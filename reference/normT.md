@@ -5,7 +5,7 @@ distribution with `df` degrees of freedom and scale given by the error
 model or the data's `sigma`: the `-2 log` likelihood of the data, summed
 over the conditions. The tails are heavier than those of
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), so
-single outliers move the fit less; `df = Inf` would be
+single outliers move the fit less; the limit of large `df` is
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md).
 
 ## Usage
@@ -43,7 +43,7 @@ normT(
 
 - df:
 
-  Degrees of freedom, a positive number, fixed during the fit.
+  Degrees of freedom, a positive finite number, fixed during the fit.
 
 - times:
 

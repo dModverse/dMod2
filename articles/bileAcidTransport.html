@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="active nav-item dropdown">
@@ -163,8 +163,8 @@ run; the fits, profiles and figures come from running the script.</p>
 <span><span class="co"># code and the shared objects of the model to a job folder in the working</span></span>
 <span><span class="co"># directory and runs the code there in the background, as one task on the local</span></span>
 <span><span class="co"># machine. In the task, `cores` holds the cores of `on`, and mstrust() runs ten</span></span>
-<span><span class="co"># fits per core. It needs a Unix-like system; on Windows, call mstrust() itself</span></span>
-<span><span class="co"># with `cores = .cores`. ?distributedComputing shows how to send the same code to</span></span>
+<span><span class="co"># fits per core; on Windows the commands run in the sh of Rtools.</span></span>
+<span><span class="co"># ?distributedComputing shows how to send the same code to</span></span>
 <span><span class="co"># other machines with sshNodes() or to a SLURM cluster with slurmCluster().</span></span>
 <span><span class="va">job</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/mstrust.html">mstrust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">pouter</span>, sd <span class="op">=</span> <span class="fl">4</span>, fits <span class="op">=</span> <span class="fl">10</span> <span class="op">*</span> <span class="va">cores</span>, cores <span class="op">=</span> <span class="va">cores</span><span class="op">)</span>,</span>

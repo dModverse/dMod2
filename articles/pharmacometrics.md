@@ -6,8 +6,6 @@ TRUE TRUE \[16\] TRUE TRUE TRUE TRUE TRUE TRUE
 Shows:
 [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md),
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md),
-[`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md),
-[`vcov()`](https://rdrr.io/r/stats/vcov.html),
 [`plotVPC()`](https://dmodverse.github.io/dMod2/reference/plotVPC.md),
 [`plotResiduals()`](https://dmodverse.github.io/dMod2/reference/plotResiduals.md),
 [`plotRandomEffects()`](https://dmodverse.github.io/dMod2/reference/plotRandomEffects.md).
@@ -20,7 +18,7 @@ SAEM multistarts and the diagnostics of the fits.
 | file | content |
 |----|----|
 | `analysis.R` | the analysis, shown below |
-| `results/cache.rds` | saved fits; delete it to fit again |
+| `results/cache.rds` | saved fits; delete it to fit again, on Windows with `cores <- 1` in `analysis.R`, where [`parallel::mclapply()`](https://rdrr.io/r/parallel/mclapply.html) runs on one core only |
 | `theophyllineMultistart.R` | multistarts of the theophylline model by FOCEI, quadrature and SAEM, saves `results/multistart.rds` for the guide |
 
 ## Run

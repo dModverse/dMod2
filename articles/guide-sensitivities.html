@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -144,10 +144,11 @@ semidefinite, with an error model it can be indefinite (<a href="methods-sensiti
 <h2 id="forward-over-forward">Forward over forward<a class="anchor" aria-label="anchor" href="#forward-over-forward"></a>
 </h2>
 <p><code>deriv2 = TRUE</code> in <code><a href="../reference/odemodel.html">odemodel()</a></code>,
-<code><a href="../reference/Y.html">Y()</a></code> and <code><a href="../reference/P.html">P()</a></code> builds second-order sensitivities;
-the objective called with <code>deriv2 = TRUE</code> and the forward
-sweep returns the exact Hessian. The equation count grows with the
-square of the parameters, so this suits small models such as those of <a href="guide-nlme.html">Nonlinear mixed-effects models</a>. The guide
+<code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> builds
+second-order sensitivities; the objective called with
+<code>deriv2 = TRUE</code> and the forward sweep returns the exact
+Hessian. The equation count grows with the square of the parameters, so
+this suits small models such as those of <a href="guide-nlme.html">Nonlinear mixed-effects models</a>. The guide
 model with 63 parameters uses it once below to show the cost.</p>
 </div>
 <div class="section level2">
@@ -155,9 +156,10 @@ model with 63 parameters uses it once below to show the cost.</p>
 </h2>
 <p>The gradient alone comes from one backward sweep of the adjoint
 system, at a cost independent of the parameter count (<a href="methods-sensitivities.html#reverse-sweep">Methods &gt; Reverse
-sweep</a>). Every function object is built with
-<code>derivMode = c("forward", "reverse")</code> and the model is called
-with <code>sweep = "reverse"</code>. Both passes use the solver
+sweep</a>). Every function object but <code><a href="../reference/Pimpl.html">Pimpl()</a></code>, which passes
+the sweep through the Jacobian of the root, is built with
+<code>derivMode = c("forward", "reverse")</code>, and the model is
+called with <code>sweep = "reverse"</code>. Both passes use the solver
 <code>options</code> alone; solves with sensitivities use
 <code>optionsSens</code> merged over <code>options</code>.</p>
 <p>In <code><a href="../reference/trust.html">trust()</a></code> the sweep is set per phase:</p>
@@ -170,13 +172,15 @@ with <code>sweep = "reverse"</code>. Both passes use the solver
 <code>"sr1"</code> phases sweep backwards if the objective allows it at
 the start, otherwise forwards. Gauss-Newton always runs forwards, since
 <span class="math inline">\(J^\top J\)</span> needs forward
-sensitivities; with <code>sweep = "reverse"</code> the objective warns
-and returns no Hessian. <code>"exact"</code> runs forwards by default
-and backwards with <code>sweep = "reverse"</code>, where
-<code>deriv2 = TRUE</code> gives the exact Hessian by forward over
-reverse. A change of sweep between phases evaluates the current iterate
-once more. <a href="guide-optimization.html">Optimization</a> compares
-the Hessian sources on the guide model.</p>
+sensitivities; a <code>"gn"</code> phase with
+<code>sweep = "reverse"</code> is an error, and the objective called
+with <code>sweep = "reverse"</code> returns no Gauss-Newton Hessian,
+with a warning where <code>hessian = TRUE</code> asks for one.
+<code>"exact"</code> runs forwards by default and backwards with
+<code>sweep = "reverse"</code>, where <code>deriv2 = TRUE</code> gives
+the exact Hessian by forward over reverse. A change of sweep between
+phases evaluates the current iterate once more. <a href="guide-optimization.html">Optimization</a> compares the Hessian
+sources on the guide model.</p>
 <p>The backward sweep follows the step grid of the value pass by
 default. On the cppDE backend, <code>optionsReverse</code> of
 <code><a href="../reference/Xs.html">Xs()</a></code> sets the accuracy, see
@@ -184,7 +188,7 @@ default. On the cppDE backend, <code>optionsReverse</code> of
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Xs.html">Xs</a></span><span class="op">(</span><span class="va">model</span>, options <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>atol <span class="op">=</span> <span class="fl">1e-8</span>, rtol <span class="op">=</span> <span class="fl">1e-6</span><span class="op">)</span>,</span>
 <span>        optionsReverse <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>refine <span class="op">=</span> <span class="cn">TRUE</span>, gradtol <span class="op">=</span> <span class="fl">1e-3</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="fu"><a href="../reference/controls.html">controls</a></span><span class="op">(</span><span class="va">x</span>, <span class="st">"optionsReverse"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>refine <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>   <span class="co"># the grid of the value pass again</span></span></code></pre></div>
+<span><span class="fu"><a href="../reference/controls.html">controls</a></span><span class="op">(</span><span class="va">x</span>, name <span class="op">=</span> <span class="st">"optionsReverse"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>refine <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>   <span class="co"># the grid of the value pass again</span></span></code></pre></div>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -203,8 +207,7 @@ solve, else is redone in substeps</td>
 </tr>
 <tr class="even">
 <td><code>gradtol</code></td>
-<td>step share of the gradient as absolute tolerance, fraction of the
-gradient scale</td>
+<td>absolute tolerance for the share of each step in the gradient</td>
 </tr>
 </tbody>
 </table>
@@ -380,10 +383,9 @@ not a method. Both Hessians agree up to the solver error:</p>
 <span>  <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-sensitivities_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="768"></p>
 <p>They agree in the large eigenvalues, the well-determined directions.
-The exact Hessian is positive definite with smallest eigenvalue -0.053,
-the Gauss-Newton Hessian has -0.025: the model estimates the standard
-deviations of the imaging readouts, and with an error model Gauss-Newton
-can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Gauss-Newton
+The smallest eigenvalue is -0.053 for the exact Hessian and -0.025 for
+Gauss-Newton. The model estimates the standard deviations of the imaging
+readouts, and with an error model Gauss-Newton can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Gauss-Newton
 with an error model</a>). In the flat directions the Hessian sources of
 <a href="guide-optimization.html">Optimization</a> take different
 steps.</p>

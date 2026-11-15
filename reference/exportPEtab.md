@@ -73,8 +73,10 @@ exportPEtab(
   vector,
   [eqnvec](https://dmodverse.github.io/dMod2/reference/eqnvec.md), or a
   Y-built error function. An observable it leaves out takes the column
-  `sigma` of the data. If `NULL`, every observable does, or has the
-  noise `"1"` without that column.
+  `sigma` of the data, or the noise `"1"` without data; a data row of
+  such an observable without a sigma is an error. If `NULL`, every
+  observable takes the column `sigma` of the data, or has the noise
+  `"1"` when the data hold no sigma.
 
 - lower, upper:
 
@@ -155,8 +157,9 @@ any other mapping it is written as `<name>_outer`.
 
 ## Limitations
 
-Events other than those at time 0 that replace a state are not written.
-Fixed parameters are always written with `parameterScale = "lin"`.
+Only events at time 0 that replace a state are written; any other event
+in `events` is an error. Fixed parameters are always written with
+`parameterScale = "lin"`.
 
 ## See also
 

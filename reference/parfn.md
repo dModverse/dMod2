@@ -15,10 +15,13 @@ parfn(p2p, parameters = NULL, condition = NULL)
 
 - p2p:
 
-  transformation for one condition, a function `p2p(p, fixed, deriv)`
-  that maps the parameter vector `p` and the fixed values `fixed` to a
-  new parameter vector. With `deriv = TRUE` the result has the attribute
-  `deriv`, the Jacobian of the transformation.
+  transformation for one condition, a function
+  `p2p(pars, fixed, deriv, deriv2)` that maps the parameter vector
+  `pars` and the fixed values `fixed` to a new parameter vector. With
+  `deriv = TRUE` the result has the attribute `deriv`, the Jacobian of
+  the transformation, with `deriv2 = TRUE` also `deriv2`, the second
+  derivatives. A `p2p` with an argument `condition` receives the
+  condition name.
 
 - parameters:
 
@@ -136,7 +139,7 @@ x <- Xd(grid)
 ## An observation function
 g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
        modelname = "prediction_obs", outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/prediction_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/prediction_obs.cpp
 
 ## One parameter transformation per condition
 innerpars <- c(getParameters(x), getParameters(g))

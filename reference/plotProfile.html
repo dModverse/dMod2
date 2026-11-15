@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -31,7 +31,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -52,7 +52,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -135,8 +135,8 @@ profiles are cut off. Defaults to 5.</p></dd>
 
 <dt id="arg-parlist">parlist<a class="anchor" aria-label="anchor" href="#arg-parlist"></a></dt>
 <dd><p>Matrix or data frame with parameter columns, drawn as points.
-With a <code>value</code> column, the differences of <code>value</code> to the lowest profile value are
-used.</p></dd>
+With a <code>value</code> column, a point is drawn at the difference of <code>value</code> to
+the lowest objective value at the optima of the profiles, otherwise at 0.</p></dd>
 
 
 <dt id="arg-ncol">ncol<a class="anchor" aria-label="anchor" href="#arg-ncol"></a></dt>

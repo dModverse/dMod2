@@ -65,10 +65,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_err.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -141,14 +141,14 @@ c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 #>   359.4032   360.7548   360.7624 
 # }
 if (FALSE) { # \dontrun{
-## Ka and Cl with correlated random effects, V with a Laplace one: a second transformation
-p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = laplace()))),
+## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation
+p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = spikeSlab()))),
         method = "explicit", compile = FALSE, modelname = "theoph_p2", derivMode = dm,
         outdir = tempdir())
 compile(p2, output = tempfile("theoph"))
 fit2 <- em(normL2(data, g * x * p2, errmodel = err), randomEffects(p2), init = init)
 fit2$omega
-fit2$strengths
+fit2$slab
 AIC(fit, fit2)
 } # }
 ```

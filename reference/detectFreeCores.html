@@ -6,13 +6,15 @@
     }
   };
 </script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet"><link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet"><script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet"><script src="../extra.js"></script><meta property="og:title" content="Detect Number of Free Cores — detectFreeCores"><meta name="description" content="Estimates the free cores as the number of cores minus the 1-minute load
-average, at least 1; inside a SLURM job on the local machine, the cores the
-job was given (SLURM_CPUS_ON_NODE) and the job processes are bound to. Works on Linux and macOS, locally or on remote
+average, at least 1. With machine = NULL inside a SLURM job, they are the
+cores the job was given (SLURM_CPUS_ON_NODE) and the job processes are
+bound to. Works on Linux and macOS, locally or on remote
 machines via ssh. On the local Windows machine the load is the processor
 load since the previous call, over at least 0.25 s and at most a minute. Under
 R CMD check with _R_CHECK_LIMIT_CORES_ set, the result is at most 2."><meta property="og:description" content="Estimates the free cores as the number of cores minus the 1-minute load
-average, at least 1; inside a SLURM job on the local machine, the cores the
-job was given (SLURM_CPUS_ON_NODE) and the job processes are bound to. Works on Linux and macOS, locally or on remote
+average, at least 1. With machine = NULL inside a SLURM job, they are the
+cores the job was given (SLURM_CPUS_ON_NODE) and the job processes are
+bound to. Works on Linux and macOS, locally or on remote
 machines via ssh. On the local Windows machine the load is the processor
 load since the previous call, over at least 0.25 s and at most a minute. Under
 R CMD check with _R_CHECK_LIMIT_CORES_ set, the result is at most 2."></head><body>
@@ -23,7 +25,7 @@ R CMD check with _R_CHECK_LIMIT_CORES_ set, the result is at most 2."></head><bo
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -41,7 +43,7 @@ R CMD check with _R_CHECK_LIMIT_CORES_ set, the result is at most 2."></head><bo
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -62,7 +64,7 @@ R CMD check with _R_CHECK_LIMIT_CORES_ set, the result is at most 2."></head><bo
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -98,8 +100,9 @@ R CMD check with _R_CHECK_LIMIT_CORES_ set, the result is at most 2."></head><bo
 
     <div class="ref-description section level2">
     <p>Estimates the free cores as the number of cores minus the 1-minute load
-average, at least 1; inside a SLURM job on the local machine, the cores the
-job was given (<code>SLURM_CPUS_ON_NODE</code>) and the job processes are bound to. Works on Linux and macOS, locally or on remote
+average, at least 1. With <code>machine = NULL</code> inside a SLURM job, they are the
+cores the job was given (<code>SLURM_CPUS_ON_NODE</code>) and the job processes are
+bound to. Works on Linux and macOS, locally or on remote
 machines via <code>ssh</code>. On the local Windows machine the load is the processor
 load since the previous call, over at least 0.25 s and at most a minute. Under
 <code>R CMD check</code> with <code>_R_CHECK_LIMIT_CORES_</code> set, the result is at most 2.</p>
@@ -122,8 +125,8 @@ any other entry an <code>ssh</code> destination such as <code>"host"</code> or <
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>Numeric vector of free cores, one per machine and named by it, with
-attributes
+    <p>Numeric vector of free cores, one per machine, named by <code>machine</code>
+when it is given, with attributes
 <code>"ncores"</code> (number of cores) and <code>"used"</code> (load average).</p>
     </div>
 
@@ -134,7 +137,7 @@ attributes
 <span class="r-out co"><span class="r-pr">#&gt;</span> attr(,"ncores")</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 4</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> attr(,"used")</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.39</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1.47</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

@@ -24,10 +24,10 @@ vcov(object, ...)
 ## Value
 
 The inverse of half the Hessian of the marginal -2 log L. A fit with
-Laplace or spike-and-slab random effects has no Hessian; there it is the
-inverse of the empirical information `information` of the group scores,
-see [`em()`](https://dmodverse.github.io/dMod2/reference/em.md), which
-needs more groups than parameters. A fit with Dirichlet-process random
+spike-and-slab random effects has no Hessian; there it is the inverse of
+the empirical information `information` of the group scores, see
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md), which needs
+more groups than parameters. A fit with Dirichlet-process random
 effects, whose groups are not independent, has neither: an error, as
 where the scores do not span every direction.
 
@@ -48,10 +48,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_err.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

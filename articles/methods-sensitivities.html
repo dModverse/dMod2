@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -194,10 +194,12 @@ Hessian of <span class="math inline">\(\ell_j\)</span> in <span class="math inli
 \end{pmatrix},
   \qquad \det L_j = -\frac{4\,(1 + r_j^2)}{\sigma_j^4} &lt; 0.
 \tag{4}\]</span></p>
-<p>The Gauss-Newton Hessian of <code><a href="../reference/normL2.html">normL2()</a></code> is <span class="math inline">\(\sum_j J_j^\top L_j J_j\)</span>, <span class="math inline">\(J_j\)</span> the Jacobian of <span class="math inline">\((f_j, \sigma_j)\)</span>: exact curvature of <span class="math inline">\(\ell_j\)</span>, no second derivatives of <span class="math inline">\(f_j\)</span> and <span class="math inline">\(\sigma_j\)</span>. The concave <span class="math inline">\(\log \sigma_j^2\)</span> gives <span class="math inline">\(L_j\)</span> one negative eigenvalue, so the
-matrix is in general indefinite along directions that move a sigma where
-residuals are small. The exact Hessian adds the second derivatives of
-<span class="math inline">\(f_j\)</span> and <span class="math inline">\(\sigma_j\)</span>, weighted by <span class="math inline">\(2 r_j / \sigma_j\)</span> and <span class="math inline">\(2 (1 - r_j^2) / \sigma_j\)</span>.</p>
+<p>The Gauss-Newton Hessian of <code><a href="../reference/normL2.html">normL2()</a></code> is <span class="math inline">\(\sum_j J_j^\top L_j J_j\)</span>, <span class="math inline">\(J_j\)</span> the Jacobian of <span class="math inline">\((f_j, \sigma_j)\)</span>: exact curvature of <span class="math inline">\(\ell_j\)</span>, no second derivatives of <span class="math inline">\(f_j\)</span> and <span class="math inline">\(\sigma_j\)</span>. By (4) <span class="math inline">\(L_j\)</span> has one negative eigenvalue at every
+residual, and the <span class="math inline">\(\sigma\sigma\)</span>
+entry <span class="math inline">\(3 r_j^2 - 1\)</span> is negative where
+residuals are small, so the matrix is in general indefinite along
+directions that move a sigma. The exact Hessian adds the second
+derivatives of <span class="math inline">\(f_j\)</span> and <span class="math inline">\(\sigma_j\)</span>, weighted by <span class="math inline">\(2 r_j / \sigma_j\)</span> and <span class="math inline">\(2 (1 - r_j^2) / \sigma_j\)</span>.</p>
 </div>
 </div>
 <div class="section level2">
@@ -211,18 +213,22 @@ for small models.</p>
 <h2 id="reverse-sweep">Reverse sweep<a class="anchor" aria-label="anchor" href="#reverse-sweep"></a>
 </h2>
 <p>The gradient of the objective alone follows from one backward sweep
-with the multipliers <span class="math inline">\(\lambda(t)\)</span> and
-the data term <span class="math inline">\(\ell\)</span>,</p>
-<p><span class="math display">\[\dot\lambda = -\left(\frac{\partial
-f}{\partial x}\right)^{\!\top} \lambda
-  - \left(\frac{\partial \ell}{\partial x}\right)^{\!\top}, \qquad
-  \frac{\mathrm{d}(-2 \log L)}{\mathrm{d}\theta} = \int \lambda^\top
+with the multipliers <span class="math inline">\(\lambda(t)\)</span>,
+zero after the last measurement, and the terms <span class="math inline">\(\ell_j\)</span> of the data at the measurement
+times <span class="math inline">\(t_j\)</span>,</p>
+<p><span class="math display">\[\begin{aligned}
+\dot\lambda &amp;= -\left(\frac{\partial f}{\partial x}\right)^{\!\top}
+\lambda, \qquad
+\lambda(t_j^-) = \lambda(t_j^+) + \left(\frac{\partial \ell_j}{\partial
+x}\right)^{\!\top}, \\
+\frac{\mathrm{d}(-2 \log L)}{\mathrm{d}\theta} &amp;= \int \lambda^\top
 \frac{\partial f}{\partial \theta}\,
-  \mathrm{d}t + \dots, \tag{5}\]</span></p>
-<p>with jumps of <span class="math inline">\(\lambda\)</span> at the
-measurement times. cppDE uses the <em>discrete adjoint</em> of the
-integrator steps, the exact derivative of the computed objective, with
-checkpoints of the forward trajectory (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse.html" class="external-link">reverse
+\mathrm{d}t + \lambda(t_0)^\top \frac{\partial x_0}{\partial \theta}
++ \sum_j \frac{\partial \ell_j}{\partial \theta} .
+\end{aligned} \tag{5}\]</span></p>
+<p>cppDE uses the <em>discrete adjoint</em> of the integrator steps, the
+exact derivative of the computed objective, with checkpoints of the
+forward trajectory (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse.html" class="external-link">reverse
 mode</a>). The cost is a few times the value, independent of <span class="math inline">\(n_\theta\)</span>. The value pass solves without
 sensitivities, and the sweep uses the step grid of that pass.
 <code><a href="../reference/Pimpl.html">Pimpl()</a></code> passes the sweep through the Jacobian of the root
@@ -256,9 +262,11 @@ absolute tolerance</td>
 </tr>
 </tbody>
 </table>
-<p>A trust region converges with a gradient accurate relative to the
-gradient size <span class="citation"><a href="#ref-carter1991global">[1]</a>, <a href="#ref-conn2000trust">[2]</a></span>, so <code>gradtol</code> is a
-fraction of the gradient scale (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html" class="external-link">checking
+<p>A trust region converges with a gradient whose error is small
+relative to the gradient <span class="citation"><a href="#ref-carter1991global">[1]</a>, <a href="#ref-conn2000trust">[2]</a></span>. <code>gradtol</code> bounds
+the error of every step in absolute terms, and the errors of the steps
+add up over the sweep; near the optimum, where the gradient vanishes, a
+fixed <code>gradtol</code> does not keep the relative error small (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html" class="external-link">checking
 the sweep</a>).</p>
 <p>A refined sweep differentiates the trajectory with substeps, not the
 computed one. Under <code>refine</code> it therefore returns, per seed,
@@ -277,8 +285,10 @@ closer to the exact one; accepted steps get no correction.</p>
 </h2>
 <p>Forward tangents, one per parameter, ride on the backward sweep,
 which returns one Hessian column per tangent. Cost grows like a forward
-solve; nothing of order <span class="math inline">\(n_\theta^2\)</span>
-is integrated or stored (<a href="https://dmodverse.github.io/cppDE/articles/methods-forward-reverse.html" class="external-link">forward
+solve; the <span class="math inline">\(n_\theta^2\)</span> Hessian
+entries are accumulated, but no <span class="math inline">\(n_x
+n_\theta^2\)</span> second-order sensitivities are integrated or stored
+(<a href="https://dmodverse.github.io/cppDE/articles/methods-forward-reverse.html" class="external-link">forward
 over reverse</a>).</p>
 <div class="section level3">
 <h3 id="second-derivatives-along-directions">Second derivatives along directions<a class="anchor" aria-label="anchor" href="#second-derivatives-along-directions"></a>

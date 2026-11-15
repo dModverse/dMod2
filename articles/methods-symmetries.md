@@ -19,10 +19,11 @@ with states \\x\\, input \\u\\, observables \\y\\ and parameters
 \\g(t; \theta) = h(x(t), \theta)\\. It is *locally structurally
 identifiable* at \\\theta\\ if no nearby \\\tilde\theta \ne \theta\\ has
 the same prediction. The property depends on the equations alone, as if
-every observable were measured exactly and continuously, and holds for
-generic \\\theta\\, outside a set of measure zero. A structural
-non-identifiability makes the likelihood exactly flat along a curve,
-seen as a flat profile [\[1\]](#ref-raue2009structural).
+every observable were measured exactly and continuously, and the answer
+is the same for every \\\theta\\ outside a set of measure zero, for
+generic \\\theta\\. A structural non-identifiability makes the
+likelihood exactly flat along a curve, seen as a flat profile
+[\[1\]](#ref-raue2009structural).
 
 ## Lie symmetries
 
@@ -37,8 +38,8 @@ of the *generator*
 
 An *invariant*, \\X(I) = 0\\, is constant on every orbit, and the
 prediction depends on \\\theta\\ only through invariants. With \\r\\
-independent generators, the observables determine \\d - r\\ parameter
-combinations.
+generators that span all symmetries and are independent at generic
+\\\theta\\, the observables determine \\d - r\\ parameter combinations.
 
 *Scalings*, \\\xi_i(\theta) = w_i \theta_i\\ with integer weights, are
 the most common symmetries of reaction networks; on the log scale their
@@ -46,9 +47,10 @@ orbits are straight lines. Two kinds occur in almost every signaling
 model:
 
 - Observable `s * (A + B) + off`: concentrations of the moiety times
-  \\\lambda\\, rate constants of second order in it and the scale `s`
-  divided by \\\lambda\\. The generator moves the total, the scales and
-  the bimolecular rate constants together.
+  \\\lambda\\; the scale `s` and the rate constant of every term of
+  second order in the moiety, or of first order in it in the equation of
+  another state, divided by \\\lambda\\. The generator moves the total,
+  the scales and these rate constants together.
 - Unobserved intermediate: level and production rate times \\\lambda\\,
   the rate it drives divided by \\\lambda\\.
 
@@ -59,12 +61,14 @@ finds generators with rational components.
 ## Detection
 
 With \\z = (x, \theta, t)\\, \\\dot\theta = 0\\, \\\dot t = 1\\, the
-model is the vector field \\F = f\\ \partial_x + \partial_t\\. The *Lie
-derivatives* of the observables,
+model is the vector field \\F = f\\ \partial_x + \partial_t\\, started
+at \\z_0(\theta) = (x_0(\theta), \theta, t_0)\\. The *Lie derivatives*
+of the observables,
 
 \\L_F^0 h = h, \qquad L_F^{k+1} h = F\bigl(L_F^k h\bigr), \tag{3}\\
 
-are the Taylor coefficients of an analytic prediction,
+at \\z_0\\ are the time derivatives of the prediction at \\t_0\\, so an
+analytic prediction is
 
 \\g(t; \theta) = \sum\_{k \ge 0} \frac{(t - t_0)^k}{k!}\\ L_F^k
 h\bigl(z_0(\theta)\bigr). \tag{4}\\
@@ -89,18 +93,25 @@ identifiable.
 
 For scalings, (6) reads \\\mathrm{OIM}\_N(\theta)\\
 \mathrm{diag}(\theta)\\ w = 0\\ for every \\\theta\\. With rational
-right-hand sides, observables and initial values this holds exactly when
-every term of every equation keeps the weighted degree: a linear system
-in the monomial exponents, whose integer solution lattice symident
-computes exactly. The remaining kernel vectors are *general* directions,
-with closed forms from interpolation ([symident
+right-hand sides, observables and initial values it holds where every
+term of every equation keeps the weighted degree, with weights on the
+states as well: a linear system in the weights, whose integer solution
+lattice symident computes exactly. A scaling that holds only on an
+invariant set, such as a start at rest, fails this test. It is among the
+remaining kernel vectors, the *general* directions, with closed forms
+from interpolation ([symident
 method](https://dmodverse.github.io/symident/method.html)).
 
-symident computes (5) exactly over a finite field \\\mathbb{F}\_p\\ at a
-random point. There the rank can only fall below the generic value, with
-a small probability that further primes and points exclude. symident
-proves the order \\N\\ sufficient where it can and checks the
-reconstructed rational \\\xi(\theta)\\ over the rationals.
+symident computes (5) exactly over finite fields \\\mathbb{F}\_p\\ at a
+fixed base point and takes the largest rank over several primes and a
+random point. The rank modulo \\p\\ at a point can only fall below the
+generic value; the checks make a lower one unlikely but do not exclude
+it. symident proves the order \\N\\ sufficient where it can. A direction
+is `"exact"` where the closed form is proven over the rationals,
+`"verified"` or `"checked"` where it is checked modulo a large prime at
+random points, with or without an error bound, and `"open"` without
+closed form; by default (`reconstruct = FALSE`) a general direction is
+returned as the support.
 
 ### Steady-state starts, inputs and conditions
 
@@ -121,9 +132,13 @@ symmetry.
 
 ## Gauge and reduction
 
-Along every orbit the objective, the profiles and the Hessian in the
-generator directions are flat, so symmetries are removed before the fit.
-A *gauge* fixes one coordinate per scaling; each orbit meets the fixed
+Along every orbit the data term and the profiles of the data term are
+flat; a prior such as
+[`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md)
+is not invariant and tilts them. The Hessian is flat in the generator
+directions at the optimum, in the Gauss-Newton approximation and for
+scalings on the log scale. So symmetries are removed before the fit. A
+*gauge* fixes one coordinate per scaling; each orbit meets the fixed
 values in one point with the same prediction. With \\W\\ the weights of
 the scalings on the fixed coordinates, one row per generator, the gauge
 removes every scaling if
@@ -134,7 +149,7 @@ removes every scaling if
 turns the generators into a parameter transformation: for scalings a
 *section* fixing one coordinate per direction, for general directions
 invariants as new parameters
-([reduction](https://dmodverse.github.io/symident/method.html#reduction)).
+([reduction](https://dmodverse.github.io/symident/method.html#reduction-and-sections)).
 
 Reference:
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md),

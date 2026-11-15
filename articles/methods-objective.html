@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -154,12 +154,16 @@ to first order, <span class="math inline">\(\sigma\)</span> in <span class="math
 </h2>
 <p><code><a href="../reference/constraintL2.html">constraintL2()</a></code> adds a Gaussian prior with means <span class="math inline">\(\mu_k\)</span> and standard deviations <span class="math inline">\(s_k\)</span>,</p>
 <p><span class="math display">\[-2 \log \pi(\theta) = \sum_k \left(
-\frac{\theta_k - \mu_k}{s_k} \right)^2, \tag{2}\]</span></p>
-<p>added to the data term by <code>+</code>. On the log scale, a prior
-far wider than the data leaves determined parameters in place and keeps
-undetermined ones finite, so the minimum exists without bounds. The
-Hessian of (2) is <span class="math inline">\(2/s_k^2\)</span> on the
-diagonal.</p>
+\left( \frac{\theta_k - \mu_k}{s_k} \right)^2 + \log s_k^2 \right)
++ \text{const}, \tag{2}\]</span></p>
+<p>added to the data term by <code>+</code>; <span class="math inline">\(\log s_k^2\)</span> enters only where <span class="math inline">\(s_k\)</span> is a parameter. It keeps an estimated
+<span class="math inline">\(s_k\)</span> from growing, but (2) then has
+no minimum: <span class="math inline">\(\theta_k = \mu_k\)</span> with
+<span class="math inline">\(s_k \to 0\)</span> lowers it without limit,
+so an estimated <span class="math inline">\(s_k\)</span> needs a lower
+bound. On the log scale, a prior far wider than the data leaves
+determined parameters in place and keeps undetermined ones finite, so
+the minimum exists without bounds. The Hessian of (2) is <span class="math inline">\(2/s_k^2\)</span> on the diagonal.</p>
 </div>
 <div class="section level2">
 <h2 id="further-terms">Further terms<a class="anchor" aria-label="anchor" href="#further-terms"></a>

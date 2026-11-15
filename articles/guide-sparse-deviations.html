@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>8. Group-specific effects • dMod2</title>
+<title>8. Sparse deviations • dMod2</title>
 <!-- mathjax math --><script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script><script>
   window.MathJax = {
     chtml: {
@@ -17,7 +17,7 @@
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<script src="../extra.js"></script><meta property="og:title" content="8. Group-specific effects">
+<script src="../extra.js"></script><meta property="og:title" content="8. Sparse deviations">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -110,11 +110,11 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>8. Group-specific effects</h1>
+      <h1>8. Sparse deviations</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/dModverse/dMod2/blob/master/vignettes/articles/guide-group-effects.Rmd" class="external-link"><code>vignettes/articles/guide-group-effects.Rmd</code></a></small>
-      <div class="d-none name"><code>guide-group-effects.Rmd</code></div>
+      <small class="dont-index">Source: <a href="https://github.com/dModverse/dMod2/blob/master/vignettes/articles/guide-sparse-deviations.Rmd" class="external-link"><code>vignettes/articles/guide-sparse-deviations.Rmd</code></a></small>
+      <div class="d-none name"><code>guide-sparse-deviations.Rmd</code></div>
     </div>
 
     
@@ -134,9 +134,9 @@ changes estimated from all compounds together. Code:
 <code><a href="../reference/em.html">em()</a></code> are introduced in <a href="guide-nlme.html">Nonlinear
 mixed-effects models</a>.</p>
 <p>The second part lists the sparse random-effect distributions
-(Laplace, spike-and-slab, Dirichlet-process) and what their fits report;
-derivations are in <a href="methods-sparse-random-effects.html">Methods
-&gt; Sparse random effects</a>.</p>
+(spike-and-slab, Dirichlet-process) and what their fits report;
+derivations are in <a href="methods-sparsity-priors.html">Methods &gt;
+Sparsity priors</a>.</p>
 <div class="section level2">
 <h2 id="compound-data">Compound data<a class="anchor" aria-label="anchor" href="#compound-data"></a>
 </h2>
@@ -184,15 +184,15 @@ distribution <span class="citation"><a href="#ref-mitchell1988bayesian">[2]</a>,
 compounds and rate constants; <span class="math inline">\(\rho\)</span>,
 <span class="math inline">\(\tau\)</span> are shared. <code><a href="../reference/em.html">em()</a></code>
 estimates <span class="math inline">\(\theta\)</span>, <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\tau\)</span> from the likelihood with the changes
-integrated out, a sum over the subsets of changed rate constants (<a href="methods-sparse-random-effects.html#approximate-marginal">Methods
-&gt; Sparse random effects</a>). The posterior spike probability <span class="math inline">\(p_0 = \Pr(\eta_{ik} = 0 \mid y)\)</span> near 0
+integrated out, a sum over the subsets of changed rate constants (<a href="methods-sparsity-priors.html#approximate-marginal">Methods &gt;
+Sparsity priors</a>). The posterior spike probability <span class="math inline">\(p_0 = \Pr(\eta_{ik} = 0 \mid y)\)</span> near 0
 means a change, near the prior <span class="math inline">\(1 -
 \rho\)</span> no evidence, above it evidence against a change.</p>
 <p>Each compound has 20 candidate rate constants, and the subset sum is
 exact; beyond a term budget <code><a href="../reference/em.html">em()</a></code> uses the expectation
-consistent (EC) approximation (<a href="methods-sparse-random-effects.html#spike-and-slab">Methods &gt;
-Spike and slab</a>). Comparison with the L1 penalty: <a href="methods-sparse-random-effects.html#selection-of-deviations">Methods
-&gt; Selection of deviations</a>.</p>
+consistent (EC) approximation (<a href="methods-sparsity-priors.html#spike-and-slab">Methods &gt; Spike
+and slab</a>). Comparison with the L1 penalty: <a href="methods-sparsity-priors.html#selection-of-deviations">Methods &gt;
+Selection of deviations</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="compound-model">Compound model<a class="anchor" aria-label="anchor" href="#compound-model"></a>
@@ -252,7 +252,7 @@ model.</p>
 </h2>
 <p><code><a href="../reference/em.html">em()</a></code> estimates fixed effects, change modes, <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\tau\)</span> together. <code>compounds.R</code>
 runs 200 starts, the reduced optimum with changes at 0 and 199 around
-it, redrawing failed starts, split into
+it, redrawing failed starts; <code>helix.R</code> splits them into
 <code><a href="../reference/distributedComputing.html">distributedComputing()</a></code> tasks by <code>msem(which = )</code>
 (<a href="guide-remote-computing.html">Remote computing</a>):</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
@@ -280,7 +280,7 @@ it, redrawing failed starts, split into
 <span><span class="co"># end, with up to 1000 iterations of the trust region, one core each</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span></span>
 <span><span class="va">fitCompounds</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/msem.html">msem</a></span><span class="op">(</span><span class="va">objCompounds</span> <span class="op">+</span> <span class="va">priorCompounds</span>, <span class="va">random</span>, <span class="va">init</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span>,</span>
-<span>                     control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>laplace <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>maxOuter <span class="op">=</span> <span class="fl">1000</span>, trustControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>                     control <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>sparseFit <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>maxOuter <span class="op">=</span> <span class="fl">1000</span>, trustControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>                     fits <span class="op">=</span> <span class="fl">200</span>, sd <span class="op">=</span> <span class="va">sdStart</span>, keepFits <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>                     cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>The best fit is saved with a table of all starts:</p>
@@ -321,7 +321,7 @@ every attempt. The waterfall shows the best 100 starts; a plateau is one
 optimum.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotValues.html">plotValues</a></span><span class="op">(</span><span class="va">fit</span>, <span class="fu"><a href="https://rdrr.io/r/base/rank.html" class="external-link">rank</a></span><span class="op">(</span><span class="va">value</span>, ties.method <span class="op">=</span> <span class="st">"first"</span><span class="op">)</span> <span class="op">&lt;=</span> <span class="fl">100</span><span class="op">)</span></span></code></pre></div>
-<p><img src="guide-group-effects_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="guide-sparse-deviations_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
 <p>Of the 200 starts, 54 end within 1 of the best -2 log L, 20 did not
 converge and 0 failed.</p>
 </div>
@@ -377,7 +377,7 @@ recovery (<code>trigger_iIkk</code>), IKK phosphorylation
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_manual.html" class="external-link">scale_shape_manual</a></span><span class="op">(</span>values <span class="op">=</span> <span class="fl">21</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="cn">NULL</span>, y <span class="op">=</span> <span class="cn">NULL</span>, fill <span class="op">=</span> <span class="st">"change [log]"</span>, alpha <span class="op">=</span> <span class="st">"evidence, -log10 p0"</span>, shape <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><img src="guide-group-effects_files/figure-html/unnamed-chunk-10-1.png" class="r-plt" alt="" width="768"></p>
+<p><img src="guide-sparse-deviations_files/figure-html/unnamed-chunk-10-1.png" class="r-plt" alt="" width="768"></p>
 <p>Each tile is one <span class="math inline">\(\eta_{ik}\)</span>; rate
 constants follow the pathway from IKK (top) to A20 (bottom). Color is
 the log-scale mode of the most probable structure: red increase, blue
@@ -435,14 +435,14 @@ alone. DCF blots span six hours, the others 50 minutes:</p>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"log signal [a.u.]"</span>, color <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"bottom"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="guide-group-effects_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="1152"></p>
+<p><img src="guide-sparse-deviations_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="1152"></p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="sparse-random-effect-distributions">Sparse random-effect distributions<a class="anchor" aria-label="anchor" href="#sparse-random-effect-distributions"></a>
 </h2>
 <p><code>gr(group, dist = )</code> sets the random-effect distribution
-of a term. Besides <code><a href="../reference/normal.html">normal()</a></code>, three have deviations exactly
+of a term. Besides <code><a href="../reference/normal.html">normal()</a></code>, two have deviations exactly
 zero unless the data need them:</p>
 <table class="table">
 <colgroup>
@@ -458,13 +458,6 @@ group</th>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code><a href="../reference/normal.html">laplace()</a></code></td>
-<td>density <span class="math inline">\(\tfrac{\lambda}{2} e^{-\lambda
-\lvert \eta \rvert}\)</span>
-</td>
-<td><code>lambda_&lt;grouping&gt;</code></td>
-</tr>
-<tr class="even">
 <td><code><a href="../reference/normal.html">spikeSlab()</a></code></td>
 <td>
 <span class="math inline">\(0\)</span> with probability <span class="math inline">\(1 - \rho\)</span>, else <span class="math inline">\(\mathcal{N}(0, \tau^2)\)</span>
@@ -474,7 +467,7 @@ group</th>
 <code>tau_&lt;grouping&gt;</code>
 </td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code><a href="../reference/normal.html">dirichletProcess()</a></code></td>
 <td>cluster value: <span class="math inline">\(0\)</span> for the
 population cluster, else one <span class="math inline">\(\mathcal{N}(0,
@@ -489,12 +482,9 @@ population cluster, else one <span class="math inline">\(\mathcal{N}(0,
 <p>Hyperparameters are shared by the symbols of a term, numbered
 <code>_1</code>, <code>_2</code>, … for several terms of one grouping,
 and estimated with the fixed effects unless given, as in
-<code>laplace(lambda = 2)</code>. A Laplace mode is exactly zero unless
-the data pull it away, which sorts shared from group-specific
-parameters, one <span class="math inline">\(\lambda\)</span> per term. A
-spike-and-slab deviation is zero with a probability reported per group.
-Under the Dirichlet process groups share deviations in clusters with the
-population value, see <a href="#dirichlet-process-random-effects">Dirichlet-process random
+<code>spikeSlab(tau = 0.5)</code>. A spike-and-slab deviation is zero
+with a probability reported per group. Under the Dirichlet process
+groups share deviations in clusters with the population value, see <a href="#dirichlet-process-random-effects">Dirichlet-process random
 effects</a>. Normal and sparse random effects of one grouping combine;
 <code>em(method = "focei")</code> fits all, Dirichlet-process ones also
 <code>method = "saem"</code>.</p>
@@ -504,15 +494,17 @@ effects</a>. Normal and sparse random effects of one grouping combine;
 </h2>
 <p><code>em(method = "focei")</code> integrates sparse random effects on
 the Laplace approximation of the data term at the joint mode of a group,
-exactly where possible, by EC where the data couple them. Fixed effects
-and hyperparameters move in one trust region: no EM iteration count, no
-random numbers. <code>fit$coupling</code> is
+exactly where possible, the spike-and-slab effects of a group jointly
+even where the data couple them, and by EC where the data link a
+Dirichlet-process effect to another factor or the subset sum leaves the
+budget. Fixed effects and hyperparameters move in one trust region: no
+EM iteration count, no random numbers. <code>fit$coupling</code> is
 <code>"expectationConsistent"</code> if a group needed EC,
 <code>NULL</code> if all are exact. Integral, gradient and
-hyperparameter steps: <a href="methods-sparse-random-effects.html#approximate-marginal">Methods
-&gt; Approximate marginal</a>, <a href="methods-sparse-random-effects.html#expectation-consistent-approximation">Methods
-&gt; Expectation consistent approximation</a> and <a href="methods-sparse-random-effects.html#joint-trust-region">Methods
-&gt; Joint trust region</a>.</p>
+hyperparameter steps: <a href="methods-sparsity-priors.html#approximate-marginal">Methods &gt;
+Approximate marginal</a>, <a href="methods-sparsity-priors.html#expectation-consistent-approximation">Methods
+&gt; Expectation consistent approximation</a> and <a href="methods-sparsity-priors.html#joint-trust-region">Methods &gt;
+Joint trust region</a>.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -520,7 +512,7 @@ hyperparameter steps: <a href="methods-sparse-random-effects.html#approximate-ma
 <col width="33%">
 </colgroup>
 <thead><tr class="header">
-<th>entry of <code>control$laplace</code>
+<th>entry of <code>control$sparseFit</code>
 </th>
 <th>default</th>
 <th>controls</th>
@@ -546,19 +538,18 @@ hyperparameter steps: <a href="methods-sparse-random-effects.html#approximate-ma
 <code>trustControl</code> tolerances of <a href="guide-model.html">Setting up models</a>, above the solver error in
 value and gradient. A run stopping short of <code>mtol</code> restarts
 while runs lower <span class="math inline">\(-2 \log L\)</span> by more
-than <code>mtol</code>. <code><a href="../reference/msem.html">msem()</a></code> perturbs strengths,
-concentrations and slab standard deviations on log scale, slab
-probabilities on logit scale.</p>
+than <code>mtol</code>. <code><a href="../reference/msem.html">msem()</a></code> perturbs concentrations and
+slab standard deviations on log scale, slab probabilities on logit
+scale.</p>
 </div>
 <div class="section level2">
 <h2 id="reported-structure">Reported structure<a class="anchor" aria-label="anchor" href="#reported-structure"></a>
 </h2>
 <p>The fit reports the most probable structure: subset of deviations
 (spike and slab) or partition (Dirichlet process). Spike deviations are
-exactly zero, slab deviations the posterior mean given the structure,
-Laplace deviations the joint mode (<a href="methods-sparse-random-effects.html#reported-structure">Methods
-&gt; Reported structure</a>). <code>fit$random</code> has a row per
-group and random effect:</p>
+exactly zero, slab deviations the posterior mean given the structure (<a href="methods-sparsity-priors.html#reported-structure">Methods &gt;
+Reported structure</a>). <code>fit$random</code> has a row per group and
+random effect:</p>
 <ul>
 <li>
 <code>mode</code>, this value;</li>
@@ -575,25 +566,24 @@ group, where some do not.</li>
 </ul>
 <p>A sparse random effect reaching no data of the group (through
 transformations, ODE, observables, error model) rests at 0 with the
-prior standard deviation and, for spike and slab, <span class="math inline">\(p_0 = 1 - \rho\)</span>.
-<code>fit$strengths</code> lists Laplace strengths,
-<code>fit$slab</code> probabilities, concentrations and slab standard
-deviations, each with term symbols, estimate and whether fixed.</p>
+prior standard deviation and, for spike and slab, <span class="math inline">\(p_0 = 1 - \rho\)</span>. <code>fit$slab</code>
+lists probabilities, concentrations and slab standard deviations, each
+with term symbols, estimate and whether fixed.</p>
 </div>
 <div class="section level2">
 <h2 id="standard-errors">Standard errors<a class="anchor" aria-label="anchor" href="#standard-errors"></a>
 </h2>
-<p>With Laplace or spike-and-slab random effects
-<code>fit$hessian</code> is <code>NULL</code>; <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>
-inverts <code>fit$information</code>, the empirical information from the
-group scores. It needs more groups than parameters, or conditions
-without random effects plus priors for the other directions; otherwise
+<p>With spike-and-slab random effects <code>fit$hessian</code> is
+<code>NULL</code>; <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> inverts
+<code>fit$information</code>, the empirical information from the group
+scores. It needs more groups than parameters, or conditions without
+random effects plus priors for the other directions; otherwise
 <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> is an error and standard errors are <code>NA</code>.
 In the compound fit the conditions without compound and the prior
 complete the five compounds. <code><a href="../reference/normal.html">dirichletProcess()</a></code> fits have
 neither; <code>confint(method = "profile")</code> gives intervals.
-Details: <a href="methods-sparse-random-effects.html#standard-errors">Methods &gt;
-Standard errors</a>.</p>
+Details: <a href="methods-sparsity-priors.html#standard-errors">Methods
+&gt; Standard errors</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="dirichlet-process-random-effects">Dirichlet-process random effects<a class="anchor" aria-label="anchor" href="#dirichlet-process-random-effects"></a>
@@ -609,16 +599,17 @@ the compounds here are fitted without it.</p>
 <p><code>method = "focei"</code> sums exactly over partitions of up to
 14 groups. <code>method = "saem"</code> draws partitions, allowing
 normal random effects alongside but no other sparse ones, and reports
-the most frequent partition after burn-in, with standard error
-<code>valueSE</code> of <span class="math inline">\(-2 \log L\)</span>.
+the most frequent partition of the late draws, from <code>window</code>
+iterations after burn-in, with standard error <code>valueSE</code> of
+<span class="math inline">\(-2 \log L\)</span>.
 <code>control$saem$particles</code> sets the importance-sampling
 particles, default 500; <code>converged</code> says whether burn-in
 ended by the drift test. An SAEM fit has no gradient, Hessian or
-empirical information. Details: <a href="methods-sparse-random-effects.html#dirichlet-process-random-effects">Methods
-&gt; Sparse random effects</a>.</p>
-<p>Reference: <code><a href="../reference/randomEffects.html">randomEffects()</a></code>, <code><a href="../reference/normal.html">laplace()</a></code>,
-<code><a href="../reference/normal.html">spikeSlab()</a></code>, <code><a href="../reference/normal.html">dirichletProcess()</a></code>,
-<code><a href="../reference/em.html">em()</a></code>, <code><a href="../reference/msem.html">msem()</a></code>, <code><a href="../reference/plotValues.html">plotValues()</a></code></p>
+empirical information. Details: <a href="methods-sparsity-priors.html#dirichlet-process-random-effects">Methods
+&gt; Sparsity priors</a>.</p>
+<p>Reference: <code><a href="../reference/randomEffects.html">randomEffects()</a></code>, <code><a href="../reference/normal.html">spikeSlab()</a></code>,
+<code><a href="../reference/normal.html">dirichletProcess()</a></code>, <code><a href="../reference/em.html">em()</a></code>, <code><a href="../reference/msem.html">msem()</a></code>,
+<code><a href="../reference/plotValues.html">plotValues()</a></code></p>
 <p><a href="guide-nlme.html">← 7. Nonlinear mixed-effects models</a> |
 <a href="guide-alignment.html">9. Alignment of relative data
 measurements →</a></p>

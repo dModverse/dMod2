@@ -48,15 +48,18 @@ The trust region bounds parameters and nodes together,
 \\\lVert D\\ \Delta\theta \rVert^2 + \lVert V (\alpha z + S\\
 \Delta\theta) \rVert^2 \le r^2 , \tag{3}\\
 
-since a region on \\\theta\\ alone leaves \\S\\ \Delta\theta\\
-unbounded, which is huge across a spike. \\V\\ is one over the state
-scale (`multipleShootingControl$scale`): data range for observed states,
-simulation range otherwise, a decade for log10 node values. \\\alpha =
-1\\ closes the linearized gaps (Bock’s step); under an active region
-\\\alpha \le 1\\ is the share of the node part of the full step that the
-radius allows. A link of the condensing chain that would propagate a gap
-through expanding segments beyond a bound is dropped for the step. Other
-summands, a prior or a single-shooting
+with \\D = \operatorname{diag}(\lvert v \rvert^{-1/2})\\ for the
+distances \\v\\ to the bounds of [Bound
+constraints](https://dmodverse.github.io/dMod2/articles/methods-trust.html#bound-constraints),
+the identity without bounds, since a region on \\\theta\\ alone leaves
+\\S\\ \Delta\theta\\ unbounded, which is huge across a spike. \\V\\ is
+one over the state scale (`multipleShootingControl$scale`): data range
+for observed states, simulation range otherwise, a decade for log10 node
+values. \\\alpha = 1\\ closes the linearized gaps (Bock’s step); under
+an active region \\\alpha \le 1\\ is the share of the node part of the
+full step that the radius allows. A link of the condensing chain that
+would propagate a gap through expanding segments beyond a bound is
+dropped for the step. Other summands, a prior or a single-shooting
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md),
 enter with value, gradient and Gauss-Newton Hessian.
 
@@ -65,7 +68,7 @@ enter with value, gradient and Gauss-Newton Hessian.
 | `stepControl$acceptance = "filter"` (default) | filter of Fletcher and Leyffer [\[3\]](#ref-fletcher2002nonlinear) on the data term \\f\\ and the scaled gap size \\h = \lVert V c \rVert\\ |
 | `stepControl$acceptance = "merit"` | \\\ell_2\\ exact penalty \\f + \mu h\\ |
 | `stepControl$soc` (on) | one second-order correction of a rejected step whose gaps did not close as predicted |
-| `tolControl$ctol` | `converged = TRUE` only for \\h\\ below it; no other test ends the run |
+| `tolControl$ctol` | `converged = TRUE` only for \\h\\ below it; stagnation, `rmin`, ten failed solves in a row, `iterlim`, and under `acceptance = "natural"` a zero full step or one failed solve end the run with `converged = FALSE` above it |
 | `hessianMethod = "gn"` | condensed Gauss-Newton blocks |
 | `hessianMethod = "bfgs"`, `"sr1"` | one quasi-Newton block per segment Lagrangian, from gradients alone, so usable with `sweep = "reverse"` |
 
@@ -94,7 +97,7 @@ segments per condition, or one per half oscillation of the data if more,
 and halves a segment where
 
 - the spectral radius of \\G_j\\ exceeds `growth` (10), the expansion of
-  the linearized flow, invariant under coordinates and scaling;
+  the linearized flow in the coordinates of the nodes;
 - the RMS of the weighted residuals exceeds `misfit` (3) and twice the
   condition median;
 - or the solve fails.
@@ -103,11 +106,11 @@ Cuts happen before the first step and at every iterate, never below half
 the finest data spacing, and keep `minPoints` (states plus one) data
 points per half, so no node fits a segment alone.
 
-An oscillator has growth near one; what grows is the phase sensitivity
-to the frequency, linearly in the periods, until the segment fits the
-data a period off. One segment per half oscillation, counted at turning
-points of the data, bounds that slip. A misfit on every segment, from
-wrong parameters, cuts nothing, since no node removes it.
+Over a period an oscillator has growth near one; what grows is the phase
+sensitivity to the frequency, linearly in the periods, until the segment
+fits the data a period off. One segment per half oscillation, counted at
+turning points of the data, bounds that slip. A misfit on every segment,
+from wrong parameters, cuts nothing, since no node removes it.
 
 | setting | node values |
 |----|----|
@@ -123,10 +126,12 @@ variable forget their start and follow the measured trajectory.
 
 `nodes = "transitions"` puts a fixed node just before every fast change
 (a spike, the jump of a relaxation oscillator), a run of samples whose
-rate lies more than eight median absolute deviations off the median
-rate, and fills the rest as `"auto"`. Each change then starts in the
-segment where the data have it, and a wrong timing shows as a gap before
-the next node. Numeric node times, for all conditions or as a list by
+rate lies more than eight times
+[`mad()`](https://rdrr.io/r/stats/mad.html), the median absolute
+deviation scaled to a normal standard deviation, off the median rate,
+and fills the rest as `"auto"`. Each change then starts in the segment
+where the data have it, and a wrong timing shows as a gap before the
+next node. Numeric node times, for all conditions or as a list by
 condition, fix the layout.
 
 ## Further step controls

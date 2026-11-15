@@ -36,11 +36,13 @@ plotData(data, ...)
 
   A [datalist](https://dmodverse.github.io/dMod2/reference/datalist.md),
   i.e. a named list of data frames with columns `name`, `time`, `value`
-  and `sigma`, or such a data frame with a `condition` column.
+  and `sigma`, or such a data frame, split into conditions by
+  [`as.datalist()`](https://dmodverse.github.io/dMod2/reference/datalist.md).
 
 - ...:
 
-  Logical expressions to subset the plotted data.
+  Logical expressions to subset the plotted data. They can refer to the
+  columns of the data and of the condition grid.
 
 - scales:
 
@@ -52,8 +54,9 @@ plotData(data, ...)
 
 - facet:
 
-  `"wrap"` (default), `"grid"` or `"wrap_plain"`. `"wrap_plain"` gives
-  one panel per combination of name and condition.
+  `"wrap"` (default): one panel per name, color by condition. `"grid"`:
+  names as rows, conditions as columns. `"wrap_plain"`: one panel per
+  combination of name and condition.
 
 - transform:
 
@@ -67,8 +70,6 @@ plotData(data, ...)
 ## Value
 
 A `ggplot` object. The attribute `"data"` holds the plotted data frame.
-
-A `ggplot` object.
 
 ## Details
 
@@ -106,7 +107,7 @@ fn <- eqnvec(
   cosine = "cos(6.28*omega*time)"
 )
 g <- Y(fn, parameters = "omega", outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/obsfn.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/obsfn.cpp
 x <- Xt()
 trafo <- lapply(1:3, function(i) eqnvec(omega = paste0("omega_", i)))
 names(trafo) <- paste0("frequency_", 1:3)

@@ -32,8 +32,9 @@ parlist(...)
 
 - ...:
 
-  for `parlist()` and [`c()`](https://rdrr.io/r/base/c.html), fit
-  results or parameter lists; for
+  for `parlist()`, fit results, one entry each; for
+  [`c()`](https://rdrr.io/r/base/c.html), fit results or parameter
+  lists, whose entries are concatenated; for
   [`print()`](https://rdrr.io/r/base/print.html) and
   [`summary()`](https://rdrr.io/r/base/summary.html), not used.
 

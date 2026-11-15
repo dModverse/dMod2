@@ -2,25 +2,21 @@
 
 The distribution of the random effects of a term, set in an effect
 formula by `gr(group, dist = )`, e.g.
-`cl ~ 1 + (1 | gr(cellline, dist = laplace()))`. Their parameters are
+`cl ~ 1 + (1 | gr(cellline, dist = spikeSlab()))`. Their parameters are
 estimated by [`em()`](https://dmodverse.github.io/dMod2/reference/em.md)
 unless given.
 
 - `normal()`: multivariate normal with mean 0 and a covariance estimated
   per correlation block. The default.
 
-- `laplace()`: Laplace with mean 0 and strength `lambda`, shared by all
-  symbols of the term, so the deviation of a group from the fixed
-  effects is exactly 0 unless the data need it.
-
 - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
   from \\N(0, \tau^2)\\ (slab); every group deviates with probability
   `prob`, independently. The spike-and-slab random effects of a group
   are integrated jointly, exactly on the quadratic expansion of the data
-  where the group has no Laplace or Dirichlet-process random effects the
-  data tie to them and the sum over their subsets stays within a budget;
-  else the expectation consistent (EC) approximation integrates each one
-  against a diagonal cavity.
+  where the group has no Dirichlet-process random effects the data tie
+  to them and the sum over their subsets stays within a budget; else the
+  expectation consistent (EC) approximation integrates each one against
+  a diagonal cavity.
 
 - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
   process with base measure \\N(0, \tau^2)\\ and `concentration`, the
@@ -42,19 +38,12 @@ unless given.
 ``` r
 normal()
 
-laplace(lambda = NULL)
-
 spikeSlab(prob = NULL, tau = NULL)
 
 dirichletProcess(concentration = NULL, tau = NULL)
 ```
 
 ## Arguments
-
-- lambda:
-
-  Strength of the Laplace distribution; `NULL` (default) estimates it, a
-  positive number fixes it.
 
 - prob:
 
@@ -85,10 +74,6 @@ An object of class `redist`.
 ## The distributions of a random term, written into gr() of an effect formula
 normal()
 #> normal() 
-laplace()
-#> laplace(lambda = NULL) 
-laplace(lambda = 2)
-#> laplace(lambda = 2) 
 spikeSlab()
 #> spikeSlab(prob = NULL, tau = NULL) 
 spikeSlab(prob = 0.2, tau = 0.5)

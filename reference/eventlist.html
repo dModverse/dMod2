@@ -7,10 +7,14 @@
   };
 </script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet"><link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet"><script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet"><script src="../extra.js"></script><meta property="og:title" content="Eventlist — eventlist"><meta name="description" content="An eventlist is a data frame with one event per row and the columns var,
 time, value, root and method. Event time and value can be
-parameters, which can be estimated. addEvent() appends an event and is
+parameters, which can be estimated. Each event gives either a time or a
+root and has NA in the other column, so an event triggered by a root
+needs time = NA in addEvent(). addEvent() appends an event and is
 pipe-friendly."><meta property="og:description" content="An eventlist is a data frame with one event per row and the columns var,
 time, value, root and method. Event time and value can be
-parameters, which can be estimated. addEvent() appends an event and is
+parameters, which can be estimated. Each event gives either a time or a
+root and has NA in the other column, so an event triggered by a root
+needs time = NA in addEvent(). addEvent() appends an event and is
 pipe-friendly."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
@@ -19,7 +23,7 @@ pipe-friendly."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,7 +41,7 @@ pipe-friendly."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -58,7 +62,7 @@ pipe-friendly."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -95,7 +99,9 @@ pipe-friendly."></head><body>
     <div class="ref-description section level2">
     <p>An eventlist is a data frame with one event per row and the columns <code>var</code>,
 <code>time</code>, <code>value</code>, <code>root</code> and <code>method</code>. Event time and value can be
-parameters, which can be estimated. <code>addEvent()</code> appends an event and is
+parameters, which can be estimated. Each event gives either a <code>time</code> or a
+<code>root</code> and has <code>NA</code> in the other column, so an event triggered by a root
+needs <code>time = NA</code> in <code>addEvent()</code>. <code>addEvent()</code> appends an event and is
 pipe-friendly.</p>
     </div>
 
@@ -115,8 +121,9 @@ pipe-friendly.</p>
 
 
 <dt id="arg-time">time<a class="anchor" aria-label="anchor" href="#arg-time"></a></dt>
-<dd><p>character or numeric, the time at which the event happens.
-Default <code>NULL</code> in <code>eventlist()</code> and <code>0</code> in <code>addEvent()</code>.</p></dd>
+<dd><p>character or numeric, the time at which the event happens, or
+<code>NA</code> for an event triggered by <code>root</code>. Default <code>NULL</code> in <code>eventlist()</code> and
+<code>0</code> in <code>addEvent()</code>.</p></dd>
 
 
 <dt id="arg-value">value<a class="anchor" aria-label="anchor" href="#arg-value"></a></dt>
@@ -125,9 +132,10 @@ in <code>eventlist()</code> and <code>0</code> in <code>addEvent()</code>.</p></
 
 
 <dt id="arg-root">root<a class="anchor" aria-label="anchor" href="#arg-root"></a></dt>
-<dd><p>character or <code>NA</code>, a condition that triggers the event when it
-reaches zero, instead of <code>time</code>. Default <code>NULL</code> in <code>eventlist()</code>, which
-becomes <code>NA</code> as soon as another column is given, and <code>NA</code> in <code>addEvent()</code>.</p></dd>
+<dd><p>character or <code>NA</code>, an expression that triggers the event when
+it reaches zero, for an event with <code>time = NA</code>. Default <code>NULL</code> in
+<code>eventlist()</code>, which becomes <code>NA</code> as soon as another column is given, and
+<code>NA</code> in <code>addEvent()</code>.</p></dd>
 
 
 <dt id="arg-method">method<a class="anchor" aria-label="anchor" href="#arg-method"></a></dt>
@@ -169,14 +177,14 @@ arguments returns an empty eventlist.</p>
 <span class="r-in"><span><span class="va">events</span> <span class="op">&lt;-</span> <span class="fu">eventlist</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">events</span> <span class="op">&lt;-</span> <span class="fu">addEvent</span><span class="op">(</span><span class="va">events</span>, var <span class="op">=</span> <span class="st">"A"</span>, time <span class="op">=</span> <span class="st">"time_switch"</span>,</span></span>
 <span class="r-in"><span>                   value <span class="op">=</span> <span class="st">"value_switch"</span>, method <span class="op">=</span> <span class="st">"replace"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="co"># Set B to 2 when A reaches A_target; the event time is the parameter time_root</span></span></span>
-<span class="r-in"><span><span class="va">events</span> <span class="op">&lt;-</span> <span class="fu">addEvent</span><span class="op">(</span><span class="va">events</span>, var <span class="op">=</span> <span class="st">"B"</span>, time <span class="op">=</span> <span class="st">"time_root"</span>, value <span class="op">=</span> <span class="fl">2</span>,</span></span>
+<span class="r-in"><span><span class="co"># Set B to 2 when A reaches A_target, an event without a time</span></span></span>
+<span class="r-in"><span><span class="va">events</span> <span class="op">&lt;-</span> <span class="fu">addEvent</span><span class="op">(</span><span class="va">events</span>, var <span class="op">=</span> <span class="st">"B"</span>, time <span class="op">=</span> <span class="cn">NA</span>, value <span class="op">=</span> <span class="fl">2</span>,</span></span>
 <span class="r-in"><span>                   root <span class="op">=</span> <span class="st">"A - A_target"</span>, method <span class="op">=</span> <span class="st">"replace"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">events</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Eventlist with 2 events:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   var        time        value         root  method</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1   A time_switch value_switch         &lt;NA&gt; replace</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2   B   time_root            2 A - A_target replace</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2   B        &lt;NA&gt;            2 A - A_target replace</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ... 1 event(s) triggered by a root condition rather than a fixed time.</span>
 </code></pre></div>
     </div>

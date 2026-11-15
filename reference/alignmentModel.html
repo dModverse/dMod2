@@ -16,7 +16,7 @@ effect formulas: yi ~ target * time gives one value per combination of
 target and time, sj ~ gel + target additive effects. A column gives one
 level per value, numeric or not; I(dose) enters a numeric column as a
 covariate with one slope. Random terms, (1 | gel), (1 + dose | p | gel)
-and gr(gel, dist = laplace()), add random effects per group as in
+and gr(gel, dist = spikeSlab()), add random effects per group as in
 randomEffects(). trafo sets the scale of a symbol, "sj &amp;lt;- 10^sj": the
 predictor is then on the log10 scale.
 Values and scales share a common factor. As in blotIt, the experiments that
@@ -44,7 +44,7 @@ effect formulas: yi ~ target * time gives one value per combination of
 target and time, sj ~ gel + target additive effects. A column gives one
 level per value, numeric or not; I(dose) enters a numeric column as a
 covariate with one slope. Random terms, (1 | gel), (1 + dose | p | gel)
-and gr(gel, dist = laplace()), add random effects per group as in
+and gr(gel, dist = spikeSlab()), add random effects per group as in
 randomEffects(). trafo sets the scale of a symbol, "sj &amp;lt;- 10^sj": the
 predictor is then on the log10 scale.
 Values and scales share a common factor. As in blotIt, the experiments that
@@ -69,7 +69,7 @@ them come out in the units of absolute.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -87,7 +87,7 @@ them come out in the units of absolute.'></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -108,7 +108,7 @@ them come out in the units of absolute.'></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -154,7 +154,7 @@ effect formulas: <code>yi ~ target * time</code> gives one value per combination
 target and time, <code>sj ~ gel + target</code> additive effects. A column gives one
 level per value, numeric or not; <code>I(dose)</code> enters a numeric column as a
 covariate with one slope. Random terms, <code>(1 | gel)</code>, <code>(1 + dose | p | gel)</code>
-and <code>gr(gel, dist = laplace())</code>, add random effects per group as in
+and <code>gr(gel, dist = spikeSlab())</code>, add random effects per group as in
 <code><a href="randomEffects.html">randomEffects()</a></code>. <code>trafo</code> sets the scale of a symbol, <code>"sj &lt;- 10^sj"</code>: the
 predictor is then on the log10 scale.</p>
 <p>Values and scales share a common factor. As in blotIt, the experiments that
@@ -203,8 +203,9 @@ them come out in the units of <code>absolute</code>.</p>
 <dd><p>data.frame with a column <code>value</code>, the readings, and the columns
 named in the formulas and expressions. An optional column <code>lloq</code> holds the
 lower limit of quantification of each reading (<code>NA</code> for none); a reading
-with <code>value &lt;= lloq</code> or <code>value</code> <code>NA</code> is censored (M3). An optional logical
-column <code>absolute</code> marks the absolute readings.</p></dd>
+with a limit and <code>value &lt;= lloq</code> or <code>value</code> <code>NA</code> is censored (M3). A
+reading without a limit whose value is not finite is dropped with a
+warning. An optional logical column <code>absolute</code> marks the absolute readings.</p></dd>
 
 
 <dt id="arg-model">model<a class="anchor" aria-label="anchor" href="#arg-model"></a></dt>

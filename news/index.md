@@ -1,5 +1,55 @@
 # Changelog
 
+## dMod2 0.15.8
+
+- `laplace()` is removed. A Laplace prior has no mass at 0, so the
+  deviations it sets to 0 at the joint mode are not a selection by the
+  marginal likelihood;
+  [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md)
+  and
+  [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md)
+  select deviations, and
+  [`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+  keeps the L1 penalty.
+  [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) takes the
+  settings of the sparse fit in `control$sparseFit`, formerly
+  `control$laplace`, and returns no `strengths`.
+- The guide chapter on sparse random effects is Sparse deviations, the
+  methods article Sparsity priors, both under new addresses. The methods
+  article describes the Dirichlet process as a grouping of the groups
+  and the clustered lasso, `fuse` of
+  [`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md),
+  as the penalized counterpart.
+- `trustL1(one.sided = TRUE)` penalizes values below `mu` by
+  `lambda * (mu - p)` and leaves values above free: a parameter on `mu`
+  stays there only while the objective pulls it down by at most
+  `lambda`, and `mu` is no lower bound.
+- [`profile()`](https://rdrr.io/r/stats/profile.html) no longer doubles
+  a step it has just shrunk.
+- [`importPEtab()`](https://dmodverse.github.io/dMod2/reference/importPEtab.md)
+  evaluates a prior without the `parameterScale` prefix on the linear
+  parameter: for a parameter on `log` or `log10` scale at the
+  back-transformed value, without a Jacobian term, as other PEtab tools
+  do. A plain `normal` or `laplace` prior on such a parameter is no
+  longer an error.
+- [`exportSbml()`](https://dmodverse.github.io/dMod2/reference/exportSbml.md)
+  writes an event with `method = "add"` or `"multiply"` as `x + value`
+  or `x * value` on the old value.
+- [`slurmCluster()`](https://dmodverse.github.io/dMod2/reference/localNode.md)
+  without `walltime` leaves out the directive lines of the job script
+  template whose field has no value, so the shipped template runs
+  without one.
+- The flags of `compile(args = )` reach the link as well.
+- Composing two functions defined for different single conditions with
+  `*` is an error.
+- The methods articles, the guide, the example projects and the
+  reference pages are corrected where they did not match the code or the
+  mathematics, among them the partition sum of the Dirichlet process,
+  the hard case of the trust-region subproblem, the regularity of
+  steady-state roots, the scaling test of the symmetry detection and the
+  growth criterion of multiple shooting.
+- The README links the guide chapters instead of repeating them.
+
 ## dMod2 0.15.7
 
 - [`detectFreeCores()`](https://dmodverse.github.io/dMod2/reference/detectFreeCores.md)

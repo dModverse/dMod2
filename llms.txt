@@ -11,7 +11,7 @@ remotes::install_github("dModverse/dMod2")
 ## Where to go
 
 - [Get started](https://dmodverse.github.io/dMod2/articles/dMod2.md): a
-  two-state model from reactions to profile likelihoods.
+  model of bile acid transport from reactions to profile likelihoods.
 - [Installation and
   troubleshooting](https://dmodverse.github.io/dMod2/articles/installation.md):
   compilers, Python, SBML, symident.
@@ -344,7 +344,6 @@ and their diagnostics.
   [`print(`*`<randomeffects>`*`)`](https://dmodverse.github.io/dMod2/reference/randomEffects.md)
   : Random effects of a parameter transformation
 - [`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md)
-  [`laplace()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   : Distributions of random effects
@@ -536,8 +535,8 @@ simulated Western blots, qPCR and targeted mass spectrometry.
   uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncertainty.md):
 - [7. Nonlinear mixed-effects
   models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md):
-- [8. Group-specific
-  effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md):
+- [8. Sparse
+  deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md):
 - [9. Alignment of relative data
   measurements](https://dmodverse.github.io/dMod2/articles/guide-alignment.md):
 - [10. PEtab import and
@@ -565,8 +564,8 @@ Derivations behind the guide, with the comparisons that support them.
   shooting](https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.md):
 - [Marginal likelihood of mixed-effects
   models](https://dmodverse.github.io/dMod2/articles/methods-nlme.md):
-- [Sparse random
-  effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.md):
+- [Sparsity
+  priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md):
 
 ### Examples: signaling models
 

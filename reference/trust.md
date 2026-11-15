@@ -63,7 +63,7 @@ trustL1(
   returning a list with components `value`, `gradient` and `hessian`. It
   is called with the logical arguments `deriv` and `hessian`, and with
   `deriv2 = TRUE` when an exact Hessian is requested, so it must accept
-  them or `...`.
+  them or `...`. `trustL1` calls it with the parameters and `...` only.
 
 - parinit:
 
@@ -90,7 +90,7 @@ trustL1(
   (default) the Gauss-Newton Hessian of the objective, `"bfgs"` or
   `"sr1"` a quasi-Newton update seeded as `qnControl$hessianInit` says,
   `"exact"` the true Hessian at every iterate, which needs an objective
-  that takes `deriv2`. Quasi-Newton methods require
+  that takes `deriv2`. `"bfgs"`, `"sr1"` and `"exact"` require
   `boundary = "reflective"`. Also selects the control defaults below.
   With `phases`, each phase names a method, and this argument is an
   error.
@@ -188,26 +188,29 @@ trustL1(
 
 - qnControl:
 
-  List of quasi-Newton settings, merged into the defaults and read only
-  in a `"bfgs"` or `"sr1"` phase.
+  List of quasi-Newton settings, merged into the defaults and read in a
+  `"bfgs"` or `"sr1"` phase; `hessianInit` also in a first phase of
+  source `"gn"`.
 
   `hessianInit`
 
   :   Seed of the approximation: `"gn"` (default) the Gauss-Newton
       Hessian at `parinit`; `"identity"` the identity matrix, after
-      which no Hessian is requested from the objective; `"exact"` the
-      true Hessian at `parinit`, then gradients only. `"exact"` needs
-      `deriv2`, see `derivMode` in
+      which the objective is asked for gradients only until a reseed;
+      `"exact"` the true Hessian at `parinit`, then gradients only.
+      `"exact"` needs `deriv2`, see `derivMode` in
       [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md).
-      Used only when `hessianMethod` is `"bfgs"` or `"sr1"`.
+      In a first phase of source `"gn"`, `"exact"` makes the first step
+      use the exact Hessian at `parinit`.
 
   `hessianReseed`
 
   :   `"never"` (default): a stalled quasi-Newton phase, or one whose
       trust radius collapses, stops. `"stall"`: it continues from a
-      fresh Hessian of the same source at the current iterate, provided
-      the iterate moved since the last reseed. The result reports the
-      count as `nReseed`.
+      fresh Hessian at the current iterate, the exact one with
+      `hessianInit = "exact"` and the Gauss-Newton one otherwise,
+      provided the iterate moved since the last reseed. The result
+      reports the count as `nReseed`.
 
   `qnMemory`
 
@@ -234,8 +237,10 @@ trustL1(
 
   `thetaMax`
 
-  :   Largest fraction of the distance to a bound a step may use.
-      Default `0.99995`. `boundary = "reflective"` only.
+  :   Smallest fraction of the distance to a bound a step may use. The
+      fraction is `max(thetaMax, 1 - m)`, below 1, with `m` the
+      first-order optimality measure. Default `0.99995`.
+      `boundary = "reflective"` only.
 
   `nonmonotone`
 
@@ -282,6 +287,8 @@ trustL1(
       continuity. Needs forward sensitivities and is skipped without
       them. Default `TRUE`.
 
+  `trustL1` takes `thetaMax` only.
+
 - minimize:
 
   If `TRUE` (default) minimize, if `FALSE` maximize.
@@ -293,26 +300,27 @@ trustL1(
 
 - printIter:
 
-  If `TRUE`, print iteration count and objective value at each
-  evaluation. Default `FALSE`.
+  If `TRUE`, print the number of the evaluation and the objective value
+  at each evaluation. Default `FALSE`.
 
 - traceFile:
 
-  Path of a CSV file written with one row per evaluation: iteration,
-  objective value and parameters. Default `NULL`, no file.
+  Path of a CSV file written with one row per evaluation: the number of
+  the evaluation (column `Iteration`), objective value and parameters.
+  Default `NULL`, no file.
 
 - sparse:
 
   `"auto"` (default), `TRUE` or `FALSE`. With `TRUE`, `objfun` is called
   with `hessian = "sparse"` and the sparse Gauss-Newton Hessian it
-  returns (a `Matrix`) is factorized by sparse Cholesky. Without phases
-  and bounds; of the other settings only `rinit`, `rmax`, `iterlim`,
-  `tolControl$ftol`, `tolControl$mtol` and `printIter` apply. `"auto"`
-  takes this path for a Gauss-Newton minimization without phases,
-  bounds, exact Hessian, trace or multiple shooting when `parinit` has
-  at least `parameters` entries and the sparse Hessian at `parinit`
-  fills at most `fill` of the matrix, both from
-  `getOption("dMod2.sparseAuto")`, a list that defaults to
+  returns (a `Matrix`) is factorized by sparse Cholesky. Minimization
+  without phases and bounds only; of the other settings only `rinit`,
+  `rmax`, `iterlim`, `tolControl$ftol`, `tolControl$mtol` and
+  `printIter` apply. `"auto"` takes this path for a Gauss-Newton
+  minimization without phases, bounds, exact Hessian, trace or multiple
+  shooting when `parinit` has at least `parameters` entries and the
+  sparse Hessian at `parinit` fills at most `fill` of the matrix, both
+  from `getOption("dMod2.sparseAuto")`, a list that defaults to
   `parameters = 500` and `fill = 0.05`.
 
 - ...:
@@ -323,15 +331,15 @@ trustL1(
 
   Named numeric vector of reference values for the L1-penalized
   parameters. Names must be a subset of `names(parinit)`; only the named
-  parameters receive a penalty. Each must lie strictly inside
-  `[parlower, parupper]`. Defaults to a zero vector covering all of
-  `parinit`.
+  parameters receive a penalty. With `boundary = "reflective"` each must
+  lie strictly inside `[parlower, parupper]`. Defaults to a zero vector
+  covering all of `parinit`.
 
 - one.sided:
 
-  Logical. If `TRUE`, the penalty is one-sided and acts as a lower wall
-  at `mu`: `lambda * max(0, mu - p)`. Otherwise it is the symmetric
-  `lambda * |p - mu|`.
+  Logical. If `TRUE`, the penalty is one-sided,
+  `lambda * max(0, mu - p)`: only values below `mu` are penalized.
+  Otherwise it is the symmetric `lambda * |p - mu|`.
 
 - lambda:
 
@@ -342,7 +350,8 @@ trustL1(
 
   Character, names in `mu` whose penalty is the gate `lambda * (p - mu)`
   with `p >= mu`: the parameter can sit exactly on `mu` and leaves it
-  only upward. Starts below `mu` are moved onto it.
+  only upward. Starts below `mu` are moved onto it. Needs
+  `boundary = "reflective"`.
 
 - fuse:
 
@@ -355,7 +364,7 @@ trustL1(
   `lambda`), `anchor` (default none) and `weights`, an `(m+1) x (m+1)`
   matrix whose last row and column refer to the anchor (default all 1).
   Fused parameters must not appear in `mu`; if `fuse` is given and `mu`
-  is not, `mu` is empty.
+  is not, `mu` is empty. Needs `boundary = "reflective"`.
 
 ## Value
 
@@ -392,7 +401,9 @@ A list of class `trustfit` with components
 - `phaseIterations`:
 
   Named integer, the iterations of each phase run, in run order and
-  named after the phase; sums to `iterations`.
+  named after the phase. The sum is `iterations` without the iteration
+  that ends the run on failed evaluations and without the iterations
+  that reseed instead of taking a step.
 
 - `phaseSweep`:
 
@@ -424,12 +435,21 @@ With `blather = TRUE` the list also contains the matrices `argpath`
 (accepted iterates) and `argtry` (trial points), one row per iteration,
 and the per-iteration vectors `steptype`, `stepback`, `accept`, `r`
 (radius), `rho` (ratio of actual to predicted reduction), `valpath`,
-`valtry`, `preddiff`, `stepnorm` and, when a quasi-Newton source is
-involved, `hessianSource`.
+`valtry`, `preddiff`, `stepnorm` and, with `boundary = "reflective"`,
+`hessianSource`.
 
 `boundary = "clip"` returns only `argument`, `value`, `gradient`,
 `hessian`, `iterations`, `converged`, `atBound` and `stopReason`, plus
 the trace.
+
+The sparse path, see `sparse`, returns only `argument`, `value`,
+`gradient`, `hessian` (a sparse `Matrix`), `iterations` and `converged`.
+
+`trustL1` returns a list without class with `argument`, `value`,
+`gradient`, `hessian`, `iterations`, `converged`, `atBound` and
+`stopReason`, plus the trace without `hessianSource`. `value` and
+`gradient` include the penalty, whose gradient counts zero on a kink;
+`hessian` is that of `objfun`.
 
 A multiple-shooting run returns `argument`, `value`, `gradient`,
 `hessian`, `iterations`, `neval`, `qnSkipped`, `converged`,
@@ -448,19 +468,24 @@ trust-region-reflective scheme of Coleman and Li. Iterates stay strictly
 inside the box and never land exactly on a bound; `atBound` in the
 result reports which parameters a bound holds.
 
-`boundary = "clip"`: active-set reduction with componentwise clipping.
+`boundary = "clip"`: active-set reduction with componentwise clipping,
+with a single `"gn"` phase. The run stops when a trial point, accepted
+or not, changes the value by less than `ftol` or has a predicted
+reduction below `mtol`, both reported as `stopReason = "fvalue"`.
+`gtol`, `xtol`, `rmin` and stagnation are not tested; three failed
+evaluations in a row end the run with `stopReason = "iterlim"`.
 
 ## Convergence
 
-The run stops as soon as one of the following holds. The gradient test
-is evaluated at the current iterate; the value and step tests count only
-on an accepted step, the model test also on a rejected Newton step from
-inside the trust region.
+With `boundary = "reflective"` the run stops as soon as one of the
+following holds. The gradient test is evaluated at the current iterate;
+the value and step tests count only on an accepted step, the model test
+also on a rejected Newton step from inside the trust region.
 
 - `gtol`: the first-order optimality measure \\\max_i \|v_i g_i\|\\ is
-  at most `gtol`, with \\v_i\\ the distance to the bound the gradient
-  points to, 1 if that bound is infinite. Without bounds it is \\\max_i
-  \|g_i\|\\.
+  at most `gtol`, with \\v_i\\ the distance to the bound in the descent
+  direction \\-g_i\\, 1 if that bound is infinite. Without bounds it is
+  \\\max_i \|g_i\|\\.
 
 - `ftol`: \\\|f - f\_{\mathrm{try}}\| \<\\ `ftol`.
 
@@ -477,8 +502,8 @@ inside the trust region.
 
 `stopReason` in the result names the test that fired: `"gradient"`,
 `"fvalue"`, `"preddiff"`, `"step"`, `"stagnation"`, `"radius"`,
-`"objfun"` (three failed evaluations in a row) or `"iterlim"`.
-Stagnation reports `converged = TRUE`.
+`"objfun"` (three failed evaluations in a row, ten with multiple
+shooting) or `"iterlim"`. Stagnation reports `converged = TRUE`.
 
 Only `gtol` tests first-order optimality. While `switches` remain, see
 `phases`, an `"fvalue"`, `"preddiff"`, `"step"` or `"stagnation"` stop
@@ -499,7 +524,8 @@ An objective built by
 [`normL2`](https://dmodverse.github.io/dMod2/reference/normL2.md)`(..., multipleShootingControl = )`,
 alone or in a sum, is optimized by multiple shooting with the same
 controls. Not available then: `hessianMethod = "exact"`, more than one
-phase, `switches`, `qnControl$hessianReseed`, `qnControl$qnMemory`,
+phase, `switches`, `qnControl$hessianInit = "exact"`,
+`qnControl$hessianReseed`, `qnControl$qnMemory`,
 `stepControl$nonmonotone`, `boundary = "clip"`, `minimize = FALSE` and
 `traceFile`. The run reports `converged = TRUE` only when the scaled
 gaps between the segments are below `tolControl$ctol`. The method is

@@ -15,7 +15,7 @@ effect formulas: `yi ~ target * time` gives one value per combination of
 target and time, `sj ~ gel + target` additive effects. A column gives
 one level per value, numeric or not; `I(dose)` enters a numeric column
 as a covariate with one slope. Random terms, `(1 | gel)`,
-`(1 + dose | p | gel)` and `gr(gel, dist = laplace())`, add random
+`(1 + dose | p | gel)` and `gr(gel, dist = spikeSlab())`, add random
 effects per group as in
 [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md).
 `trafo` sets the scale of a symbol, `"sj <- 10^sj"`: the predictor is
@@ -66,8 +66,10 @@ print(x, ...)
   data.frame with a column `value`, the readings, and the columns named
   in the formulas and expressions. An optional column `lloq` holds the
   lower limit of quantification of each reading (`NA` for none); a
-  reading with `value <= lloq` or `value` `NA` is censored (M3). An
-  optional logical column `absolute` marks the absolute readings.
+  reading with a limit and `value <= lloq` or `value` `NA` is censored
+  (M3). A reading without a limit whose value is not finite is dropped
+  with a warning. An optional logical column `absolute` marks the
+  absolute readings.
 
 - model:
 

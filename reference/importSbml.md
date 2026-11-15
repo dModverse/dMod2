@@ -1,7 +1,7 @@
 # Import an SBML Model
 
-Reads an SBML Level 3 file. Requires reticulate, which provides a Python
-with `python-libsbml`; set the environment variable
+Reads an SBML Level 3 file. Requires rjson and reticulate, which
+provides a Python with `python-libsbml`; set the environment variable
 `DMOD_LIBSBML_PYTHON` to the path of a Python interpreter to use that
 one instead. Kinetic laws are divided by the volume of their
 compartment.
@@ -48,8 +48,9 @@ A list with components
 
 - `assignmentRules`:
 
-  Named list of assignment rule formulas, already substituted into
-  rates, initial values and observables.
+  Named list of the formulas of the assignment rules and of the
+  parameter initial assignments that `keep` does not name, already
+  substituted into rates, initial values and observables.
 
 - `events`:
 

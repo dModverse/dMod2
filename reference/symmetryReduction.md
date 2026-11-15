@@ -78,7 +78,7 @@ symmetryReduction(
 - timeout:
 
   Time limit in seconds for the section search of one block; a block not
-  solved in time keeps the invariants (`"invariantOnly"`). Unlike
+  solved in time keeps the invariants (`"invariant_only"`). Unlike
   `workCap`, it depends on the load of the machine. Defaults to `Inf`.
 
 - allowOpen:
@@ -117,7 +117,7 @@ An object of class `symmetryreduction`:
 
   one entry per set of coupled directions, with `invariants`, `section`,
   `newParameters` (the invariant each `q_<k>` holds), `solvedDomain`,
-  `coverage` and `status` (`"fixed"`, `"reduced"`, `"invariantOnly"` or
+  `coverage` and `status` (`"fixed"`, `"reduced"`, `"invariant_only"` or
   `"unresolved"`), `level`, `generatorLevel` (the lowest level of the
   directions in the block), `unproven` (the claims of the section that
   are not proven) and, for a curved block, `count` (`"exact"` or

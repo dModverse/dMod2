@@ -2,9 +2,9 @@
 
 Runs [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) from
 `fits` starts, the first at `init`, the others perturbed by normal noise
-of standard deviation `sd` (on the log scale for strengths,
-concentrations and slab standard deviations, on the logit scale for slab
-probabilities), and returns the best fit.
+of standard deviation `sd` (on the log scale for concentrations and slab
+standard deviations, on the logit scale for slab probabilities), and
+returns the best fit.
 
 ## Usage
 
@@ -47,13 +47,17 @@ msem(
 
   Named numeric start with the parameters of `obj` that are neither
   random effects nor created by the effect formulas (those start at 0).
-  It may also set those and the hyperparameters: `omega_*` (log standard
-  deviations and Cholesky entries), `lambda_*` (Laplace), `prob_*` and
-  `tau_*` (spike and slab), `concentration_*` and `tau_*` (Dirichlet
-  process), named `<kind>_<grouping>` and numbered `_1`, `_2`, ... where
-  a grouping has several blocks. An `em` fit as `init` gives the start:
-  the estimates, `fixed` values and random effects of that fit, without
-  those it set to 0, and with sparse random effects the inner modes.
+  It may also set those and the hyperparameters: `omega_<a>_<a>`, the
+  log of the diagonal entry of the Cholesky factor of `Omega` (the log
+  standard deviation of an uncorrelated random effect), and
+  `omega_<a>_<b>`, the entry in row `a` and column `b` below the
+  diagonal, with `a` and `b` the stems of the random effects without
+  `eta_`, as in `omega_cl_cl`; `prob_*` and `tau_*` (spike and slab),
+  `concentration_*` and `tau_*` (Dirichlet process), named
+  `<kind>_<grouping>` and numbered `_1`, `_2`, ... where a grouping has
+  several blocks. An `em` fit as `init` gives the start: the estimates,
+  `fixed` values and random effects of that fit, without those it set to
+  0, and with sparse random effects the inner modes.
 
 - fixed:
 
@@ -104,7 +108,7 @@ msem(
       from the estimates; where -2 log L rises by at most `boundary`,
       that fit is returned and names the hyperparameter in `boundary`.
 
-  `quadrature`, `saem`, `laplace`
+  `quadrature`, `saem`, `sparseFit`
 
   :   lists of the sections Quadrature, SAEM and Sparse random effects.
 
@@ -126,7 +130,8 @@ msem(
 
 - verbose:
 
-  Logical; print the progress of the iterative methods.
+  Logical. If `TRUE`, print the table of the starts; the fits print no
+  progress. Default `FALSE`.
 
 - sparse:
 
@@ -167,6 +172,10 @@ msem(
 
 The fit with the smallest `value`, of class `em`, with `multistart`, a
 data frame with a row per start:
+
+- `start`:
+
+  the position of the start among the `fits` drawn.
 
 - `value`, `converged`, `iterations`:
 
@@ -217,10 +226,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_err.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

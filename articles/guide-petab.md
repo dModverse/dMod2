@@ -116,8 +116,9 @@ multiplies concentration rates by the compartment volume,
 [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md)
 divides again.
 [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md)
-returns an equation list with compartments, volumes, parameter values,
-initial values, assignment rules and events:
+returns a list: the equation list with compartments and volumes in
+`reactions`, parameter values, initial values, observables, assignment
+rules and events:
 
 ``` r
 

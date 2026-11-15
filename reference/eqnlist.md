@@ -45,9 +45,10 @@ eqnlist(
 
 - volumes:
 
-  named character of state volumes. Without `compartments` and
-  `compartmentOf`, each distinct expression becomes a compartment with
-  ID `c1`, `c2`, ...
+  named character of state volumes. Without `compartmentOf`, each
+  distinct expression becomes a compartment with ID `c1`, `c2`, ..., and
+  `compartments` is ignored. With `compartmentOf`, the compartment
+  layout wins, and a volume that differs from it gives a warning.
 
 - ...:
 
@@ -102,7 +103,19 @@ eqnlist(
 
 - totals:
 
-  named list of user-defined conservation expressions, see
+  named list of user-defined conservation expressions, stored without
+  the checks of
+  [`customTotals()`](https://dmodverse.github.io/dMod2/reference/customTotals.md).
+  [`conservedQuantities()`](https://dmodverse.github.io/dMod2/reference/conservedQuantities.md)
+  returns them;
+  [`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
+  ignores them, and
+  [`addReaction()`](https://dmodverse.github.io/dMod2/reference/addReaction.md),
+  [`assignCompartment()`](https://dmodverse.github.io/dMod2/reference/assignCompartment.md),
+  [`setCompartmentVolume()`](https://dmodverse.github.io/dMod2/reference/setCompartmentVolume.md),
+  [`subset()`](https://rdrr.io/r/base/subset.html) and
+  [`c()`](https://rdrr.io/r/base/c.html) drop them, as they keep only
+  totals set by
   [`customTotals()`](https://dmodverse.github.io/dMod2/reference/customTotals.md).
   Default `NULL` uses the detected basis.
 
@@ -118,7 +131,8 @@ The data frame for `as.eqnlist()` contains the columns "Description"
 the stoichiometric matrix. Layout attributes of the data frame, as set
 by
 [`as.data.frame.eqnlist()`](https://dmodverse.github.io/dMod2/reference/as.data.frame.eqnlist.md),
-are used unless `volumes` is given.
+fill in the layout arguments not given; with `volumes` given, the
+attributes `compartments` and `compartmentOf` are not used.
 
 ## See also
 

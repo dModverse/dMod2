@@ -21,7 +21,7 @@ objective functions and plain R functions.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,7 +39,7 @@ objective functions and plain R functions.'></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -60,7 +60,7 @@ objective functions and plain R functions.'></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -136,7 +136,7 @@ objective functions and plain R functions.</p>
 <dd><p>Objective function <code>fitted(pars, fixed, ...)</code> returning a
 list with <code>value</code>, <code>gradient</code> and <code>hessian</code>. Numeric
 attributes of the result, such as <code>"data"</code> and <code>"prior"</code>, are
-kept as columns of the profile.</p></dd>
+kept as columns of the profile, except <code>chi2</code> and <code>chi2_*</code>.</p></dd>
 
 
 <dt id="arg-pars">pars<a class="anchor" aria-label="anchor" href="#arg-pars"></a></dt>
@@ -222,8 +222,10 @@ is halved; below half of it <code>gamma</code> doubles up to the initial
 value. <code>1</code> for both methods.</p></dd>
 
 <dt><code>reg</code></dt>
-<dd><p>Singular values below <code>reg</code> are dropped when the
-Hessian is inverted. <code>.Machine$double.eps</code> / <code>0</code>.</p></dd>
+<dd><p>Where the Hessian bordered by the constraint is
+numerically singular, the path equation is solved by a pseudoinverse
+without the singular values below <code>reg</code> times the largest one
+and the matrix dimension. <code>.Machine$double.eps</code> / <code>0</code>.</p></dd>
 
 
 </dl></dd>
@@ -283,8 +285,10 @@ path equation and the reoptimizations on the sparse Hessian of
 parameters, with metanames <code>value</code> (the objective), <code>constraint</code>
 (deviation of the profiled parameter from the value in <code>pars</code>),
 <code>stepsize</code>, <code>gamma</code> and <code>whichPar</code> (the profiled
-parameter), columns for the numeric attributes of the objective, and one
-column per parameter. Profiles that fail are dropped with a message. The
+parameter), columns for the numeric attributes of the objective other
+than <code>chi2</code> and <code>chi2_*</code>, and one column per parameter.
+Profiles that fail are dropped with a message; when all fail,
+<code><a href="https://rdrr.io/r/stats/profile.html" class="external-link">profile()</a></code> stops with an error. The
 attribute <code>"ends"</code> is a data frame with one row per side and the
 columns <code>whichPar</code>, <code>side</code>, <code>steps</code> and <code>reason</code>:
 <code>"threshold"</code>, <code>"limit"</code>, <code>"step limit"</code> or the error of

@@ -17,7 +17,7 @@ them."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ them."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -56,7 +56,7 @@ them."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -149,11 +149,14 @@ call when the link command would exceed the command-line limit. Default
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Compile and link flags are taken per source from the <code>"compileInfo"</code>
 attribute of the objects. Objects without it are matched to sources in the
-working directory by model name. Unchanged sources are not recompiled.</p>
-<p>Without <code>output</code>, each source becomes a shared object named after it, i.e.
-after the model name. With <code>output</code>, all sources are linked into one shared
-object of that name, and the model name of every object passed as a plain
-variable is set to <code>output</code>, see <code><a href="modelname.html">modelname()</a></code>. If a shared object of that
+working directory by model name.</p>
+<p>Without <code>output</code>, each source goes through <code>R CMD SHLIB</code> and becomes a
+shared object named after it, i.e. after the model name. With <code>output</code>, all
+sources are linked into one shared object of that name, and the model name
+of every <code>prdfn</code>, <code>obsfn</code> or <code>parfn</code> passed as a plain variable is set to
+<code>output</code>, see <code><a href="modelname.html">modelname()</a></code>. The object file of a source is then reused while
+the source, the compile command and the installed <span class="pkg">cppDE</span> and <span class="pkg">cOde</span>
+are unchanged. If a shared object of that
 name is already loaded, a suffix <code>_2</code>, <code>_3</code>, ... is appended with a warning.
 With many sources, set <code>output</code>: R limits the number of loaded shared
 objects.</p>

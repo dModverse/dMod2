@@ -152,8 +152,9 @@ sums of them are symmetries too. Up to such sums there are four kinds.
 ## Symmetry reduction
 
 [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
-returns a parameter transformation that removes the directions, for
-scalings by fixing one coordinate per direction ([Methods \> Gauge and
+returns in `$trafo` a parameter transformation that removes the
+directions, for scalings by fixing one coordinate per direction
+([Methods \> Gauge and
 reduction](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction)).
 
 ``` r

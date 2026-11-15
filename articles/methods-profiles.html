@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -137,11 +137,12 @@ parameters minimize <span class="math inline">\(f\)</span>,</p>
 L\bigl(\hat\theta(c)\bigr) . \tag{2}\]</span></p>
 <p>Without a prior, (2) is the minimum of <span class="math inline">\(-2
 \log L\)</span> with <span class="math inline">\(\theta_i = c\)</span>.
-By the likelihood ratio test, <span class="math inline">\(\mathrm{PL}_i(c) - \min_c
-\mathrm{PL}_i(c)\)</span> below the <span class="math inline">\(1 -
-\alpha\)</span> quantile of <span class="math inline">\(\chi^2_1\)</span> (3.84 for 95 %) defines an
+By the likelihood ratio test, the rise <span class="math inline">\(\mathrm{PL}_i(c) -
+\mathrm{PL}_i(\hat\theta_i)\)</span> from the optimum <span class="math inline">\(\hat\theta_i\)</span> below the <span class="math inline">\(1 - \alpha\)</span> quantile of <span class="math inline">\(\chi^2_1\)</span> (3.84 for 95 %) defines an
 asymptotic confidence interval, invariant under reparametrization of
-<span class="math inline">\(\theta_i\)</span>.
+<span class="math inline">\(\theta_i\)</span>. Without a prior the
+optimum is the minimum of (2); with a prior (2) may fall below the value
+at the optimum, and the rise is still measured from there.
 <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> computes the threshold,
 <code>method = "F"</code> the finite-sample one for estimated standard
 deviations. A prior wide against the data curvature keeps (1) finite
@@ -205,9 +206,12 @@ of the Lagrangian <span class="math inline">\(f(\theta) +
 \mathrm{d}\lambda/\mathrm{d}c \end{pmatrix}
   = \begin{pmatrix} 0 \\ 1 \end{pmatrix} \tag{3}\]</span></p>
 <p>with the Hessian <span class="math inline">\(H\)</span> of <span class="math inline">\(f\)</span>: one evaluation and one linear solve
-per step. With a Gauss-Newton <span class="math inline">\(H\)</span> the
-path drifts; <code>algoControl = list(reoptimize = TRUE)</code> corrects
-each step by a short fit.</p>
+per step. The step solves (3) with <span class="math inline">\(-\gamma
+\nabla f\)</span> in place of the upper zero, which pulls it back to the
+constrained optimum (<span class="math inline">\(\gamma = 1\)</span> by
+default, adapted to the size of the pull); with a Gauss-Newton <span class="math inline">\(H\)</span> the path still drifts, and
+<code>algoControl = list(reoptimize = TRUE)</code> corrects each step by
+a short fit.</p>
 </li>
 </ul>
 <p>Step control and stops:</p>
@@ -239,8 +243,9 @@ threshold; <code>limits</code> relative to the optimum reached;
 </tr>
 </tbody>
 </table>
-<p>A point below the start value is a better optimum, from which fit and
-profiles are repeated. Where the curvature jumps, as at the onset of
+<p>A point of <span class="math inline">\(f\)</span> below the start
+value is a better optimum: fit and profiles are then to be repeated from
+it. Where the curvature jumps, as at the onset of
 <code><a href="../reference/constraintStability.html">constraintStability()</a></code> (<a href="methods-steady-states.html#stability">Steady states</a>), the step
 shrinks to <code>min</code> and stays on the profile.</p>
 </div>
@@ -253,15 +258,18 @@ has the profile likelihood</p>
 L\bigl(\hat\theta(z)\bigr) , \quad
 \hat\theta(z) = \operatorname*{arg\,min}_{\theta \,:\, h(t, \theta) = z}
 f(\theta) , \tag{4}\]</span></p>
-<p>whose threshold gives a confidence interval of the prediction <span class="citation"><a href="#ref-kreutz2012likelihood">[2]</a></span>, the
-projection of the parameter confidence region.</p>
+<p>whose threshold gives a confidence interval of the prediction <span class="citation"><a href="#ref-kreutz2012likelihood">[2]</a></span>;
+without a prior it is the image of the parameter region at the <span class="math inline">\(\chi^2_1\)</span> threshold, not of the joint
+region.</p>
 <p>A validation data point makes <span class="math inline">\(z\)</span>
 a parameter <span class="math inline">\(v\)</span>, tied to the
 prediction by</p>
 <p><span class="math display">\[\left( \frac{h(t, \theta) - v}{\sigma_v}
 \right)^2 . \tag{5}\]</span></p>
 <p>The profile of <span class="math inline">\(v\)</span> is (4) for
-<span class="math inline">\(\sigma_v \to 0\)</span>, and within <span class="math inline">\(\sigma_v\)</span> of (4) for <span class="math inline">\(\sigma_v\)</span> small against the band.
+<span class="math inline">\(\sigma_v \to 0\)</span> and lies below (4)
+otherwise, so the interval of <span class="math inline">\(v\)</span> is
+wider: for a quadratic (4) of half-width <span class="math inline">\(w\)</span> the half-width becomes <span class="math inline">\((w^2 + \Delta \sigma_v^2)^{1/2}\)</span>, <span class="math inline">\(\Delta\)</span> the threshold.
 <code><a href="../reference/datapointL2.html">datapointL2()</a></code> builds (5) as an <code>objfn</code> from the
 evaluation of <code><a href="../reference/normL2.html">normL2()</a></code>, which therefore predicts at <span class="math inline">\(t\)</span> (<code>times = t</code>). With
 <code>attrName = "data"</code>, (5) adds to the data term, so

@@ -19,7 +19,7 @@ merged again. For a problem built in dMod, use exportPEtab()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,7 +37,7 @@ merged again. For a problem built in dMod, use exportPEtab()."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -58,7 +58,7 @@ merged again. For a problem built in dMod, use exportPEtab()."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -146,6 +146,11 @@ an error.</p></dd>
     <p>Limits:</p><ul><li><p>Parameter scales are read from <code>attr(petab$bestfit, "petab_scales")</code>; without it they are <code>"lin"</code>.</p></li>
 <li><p>v2 has no parameter scales: values and bounds are written on the
 linear scale, with a warning.</p></li>
+<li><p>v2 has no priors on the parameter scale: such a prior is written as
+the matching prior of the linear parameter, with a warning.</p></li>
+<li><p>v1 has no experiment periods, no start time other than 0 and fewer
+prior distributions: periods and later starts are an error, a prior
+without a v1 form gives a warning.</p></li>
 <li><p>v2 has no <code>log10</code> observable transformation: it is written as
 <code>"log-normal"</code> noise, with a warning.</p></li>
 <li><p>Initial values set per condition only in the parameter

@@ -30,7 +30,7 @@ random terms
 (1 | ID), (1 + dose | ID) with a random slope,
 (1 | p | ID) with an ID p: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
-terms are independent. gr(ID, dist = laplace()) instead of ID sets
+terms are independent. gr(ID, dist = spikeSlab()) instead of ID sets
 the distribution, see normal(). The random effect of a group is
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;group&amp;gt; for the intercept and
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;column&amp;gt;_&amp;lt;group&amp;gt; for a slope; a symbol with random terms
@@ -63,7 +63,7 @@ random terms
 (1 | ID), (1 + dose | ID) with a random slope,
 (1 | p | ID) with an ID p: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
-terms are independent. gr(ID, dist = laplace()) instead of ID sets
+terms are independent. gr(ID, dist = spikeSlab()) instead of ID sets
 the distribution, see normal(). The random effect of a group is
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;group&amp;gt; for the intercept and
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;column&amp;gt;_&amp;lt;group&amp;gt; for a slope; a symbol with random terms
@@ -79,7 +79,7 @@ in a second grouping gets the grouping name in the stem, eta_cl_center_&amp;lt;g
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -97,7 +97,7 @@ in a second grouping gets the grouping name in the stem, eta_cl_center_&amp;lt;g
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -118,7 +118,7 @@ in a second grouping gets the grouping name in the stem, eta_cl_center_&amp;lt;g
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -177,7 +177,7 @@ other columns are <code>cl_&lt;column&gt;</code> (<code>cl_wt</code>, <code>cl_l
 <dd><p><code>(1 | ID)</code>, <code>(1 + dose | ID)</code> with a random slope,
 <code>(1 | p | ID)</code> with an ID <code>p</code>: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
-terms are independent. <code>gr(ID, dist = laplace())</code> instead of <code>ID</code> sets
+terms are independent. <code>gr(ID, dist = spikeSlab())</code> instead of <code>ID</code> sets
 the distribution, see <code><a href="normal.html">normal()</a></code>. The random effect of a group is
 <code>eta_&lt;symbol&gt;_&lt;group&gt;</code> for the intercept and
 <code>eta_&lt;symbol&gt;_&lt;column&gt;_&lt;group&gt;</code> for a slope; a symbol with random terms
@@ -214,14 +214,18 @@ formulas, or a parameter function <code><a href="P.html">P()</a></code> built fr
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>An object of class <code>randomeffects</code>, a list with <code>terms</code> (one row
-per random effect column: symbol, formula term, column, grouping,
-ID, distribution, fixed hyperparameters and the name stem of
-the etas),
-<code>blocks</code> (the correlated groups of rows), <code>subjects</code> (the groups of each
+per random effect column: <code>symbol</code>, <code>origin</code> (the formula), <code>term</code>,
+<code>column</code>, <code>group</code>, <code>id</code>, <code>dist</code>, the fixed hyperparameters <code>prob</code>,
+<code>concentration</code> and <code>tau</code> (<code>NA</code> where estimated) and <code>stem</code>, the name
+stem of the etas),
+<code>blocks</code> (groups of rows: the normal rows of a block are correlated, the
+rows of a spike-and-slab or Dirichlet-process block share the
+hyperparameters), <code>subjects</code> (the groups of each
 grouping and the conditions they own), <code>fixed</code> (the parameters the
 formulas created), <code>etas</code> (eta names, one row per condition, one column
-per term row) and <code>fixedDesign</code> (per symbol the model matrix of the fixed
-effects, one row per condition).</p>
+per term row), <code>groups</code> (per stem the group of each condition),
+<code>fixedDesign</code> (per symbol the model matrix of the fixed effects, one row
+per condition) and <code>etaNames</code> (<code>NULL</code> for random effects from <code><a href="define.html">insert()</a></code>).</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -239,7 +243,7 @@ effects, one row per condition).</p>
 <span class="r-in"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="define.html">insert</a></span><span class="op">(</span><span class="va">trafo</span>,</span></span>
 <span class="r-in"><span>                <span class="va">ka</span> <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">p</span> <span class="op">|</span> <span class="va">ID</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>                <span class="va">cl</span> <span class="op">~</span> <span class="va">wt</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">+</span> <span class="va">dose</span> <span class="op">|</span> <span class="va">p</span> <span class="op">|</span> <span class="va">ID</span><span class="op">)</span>,</span></span>
-<span class="r-in"><span>                <span class="va">v</span>  <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="fu">gr</span><span class="op">(</span><span class="va">ID</span>, dist <span class="op">=</span> <span class="fu"><a href="normal.html">laplace</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span>                <span class="va">v</span>  <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="fu">gr</span><span class="op">(</span><span class="va">ID</span>, dist <span class="op">=</span> <span class="fu"><a href="normal.html">spikeSlab</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">trafo</span><span class="op">$</span><span class="va">C2</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Idx Inner &lt;- Outer</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   1    cl &lt;- exp((cl+cl_wt*75+eta_cl_s2+eta_cl_dose_s2*100))</span>
@@ -249,7 +253,7 @@ effects, one row per condition).</p>
 <span class="r-in"><span><span class="va">re</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Random effects: 4 terms over ID</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   block 1 (normal, ID): eta_ka, eta_cl, eta_cl_dose</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   block 2 (laplace, lambda estimated, ID): eta_v</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   block 2 (spikeSlab, prob estimated, tau estimated, ID): eta_v</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   fixed effects: ka, cl, cl_wt, v </span>
 <span class="r-in"><span><span class="va">re</span><span class="op">$</span><span class="va">fixed</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ka"    "cl"    "cl_wt" "v"    </span>

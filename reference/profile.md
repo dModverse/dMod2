@@ -40,7 +40,8 @@ profile(fitted, ...)
 
   Objective function `fitted(pars, fixed, ...)` returning a list with
   `value`, `gradient` and `hessian`. Numeric attributes of the result,
-  such as `"data"` and `"prior"`, are kept as columns of the profile.
+  such as `"data"` and `"prior"`, are kept as columns of the profile,
+  except `chi2` and `chi2_*`.
 
 - pars:
 
@@ -135,8 +136,10 @@ profile(fitted, ...)
 
   `reg`
 
-  :   Singular values below `reg` are dropped when the Hessian is
-      inverted. `.Machine$double.eps` / `0`.
+  :   Where the Hessian bordered by the constraint is numerically
+      singular, the path equation is solved by a pseudoinverse without
+      the singular values below `reg` times the largest one and the
+      matrix dimension. `.Machine$double.eps` / `0`.
 
 - optControl:
 
@@ -199,11 +202,13 @@ with one row per profile point of all profiled parameters, with
 metanames `value` (the objective), `constraint` (deviation of the
 profiled parameter from the value in `pars`), `stepsize`, `gamma` and
 `whichPar` (the profiled parameter), columns for the numeric attributes
-of the objective, and one column per parameter. Profiles that fail are
-dropped with a message. The attribute `"ends"` is a data frame with one
-row per side and the columns `whichPar`, `side`, `steps` and `reason`:
-`"threshold"`, `"limit"`, `"step limit"` or the error of the objective
-that ended the side.
+of the objective other than `chi2` and `chi2_*`, and one column per
+parameter. Profiles that fail are dropped with a message; when all fail,
+[`profile()`](https://rdrr.io/r/stats/profile.html) stops with an error.
+The attribute `"ends"` is a data frame with one row per side and the
+columns `whichPar`, `side`, `steps` and `reason`: `"threshold"`,
+`"limit"`, `"step limit"` or the error of the objective that ended the
+side.
 
 ## See also
 

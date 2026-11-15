@@ -5,11 +5,11 @@
       fontURL: "https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/output/chtml/fonts/woff-v2"
     }
   };
-</script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet"><link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet"><script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet"><script src="../extra.js"></script><meta property="og:title" content="Import an SBML Model — importSbml"><meta name="description" content="Reads an SBML Level 3 file. Requires reticulate, which provides a
-Python with python-libsbml; set the environment variable
+</script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet"><link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet"><script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet"><script src="../extra.js"></script><meta property="og:title" content="Import an SBML Model — importSbml"><meta name="description" content="Reads an SBML Level 3 file. Requires rjson and reticulate, which
+provides a Python with python-libsbml; set the environment variable
 DMOD_LIBSBML_PYTHON to the path of a Python interpreter to use that one
-instead. Kinetic laws are divided by the volume of their compartment."><meta property="og:description" content="Reads an SBML Level 3 file. Requires reticulate, which provides a
-Python with python-libsbml; set the environment variable
+instead. Kinetic laws are divided by the volume of their compartment."><meta property="og:description" content="Reads an SBML Level 3 file. Requires rjson and reticulate, which
+provides a Python with python-libsbml; set the environment variable
 DMOD_LIBSBML_PYTHON to the path of a Python interpreter to use that one
 instead. Kinetic laws are divided by the volume of their compartment."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -19,7 +19,7 @@ instead. Kinetic laws are divided by the volume of their compartment."></head><b
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,7 +37,7 @@ instead. Kinetic laws are divided by the volume of their compartment."></head><b
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -58,7 +58,7 @@ instead. Kinetic laws are divided by the volume of their compartment."></head><b
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -93,8 +93,8 @@ instead. Kinetic laws are divided by the volume of their compartment."></head><b
     </div>
 
     <div class="ref-description section level2">
-    <p>Reads an SBML Level 3 file. Requires <span class="pkg">reticulate</span>, which provides a
-Python with <code>python-libsbml</code>; set the environment variable
+    <p>Reads an SBML Level 3 file. Requires <span class="pkg">rjson</span> and <span class="pkg">reticulate</span>, which
+provides a Python with <code>python-libsbml</code>; set the environment variable
 <code>DMOD_LIBSBML_PYTHON</code> to the path of a Python interpreter to use that one
 instead. Kinetic laws are divided by the volume of their compartment.</p>
     </div>
@@ -135,8 +135,9 @@ initial values and observables. Default <code>NULL</code>.</p></dd>
 empty.</p></dd>
 
 <dt><code>assignmentRules</code></dt>
-<dd><p>Named list of assignment rule formulas,
-already substituted into rates, initial values and observables.</p></dd>
+<dd><p>Named list of the formulas of the assignment
+rules and of the parameter initial assignments that <code>keep</code> does not
+name, already substituted into rates, initial values and observables.</p></dd>
 
 <dt><code>events</code></dt>
 <dd><p>An <a href="eventlist.html">eventlist</a> or <code>NULL</code>, including the rescaling of

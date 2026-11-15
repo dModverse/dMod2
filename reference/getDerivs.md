@@ -49,7 +49,8 @@ Depends on the class of `x`:
 
 - `list`: a list with the result for each element.
 
-An error is raised if `x` has no first derivatives.
+An error is raised if `x` has no first derivatives; an `objlist` without
+gradient gives `NULL`.
 
 ## See also
 

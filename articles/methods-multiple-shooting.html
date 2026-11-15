@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -161,13 +161,14 @@ convergence.</p>
 <p><span class="math display">\[\lVert D\, \Delta\theta \rVert^2 +
 \lVert V (\alpha z + S\, \Delta\theta) \rVert^2 \le r^2 ,
 \tag{3}\]</span></p>
-<p>since a region on <span class="math inline">\(\theta\)</span> alone
-leaves <span class="math inline">\(S\, \Delta\theta\)</span> unbounded,
-which is huge across a spike. <span class="math inline">\(V\)</span> is
-one over the state scale (<code>multipleShootingControl$scale</code>):
-data range for observed states, simulation range otherwise, a decade for
-log10 node values. <span class="math inline">\(\alpha = 1\)</span>
-closes the linearized gaps (Bock’s step); under an active region <span class="math inline">\(\alpha \le 1\)</span> is the share of the node
+<p>with <span class="math inline">\(D = \operatorname{diag}(\lvert v
+\rvert^{-1/2})\)</span> for the distances <span class="math inline">\(v\)</span> to the bounds of <a href="methods-trust.html#bound-constraints">Bound constraints</a>, the
+identity without bounds, since a region on <span class="math inline">\(\theta\)</span> alone leaves <span class="math inline">\(S\, \Delta\theta\)</span> unbounded, which is huge
+across a spike. <span class="math inline">\(V\)</span> is one over the
+state scale (<code>multipleShootingControl$scale</code>): data range for
+observed states, simulation range otherwise, a decade for log10 node
+values. <span class="math inline">\(\alpha = 1\)</span> closes the
+linearized gaps (Bock’s step); under an active region <span class="math inline">\(\alpha \le 1\)</span> is the share of the node
 part of the full step that the radius allows. A link of the condensing
 chain that would propagate a gap through expanding segments beyond a
 bound is dropped for the step. Other summands, a prior or a
@@ -204,8 +205,10 @@ close as predicted</td>
 <tr class="even">
 <td><code>tolControl$ctol</code></td>
 <td>
-<code>converged = TRUE</code> only for <span class="math inline">\(h\)</span> below it; no other test ends the
-run</td>
+<code>converged = TRUE</code> only for <span class="math inline">\(h\)</span> below it; stagnation,
+<code>rmin</code>, ten failed solves in a row, <code>iterlim</code>, and
+under <code>acceptance = "natural"</code> a zero full step or one failed
+solve end the run with <code>converged = FALSE</code> above it</td>
 </tr>
 <tr class="odd">
 <td><code>hessianMethod = "gn"</code></td>
@@ -246,8 +249,8 @@ from ten segments per condition, or one per half oscillation of the data
 if more, and halves a segment where</p>
 <ul>
 <li>the spectral radius of <span class="math inline">\(G_j\)</span>
-exceeds <code>growth</code> (10), the expansion of the linearized flow,
-invariant under coordinates and scaling;</li>
+exceeds <code>growth</code> (10), the expansion of the linearized flow
+in the coordinates of the nodes;</li>
 <li>the RMS of the weighted residuals exceeds <code>misfit</code> (3)
 and twice the condition median;</li>
 <li>or the solve fails.</li>
@@ -255,11 +258,12 @@ and twice the condition median;</li>
 <p>Cuts happen before the first step and at every iterate, never below
 half the finest data spacing, and keep <code>minPoints</code> (states
 plus one) data points per half, so no node fits a segment alone.</p>
-<p>An oscillator has growth near one; what grows is the phase
-sensitivity to the frequency, linearly in the periods, until the segment
-fits the data a period off. One segment per half oscillation, counted at
-turning points of the data, bounds that slip. A misfit on every segment,
-from wrong parameters, cuts nothing, since no node removes it.</p>
+<p>Over a period an oscillator has growth near one; what grows is the
+phase sensitivity to the frequency, linearly in the periods, until the
+segment fits the data a period off. One segment per half oscillation,
+counted at turning points of the data, bounds that slip. A misfit on
+every segment, from wrong parameters, cuts nothing, since no node
+removes it.</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -309,11 +313,12 @@ voltage-gated variable forget their start and follow the measured
 trajectory.</p>
 <p><code>nodes = "transitions"</code> puts a fixed node just before
 every fast change (a spike, the jump of a relaxation oscillator), a run
-of samples whose rate lies more than eight median absolute deviations
-off the median rate, and fills the rest as <code>"auto"</code>. Each
-change then starts in the segment where the data have it, and a wrong
-timing shows as a gap before the next node. Numeric node times, for all
-conditions or as a list by condition, fix the layout.</p>
+of samples whose rate lies more than eight times <code><a href="https://rdrr.io/r/stats/mad.html" class="external-link">mad()</a></code>, the
+median absolute deviation scaled to a normal standard deviation, off the
+median rate, and fills the rest as <code>"auto"</code>. Each change then
+starts in the segment where the data have it, and a wrong timing shows
+as a gap before the next node. Numeric node times, for all conditions or
+as a list by condition, fix the layout.</p>
 </div>
 <div class="section level2">
 <h2 id="further-step-controls">Further step controls<a class="anchor" aria-label="anchor" href="#further-step-controls"></a>

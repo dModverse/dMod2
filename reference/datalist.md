@@ -35,8 +35,9 @@ datalist(...)
 
 - ...:
 
-  for `datalist()` and [`c()`](https://rdrr.io/r/base/c.html), named
-  data frames or datalists; for the `as.datalist()` methods, not used.
+  for `datalist()`, named data frames; for
+  [`c()`](https://rdrr.io/r/base/c.html), datalists; for the
+  `as.datalist()` methods, not used.
 
 - splitBy:
 

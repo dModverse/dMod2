@@ -19,7 +19,7 @@ Hessian."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,7 +37,7 @@ Hessian."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -58,7 +58,7 @@ Hessian."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -158,7 +158,8 @@ parameters, returning a list with components <code>value</code>,
 <code>gradient</code> and <code>hessian</code>. It is called with the logical
 arguments <code>deriv</code> and <code>hessian</code>, and with <code>deriv2 = TRUE</code>
 when an exact Hessian is requested, so it must accept them or
-<code>...</code>.</p></dd>
+<code>...</code>. <code>trustL1</code> calls it with the parameters and <code>...</code>
+only.</p></dd>
 
 
 <dt id="arg-parinit">parinit<a class="anchor" aria-label="anchor" href="#arg-parinit"></a></dt>
@@ -186,7 +187,8 @@ Default <code>1000</code>.</p></dd>
 objective, <code>"bfgs"</code> or <code>"sr1"</code> a quasi-Newton update seeded as
 <code>qnControl$hessianInit</code> says, <code>"exact"</code> the true Hessian at
 every iterate, which needs an objective that takes <code>deriv2</code>.
-Quasi-Newton methods require <code>boundary = "reflective"</code>.
+<code>"bfgs"</code>, <code>"sr1"</code> and <code>"exact"</code> require
+<code>boundary = "reflective"</code>.
 Also selects the control defaults below. With <code>phases</code>, each phase
 names a method, and this argument is an error.</p></dd>
 
@@ -278,22 +280,24 @@ and <code>rmin</code>.</p></dd>
 
 <dt id="arg-qncontrol">qnControl<a class="anchor" aria-label="anchor" href="#arg-qncontrol"></a></dt>
 <dd><p>List of quasi-Newton settings, merged into the defaults and
-read only in a <code>"bfgs"</code> or <code>"sr1"</code> phase.</p><dl><dt><code>hessianInit</code></dt>
+read in a <code>"bfgs"</code> or <code>"sr1"</code> phase; <code>hessianInit</code> also in
+a first phase of source <code>"gn"</code>.</p><dl><dt><code>hessianInit</code></dt>
 <dd><p>Seed of the approximation: <code>"gn"</code>
 (default) the Gauss-Newton Hessian at <code>parinit</code>;
-<code>"identity"</code> the identity matrix, after which no Hessian is
-requested from the objective; <code>"exact"</code> the true Hessian at
-<code>parinit</code>, then gradients only. <code>"exact"</code> needs
-<code>deriv2</code>, see <code>derivMode</code> in <code><a href="odemodel.html">odemodel()</a></code>. Used only when
-<code>hessianMethod</code> is <code>"bfgs"</code> or <code>"sr1"</code>.</p></dd>
+<code>"identity"</code> the identity matrix, after which the objective is
+asked for gradients only until a reseed; <code>"exact"</code> the true
+Hessian at <code>parinit</code>, then gradients only. <code>"exact"</code> needs
+<code>deriv2</code>, see <code>derivMode</code> in <code><a href="odemodel.html">odemodel()</a></code>. In a first phase
+of source <code>"gn"</code>, <code>"exact"</code> makes the first step use the
+exact Hessian at <code>parinit</code>.</p></dd>
 
 <dt><code>hessianReseed</code></dt>
 <dd><p><code>"never"</code> (default): a stalled
 quasi-Newton phase, or one whose trust radius collapses, stops.
-<code>"stall"</code>: it continues from a fresh
-Hessian of the same source at the current iterate, provided the
-iterate moved since the last reseed. The result reports the count as
-<code>nReseed</code>.</p></dd>
+<code>"stall"</code>: it continues from a fresh Hessian at the current
+iterate, the exact one with <code>hessianInit = "exact"</code> and the
+Gauss-Newton one otherwise, provided the iterate moved since the last
+reseed. The result reports the count as <code>nReseed</code>.</p></dd>
 
 <dt><code>qnMemory</code></dt>
 <dd><p>Number of <code>(s, y)</code> pairs kept. Default
@@ -319,9 +323,10 @@ rejected trial point. Default <code>TRUE</code> for a phase whose source is
 <dt id="arg-stepcontrol">stepControl<a class="anchor" aria-label="anchor" href="#arg-stepcontrol"></a></dt>
 <dd><p>List of step and acceptance settings, merged into the
 defaults.</p><dl><dt><code>thetaMax</code></dt>
-<dd><p>Largest fraction of the distance to a bound a
-step may use. Default <code>0.99995</code>. <code>boundary = "reflective"</code>
-only.</p></dd>
+<dd><p>Smallest fraction of the distance to a bound a
+step may use. The fraction is <code>max(thetaMax, 1 - m)</code>, below 1,
+with <code>m</code> the first-order optimality measure. Default
+<code>0.99995</code>. <code>boundary = "reflective"</code> only.</p></dd>
 
 <dt><code>nonmonotone</code></dt>
 <dd><p>Zhang-Hager relaxation in <code>[0, 1)</code>: a
@@ -364,7 +369,7 @@ enforces continuity. Needs forward sensitivities and is skipped
 without them. Default <code>TRUE</code>.</p></dd>
 
 
-</dl></dd>
+</dl><p><code>trustL1</code> takes <code>thetaMax</code> only.</p></dd>
 
 
 <dt id="arg-minimize">minimize<a class="anchor" aria-label="anchor" href="#arg-minimize"></a></dt>
@@ -378,20 +383,22 @@ trace listed under Value. Default <code>FALSE</code>.</p></dd>
 
 
 <dt id="arg-printiter">printIter<a class="anchor" aria-label="anchor" href="#arg-printiter"></a></dt>
-<dd><p>If <code>TRUE</code>, print iteration count and objective value
-at each evaluation. Default <code>FALSE</code>.</p></dd>
+<dd><p>If <code>TRUE</code>, print the number of the evaluation and the
+objective value at each evaluation. Default <code>FALSE</code>.</p></dd>
 
 
 <dt id="arg-tracefile">traceFile<a class="anchor" aria-label="anchor" href="#arg-tracefile"></a></dt>
 <dd><p>Path of a CSV file written with one row per evaluation:
-iteration, objective value and parameters. Default <code>NULL</code>, no file.</p></dd>
+the number of the evaluation (column <code>Iteration</code>), objective value
+and parameters. Default <code>NULL</code>, no file.</p></dd>
 
 
 <dt id="arg-sparse">sparse<a class="anchor" aria-label="anchor" href="#arg-sparse"></a></dt>
 <dd><p><code>"auto"</code> (default), <code>TRUE</code> or <code>FALSE</code>. With
 <code>TRUE</code>, <code>objfun</code> is called with <code>hessian = "sparse"</code> and
 the sparse Gauss-Newton Hessian it returns (a <code>Matrix</code>) is factorized by sparse
-Cholesky. Without phases and bounds; of the other settings only
+Cholesky. Minimization without phases and bounds only; of the other
+settings only
 <code>rinit</code>, <code>rmax</code>, <code>iterlim</code>, <code>tolControl$ftol</code>,
 <code>tolControl$mtol</code> and <code>printIter</code> apply. <code>"auto"</code> takes
 this path for a Gauss-Newton minimization without phases, bounds, exact
@@ -409,14 +416,15 @@ at most <code>fill</code> of the matrix, both from
 <dt id="arg-mu">mu<a class="anchor" aria-label="anchor" href="#arg-mu"></a></dt>
 <dd><p>Named numeric vector of reference values for the L1-penalized
 parameters. Names must be a subset of <code>names(parinit)</code>; only the
-named parameters receive a penalty. Each must lie strictly inside
-<code>[parlower, parupper]</code>. Defaults to a zero vector covering all of
+named parameters receive a penalty. With <code>boundary = "reflective"</code>
+each must lie strictly inside <code>[parlower, parupper]</code>. Defaults to a
+zero vector covering all of
 <code>parinit</code>.</p></dd>
 
 
 <dt id="arg-one-sided">one.sided<a class="anchor" aria-label="anchor" href="#arg-one-sided"></a></dt>
-<dd><p>Logical. If <code>TRUE</code>, the penalty is one-sided and
-acts as a lower wall at <code>mu</code>: <code>lambda * max(0, mu - p)</code>.
+<dd><p>Logical. If <code>TRUE</code>, the penalty is one-sided,
+<code>lambda * max(0, mu - p)</code>: only values below <code>mu</code> are penalized.
 Otherwise it is the symmetric <code>lambda * |p - mu|</code>.</p></dd>
 
 
@@ -429,7 +437,7 @@ all entries of <code>mu</code>) or a named numeric aligned with <code>mu</code>.
 <dd><p>Character, names in <code>mu</code> whose penalty is the gate
 <code>lambda * (p - mu)</code> with <code>p &gt;= mu</code>: the parameter can sit exactly
 on <code>mu</code> and leaves it only upward. Starts below <code>mu</code> are moved
-onto it.</p></dd>
+onto it. Needs <code>boundary = "reflective"</code>.</p></dd>
 
 
 <dt id="arg-fuse">fuse<a class="anchor" aria-label="anchor" href="#arg-fuse"></a></dt>
@@ -442,7 +450,8 @@ list with <code>pars</code>, and optionally <code>lambda</code> (default: the sc
 <code>lambda</code>), <code>anchor</code> (default none) and <code>weights</code>, an
 <code>(m+1) x (m+1)</code> matrix whose last row and column refer to the
 anchor (default all 1). Fused parameters must not appear in <code>mu</code>; if
-<code>fuse</code> is given and <code>mu</code> is not, <code>mu</code> is empty.</p></dd>
+<code>fuse</code> is given and <code>mu</code> is not, <code>mu</code> is empty. Needs
+<code>boundary = "reflective"</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -471,8 +480,10 @@ gradient and model Hessian at <code>argument</code>.</p></dd>
 
 <dt><code>phaseIterations</code></dt>
 <dd><p>Named integer, the iterations of each
-phase run, in run order and named after the phase; sums to
-<code>iterations</code>.</p></dd>
+phase run, in run order and named after the phase. The sum is
+<code>iterations</code> without the iteration that ends the run on failed
+evaluations and without the iterations that reseed instead of
+taking a step.</p></dd>
 
 <dt><code>phaseSweep</code></dt>
 <dd><p>Named character, the sweep of each element
@@ -503,11 +514,20 @@ Convergence.</p></dd>
 row per iteration, and the per-iteration vectors <code>steptype</code>,
 <code>stepback</code>, <code>accept</code>, <code>r</code> (radius), <code>rho</code> (ratio of
 actual to predicted reduction), <code>valpath</code>, <code>valtry</code>,
-<code>preddiff</code>, <code>stepnorm</code> and, when a quasi-Newton source is
-involved, <code>hessianSource</code>.</p>
+<code>preddiff</code>, <code>stepnorm</code> and, with
+<code>boundary = "reflective"</code>, <code>hessianSource</code>.</p>
 <p><code>boundary = "clip"</code> returns only <code>argument</code>, <code>value</code>,
 <code>gradient</code>, <code>hessian</code>, <code>iterations</code>, <code>converged</code>,
 <code>atBound</code> and <code>stopReason</code>, plus the trace.</p>
+<p>The sparse path, see <code>sparse</code>, returns only <code>argument</code>,
+<code>value</code>, <code>gradient</code>, <code>hessian</code> (a sparse <code>Matrix</code>),
+<code>iterations</code> and <code>converged</code>.</p>
+<p><code>trustL1</code> returns a list without class with <code>argument</code>,
+<code>value</code>, <code>gradient</code>, <code>hessian</code>, <code>iterations</code>,
+<code>converged</code>, <code>atBound</code> and <code>stopReason</code>, plus the trace
+without <code>hessianSource</code>. <code>value</code> and <code>gradient</code> include the
+penalty, whose gradient counts zero on a kink; <code>hessian</code> is that of
+<code>objfun</code>.</p>
 <p>A multiple-shooting run returns <code>argument</code>, <code>value</code>,
 <code>gradient</code>, <code>hessian</code>, <code>iterations</code>, <code>neval</code>,
 <code>qnSkipped</code>, <code>converged</code>, <code>stopReason</code>, <code>atBound</code> and
@@ -528,19 +548,25 @@ stages), the <code>cuts</code>, the <code>acceptance</code> and <code>sweep</cod
 trust-region-reflective scheme of Coleman and Li. Iterates stay strictly
 inside the box and never land exactly on a bound; <code>atBound</code> in the
 result reports which parameters a bound holds.</p>
-<p><code>boundary = "clip"</code>: active-set reduction with componentwise clipping.</p>
+<p><code>boundary = "clip"</code>: active-set reduction with componentwise clipping,
+with a single <code>"gn"</code> phase. The run stops when a trial point, accepted
+or not, changes the value by less than <code>ftol</code> or has a predicted
+reduction below <code>mtol</code>, both reported as <code>stopReason = "fvalue"</code>.
+<code>gtol</code>, <code>xtol</code>, <code>rmin</code> and stagnation are not tested; three
+failed evaluations in a row end the run with <code>stopReason = "iterlim"</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="convergence">Convergence<a class="anchor" aria-label="anchor" href="#convergence"></a></h2>
 
 
-<p>The run stops as soon as one of the following holds. The gradient test is
+<p>With <code>boundary = "reflective"</code> the run stops as soon as one of the
+following holds. The gradient test is
 evaluated at the current iterate; the value and step tests count only on an
 accepted step, the model test also on a rejected Newton step from inside the
 trust region.</p><ul><li><p><code>gtol</code>: the first-order optimality measure
 \(\max_i |v_i g_i|\) is at most <code>gtol</code>, with \(v_i\) the
-distance to the bound the gradient points to, 1 if that bound is
-infinite. Without bounds it is \(\max_i |g_i|\).</p></li>
+distance to the bound in the descent direction \(-g_i\), 1 if that
+bound is infinite. Without bounds it is \(\max_i |g_i|\).</p></li>
 <li><p><code>ftol</code>: \(|f - f_{\mathrm{try}}| &lt;\) <code>ftol</code>.</p></li>
 <li><p><code>mtol</code>: the predicted reduction
 \(|g^\top p + \frac{1}{2} p^\top H p| &lt;\) <code>mtol</code>.</p></li>
@@ -553,7 +579,8 @@ no longer changes the parameters in floating point. Reports
 </ul><p><code>stopReason</code> in the result names the test that fired:
 <code>"gradient"</code>, <code>"fvalue"</code>, <code>"preddiff"</code>, <code>"step"</code>,
 <code>"stagnation"</code>, <code>"radius"</code>, <code>"objfun"</code> (three failed
-evaluations in a row) or <code>"iterlim"</code>. Stagnation reports
+evaluations in a row, ten with multiple shooting) or <code>"iterlim"</code>.
+Stagnation reports
 <code>converged = TRUE</code>.</p>
 <p>Only <code>gtol</code> tests first-order optimality. While <code>switches</code>
 remain, see <code>phases</code>, an <code>"fvalue"</code>, <code>"preddiff"</code>,
@@ -575,8 +602,9 @@ the last accepted one when <code>stepControl$nonmonotone = 0</code>.</p>
 <p>An objective built by <code><a href="normL2.html">normL2</a>(..., multipleShootingControl = )</code>,
 alone or in a sum, is optimized by multiple shooting with the same controls.
 Not available then: <code>hessianMethod = "exact"</code>, more than one phase,
-<code>switches</code>, <code>qnControl$hessianReseed</code>,
-<code>qnControl$qnMemory</code>, <code>stepControl$nonmonotone</code>,
+<code>switches</code>, <code>qnControl$hessianInit = "exact"</code>,
+<code>qnControl$hessianReseed</code>, <code>qnControl$qnMemory</code>,
+<code>stepControl$nonmonotone</code>,
 <code>boundary = "clip"</code>, <code>minimize = FALSE</code> and <code>traceFile</code>.
 The run reports <code>converged = TRUE</code> only when the scaled gaps between
 the segments are below <code>tolControl$ctol</code>. The method is described in

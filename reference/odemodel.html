@@ -17,7 +17,7 @@ the result into a prediction function."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ the result into a prediction function."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -56,7 +56,7 @@ the result into a prediction function."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -138,7 +138,8 @@ effect.</p></dd>
 
 <dt id="arg-derivmode">derivMode<a class="anchor" aria-label="anchor" href="#arg-derivmode"></a></dt>
 <dd><p>character, the derivative directions to build, one or
-more of:</p><ul><li><p><code>"forward"</code> (default): sensitivity equations.</p></li>
+more of:</p><ul><li><p><code>"forward"</code> (default): sensitivity equations. <code>deriv = TRUE</code> builds them
+also when <code>derivMode</code> leaves out <code>"forward"</code>.</p></li>
 <li><p><code>"reverse"</code>: adjoint gradient, needed for <code>obj(..., sweep = "reverse")</code>.
 Not available on <code>backend = "deSolve"</code>.</p></li>
 <li><p><code>"forward-forward"</code>: second-order sensitivities.</p></li>
@@ -176,13 +177,15 @@ through <span class="pkg">cOde</span>.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
-<dd><p>logical, print the compiler output. Default <code>FALSE</code>.</p></dd>
+<dd><p>logical, print the compiler output. Default <code>FALSE</code>. Not used
+with <code>backend = "deSolve"</code>.</p></dd>
 
 
 <dt id="arg-outdir">outdir<a class="anchor" aria-label="anchor" href="#arg-outdir"></a></dt>
 <dd><p>directory for the generated sources and shared objects.
 Default <code>getOption("dMod2.outdir")</code>, else the working directory.
-<code>backend = "deSolve"</code> writes to the working directory only.</p></dd>
+<code>backend = "deSolve"</code> writes to the working directory only; any other
+<code>outdir</code>, also one set by the option, is an error.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>

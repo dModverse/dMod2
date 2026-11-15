@@ -92,8 +92,8 @@ plotValues(
 
 - tol:
 
-  Maximal difference between neighboring objective values that still
-  counts as one step. Defaults to 1.
+  A value more than `tol` above the lowest value of the current step
+  starts a new step. Defaults to 1.
 
 - showSteps:
 

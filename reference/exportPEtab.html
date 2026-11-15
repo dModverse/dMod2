@@ -19,7 +19,7 @@ values are read off the parameter transformation p."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,7 +37,7 @@ values are read off the parameter transformation p."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -58,7 +58,7 @@ values are read off the parameter transformation p."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -158,8 +158,10 @@ chosen <code>parameterScale</code>. Names become <code>parameterId</code>s in pa
 <dt id="arg-errors">errors<a class="anchor" aria-label="anchor" href="#arg-errors"></a></dt>
 <dd><p>Noise formulas keyed by observableId. Accepts a named
 character vector, <a href="eqnvec.html">eqnvec</a>, or a Y-built error function. An observable it
-leaves out takes the column <code>sigma</code> of the data. If <code>NULL</code>, every
-observable does, or has the noise <code>"1"</code> without that column.</p></dd>
+leaves out takes the column <code>sigma</code> of the data, or the noise <code>"1"</code> without
+data; a data row of such an observable without a sigma is an error. If
+<code>NULL</code>, every observable takes the column <code>sigma</code> of the data, or has the
+noise <code>"1"</code> when the data hold no sigma.</p></dd>
 
 
 <dt id="arg-lower-upper">lower, upper<a class="anchor" aria-label="anchor" href="#arg-lower-upper"></a></dt>
@@ -241,7 +243,8 @@ wrap; for any other mapping it is written as <code>&lt;name&gt;_outer</code>.</p
     <h2 id="limitations">Limitations<a class="anchor" aria-label="anchor" href="#limitations"></a></h2>
 
 
-<p>Events other than those at time 0 that replace a state are not written.
+<p>Only events at time 0 that replace a state are written; any other event in
+<code>events</code> is an error.
 Fixed parameters are always written with <code>parameterScale = "lin"</code>.</p>
     </div>
     <div class="section level2">

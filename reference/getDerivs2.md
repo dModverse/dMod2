@@ -50,7 +50,8 @@ Depends on the class of `x`:
 
 - `list`: a list with the result for each element.
 
-An error is raised if `x` has no second derivatives.
+An error is raised if `x` has no second derivatives; an `objlist`
+without Hessian gives `NULL`.
 
 ## See also
 

@@ -23,10 +23,13 @@ and the profile likelihood is the data term along this path,
 \\\mathrm{PL}\_i(c) = -2 \log L\bigl(\hat\theta(c)\bigr) . \tag{2}\\
 
 Without a prior, (2) is the minimum of \\-2 \log L\\ with \\\theta_i =
-c\\. By the likelihood ratio test, \\\mathrm{PL}\_i(c) - \min_c
-\mathrm{PL}\_i(c)\\ below the \\1 - \alpha\\ quantile of \\\chi^2_1\\
-(3.84 for 95 %) defines an asymptotic confidence interval, invariant
-under reparametrization of \\\theta_i\\.
+c\\. By the likelihood ratio test, the rise \\\mathrm{PL}\_i(c) -
+\mathrm{PL}\_i(\hat\theta_i)\\ from the optimum \\\hat\theta_i\\ below
+the \\1 - \alpha\\ quantile of \\\chi^2_1\\ (3.84 for 95 %) defines an
+asymptotic confidence interval, invariant under reparametrization of
+\\\theta_i\\. Without a prior the optimum is the minimum of (2); with a
+prior (2) may fall below the value at the optimum, and the rise is still
+measured from there.
 [`profileThreshold()`](https://dmodverse.github.io/dMod2/reference/profileThreshold.md)
 computes the threshold, `method = "F"` the finite-sample one for
 estimated standard deviations. A prior wide against the data curvature
@@ -74,7 +77,10 @@ point.
   \end{pmatrix} \tag{3}\\
 
   with the Hessian \\H\\ of \\f\\: one evaluation and one linear solve
-  per step. With a Gauss-Newton \\H\\ the path drifts;
+  per step. The step solves (3) with \\-\gamma \nabla f\\ in place of
+  the upper zero, which pulls it back to the constrained optimum
+  (\\\gamma = 1\\ by default, adapted to the size of the pull); with a
+  Gauss-Newton \\H\\ the path still drifts, and
   `algoControl = list(reoptimize = TRUE)` corrects each step by a short
   fit.
 
@@ -86,8 +92,9 @@ Step control and stops:
 | step doubles | mismatch below `0.3 * atol`, or below `0.3 * rtol` relative |
 | side ends | objective (or data term, `stop = "data"`) up by the threshold; `limits` relative to the optimum reached; `limit` steps |
 
-A point below the start value is a better optimum, from which fit and
-profiles are repeated. Where the curvature jumps, as at the onset of
+A point of \\f\\ below the start value is a better optimum: fit and
+profiles are then to be repeated from it. Where the curvature jumps, as
+at the onset of
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
 ([Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)),
@@ -102,16 +109,19 @@ A prediction \\z = h(t, \theta)\\ has the profile likelihood
 z} f(\theta) , \tag{4}\\
 
 whose threshold gives a confidence interval of the prediction
-[\[2\]](#ref-kreutz2012likelihood), the projection of the parameter
-confidence region.
+[\[2\]](#ref-kreutz2012likelihood); without a prior it is the image of
+the parameter region at the \\\chi^2_1\\ threshold, not of the joint
+region.
 
 A validation data point makes \\z\\ a parameter \\v\\, tied to the
 prediction by
 
 \\\left( \frac{h(t, \theta) - v}{\sigma_v} \right)^2 . \tag{5}\\
 
-The profile of \\v\\ is (4) for \\\sigma_v \to 0\\, and within
-\\\sigma_v\\ of (4) for \\\sigma_v\\ small against the band.
+The profile of \\v\\ is (4) for \\\sigma_v \to 0\\ and lies below (4)
+otherwise, so the interval of \\v\\ is wider: for a quadratic (4) of
+half-width \\w\\ the half-width becomes \\(w^2 + \Delta
+\sigma_v^2)^{1/2}\\, \\\Delta\\ the threshold.
 [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md)
 builds (5) as an `objfn` from the evaluation of
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md),

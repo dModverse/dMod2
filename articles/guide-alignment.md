@@ -663,7 +663,7 @@ Reference:
 [`plotResiduals()`](https://dmodverse.github.io/dMod2/reference/plotResiduals.md),
 [`plotRandomEffects()`](https://dmodverse.github.io/dMod2/reference/plotRandomEffects.md)
 
-[← 8. Group-specific
-effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md)
+[← 8. Sparse
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md)
 \| [10. PEtab import and export
 →](https://dmodverse.github.io/dMod2/articles/guide-petab.md)

@@ -7,7 +7,6 @@
 <url><loc>https://dmodverse.github.io/dMod2/articles/boehmJProteomeRes2014.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/dMod2.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-alignment.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/articles/guide-group-effects.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-model.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-nlme.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-optimization.html</loc></url>
@@ -16,6 +15,7 @@
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-profiles.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-symmetries.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/index.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/installation.html</loc></url>
@@ -25,7 +25,7 @@
 <url><loc>https://dmodverse.github.io/dMod2/articles/methods-objective.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/methods-profiles.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/methods-steady-states.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/methods-symmetries.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/methods-trust.html</loc></url>

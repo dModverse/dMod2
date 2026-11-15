@@ -4,7 +4,9 @@
 [vcov()](https://dmodverse.github.io/dMod2/reference/vcov.em.md);
 `method = "profile"` refits with each parameter held at trial values and
 finds where -2 log L has risen by the \\\chi^2_1\\ quantile of `level`
-on either side, by bisection from the Wald limits.
+on either side, by bisection from the Wald limits. A side on which the
+rise is not reached within 128 times the distance of the Wald limit from
+the estimate gives `-Inf` or `Inf`.
 
 ## Usage
 
@@ -70,10 +72,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_err.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

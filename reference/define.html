@@ -31,7 +31,7 @@ attribute tree.
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -49,7 +49,7 @@ attribute tree.
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@ attribute tree.
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -144,7 +144,9 @@ branched transformation also one or several effect formulas, e.g.
 <code>cl ~ wt + (1 | ID)</code>, which replace the symbol by a linear predictor
 over the columns of the branch table with fixed and random effects; see
 <code><a href="randomEffects.html">randomEffects()</a></code>. Named arguments in <code>...</code> are then placeholders of the
-formulas, <code>insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))</code>.</p></dd>
+formulas, <code>insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))</code>. A
+substitution or a second effect formula for a symbol that has an effect
+formula is an error: set the scale of a symbol before adding effects.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -160,7 +162,8 @@ placeholders, evaluated once in the calling environment.</p></dd>
 
 <dt id="arg-conditionmatch">conditionMatch<a class="anchor" aria-label="anchor" href="#arg-conditionmatch"></a></dt>
 <dd><p>Regular expression; only the conditions whose names
-match are changed. Default <code>NULL</code>, all.</p></dd>
+match are changed. Default <code>NULL</code>, all. Needs the tree of a
+transformation built by <code>branch()</code>.</p></dd>
 
 
 <dt id="arg-table">table<a class="anchor" aria-label="anchor" href="#arg-table"></a></dt>
@@ -176,7 +179,8 @@ by name.</p></dd>
 <dt id="arg-apply">apply<a class="anchor" aria-label="anchor" href="#arg-apply"></a></dt>
 <dd><p>One of <code>"nothing"</code> (default), <code>"insert"</code> and <code>"define"</code>: what
 is done with every non-missing entry <code>table[condition, column]</code>, with
-the column name as left-hand side and the entry as right-hand side.</p></dd>
+the column name as left-hand side and the entry as right-hand side.
+Columns named <code>condition</code> or <code>conditions</code> are skipped.</p></dd>
 
 </dl></div>
     <div class="section level2">

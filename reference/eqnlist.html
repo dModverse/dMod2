@@ -17,7 +17,7 @@ one from these parts, as.eqnlist() from a data frame of reactions."></head><body
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ one from these parts, as.eqnlist() from a data frame of reactions."></head><body
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -56,7 +56,7 @@ one from these parts, as.eqnlist() from a data frame of reactions."></head><body
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -137,9 +137,10 @@ column per state.</p></dd>
 
 
 <dt id="arg-volumes">volumes<a class="anchor" aria-label="anchor" href="#arg-volumes"></a></dt>
-<dd><p>named character of state volumes. Without <code>compartments</code>
-and <code>compartmentOf</code>, each distinct expression becomes a compartment with
-ID <code>c1</code>, <code>c2</code>, ...</p></dd>
+<dd><p>named character of state volumes. Without <code>compartmentOf</code>,
+each distinct expression becomes a compartment with ID <code>c1</code>, <code>c2</code>, ...,
+and <code>compartments</code> is ignored. With <code>compartmentOf</code>, the compartment layout
+wins, and a volume that differs from it gives a warning.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -194,8 +195,12 @@ column per state. Default <code>NULL</code> gives an empty equation list.</p></d
 
 
 <dt id="arg-totals">totals<a class="anchor" aria-label="anchor" href="#arg-totals"></a></dt>
-<dd><p>named list of user-defined conservation expressions, see
-<code><a href="customTotals.html">customTotals()</a></code>. Default <code>NULL</code> uses the detected basis.</p></dd>
+<dd><p>named list of user-defined conservation expressions, stored
+without the checks of <code><a href="customTotals.html">customTotals()</a></code>. <code><a href="conservedQuantities.html">conservedQuantities()</a></code> returns
+them; <code><a href="steadyStates.html">steadyStates()</a></code> ignores them, and <code><a href="addReaction.html">addReaction()</a></code>,
+<code><a href="assignCompartment.html">assignCompartment()</a></code>, <code><a href="setCompartmentVolume.html">setCompartmentVolume()</a></code>, <code><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset()</a></code> and <code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code> drop
+them, as they keep only totals set by <code><a href="customTotals.html">customTotals()</a></code>. Default <code>NULL</code>
+uses the detected basis.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -208,8 +213,9 @@ per-state <code>volumes</code>. <code>is.eqnlist()</code> returns a logical.</p>
     <p>The data frame for <code>as.eqnlist()</code> contains the columns
 "Description" (character), "Rate" (character) and one column per state,
 the columns of the stoichiometric matrix. Layout attributes of the data
-frame, as set by <code><a href="as.data.frame.eqnlist.html">as.data.frame.eqnlist()</a></code>, are used unless <code>volumes</code> is
-given.</p>
+frame, as set by <code><a href="as.data.frame.eqnlist.html">as.data.frame.eqnlist()</a></code>, fill in the layout arguments not
+given; with <code>volumes</code> given, the attributes <code>compartments</code> and
+<code>compartmentOf</code> are not used.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

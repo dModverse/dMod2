@@ -50,10 +50,10 @@ controls(x, condition = NULL, name, ...) <- value
 
 ## Value
 
-`controls(x)` prints the available controls and returns their names
-invisibly; for an `fn`, as a list with one entry per function. With
-`name`, the value of the control, or `NULL` if no function holds it. The
-setter returns `x`.
+For an `fn`, `controls(x)` prints the available controls and returns
+them invisibly, a list with one entry per function; for an `objfn`, it
+returns their names. With `name`, the value of the control, or `NULL` if
+no function holds it. The setter returns `x`.
 
 ## Details
 

@@ -49,8 +49,8 @@ plotProfile(profs, ...)
 - parlist:
 
   Matrix or data frame with parameter columns, drawn as points. With a
-  `value` column, the differences of `value` to the lowest profile value
-  are used.
+  `value` column, a point is drawn at the difference of `value` to the
+  lowest objective value at the optima of the profiles, otherwise at 0.
 
 - ncol:
 

@@ -35,7 +35,7 @@ on the log scale. The parts of an effect formula:
   `(1 | ID)`, `(1 + dose | ID)` with a random slope, `(1 | p | ID)` with
   an ID `p`: terms with the same ID and grouping are correlated across
   formulas, the columns of one term are correlated, other terms are
-  independent. `gr(ID, dist = laplace())` instead of `ID` sets the
+  independent. `gr(ID, dist = spikeSlab())` instead of `ID` sets the
   distribution, see
   [`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md).
   The random effect of a group is `eta_<symbol>_<group>` for the
@@ -73,13 +73,18 @@ print(x, ...)
 ## Value
 
 An object of class `randomeffects`, a list with `terms` (one row per
-random effect column: symbol, formula term, column, grouping, ID,
-distribution, fixed hyperparameters and the name stem of the etas),
-`blocks` (the correlated groups of rows), `subjects` (the groups of each
-grouping and the conditions they own), `fixed` (the parameters the
-formulas created), `etas` (eta names, one row per condition, one column
-per term row) and `fixedDesign` (per symbol the model matrix of the
-fixed effects, one row per condition).
+random effect column: `symbol`, `origin` (the formula), `term`,
+`column`, `group`, `id`, `dist`, the fixed hyperparameters `prob`,
+`concentration` and `tau` (`NA` where estimated) and `stem`, the name
+stem of the etas), `blocks` (groups of rows: the normal rows of a block
+are correlated, the rows of a spike-and-slab or Dirichlet-process block
+share the hyperparameters), `subjects` (the groups of each grouping and
+the conditions they own), `fixed` (the parameters the formulas created),
+`etas` (eta names, one row per condition, one column per term row),
+`groups` (per stem the group of each condition), `fixedDesign` (per
+symbol the model matrix of the fixed effects, one row per condition) and
+`etaNames` (`NULL` for random effects from
+[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md)).
 
 ## See also
 
@@ -99,7 +104,7 @@ trafo <- insert(trafo, "x <- exp(x)", x = c("ka", "cl", "v"))
 trafo <- insert(trafo,
                 ka ~ 1 + (1 | p | ID),
                 cl ~ wt + (1 + dose | p | ID),
-                v  ~ 1 + (1 | gr(ID, dist = laplace())))
+                v  ~ 1 + (1 | gr(ID, dist = spikeSlab())))
 trafo$C2
 #> Idx Inner <- Outer
 #>   1    cl <- exp((cl+cl_wt*75+eta_cl_s2+eta_cl_dose_s2*100))
@@ -109,7 +114,7 @@ re <- randomEffects(trafo)
 re
 #> Random effects: 4 terms over ID
 #>   block 1 (normal, ID): eta_ka, eta_cl, eta_cl_dose
-#>   block 2 (laplace, lambda estimated, ID): eta_v
+#>   block 2 (spikeSlab, prob estimated, tau estimated, ID): eta_v
 #>   fixed effects: ka, cl, cl_wt, v 
 re$fixed
 #> [1] "ka"    "cl"    "cl_wt" "v"    

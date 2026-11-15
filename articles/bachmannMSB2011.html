@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="active nav-item dropdown">
@@ -127,9 +127,10 @@
 <p>JAK2-STAT5 signaling in CFU-E cells with the feedbacks of CIS, SOCS3
 and SHP1, after Bachmann et al. (2011), Mol Syst Biol 7:516. 541
 measurements from 13 experiments in 36 conditions, 20 observables, 113
-parameters, fitted within the bounds of the publication. The guide
-chapter <a href="https://dmodverse.github.io/dMod2/articles/guide-petab.html">PEtab</a>
-imports the problem from the PEtab benchmark collection.</p>
+parameters, fitted within the bounds of the publication.
+<code>petab.R</code> imports the problem from the PEtab benchmark
+collection; the guide chapter <a href="https://dmodverse.github.io/dMod2/articles/guide-petab.html">PEtab</a>
+shows import and export on the guide model.</p>
 <div class="section level2">
 <h2 id="files">Files<a class="anchor" aria-label="anchor" href="#files"></a>
 </h2>
@@ -164,7 +165,8 @@ objective</td>
 </tr>
 <tr class="odd">
 <td><code>results/</code></td>
-<td>saved fits</td>
+<td>saved fits, and in <code>results/petab/</code> the problem
+<code>petab.R</code> writes</td>
 </tr>
 </tbody>
 </table>
@@ -180,7 +182,8 @@ objective</td>
 <p><code>model.R</code> uses the free cores of the machine. The guide
 chapter <a href="https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html">Remote
 computing</a> shows how to run a multistart on other machines.
-<code>plots.R</code> only reads <code>results/</code>.</p>
+<code>plots.R</code> fits nothing: it reads <code>results/</code> and
+simulates the compiled model.</p>
 </div>
 <div class="section level2">
 <h2 id="fit">Fit<a class="anchor" aria-label="anchor" href="#fit"></a>

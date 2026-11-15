@@ -7,7 +7,6 @@ articles:
   articles/boehmJProteomeRes2014: boehmJProteomeRes2014.html
   articles/dMod2: dMod2.html
   articles/guide-alignment: guide-alignment.html
-  articles/guide-group-effects: guide-group-effects.html
   articles/guide-model: guide-model.html
   articles/guide-nlme: guide-nlme.html
   articles/guide-optimization: guide-optimization.html
@@ -16,6 +15,7 @@ articles:
   articles/guide-profiles: guide-profiles.html
   articles/guide-remote-computing: guide-remote-computing.html
   articles/guide-sensitivities: guide-sensitivities.html
+  articles/guide-sparse-deviations: guide-sparse-deviations.html
   articles/guide-symmetries: guide-symmetries.html
   articles/installation: installation.html
   articles/kokMSB2020: kokMSB2020.html
@@ -24,7 +24,7 @@ articles:
   articles/methods-objective: methods-objective.html
   articles/methods-profiles: methods-profiles.html
   articles/methods-sensitivities: methods-sensitivities.html
-  articles/methods-sparse-random-effects: methods-sparse-random-effects.html
+  articles/methods-sparsity-priors: methods-sparsity-priors.html
   articles/methods-steady-states: methods-steady-states.html
   articles/methods-symmetries: methods-symmetries.html
   articles/methods-trust: methods-trust.html
@@ -32,7 +32,7 @@ articles:
   articles/oppeltNPJSystBiolAppl2018: oppeltNPJSystBiolAppl2018.html
   articles/pharmacometrics: pharmacometrics.html
   articles/TMDD: TMDD.html
-last_built: 2026-11-14T16:41Z
+last_built: 2026-11-15T04:37Z
 urls:
   reference: https://dmodverse.github.io/dMod2/reference
   article: https://dmodverse.github.io/dMod2/articles

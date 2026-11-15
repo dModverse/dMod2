@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -132,10 +132,11 @@ x(t_0) = x_0(\theta), \qquad y = h(x, \theta), \tag{1}\]</span></p>
 \mathbb{R}^d\)</span> of any kind, and prediction <span class="math inline">\(g(t; \theta) = h(x(t), \theta)\)</span>. It is
 <em>locally structurally identifiable</em> at <span class="math inline">\(\theta\)</span> if no nearby <span class="math inline">\(\tilde\theta \ne \theta\)</span> has the same
 prediction. The property depends on the equations alone, as if every
-observable were measured exactly and continuously, and holds for generic
-<span class="math inline">\(\theta\)</span>, outside a set of measure
-zero. A structural non-identifiability makes the likelihood exactly flat
-along a curve, seen as a flat profile <span class="citation"><a href="#ref-raue2009structural">[1]</a></span>.</p>
+observable were measured exactly and continuously, and the answer is the
+same for every <span class="math inline">\(\theta\)</span> outside a set
+of measure zero, for generic <span class="math inline">\(\theta\)</span>. A structural non-identifiability
+makes the likelihood exactly flat along a curve, seen as a flat profile
+<span class="citation"><a href="#ref-raue2009structural">[1]</a></span>.</p>
 </div>
 <div class="section level2">
 <h2 id="lie-symmetries">Lie symmetries<a class="anchor" aria-label="anchor" href="#lie-symmetries"></a>
@@ -151,19 +152,19 @@ the integral curves of the <em>generator</em></p>
 \tag{2}\]</span></p>
 <p>An <em>invariant</em>, <span class="math inline">\(X(I) = 0\)</span>,
 is constant on every orbit, and the prediction depends on <span class="math inline">\(\theta\)</span> only through invariants. With
-<span class="math inline">\(r\)</span> independent generators, the
-observables determine <span class="math inline">\(d - r\)</span>
-parameter combinations.</p>
+<span class="math inline">\(r\)</span> generators that span all
+symmetries and are independent at generic <span class="math inline">\(\theta\)</span>, the observables determine <span class="math inline">\(d - r\)</span> parameter combinations.</p>
 <p><em>Scalings</em>, <span class="math inline">\(\xi_i(\theta) = w_i
 \theta_i\)</span> with integer weights, are the most common symmetries
 of reaction networks; on the log scale their orbits are straight lines.
 Two kinds occur in almost every signaling model:</p>
 <ul>
 <li>Observable <code>s * (A + B) + off</code>: concentrations of the
-moiety times <span class="math inline">\(\lambda\)</span>, rate
-constants of second order in it and the scale <code>s</code> divided by
-<span class="math inline">\(\lambda\)</span>. The generator moves the
-total, the scales and the bimolecular rate constants together.</li>
+moiety times <span class="math inline">\(\lambda\)</span>; the scale
+<code>s</code> and the rate constant of every term of second order in
+the moiety, or of first order in it in the equation of another state,
+divided by <span class="math inline">\(\lambda\)</span>. The generator
+moves the total, the scales and these rate constants together.</li>
 <li>Unobserved intermediate: level and production rate times <span class="math inline">\(\lambda\)</span>, the rate it drives divided by
 <span class="math inline">\(\lambda\)</span>.</li>
 </ul>
@@ -175,11 +176,15 @@ with rational components.</p>
 <h2 id="detection">Detection<a class="anchor" aria-label="anchor" href="#detection"></a>
 </h2>
 <p>With <span class="math inline">\(z = (x, \theta, t)\)</span>, <span class="math inline">\(\dot\theta = 0\)</span>, <span class="math inline">\(\dot t = 1\)</span>, the model is the vector field
-<span class="math inline">\(F = f\, \partial_x + \partial_t\)</span>.
-The <em>Lie derivatives</em> of the observables,</p>
+<span class="math inline">\(F = f\, \partial_x + \partial_t\)</span>,
+started at <span class="math inline">\(z_0(\theta) = (x_0(\theta),
+\theta, t_0)\)</span>. The <em>Lie derivatives</em> of the
+observables,</p>
 <p><span class="math display">\[L_F^0 h = h, \qquad L_F^{k+1} h =
 F\bigl(L_F^k h\bigr), \tag{3}\]</span></p>
-<p>are the Taylor coefficients of an analytic prediction,</p>
+<p>at <span class="math inline">\(z_0\)</span> are the time derivatives
+of the prediction at <span class="math inline">\(t_0\)</span>, so an
+analytic prediction is</p>
 <p><span class="math display">\[g(t; \theta) = \sum_{k \ge 0} \frac{(t -
 t_0)^k}{k!}\, L_F^k h\bigl(z_0(\theta)\bigr). \tag{4}\]</span></p>
 <p>Collected up to order <span class="math inline">\(N\)</span> they
@@ -201,17 +206,25 @@ generators, <span class="math inline">\(d - \operatorname{rank}
 identifiable.</p>
 <p>For scalings, (6) reads <span class="math inline">\(\mathrm{OIM}_N(\theta)\, \mathrm{diag}(\theta)\, w
 = 0\)</span> for every <span class="math inline">\(\theta\)</span>. With
-rational right-hand sides, observables and initial values this holds
-exactly when every term of every equation keeps the weighted degree: a
-linear system in the monomial exponents, whose integer solution lattice
-symident computes exactly. The remaining kernel vectors are
-<em>general</em> directions, with closed forms from interpolation (<a href="https://dmodverse.github.io/symident/method.html" class="external-link">symident
+rational right-hand sides, observables and initial values it holds where
+every term of every equation keeps the weighted degree, with weights on
+the states as well: a linear system in the weights, whose integer
+solution lattice symident computes exactly. A scaling that holds only on
+an invariant set, such as a start at rest, fails this test. It is among
+the remaining kernel vectors, the <em>general</em> directions, with
+closed forms from interpolation (<a href="https://dmodverse.github.io/symident/method.html" class="external-link">symident
 method</a>).</p>
-<p>symident computes (5) exactly over a finite field <span class="math inline">\(\mathbb{F}_p\)</span> at a random point. There the
-rank can only fall below the generic value, with a small probability
-that further primes and points exclude. symident proves the order <span class="math inline">\(N\)</span> sufficient where it can and checks the
-reconstructed rational <span class="math inline">\(\xi(\theta)\)</span>
-over the rationals.</p>
+<p>symident computes (5) exactly over finite fields <span class="math inline">\(\mathbb{F}_p\)</span> at a fixed base point and
+takes the largest rank over several primes and a random point. The rank
+modulo <span class="math inline">\(p\)</span> at a point can only fall
+below the generic value; the checks make a lower one unlikely but do not
+exclude it. symident proves the order <span class="math inline">\(N\)</span> sufficient where it can. A direction is
+<code>"exact"</code> where the closed form is proven over the rationals,
+<code>"verified"</code> or <code>"checked"</code> where it is checked
+modulo a large prime at random points, with or without an error bound,
+and <code>"open"</code> without closed form; by default
+(<code>reconstruct = FALSE</code>) a general direction is returned as
+the support.</p>
 <div class="section level3">
 <h3 id="steady-state-starts-inputs-and-conditions">Steady-state starts, inputs and conditions<a class="anchor" aria-label="anchor" href="#steady-state-starts-inputs-and-conditions"></a>
 </h3>
@@ -257,17 +270,20 @@ that factor take no part in a symmetry.</p>
 <div class="section level2">
 <h2 id="gauge-and-reduction">Gauge and reduction<a class="anchor" aria-label="anchor" href="#gauge-and-reduction"></a>
 </h2>
-<p>Along every orbit the objective, the profiles and the Hessian in the
-generator directions are flat, so symmetries are removed before the fit.
-A <em>gauge</em> fixes one coordinate per scaling; each orbit meets the
-fixed values in one point with the same prediction. With <span class="math inline">\(W\)</span> the weights of the scalings on the
+<p>Along every orbit the data term and the profiles of the data term are
+flat; a prior such as <code><a href="../reference/constraintL2.html">constraintL2()</a></code> is not invariant and
+tilts them. The Hessian is flat in the generator directions at the
+optimum, in the Gauss-Newton approximation and for scalings on the log
+scale. So symmetries are removed before the fit. A <em>gauge</em> fixes
+one coordinate per scaling; each orbit meets the fixed values in one
+point with the same prediction. With <span class="math inline">\(W\)</span> the weights of the scalings on the
 fixed coordinates, one row per generator, the gauge removes every
 scaling if</p>
 <p><span class="math display">\[\det W \ne 0 . \tag{7}\]</span></p>
 <p><code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> turns the generators into a
 parameter transformation: for scalings a <em>section</em> fixing one
 coordinate per direction, for general directions invariants as new
-parameters (<a href="https://dmodverse.github.io/symident/method.html#reduction" class="external-link">reduction</a>).</p>
+parameters (<a href="https://dmodverse.github.io/symident/method.html#reduction-and-sections" class="external-link">reduction</a>).</p>
 <p>Reference: <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>,
 <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code></p>
 </div>

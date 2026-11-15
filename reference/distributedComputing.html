@@ -21,7 +21,7 @@ nodes need a POSIX shell."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,7 +39,7 @@ nodes need a POSIX shell."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -60,7 +60,7 @@ nodes need a POSIX shell."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -197,17 +197,17 @@ as arguments. <code>1</code> compiles one file at a time. Default 50.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>With <code>wait = TRUE</code> the results of <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code>, else an object of class
 <code>dMod2Job</code>, a list of functions:</p><dl><dt><code>check()</code></dt>
-<dd><p>reports how many tasks are done, running or failed and
-returns <code>TRUE</code> once no task runs any more, with a warning when some
-failed. A task fails when the task process ends without a result. A
-task without a result on a node that does not answer, or whose queue
-does not, counts as running.</p></dd>
+<dd><p>reports how many tasks are done, running, failed or not
+reachable and returns <code>TRUE</code> once no task runs or is not reachable, with
+a warning when some failed. A task fails when the task process ends
+without a result. A task without a result on a node that does not answer,
+or whose queue does not, is not reachable.</p></dd>
 
 <dt><code>wait(interval = 10)</code></dt>
 <dd><p>polls every <code>interval</code> seconds until no task
-runs, reports each change as a message and returns <code>TRUE</code> when every task
-is done. While a node does not answer, the pause between polls doubles up
-to 10 minutes.</p></dd>
+runs or is not reachable, reports each change as a message and returns
+<code>TRUE</code> when every task is done. While a node does not answer, the pause
+between polls doubles up to 10 minutes.</p></dd>
 
 <dt><code>get(combine = TRUE, all = FALSE)</code></dt>
 <dd><p>returns the results. With
@@ -253,8 +253,8 @@ was submitted from another machine. Every job is registered in
 <code>tools::R_user_dir("dMod2", "data")</code> until <code>purge(local = TRUE)</code>, and
 <code><a href="dMod2Jobs.html">dMod2Jobs()</a></code> lists them.</p>
 <p>The model files are those of the <a href="obsfn.html">obsfn</a>, <a href="parfn.html">parfn</a>, <a href="prdfn.html">prdfn</a> and objective
-objects in <code>input</code>; objects without them take every file of
-<code>getOption("dMod2.outdir")</code>, else of the working directory.</p><ul><li><p><code>build = "compile"</code>: the C/C++ sources are copied and compiled once
+objects in <code>input</code>; when none of them has model files, those in
+<code>getOption("dMod2.outdir")</code>, else in the working directory.</p><ul><li><p><code>build = "compile"</code>: the C/C++ sources are copied and compiled once
 per node into one shared object, against the cppDE installed there.</p></li>
 <li><p><code>build = "link"</code>: the object files (<code>.o</code>) are copied and linked once
 per node; needs a compiler there compatible with the local one.</p></li>

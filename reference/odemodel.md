@@ -53,7 +53,8 @@ odemodel(
 
   character, the derivative directions to build, one or more of:
 
-  - `"forward"` (default): sensitivity equations.
+  - `"forward"` (default): sensitivity equations. `deriv = TRUE` builds
+    them also when `derivMode` leaves out `"forward"`.
 
   - `"reverse"`: adjoint gradient, needed for
     `obj(..., sweep = "reverse")`. Not available on
@@ -100,13 +101,15 @@ odemodel(
 
 - verbose:
 
-  logical, print the compiler output. Default `FALSE`.
+  logical, print the compiler output. Default `FALSE`. Not used with
+  `backend = "deSolve"`.
 
 - outdir:
 
   directory for the generated sources and shared objects. Default
   `getOption("dMod2.outdir")`, else the working directory.
-  `backend = "deSolve"` writes to the working directory only.
+  `backend = "deSolve"` writes to the working directory only; any other
+  `outdir`, also one set by the option, is an error.
 
 - ...:
 

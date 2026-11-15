@@ -54,7 +54,7 @@ align(
 
 - iterlim:
 
-  Iteration limit of the optimizer; with Laplace, spike-and-slab or
+  Iteration limit of the optimizer; with spike-and-slab or
   Dirichlet-process terms the outer iterations of
   [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
 
@@ -92,10 +92,11 @@ alone, the error parameters held at their estimates), `scaled` (the
 readings with `prediction`, `sigma`, `residual` and `bloq`),
 `parameters` (with attribute `estimation`, `"REML"` or `"ML"`), `value`
 (-2 log L, of the restricted likelihood with REML, with the
-normalization and the prior), `npar` (one less per block), `AIC` (with
-REML comparable only between fits with the same parameters of the
-prediction), `values` (-2 log L of all fits, sorted), `multistart`
-(`value`, `converged` and `iterations` per fit, see
+normalization and the prior), `npar` (one less per block without
+absolute readings), `AIC` (with REML comparable only between fits with
+the same parameters of the prediction), `values` (-2 log L of all fits,
+sorted), `multistart` (`value`, `converged` and `iterations` per fit,
+see
 [`plotValues()`](https://dmodverse.github.io/dMod2/reference/plotValues.md);
 with REML the maximum likelihood fits the rounds start from),
 `remlRounds` (the rounds of the restricted likelihood, 0 without),

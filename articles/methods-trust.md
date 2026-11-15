@@ -18,7 +18,7 @@ minimizes the quadratic model of the objective inside a ball,
 
 The ratio of actual to predicted decrease decides on the step and the
 radius \\r\\. Subproblem, radius, bounds and termination are the same
-for every source of \\H\\.
+for every source of \\H\\; the [sparse path](#sparse-hessians) differs.
 
 ### Trust-region subproblem
 
@@ -41,12 +41,14 @@ equation
 \frac{1}{r} - \Big( \sum_i \frac{\gamma_i^2}{(\lambda_i + \nu)^2}
 \Big)^{-1/2}, \tag{3}\\
 
-nearly linear for \\\nu \> -\lambda\_{\min}\\, solved by Newton’s method
-in a few \\O(n\_\theta)\\ iterations. If \\\gamma_i = 0\\ for every
-eigenvector of \\\lambda\_{\min} \< 0\\ (hard case), the solution is
-\\s(-\lambda\_{\min}) + \tau q\_{\min}\\ with \\\lVert s \rVert = r\\.
-Negative curvature is followed to the boundary. The eigendecomposition
-costs \\O(n\_\theta^3)\\; sparse Hessians use the [sparse
+nearly linear for \\\nu \> -\lambda\_{\min}\\, solved by bisection on a
+bracket of \\\nu\\, every evaluation \\O(n\_\theta)\\ in the eigenbasis.
+If \\\gamma_i = 0\\ for every eigenvector of \\\lambda\_{\min} \< 0\\
+and \\\lVert s(-\lambda\_{\min}) \rVert \le r\\ (hard case), the
+solution is \\s(-\lambda\_{\min}) + \tau q\_{\min}\\ with \\\lVert s
+\rVert = r\\; otherwise it is the root of (3). Negative curvature is
+followed to the boundary. The eigendecomposition costs
+\\O(n\_\theta^3)\\; sparse Hessians use the [sparse
 path](#sparse-hessians).
 
 ### Radius update
@@ -63,9 +65,12 @@ the radius is updated with \\r\_{\max}\\ = `rmax`:
 \tag{5}\\
 
 A step with \\\rho_k \< 1/4\\ is rejected. The radius grows only when
-the step reached the boundary. The first radius is `rinit`. A trial
-point where the objective fails or is not finite counts as rejected;
-three in a row end the run (`"objfun"`).
+the step reached the boundary. Under `boundary = "clip"` the radius
+shrinks to \\r_k/4\\, grows after every step that is not the Newton
+step, and a step that lowers \\f\\ is accepted where the value or model
+test ends the run. The first radius is `rinit`. A trial point where the
+objective fails or is not finite counts as rejected; three in a row end
+the run (`"objfun"`).
 
 ### Nonmonotone acceptance
 
@@ -76,15 +81,16 @@ decrease is measured from a weighted average of past values
 \\Q\_{k+1} = \eta Q_k + 1, \qquad C\_{k+1} = \frac{\eta Q_k C_k +
 f(\theta\_{k+1})}{Q\_{k+1}}, \tag{6}\\
 
-and \\\rho_k = \bigl(C_k - f(\theta_k + s_k)\bigr) /
-\bigl(-m_k(s_k)\bigr)\\; \\\eta = 0\\ recovers (4). The result is the
-best iterate visited; the termination tests read \\f\\ itself.
+updated at accepted steps, and \\\rho_k = \bigl(C_k - f(\theta_k +
+s_k)\bigr) / \bigl(-m_k(s_k)\bigr)\\; \\\eta = 0\\ recovers (4). The
+result is the best iterate visited; the termination tests read \\f\\
+itself.
 
 ### Bound constraints
 
 `boundary = "reflective"` is the interior method of Coleman and Li
 [\[4\]](#ref-coleman1996interior). With \\v_i\\ the signed distance to
-the bound the gradient points to (1 if infinite), \\D =
+the bound in the descent direction \\-g_i\\ (1 if infinite), \\D =
 \operatorname{diag}(\lvert v \rvert^{1/2})\\ and \\J^v\\ the diagonal of
 \\\partial \lvert v \rvert / \partial \theta\\, the subproblem is solved
 in the scaled variables
@@ -94,10 +100,12 @@ in the scaled variables
 
 The optimality measure of `gtol`, \\\max_i \lvert v_i g_i \rvert\\,
 vanishes at interior stationary points and at active bounds. A step
-leaving the box is cut to `thetaMax` (0.99995) of the distance,
+leaving the box is cut to the fraction \\\max(\texttt{thetaMax}, 1 -
+\text{optimality measure})\\ of the distance (`thetaMax` = 0.99995),
 reflected, or replaced by scaled steepest descent, whichever the model
-rates best. `boundary = "clip"` removes active parameters from the
-subproblem and clips the step.
+rates best. The ratio (4) and the step length in (5) are those of the
+scaled model of (7). `boundary = "clip"` removes active parameters from
+the subproblem and clips the step.
 
 ### Termination criteria
 
@@ -105,11 +113,15 @@ The tests are listed in
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html#termination-criteria).
 Only `"gradient"` tests optimality; `"fvalue"`, `"preddiff"` and
 `"step"` read the quadratic model and can stop at a non-stationary point
-if \\H\\ is poor. A quasi-Newton phase therefore ends only on the
-gradient, stagnation or the radius [\[5\]](#ref-nocedal2006numerical).
-For an ODE integrated at relative tolerance \\\epsilon\\ the value has
-an error of about \\\epsilon\\, the gradient more; `ftol` and `gtol`
-belong at or above these noise floors.
+if \\H\\ is poor. While further phases follow, these tests hand over to
+the next one ([Hessian phases](#hessian-phases)); the last quasi-Newton
+phase therefore ends only on the gradient, stagnation, the radius,
+`iterlim` or a failing objective [\[5\]](#ref-nocedal2006numerical). For
+an ODE integrated at relative tolerance \\\epsilon\\ a weighted residual
+\\r_j\\ of a prediction \\f_j\\ has an error of about \\\epsilon f_j /
+\sigma_j\\, so the value has one of about \\2 \epsilon \sum_j \lvert r_j
+f_j \rvert / \sigma_j\\, growing with the amount of data, the gradient
+more; `ftol` and `gtol` belong at or above these noise floors.
 
 ## Sources of the model Hessian
 
@@ -121,8 +133,10 @@ derivatives of the residuals ([Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gradient-and-hessian-of-the-objective)).
 Gauss-Newton keeps the first, positive semidefinite term, which comes
 free with the gradient; the second is small where residuals scatter
-around zero. The prior adds \\2/s_k^2\\ on the diagonal. With a
-parameter-dependent error model the matrix is \\J^\top L J\\, not
+around zero. A Gaussian prior adds twice the prior precision on the
+diagonal ([Likelihood and
+prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#prior)).
+With a parameter-dependent error model the matrix is \\J^\top L J\\, not
 necessarily semidefinite ([Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
 With large residuals the Gauss-Newton model can stop short of the
@@ -156,10 +170,11 @@ the update is
 \\B\_{k+1} = B_k - \frac{B_k s\\ s^\top B_k}{s^\top B_k s} +
 \frac{\tilde y\\ \tilde y^\top}{s^\top \tilde y}. \tag{10}\\
 
-Then \\s^\top \tilde y \ge 0.2\\ s^\top B s \> 0\\. `qnCautious`
-[\[7\]](#ref-li2001modified) skips pairs with \\s^\top y \le c \lVert s
-\rVert \lVert y \rVert\\ (counted in `qnSkipped`). BFGS updates from
-accepted steps only.
+Then \\s^\top \tilde y \ge 0.2\\ s^\top B s \> 0\\. `qnCautious` skips
+pairs with \\s^\top y \le c \lVert s \rVert \lVert y \rVert\\ (counted
+in `qnSkipped`), a cautious update in the sense of
+[\[7\]](#ref-li2001global), whose test scales with the gradient instead.
+BFGS updates from accepted steps only.
 
 ### SR1 update
 
@@ -196,8 +211,11 @@ with the Gauss-Newton Hessian, as in Fides
 
 ### Sparse Hessians
 
-The sparse path solves (3) by sparse Cholesky factors of \\H + \nu I\\
-instead of the eigendecomposition.
+The sparse path solves (3) by Newton’s method on sparse Cholesky factors
+of \\H + \nu I\\ instead of the eigendecomposition. It accepts every
+step with \\\rho_k \> 0\\, shrinks the radius to \\r_k/4\\ below
+\\\rho_k = 1/4\\ and stops on the predicted or the actual decrease,
+without a gradient test.
 
 ## L1 penalties
 
@@ -214,13 +232,17 @@ with penalized parameters \\P\\, references \\\mu_i\\ and strengths
 the trust region with the Gauss-Newton Hessian and two changes: a
 parameter on the kink is removed from (1) while \\\lvert \partial f /
 \partial \theta_i \rvert \le \lambda_i\\, and a step across the kink is
-cut back onto \\\mu_i\\, so zero differences are exact. A one-sided
-penalty is
+cut back onto \\\mu_i\\, so zero differences are exact. Further
+penalties are a one-sided one,
 
-\\\lambda_i \max(0,\\ \mu_i - \theta_i) . \tag{13}\\
+\\\lambda_i \max(0,\\ \mu_i - \theta_i) , \tag{13}\\
 
-a gate \\\lambda_i (\theta_i - \mu_i)\\ with \\\theta_i \ge \mu_i\\, a
-fused block \\B\\
+which keeps a parameter on the kink while \\0 \le \partial f / \partial
+\theta_i \le \lambda_i\\; a gate \\\lambda_i (\theta_i - \mu_i)\\ with
+\\\theta_i \ge \mu_i\\, which keeps it there while \\\partial f /
+\partial \theta_i \ge -\lambda_i\\; and a fused block \\B\\, the
+clustered lasso [\[12\]](#ref-hauber2023uncovering) in the L1 form
+(Hauber et al. favor the exponent 0.8),
 
 \\\lambda \sum\_{p \< q \in B} w\_{pq}\\ \lvert \theta_p - \theta_q
 \rvert , \tag{14}\\
@@ -386,10 +408,10 @@ pp. 144–157, 1978, doi:
 
 \[7\]
 
-D.-H. Li and M. Fukushima, “A modified BFGS method and its global
-convergence in nonconvex minimization,” *Journal of Computational and
-Applied Mathematics*, vol. 129, no. 1–2, pp. 15–35, 2001, doi:
-[10.1016/S0377-0427(00)00540-9](https://doi.org/10.1016/S0377-0427(00)00540-9).
+D.-H. Li and M. Fukushima, “On the global convergence of the BFGS method
+for nonconvex unconstrained optimization problems,” *SIAM Journal on
+Optimization*, vol. 11, no. 4, pp. 1054–1064, 2001, doi:
+[10.1137/S1052623499354242](https://doi.org/10.1137/S1052623499354242).
 
 \[8\]
 
@@ -418,3 +440,10 @@ R. Tibshirani, “Regression shrinkage and selection via the lasso,”
 *Journal of the Royal Statistical Society: Series B*, vol. 58, no. 1,
 pp. 267–288, 1996, doi:
 [10.1111/j.2517-6161.1996.tb02080.x](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x).
+
+\[12\]
+
+A. L. Hauber, M. Rosenblatt, and J. Timmer, “Uncovering specific
+mechanisms across cell types in dynamical models,” *PLOS Computational
+Biology*, vol. 19, no. 9, p. e1010867, 2023, doi:
+[10.1371/journal.pcbi.1010867](https://doi.org/10.1371/journal.pcbi.1010867).

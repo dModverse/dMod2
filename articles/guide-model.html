@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -201,7 +201,7 @@ refractory <code>iIkk</code>.</p>
 <code>eqnlist</code>. <code><a href="../reference/assignCompartment.html">assignCompartment()</a></code> places the four
 nuclear species in the nucleus of volume <code>Vnuc</code> relative to
 the cytoplasm. Rates are concentration rates in the compartment of the
-educts, so</p>
+educts, of the products for a reaction without net educts, so</p>
 <p><span class="math display">\[\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\,
 V_{f(r)}\, v_r(x, p),\]</span></p>
 <p>with <span class="math inline">\(S_{ri}\)</span> the stoichiometry
@@ -562,9 +562,10 @@ complex formation.</p>
 </h2>
 <p>The data are live-cell imaging of NFκB and A20-GFP, immunoblots of
 the cytoplasm, and immunoblots after immunoprecipitation of NFκB or
-IκBα. Each readout measures a sum of species up to a scale
-<code>s_</code> and an offset <code>off_</code>; imaging signals bleach
-with rate <code>tau_</code>. On the natural log scale of the data,</p>
+IκBα. Each readout but the ratio <code>ratioNFkBIkBa</code> measures a
+sum of species up to a scale <code>s_</code> and an offset
+<code>off_</code>; imaging signals bleach with rate <code>tau_</code>.
+On the natural log scale of the data,</p>
 <p><span class="math display">\[y = \log(s\, x + o) - \tau t
 .\]</span></p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
@@ -661,8 +662,10 @@ observables <code>g</code> and the error model <code>e</code>.
 <p>The default backend <code>"cppDE"</code> integrates by BDF with
 first- and, with <code>deriv2 = TRUE</code>, second-order sensitivities;
 <code>backend = "Sundials"</code> uses CVODES, <code>"deSolve"</code>
-deSolve. A step is accepted if <span class="math inline">\(|\varepsilon_i| \le \mathrm{atol} +
-\mathrm{rtol}\,|x_i|\)</span>:</p>
+deSolve. A step is accepted if the weighted RMS norm of the local errors
+is at most one, <span class="math inline">\(\bigl(\tfrac1n \sum_i
+\varepsilon_i^2 / (\mathrm{atol} + \mathrm{rtol}\,|x_i|)^2\bigr)^{1/2}
+\le 1\)</span>:</p>
 <table class="table">
 <colgroup>
 <col width="33%">

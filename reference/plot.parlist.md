@@ -15,14 +15,19 @@ plot(x, path = FALSE, ...)
 
 - x:
 
-  object of class `parlist`, e.g. from
+  object of class `parlist` from
   [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md).
+  Both plots need the starting point `parinit` that
+  [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md)
+  adds to each fit; a list of
+  [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+  results has none.
 
 - path:
 
   logical, plot the path of the parameters from the initial values to
   convergence. Default `FALSE`. `path = TRUE` needs fits run with
-  `trust(..., blather = TRUE)` or `mstrust(..., blather = TRUE)`.
+  `mstrust(..., blather = TRUE)`.
 
 - ...:
 

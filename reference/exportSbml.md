@@ -33,9 +33,10 @@ exportSbml(
 
   Named numeric vector of parameter values (including any
   compartment-size parameters referenced in `eqnlist$compartments`). An
-  entry whose name is a compartment or a species is that element's size
-  or initial value, not a separate `<parameter>`. Default `NULL`:
-  parameters are written without values.
+  entry named like a compartment whose volume is the compartment symbol
+  is the size of that compartment; entries named like other compartments
+  or like species are not written. Default `NULL`: no `<parameter>` is
+  written.
 
 - inits:
 

@@ -9,11 +9,11 @@
 distribution with df degrees of freedom and scale given by the error
 model or the data's sigma: the -2 log likelihood of the data, summed
 over the conditions. The tails are heavier than those of normL2(), so
-single outliers move the fit less; df = Inf would be normL2()."><meta property="og:description" content="Builds the objective of a fit whose residuals follow a Student-t
+single outliers move the fit less; the limit of large df is normL2()."><meta property="og:description" content="Builds the objective of a fit whose residuals follow a Student-t
 distribution with df degrees of freedom and scale given by the error
 model or the data's sigma: the -2 log likelihood of the data, summed
 over the conditions. The tails are heavier than those of normL2(), so
-single outliers move the fit less; df = Inf would be normL2()."></head><body>
+single outliers move the fit less; the limit of large df is normL2()."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -21,7 +21,7 @@ single outliers move the fit less; df = Inf would be normL2()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -39,7 +39,7 @@ single outliers move the fit less; df = Inf would be normL2()."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -60,7 +60,7 @@ single outliers move the fit less; df = Inf would be normL2()."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -99,7 +99,7 @@ single outliers move the fit less; df = Inf would be normL2()."></head><body>
 distribution with <code>df</code> degrees of freedom and scale given by the error
 model or the data's <code>sigma</code>: the <code>-2 log</code> likelihood of the data, summed
 over the conditions. The tails are heavier than those of <code><a href="normL2.html">normL2()</a></code>, so
-single outliers move the fit less; <code>df = Inf</code> would be <code><a href="normL2.html">normL2()</a></code>.</p>
+single outliers move the fit less; the limit of large <code>df</code> is <code><a href="normL2.html">normL2()</a></code>.</p>
     </div>
 
     <div class="section level2">
@@ -134,7 +134,7 @@ defined only for a subset of conditions.</p></dd>
 
 
 <dt id="arg-df">df<a class="anchor" aria-label="anchor" href="#arg-df"></a></dt>
-<dd><p>Degrees of freedom, a positive number, fixed during the fit.</p></dd>
+<dd><p>Degrees of freedom, a positive finite number, fixed during the fit.</p></dd>
 
 
 <dt id="arg-times">times<a class="anchor" aria-label="anchor" href="#arg-times"></a></dt>

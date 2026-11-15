@@ -29,7 +29,7 @@ em() take the sparse path as sparse = "auto" decides.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@ em() take the sparse path as sparse = "auto" decides.'></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -68,7 +68,7 @@ em() take the sparse path as sparse = "auto" decides.'></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -153,8 +153,8 @@ a separate condition, so the Hessian is sparse over them; <code><a href="trust.h
 
 
 <dt id="arg-iterlim">iterlim<a class="anchor" aria-label="anchor" href="#arg-iterlim"></a></dt>
-<dd><p>Iteration limit of the optimizer; with Laplace, spike-and-slab
-or Dirichlet-process terms the outer iterations of <code><a href="em.html">em()</a></code>.</p></dd>
+<dd><p>Iteration limit of the optimizer; with spike-and-slab or
+Dirichlet-process terms the outer iterations of <code><a href="em.html">em()</a></code>.</p></dd>
 
 
 <dt id="arg-init">init<a class="anchor" aria-label="anchor" href="#arg-init"></a></dt>
@@ -190,7 +190,8 @@ symbol; with REML <code>se</code> from the information of the mean parameters al
 the error parameters held at their estimates), <code>scaled</code> (the readings with <code>prediction</code>, <code>sigma</code>, <code>residual</code>
 and <code>bloq</code>), <code>parameters</code> (with attribute <code>estimation</code>, <code>"REML"</code> or
 <code>"ML"</code>), <code>value</code> (-2 log L, of the restricted likelihood with REML, with
-the normalization and the prior), <code>npar</code> (one less per block), <code>AIC</code>
+the normalization and the prior), <code>npar</code> (one less per block without
+absolute readings), <code>AIC</code>
 (with REML comparable only between fits with the same parameters of the
 prediction), <code>values</code> (-2 log L of all fits, sorted), <code>multistart</code>
 (<code>value</code>, <code>converged</code> and <code>iterations</code> per fit, see <code><a href="plotValues.html">plotValues()</a></code>;

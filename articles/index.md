@@ -28,8 +28,8 @@ simulated Western blots, qPCR and targeted mass spectrometry.
   uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncertainty.md):
 - [7. Nonlinear mixed-effects
   models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md):
-- [8. Group-specific
-  effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md):
+- [8. Sparse
+  deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md):
 - [9. Alignment of relative data
   measurements](https://dmodverse.github.io/dMod2/articles/guide-alignment.md):
 - [10. PEtab import and
@@ -57,8 +57,8 @@ Derivations behind the guide, with the comparisons that support them.
   shooting](https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.md):
 - [Marginal likelihood of mixed-effects
   models](https://dmodverse.github.io/dMod2/articles/methods-nlme.md):
-- [Sparse random
-  effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.md):
+- [Sparsity
+  priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md):
 
 ### Examples: signaling models
 

@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -160,10 +160,11 @@ from <code>randomEffects(p)</code>. Conditions without a group add their
 \psi^{(t)}\)</span>. EM alternates forming <span class="math inline">\(Q
 = \sum_i Q_i\)</span> and maximizing it, so <span class="math inline">\(\ell\)</span> never decreases; near the optimum it
 converges linearly at the fraction of missing information. ECM <span class="citation"><a href="#ref-meng1993maximum">[2]</a></span> splits
-the M-step: <span class="math inline">\(\Omega\)</span> in closed form,
-structural parameters by optimization. <a href="methods-sparse-random-effects.html#hyperparameters">Sparse random
-effects</a> minimizes <span class="math inline">\(-2Q\)</span> instead.
-The methods replace the posterior, which has no closed form, by:</p>
+the M-step into conditional steps, ECME <span class="citation"><a href="#ref-liu1994ecme">[3]</a></span> takes some of them on the
+likelihood itself: <span class="math inline">\(\Omega\)</span> in closed
+form, structural parameters by optimization. <a href="methods-sparsity-priors.html#hyperparameters">Sparsity priors</a>
+minimizes <span class="math inline">\(-2Q\)</span> instead. The methods
+replace the posterior, which has no closed form, by:</p>
 <table class="table">
 <colgroup>
 <col width="25%">
@@ -194,7 +195,7 @@ The methods replace the posterior, which has no closed form, by:</p>
 <tr class="odd">
 <td><code>"laplaceEM"</code></td>
 <td>Laplace moments, nodes of degree 3</td>
-<td>ECM</td>
+<td>ECME</td>
 <td>quadrature, level <span class="math inline">\(K + 2\)</span>
 </td>
 </tr>
@@ -215,20 +216,22 @@ The methods replace the posterior, which has no closed form, by:</p>
 <h3 id="laplace-approximation">Laplace approximation<a class="anchor" aria-label="anchor" href="#laplace-approximation"></a>
 </h3>
 <p>With <span class="math inline">\(\Phi_i(\eta) = -2 \log p(y_i \mid
-\eta, \psi) - 2 \log p(\eta \mid \Omega)\)</span>, mode <span class="math inline">\(\hat\eta_i\)</span> and curvature <span class="math inline">\(H_i = \nabla^2_\eta \Phi_i(\hat\eta_i)\)</span>,
-Laplace’s approximation of (2) is <span class="math inline">\(-2 \log
-L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert - K
-\log(2\pi)\)</span>. The prior omits <span class="math inline">\(K
-\log(2\pi)\)</span>, so FOCEI minimizes</p>
+\eta, \psi) - 2 \log p(\eta \mid \Omega) - K \log(2\pi)\)</span>, the
+prior without the constant of the normal density, mode <span class="math inline">\(\hat\eta_i\)</span> and the Gauss-Newton curvature
+<span class="math inline">\(H_i\)</span> of <span class="math inline">\(\Phi_i\)</span> at <span class="math inline">\(\hat\eta_i\)</span>, Laplace’s approximation of
+(2) is <span class="math inline">\(-2 \log L_i \approx
+\Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert\)</span>, the constant
+canceling against that of the Gaussian integral. FOCEI minimizes</p>
 <p><span class="math display">\[F(\psi) = \sum_i \Bigl[
 \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert \Bigr]
 \tag{4}\]</span></p>
 <p>plus the full <span class="math inline">\(-2 \log L\)</span> of the
 conditions without a group. <span class="math inline">\(\log \lvert
-H_i/2 \rvert\)</span> is the volume term. <span class="math inline">\(H_i\)</span> includes the derivatives of <span class="math inline">\(\sigma\)</span> in <span class="math inline">\(\eta\)</span>, the interaction of FOCEI <span class="citation"><a href="#ref-wang2007derivation">[3]</a>, <a href="#ref-pinheiro1995approximations">[4]</a></span>. Conditional
+H_i/2 \rvert\)</span> is the volume term. <span class="math inline">\(H_i\)</span> includes the derivatives of <span class="math inline">\(\sigma\)</span> in <span class="math inline">\(\eta\)</span>, the interaction of FOCEI <span class="citation"><a href="#ref-wang2007derivation">[4]</a>, <a href="#ref-pinheiro1995approximations">[5]</a></span>. Conditional
 standard errors of the modes are the square roots of the diagonal of
 <span class="math inline">\(2 H_i^{-1}\)</span>. The error has either
-sign and order <span class="math inline">\(K / n_i\)</span> for <span class="math inline">\(n_i\)</span> data points in the group.</p>
+sign and order <span class="math inline">\(1 / n_i\)</span> for <span class="math inline">\(n_i\)</span> data points in the group, with a
+factor that grows with <span class="math inline">\(K\)</span>.</p>
 </div>
 <div class="section level3">
 <h3 id="bilevel-optimization">Bilevel optimization<a class="anchor" aria-label="anchor" href="#bilevel-optimization"></a>
@@ -296,8 +299,8 @@ curvature by SR1</td>
 <tr class="even">
 <td><code>derivMode = "forward-forward"</code></td>
 <td>
-<code>deriv2 = TRUE</code> sensitivities; exact Hessian in the outer
-model</td>
+<code>deriv2 = TRUE</code> sensitivities; exact gradient, curvature
+without third-order terms</td>
 </tr>
 <tr class="odd">
 <td><code>secondOrderCorrection = FALSE</code></td>
@@ -305,8 +308,9 @@ model</td>
 </tr>
 </tbody>
 </table>
-<p>The reported Hessian is exact (forward over forward) where the model
-has <code>deriv2</code>, as <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> states. For <span class="math inline">\(\sigma\)</span> depending on <span class="math inline">\(\eta\)</span>, quadrature gives better standard
+<p>Where the model has <code>deriv2</code>, the reported Hessian has the
+exact Schur complement and the curvature of the volume term without
+third-order sensitivities, as <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> states. For <span class="math inline">\(\sigma\)</span> depending on <span class="math inline">\(\eta\)</span>, quadrature gives better standard
 errors of <span class="math inline">\(\Omega\)</span>.</p>
 </div>
 </div>
@@ -317,9 +321,9 @@ errors of <span class="math inline">\(\Omega\)</span>.</p>
 posteriors, as for oral doses sampled near absorption. The cubature
 <span class="math inline">\(\int e^{-\Phi_i/2}\, \mathrm{d}\eta \approx
 \sum_b W_b\, e^{-\Phi_i(\eta_b)/2}\)</span> removes that error level by
-level. It combines the nested Genz-Keister rules <span class="citation"><a href="#ref-genz1996fully">[5]</a></span>, 1, 3, 9,
+level. It combines the nested Genz-Keister rules <span class="citation"><a href="#ref-genz1996fully">[6]</a></span>, 1, 3, 9,
 19 and 35 points exact to degree 1, 5, 15, 29 and 51, by Smolyak’s
-sparse grid <span class="citation"><a href="#ref-smolyak1963quadrature">[6]</a>, <a href="#ref-heiss2008likelihood">[7]</a></span>,</p>
+sparse grid <span class="citation"><a href="#ref-smolyak1963quadrature">[7]</a>, <a href="#ref-heiss2008likelihood">[8]</a></span>,</p>
 <p><span class="math display">\[A(L, K) = \sum_{\lvert \mathbf{i} \rvert
 \le L} \Delta^{i_1} \otimes \cdots \otimes \Delta^{i_K},
 \tag{6}\]</span></p>
@@ -329,10 +333,16 @@ and <span class="math inline">\(l - 1\)</span>. Level <span class="math inline">
 nodes polynomial in <span class="math inline">\(K\)</span> (for <span class="math inline">\(K = 3\)</span>, levels 3 to 7 have 1, 7, 19, 45,
 117); level <span class="math inline">\(K\)</span> is the single Laplace
 node. The grid sits on the FOCEI Gaussian <span class="math inline">\(\mathcal{N}(\hat\eta_i, 2 H_i^{-1})\)</span> and
-moves with <span class="math inline">\(\psi\)</span> <span class="citation"><a href="#ref-clausen2009maximum">[8]</a></span>.
+moves with <span class="math inline">\(\psi\)</span> <span class="citation"><a href="#ref-clausen2009maximum">[9]</a></span>.
 Negative weights make <span class="math inline">\(\log L_i\)</span> a
 signed log-sum-exp; a nonpositive sum, an unresolved posterior, fails
-the evaluation, naming the group. Gradient and Hessian are exact.</p>
+the evaluation, naming the group. The gradient is the quadrature of the
+exact gradient of <span class="math inline">\(\log L_i\)</span> on the
+current nodes (Fisher’s identity), the Hessian follows by Louis’
+identity from data Hessians per node that are exact where the model has
+<code>deriv2</code> and Gauss-Newton otherwise; the move of the grid
+with <span class="math inline">\(\psi\)</span> is not
+differentiated.</p>
 <p><code>method = "quadrature"</code> starts from the converged FOCEI
 fit and alternates:</p>
 <ul>
@@ -351,14 +361,15 @@ less than <code>tolDecrement</code> or less than the nodes resolve.</li>
 </ul>
 <p>At the estimate, importance sampling (<span class="math inline">\(t_5\)</span> proposal at the mode, shifted lattice
 points) flags groups whose two estimates differ by more than three
-standard errors plus the level error, or with Pareto shape <span class="citation"><a href="#ref-vehtari2024pareto">[9]</a></span> above
+standard errors plus the level error, or with Pareto shape <span class="citation"><a href="#ref-vehtari2024pareto">[10]</a></span> above
 0.7.</p>
 </div>
 <div class="section level2">
 <h2 id="laplace-em">Laplace EM<a class="anchor" aria-label="anchor" href="#laplace-em"></a>
 </h2>
-<p><code>method = "laplaceEM"</code> runs ECM: a trust-region step of
-the structural parameters on frozen nodes of level <span class="math inline">\(K + 1\)</span>, then every block of <span class="math inline">\(\Omega\)</span> from <span class="math inline">\(S
+<p><code>method = "laplaceEM"</code> runs ECME: a trust-region run of at
+most <code>maxCm1Iter</code> (30) iterations of the structural
+parameters on the likelihood over frozen nodes of level <span class="math inline">\(K + 1\)</span>, then every block of <span class="math inline">\(\Omega\)</span> from <span class="math inline">\(S
 = G^{-1} \sum_i M_i\)</span> with the posterior second moments <span class="math inline">\(M_i = \hat\eta_i \hat\eta_i^\top + 2
 H_i^{-1}\)</span> (modes alone would shrink <span class="math inline">\(\Omega\)</span>). It stops when parameter change
 and extrapolated remaining distance are below <code>epsEcm</code>
@@ -369,13 +380,13 @@ iterations. Settings come from <code>control$quadrature</code>.</p>
 <h2 id="saem">SAEM<a class="anchor" aria-label="anchor" href="#saem"></a>
 </h2>
 <p><code>method = "saem"</code> uses posterior draws, with no Gaussian
-assumption and equal cost for any <span class="math inline">\(K\)</span>. Stochastic-approximation EM <span class="citation"><a href="#ref-delyon1999convergence">[10]</a></span>
-averages the sufficient statistics by a Robbins-Monro recursion <span class="citation"><a href="#ref-robbins1951stochastic">[11]</a></span>,</p>
+assumption and equal cost for any <span class="math inline">\(K\)</span>. Stochastic-approximation EM <span class="citation"><a href="#ref-delyon1999convergence">[11]</a></span>
+averages the sufficient statistics by a Robbins-Monro recursion <span class="citation"><a href="#ref-robbins1951stochastic">[12]</a></span>,</p>
 <p><span class="math display">\[s_k = s_{k-1} + \gamma_k \bigl( S(y,
 \eta^{(k)}) - s_{k-1} \bigr), \qquad
 \eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} =
 \hat\psi(s_k), \tag{7}\]</span></p>
-<p>converging to a stationary point of <span class="math inline">\(\ell\)</span> <span class="citation"><a href="#ref-delyon1999convergence">[10]</a>, <a href="#ref-kuhn2004coupling">[12]</a></span>. <span class="math inline">\(\Omega\)</span> follows from <span class="math inline">\(\sum_i \eta_i \eta_i^\top\)</span>, mu-referenced
+<p>converging to a stationary point of <span class="math inline">\(\ell\)</span> <span class="citation"><a href="#ref-delyon1999convergence">[11]</a>, <a href="#ref-kuhn2004coupling">[13]</a></span>. <span class="math inline">\(\Omega\)</span> follows from <span class="math inline">\(\sum_i \eta_i \eta_i^\top\)</span>, mu-referenced
 fixed effects by generalized least squares, other structural parameters
 from an average of quadratic models at the draws, whose Newton step has
 the marginal score as fixed point.</p>
@@ -393,22 +404,22 @@ the marginal score as fixed point.</p>
 <td>draws</td>
 <td>few random-walk Metropolis steps and independence proposals from
 <span class="math inline">\(\mathcal{N}(\hat\eta_i, 1.5 \cdot 2
-H_i^{-1})\)</span> <span class="citation"><a href="#ref-kuhn2004coupling">[12]</a></span>; <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code>
+H_i^{-1})\)</span> <span class="citation"><a href="#ref-kuhn2004coupling">[13]</a></span>; <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code>
 reproduces</td>
 </tr>
 <tr class="even">
 <td>burn-in</td>
 <td>
 <span class="math inline">\(\gamma_k = 1\)</span>, variances shrink
-at most 5 % per iteration <span class="citation"><a href="#ref-lavielle2014mixed">[13]</a></span>; ends when no parameter
+at most 5 % per iteration <span class="citation"><a href="#ref-lavielle2014mixed">[14]</a></span>; ends when no parameter
 drifts over <code>window</code>
 </td>
 </tr>
 <tr class="odd">
 <td>averaging</td>
 <td>
-<span class="math inline">\(\gamma_k = k^{-0.7}\)</span>, mean of
-iterates <span class="citation"><a href="#ref-polyak1992acceleration">[14]</a></span>; ends when the
+<span class="math inline">\(\gamma_k = k^{-0.7}\)</span>, <span class="math inline">\(k\)</span> counted from the end of burn-in, mean
+of iterates <span class="citation"><a href="#ref-polyak1992acceleration">[15]</a></span>; ends when the
 expected Monte Carlo rise of <span class="math inline">\(-2 \log
 L\)</span> is below <code>mcTol</code>
 </td>
@@ -419,16 +430,17 @@ L\)</span> is below <code>mcTol</code>
 raises it in every iteration; <code><a href="../reference/em.html">em()</a></code> reports the quadrature
 of level <span class="math inline">\(K + 2\)</span> with standard errors
 from the quadrature Hessian. SAEM suits many random effects and skewed,
-heavy-tailed or multimodal posteriors <span class="citation"><a href="#ref-kuhn2005maximum">[15]</a></span>.</p>
+heavy-tailed or multimodal posteriors <span class="citation"><a href="#ref-kuhn2005maximum">[16]</a></span>.</p>
 </div>
 <div class="section level2">
 <h2 id="variance-at-the-boundary">Zero variance components<a class="anchor" aria-label="anchor" href="#variance-at-the-boundary"></a>
 </h2>
-<p>An unsupported variance runs to 0, minus infinity on the log scale. A
-lone normal random effect in a block ending below standard deviation 0.1
-is therefore refitted at 0. If <span class="math inline">\(-2 \log
-L\)</span> rises by at most <code>control$boundary</code>, the refit is
-returned, the variance named in <code>boundary</code>.</p>
+<p>An unsupported variance runs to 0, minus infinity on the log scale.
+With one grouping and several blocks, a normal random effect alone in a
+block whose estimated standard deviation ends below 0.1 is therefore
+refitted at 0. If <span class="math inline">\(-2 \log L\)</span> rises
+by at most <code>control$boundary</code>, the refit is returned, the
+variance named in <code>boundary</code>.</p>
 </div>
 <div class="section level2 unnumbered">
 <h2 class="unnumbered" id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
@@ -449,15 +461,23 @@ likelihood estimation via the <span>ECM</span> algorithm: A general
 framework,”</span> <em>Biometrika</em>, vol. 80, no. 2, pp. 267–278,
 1993, doi: <a href="https://doi.org/10.1093/biomet/80.2.267" class="external-link">10.1093/biomet/80.2.267</a>.</div>
 </div>
-<div id="ref-wang2007derivation" class="csl-entry">
+<div id="ref-liu1994ecme" class="csl-entry">
 <div class="csl-left-margin">[3] </div>
+<div class="csl-right-inline">C.
+Liu and D. B. Rubin, <span>“The <span>ECME</span> algorithm: A simple
+extension of <span>EM</span> and <span>ECM</span> with faster monotone
+convergence,”</span> <em>Biometrika</em>, vol. 81, no. 4, pp. 633–648,
+1994, doi: <a href="https://doi.org/10.1093/biomet/81.4.633" class="external-link">10.1093/biomet/81.4.633</a>.</div>
+</div>
+<div id="ref-wang2007derivation" class="csl-entry">
+<div class="csl-left-margin">[4] </div>
 <div class="csl-right-inline">Y.
 Wang, <span>“Derivation of various <span>NONMEM</span> estimation
 methods,”</span> <em>Journal of Pharmacokinetics and
 Pharmacodynamics</em>, vol. 34, no. 5, pp. 575–593, 2007, doi: <a href="https://doi.org/10.1007/s10928-007-9060-6" class="external-link">10.1007/s10928-007-9060-6</a>.</div>
 </div>
 <div id="ref-pinheiro1995approximations" class="csl-entry">
-<div class="csl-left-margin">[4] </div>
+<div class="csl-left-margin">[5] </div>
 <div class="csl-right-inline">J.
 C. Pinheiro and D. M. Bates, <span>“Approximations to the log-likelihood
 function in the nonlinear mixed-effects model,”</span> <em>Journal of
@@ -465,7 +485,7 @@ Computational and Graphical Statistics</em>, vol. 4, no. 1, pp. 12–35,
 1995, doi: <a href="https://doi.org/10.1080/10618600.1995.10474663" class="external-link">10.1080/10618600.1995.10474663</a>.</div>
 </div>
 <div id="ref-genz1996fully" class="csl-entry">
-<div class="csl-left-margin">[5] </div>
+<div class="csl-left-margin">[6] </div>
 <div class="csl-right-inline">A.
 Genz and B. D. Keister, <span>“Fully symmetric interpolatory rules for
 multiple integrals over infinite regions with <span>Gaussian</span>
@@ -473,21 +493,21 @@ weight,”</span> <em>Journal of Computational and Applied
 Mathematics</em>, vol. 71, no. 2, pp. 299–309, 1996, doi: <a href="https://doi.org/10.1016/0377-0427(95)00232-4" class="external-link">10.1016/0377-0427(95)00232-4</a>.</div>
 </div>
 <div id="ref-smolyak1963quadrature" class="csl-entry">
-<div class="csl-left-margin">[6] </div>
+<div class="csl-left-margin">[7] </div>
 <div class="csl-right-inline">S.
 A. Smolyak, <span>“Quadrature and interpolation formulas for tensor
 products of certain classes of functions,”</span> <em>Soviet Mathematics
 Doklady</em>, vol. 4, pp. 240–243, 1963.</div>
 </div>
 <div id="ref-heiss2008likelihood" class="csl-entry">
-<div class="csl-left-margin">[7] </div>
+<div class="csl-left-margin">[8] </div>
 <div class="csl-right-inline">F.
 Heiss and V. Winschel, <span>“Likelihood approximation by numerical
 integration on sparse grids,”</span> <em>Journal of Econometrics</em>,
 vol. 144, no. 1, pp. 62–80, 2008, doi: <a href="https://doi.org/10.1016/j.jeconom.2007.12.004" class="external-link">10.1016/j.jeconom.2007.12.004</a>.</div>
 </div>
 <div id="ref-clausen2009maximum" class="csl-entry">
-<div class="csl-left-margin">[8] </div>
+<div class="csl-left-margin">[9] </div>
 <div class="csl-right-inline">W.
 H. O. Clausen, B. B. Rønn, and I. M. Skovgaard, <span>“Maximum
 likelihood estimation in nonlinear mixed effect models: Adaptive
@@ -496,28 +516,28 @@ likelihood estimation in nonlinear mixed effect models: Adaptive
 2009, pp. Abstract 1607.</div>
 </div>
 <div id="ref-vehtari2024pareto" class="csl-entry">
-<div class="csl-left-margin">[9] </div>
+<div class="csl-left-margin">[10] </div>
 <div class="csl-right-inline">A.
 Vehtari, D. Simpson, A. Gelman, Y. Yao, and J. Gabry, <span>“Pareto
 smoothed importance sampling,”</span> <em>Journal of Machine Learning
 Research</em>, vol. 25, no. 72, pp. 1–58, 2024.</div>
 </div>
 <div id="ref-delyon1999convergence" class="csl-entry">
-<div class="csl-left-margin">[10] </div>
+<div class="csl-left-margin">[11] </div>
 <div class="csl-right-inline">B.
 Delyon, M. Lavielle, and E. Moulines, <span>“Convergence of a stochastic
 approximation version of the <span>EM</span> algorithm,”</span> <em>The
 Annals of Statistics</em>, vol. 27, no. 1, pp. 94–128, 1999, doi: <a href="https://doi.org/10.1214/aos/1018031103" class="external-link">10.1214/aos/1018031103</a>.</div>
 </div>
 <div id="ref-robbins1951stochastic" class="csl-entry">
-<div class="csl-left-margin">[11] </div>
+<div class="csl-left-margin">[12] </div>
 <div class="csl-right-inline">H.
 Robbins and S. Monro, <span>“A stochastic approximation method,”</span>
 <em>The Annals of Mathematical Statistics</em>, vol. 22, no. 3, pp.
 400–407, 1951, doi: <a href="https://doi.org/10.1214/aoms/1177729586" class="external-link">10.1214/aoms/1177729586</a>.</div>
 </div>
 <div id="ref-kuhn2004coupling" class="csl-entry">
-<div class="csl-left-margin">[12] </div>
+<div class="csl-left-margin">[13] </div>
 <div class="csl-right-inline">E.
 Kuhn and M. Lavielle, <span>“Coupling a stochastic approximation version
 of <span>EM</span> with an <span>MCMC</span> procedure,”</span>
@@ -525,21 +545,21 @@ of <span>EM</span> with an <span>MCMC</span> procedure,”</span>
 doi: <a href="https://doi.org/10.1051/ps:2004007" class="external-link">10.1051/ps:2004007</a>.</div>
 </div>
 <div id="ref-lavielle2014mixed" class="csl-entry">
-<div class="csl-left-margin">[13] </div>
+<div class="csl-left-margin">[14] </div>
 <div class="csl-right-inline">M.
 Lavielle, <em>Mixed effects models for the population approach: Models,
 tasks, methods and tools</em>. Boca Raton: Chapman; Hall/CRC, 2014. doi:
 <a href="https://doi.org/10.1201/b17203" class="external-link">10.1201/b17203</a>.</div>
 </div>
 <div id="ref-polyak1992acceleration" class="csl-entry">
-<div class="csl-left-margin">[14] </div>
+<div class="csl-left-margin">[15] </div>
 <div class="csl-right-inline">B.
 T. Polyak and A. B. Juditsky, <span>“Acceleration of stochastic
 approximation by averaging,”</span> <em>SIAM Journal on Control and
 Optimization</em>, vol. 30, no. 4, pp. 838–855, 1992, doi: <a href="https://doi.org/10.1137/0330046" class="external-link">10.1137/0330046</a>.</div>
 </div>
 <div id="ref-kuhn2005maximum" class="csl-entry">
-<div class="csl-left-margin">[15] </div>
+<div class="csl-left-margin">[16] </div>
 <div class="csl-right-inline">E.
 Kuhn and M. Lavielle, <span>“Maximum likelihood estimation in nonlinear
 mixed effects models,”</span> <em>Computational Statistics &amp; Data

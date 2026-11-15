@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -136,7 +136,8 @@ inside a ball,</p>
   \lVert s \rVert \le r . \tag{1}\]</span></p>
 <p>The ratio of actual to predicted decrease decides on the step and the
 radius <span class="math inline">\(r\)</span>. Subproblem, radius,
-bounds and termination are the same for every source of <span class="math inline">\(H\)</span>.</p>
+bounds and termination are the same for every source of <span class="math inline">\(H\)</span>; the <a href="#sparse-hessians">sparse
+path</a> differs.</p>
 <div class="section level3">
 <h3 id="trust-region-subproblem">Trust-region subproblem<a class="anchor" aria-label="anchor" href="#trust-region-subproblem"></a>
 </h3>
@@ -157,11 +158,11 @@ root of the secular equation</p>
 = \frac{1}{r} - \Big( \sum_i \frac{\gamma_i^2}{(\lambda_i + \nu)^2}
 \Big)^{-1/2}, \tag{3}\]</span></p>
 <p>nearly linear for <span class="math inline">\(\nu &gt;
--\lambda_{\min}\)</span>, solved by Newton’s method in a few <span class="math inline">\(O(n_\theta)\)</span> iterations. If <span class="math inline">\(\gamma_i = 0\)</span> for every eigenvector of
-<span class="math inline">\(\lambda_{\min} &lt; 0\)</span> (hard case),
-the solution is <span class="math inline">\(s(-\lambda_{\min}) + \tau
-q_{\min}\)</span> with <span class="math inline">\(\lVert s \rVert =
-r\)</span>. Negative curvature is followed to the boundary. The
+-\lambda_{\min}\)</span>, solved by bisection on a bracket of <span class="math inline">\(\nu\)</span>, every evaluation <span class="math inline">\(O(n_\theta)\)</span> in the eigenbasis. If <span class="math inline">\(\gamma_i = 0\)</span> for every eigenvector of
+<span class="math inline">\(\lambda_{\min} &lt; 0\)</span> and <span class="math inline">\(\lVert s(-\lambda_{\min}) \rVert \le r\)</span>
+(hard case), the solution is <span class="math inline">\(s(-\lambda_{\min}) + \tau q_{\min}\)</span> with
+<span class="math inline">\(\lVert s \rVert = r\)</span>; otherwise it
+is the root of (3). Negative curvature is followed to the boundary. The
 eigendecomposition costs <span class="math inline">\(O(n_\theta^3)\)</span>; sparse Hessians use the <a href="#sparse-hessians">sparse path</a>.</p>
 </div>
 <div class="section level3">
@@ -178,10 +179,12 @@ eigendecomposition costs <span class="math inline">\(O(n_\theta^3)\)</span>; spa
 r_k, &amp; \text{otherwise.}
 \end{cases} \tag{5}\]</span></p>
 <p>A step with <span class="math inline">\(\rho_k &lt; 1/4\)</span> is
-rejected. The radius grows only when the step reached the boundary. The
-first radius is <code>rinit</code>. A trial point where the objective
-fails or is not finite counts as rejected; three in a row end the run
-(<code>"objfun"</code>).</p>
+rejected. The radius grows only when the step reached the boundary.
+Under <code>boundary = "clip"</code> the radius shrinks to <span class="math inline">\(r_k/4\)</span>, grows after every step that is not
+the Newton step, and a step that lowers <span class="math inline">\(f\)</span> is accepted where the value or model
+test ends the run. The first radius is <code>rinit</code>. A trial point
+where the objective fails or is not finite counts as rejected; three in
+a row end the run (<code>"objfun"</code>).</p>
 </div>
 <div class="section level3">
 <h3 id="nonmonotone-acceptance">Nonmonotone acceptance<a class="anchor" aria-label="anchor" href="#nonmonotone-acceptance"></a>
@@ -190,26 +193,32 @@ fails or is not finite counts as rejected; three in a row end the run
 measured from a weighted average of past values <span class="citation"><a href="#ref-zhang2004nonmonotone">[3]</a></span>,</p>
 <p><span class="math display">\[Q_{k+1} = \eta Q_k + 1, \qquad C_{k+1} =
 \frac{\eta Q_k C_k + f(\theta_{k+1})}{Q_{k+1}}, \tag{6}\]</span></p>
-<p>and <span class="math inline">\(\rho_k = \bigl(C_k - f(\theta_k +
-s_k)\bigr) / \bigl(-m_k(s_k)\bigr)\)</span>; <span class="math inline">\(\eta = 0\)</span> recovers (4). The result is the
-best iterate visited; the termination tests read <span class="math inline">\(f\)</span> itself.</p>
+<p>updated at accepted steps, and <span class="math inline">\(\rho_k =
+\bigl(C_k - f(\theta_k + s_k)\bigr) / \bigl(-m_k(s_k)\bigr)\)</span>;
+<span class="math inline">\(\eta = 0\)</span> recovers (4). The result
+is the best iterate visited; the termination tests read <span class="math inline">\(f\)</span> itself.</p>
 </div>
 <div class="section level3">
 <h3 id="bound-constraints">Bound constraints<a class="anchor" aria-label="anchor" href="#bound-constraints"></a>
 </h3>
 <p><code>boundary = "reflective"</code> is the interior method of
-Coleman and Li <span class="citation"><a href="#ref-coleman1996interior">[4]</a></span>. With <span class="math inline">\(v_i\)</span> the signed distance to the bound the
-gradient points to (1 if infinite), <span class="math inline">\(D =
-\operatorname{diag}(\lvert v \rvert^{1/2})\)</span> and <span class="math inline">\(J^v\)</span> the diagonal of <span class="math inline">\(\partial \lvert v \rvert / \partial
-\theta\)</span>, the subproblem is solved in the scaled variables</p>
+Coleman and Li <span class="citation"><a href="#ref-coleman1996interior">[4]</a></span>. With <span class="math inline">\(v_i\)</span> the signed distance to the bound in
+the descent direction <span class="math inline">\(-g_i\)</span> (1 if
+infinite), <span class="math inline">\(D = \operatorname{diag}(\lvert v
+\rvert^{1/2})\)</span> and <span class="math inline">\(J^v\)</span> the
+diagonal of <span class="math inline">\(\partial \lvert v \rvert /
+\partial \theta\)</span>, the subproblem is solved in the scaled
+variables</p>
 <p><span class="math display">\[\hat g = D g, \qquad \hat B = D H D +
 \operatorname{diag}(g)\, J^v , \tag{7}\]</span></p>
 <p>The optimality measure of <code>gtol</code>, <span class="math inline">\(\max_i \lvert v_i g_i \rvert\)</span>, vanishes at
 interior stationary points and at active bounds. A step leaving the box
-is cut to <code>thetaMax</code> (0.99995) of the distance, reflected, or
-replaced by scaled steepest descent, whichever the model rates best.
-<code>boundary = "clip"</code> removes active parameters from the
-subproblem and clips the step.</p>
+is cut to the fraction <span class="math inline">\(\max(\texttt{thetaMax}, 1 - \text{optimality
+measure})\)</span> of the distance (<code>thetaMax</code> = 0.99995),
+reflected, or replaced by scaled steepest descent, whichever the model
+rates best. The ratio (4) and the step length in (5) are those of the
+scaled model of (7). <code>boundary = "clip"</code> removes active
+parameters from the subproblem and clips the step.</p>
 </div>
 <div class="section level3">
 <h3 id="termination-criteria">Termination criteria<a class="anchor" aria-label="anchor" href="#termination-criteria"></a>
@@ -217,12 +226,19 @@ subproblem and clips the step.</p>
 <p>The tests are listed in <a href="guide-optimization.html#termination-criteria">Optimization</a>.
 Only <code>"gradient"</code> tests optimality; <code>"fvalue"</code>,
 <code>"preddiff"</code> and <code>"step"</code> read the quadratic model
-and can stop at a non-stationary point if <span class="math inline">\(H\)</span> is poor. A quasi-Newton phase therefore
-ends only on the gradient, stagnation or the radius <span class="citation"><a href="#ref-nocedal2006numerical">[5]</a></span>. For
-an ODE integrated at relative tolerance <span class="math inline">\(\epsilon\)</span> the value has an error of about
-<span class="math inline">\(\epsilon\)</span>, the gradient more;
-<code>ftol</code> and <code>gtol</code> belong at or above these noise
-floors.</p>
+and can stop at a non-stationary point if <span class="math inline">\(H\)</span> is poor. While further phases follow,
+these tests hand over to the next one (<a href="#hessian-phases">Hessian
+phases</a>); the last quasi-Newton phase therefore ends only on the
+gradient, stagnation, the radius, <code>iterlim</code> or a failing
+objective <span class="citation"><a href="#ref-nocedal2006numerical">[5]</a></span>. For an ODE integrated
+at relative tolerance <span class="math inline">\(\epsilon\)</span> a
+weighted residual <span class="math inline">\(r_j\)</span> of a
+prediction <span class="math inline">\(f_j\)</span> has an error of
+about <span class="math inline">\(\epsilon f_j / \sigma_j\)</span>, so
+the value has one of about <span class="math inline">\(2 \epsilon \sum_j
+\lvert r_j f_j \rvert / \sigma_j\)</span>, growing with the amount of
+data, the gradient more; <code>ftol</code> and <code>gtol</code> belong
+at or above these noise floors.</p>
 </div>
 </div>
 <div class="section level2">
@@ -237,7 +253,8 @@ Gauss-Newton Hessian <span class="math inline">\(2 J^\top J\)</span>
 plus a term with the second derivatives of the residuals (<a href="methods-sensitivities.html#gradient-and-hessian-of-the-objective">Sensitivities
 and Hessians</a>). Gauss-Newton keeps the first, positive semidefinite
 term, which comes free with the gradient; the second is small where
-residuals scatter around zero. The prior adds <span class="math inline">\(2/s_k^2\)</span> on the diagonal. With a
+residuals scatter around zero. A Gaussian prior adds twice the prior
+precision on the diagonal (<a href="methods-objective.html#prior">Likelihood and prior</a>). With a
 parameter-dependent error model the matrix is <span class="math inline">\(J^\top L J\)</span>, not necessarily semidefinite
 (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Sensitivities
 and Hessians</a>). With large residuals the Gauss-Newton model can stop
@@ -271,9 +288,10 @@ definite, which needs <span class="math inline">\(s^\top y &gt;
 B_k}{s^\top B_k s} + \frac{\tilde y\, \tilde y^\top}{s^\top \tilde y}.
 \tag{10}\]</span></p>
 <p>Then <span class="math inline">\(s^\top \tilde y \ge 0.2\, s^\top B s
-&gt; 0\)</span>. <code>qnCautious</code> <span class="citation"><a href="#ref-li2001modified">[7]</a></span> skips pairs with <span class="math inline">\(s^\top y \le c \lVert s \rVert \lVert y
-\rVert\)</span> (counted in <code>qnSkipped</code>). BFGS updates from
-accepted steps only.</p>
+&gt; 0\)</span>. <code>qnCautious</code> skips pairs with <span class="math inline">\(s^\top y \le c \lVert s \rVert \lVert y
+\rVert\)</span> (counted in <code>qnSkipped</code>), a cautious update
+in the sense of <span class="citation"><a href="#ref-li2001global">[7]</a></span>, whose test scales with the
+gradient instead. BFGS updates from accepted steps only.</p>
 </div>
 <div class="section level3">
 <h3 id="sr1-update">SR1 update<a class="anchor" aria-label="anchor" href="#sr1-update"></a>
@@ -312,8 +330,11 @@ Hessian, as in Fides <span class="citation"><a href="#ref-froehlich2022fides">[1
 <div class="section level3">
 <h3 id="sparse-hessians">Sparse Hessians<a class="anchor" aria-label="anchor" href="#sparse-hessians"></a>
 </h3>
-<p>The sparse path solves (3) by sparse Cholesky factors of <span class="math inline">\(H + \nu I\)</span> instead of the
-eigendecomposition.</p>
+<p>The sparse path solves (3) by Newton’s method on sparse Cholesky
+factors of <span class="math inline">\(H + \nu I\)</span> instead of the
+eigendecomposition. It accepts every step with <span class="math inline">\(\rho_k &gt; 0\)</span>, shrinks the radius to
+<span class="math inline">\(r_k/4\)</span> below <span class="math inline">\(\rho_k = 1/4\)</span> and stops on the predicted
+or the actual decrease, without a gradient test.</p>
 </div>
 </div>
 <div class="section level2">
@@ -328,13 +349,16 @@ references <span class="math inline">\(\mu_i\)</span> and strengths
 <span class="math inline">\(\lambda_i\)</span>. <code><a href="../reference/trust.html">trustL1()</a></code>
 runs the trust region with the Gauss-Newton Hessian and two changes: a
 parameter on the kink is removed from (1) while <span class="math inline">\(\lvert \partial f / \partial \theta_i \rvert \le
-\lambda_i\)</span>, and a step across the kink is cut back onto <span class="math inline">\(\mu_i\)</span>, so zero differences are exact. A
-one-sided penalty is</p>
-<p><span class="math display">\[\lambda_i \max(0,\, \mu_i - \theta_i) .
+\lambda_i\)</span>, and a step across the kink is cut back onto <span class="math inline">\(\mu_i\)</span>, so zero differences are exact.
+Further penalties are a one-sided one,</p>
+<p><span class="math display">\[\lambda_i \max(0,\, \mu_i - \theta_i) ,
 \tag{13}\]</span></p>
-<p>a gate <span class="math inline">\(\lambda_i (\theta_i -
-\mu_i)\)</span> with <span class="math inline">\(\theta_i \ge
-\mu_i\)</span>, a fused block <span class="math inline">\(B\)</span></p>
+<p>which keeps a parameter on the kink while <span class="math inline">\(0 \le \partial f / \partial \theta_i \le
+\lambda_i\)</span>; a gate <span class="math inline">\(\lambda_i
+(\theta_i - \mu_i)\)</span> with <span class="math inline">\(\theta_i
+\ge \mu_i\)</span>, which keeps it there while <span class="math inline">\(\partial f / \partial \theta_i \ge
+-\lambda_i\)</span>; and a fused block <span class="math inline">\(B\)</span>, the clustered lasso <span class="citation"><a href="#ref-hauber2023uncovering">[12]</a></span> in
+the L1 form (Hauber et al. favor the exponent 0.8),</p>
 <p><span class="math display">\[\lambda \sum_{p &lt; q \in B} w_{pq}\,
 \lvert \theta_p - \theta_q \rvert , \tag{14}\]</span></p>
 <p>optionally with an anchor; equal parameters move as one until the
@@ -509,12 +533,12 @@ J. D. Powell, <span>“A fast algorithm for nonlinearly constrained
 optimization calculations,”</span> <em>Lecture Notes in
 Mathematics</em>, vol. 630, pp. 144–157, 1978, doi: <a href="https://doi.org/10.1007/BFb0067703" class="external-link">10.1007/BFb0067703</a>.</div>
 </div>
-<div id="ref-li2001modified" class="csl-entry">
+<div id="ref-li2001global" class="csl-entry">
 <div class="csl-left-margin">[7] </div>
-<div class="csl-right-inline">D.-H. Li and M. Fukushima, <span>“A modified
-<span>BFGS</span> method and its global convergence in nonconvex
-minimization,”</span> <em>Journal of Computational and Applied
-Mathematics</em>, vol. 129, no. 1–2, pp. 15–35, 2001, doi: <a href="https://doi.org/10.1016/S0377-0427(00)00540-9" class="external-link">10.1016/S0377-0427(00)00540-9</a>.</div>
+<div class="csl-right-inline">D.-H. Li and M. Fukushima, <span>“On the global
+convergence of the <span>BFGS</span> method for nonconvex unconstrained
+optimization problems,”</span> <em>SIAM Journal on Optimization</em>,
+vol. 11, no. 4, pp. 1054–1064, 2001, doi: <a href="https://doi.org/10.1137/S1052623499354242" class="external-link">10.1137/S1052623499354242</a>.</div>
 </div>
 <div id="ref-shanno1978matrix" class="csl-entry">
 <div class="csl-left-margin">[8] </div>
@@ -545,6 +569,13 @@ e1010322, 2022, doi: <a href="https://doi.org/10.1371/journal.pcbi.1010322" clas
 Tibshirani, <span>“Regression shrinkage and selection via the
 lasso,”</span> <em>Journal of the Royal Statistical Society: Series
 B</em>, vol. 58, no. 1, pp. 267–288, 1996, doi: <a href="https://doi.org/10.1111/j.2517-6161.1996.tb02080.x" class="external-link">10.1111/j.2517-6161.1996.tb02080.x</a>.</div>
+</div>
+<div id="ref-hauber2023uncovering" class="csl-entry">
+<div class="csl-left-margin">[12] </div>
+<div class="csl-right-inline">A.
+L. Hauber, M. Rosenblatt, and J. Timmer, <span>“Uncovering specific
+mechanisms across cell types in dynamical models,”</span> <em>PLOS
+Computational Biology</em>, vol. 19, no. 9, p. e1010867, 2023, doi: <a href="https://doi.org/10.1371/journal.pcbi.1010867" class="external-link">10.1371/journal.pcbi.1010867</a>.</div>
 </div>
 </div>
 </div>

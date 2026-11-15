@@ -1,12 +1,13 @@
 # Detect Number of Free Cores
 
 Estimates the free cores as the number of cores minus the 1-minute load
-average, at least 1; inside a SLURM job on the local machine, the cores
-the job was given (`SLURM_CPUS_ON_NODE`) and the job processes are bound
-to. Works on Linux and macOS, locally or on remote machines via `ssh`.
-On the local Windows machine the load is the processor load since the
-previous call, over at least 0.25 s and at most a minute. Under
-`R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at most 2.
+average, at least 1. With `machine = NULL` inside a SLURM job, they are
+the cores the job was given (`SLURM_CPUS_ON_NODE`) and the job processes
+are bound to. Works on Linux and macOS, locally or on remote machines
+via `ssh`. On the local Windows machine the load is the processor load
+since the previous call, over at least 0.25 s and at most a minute.
+Under `R CMD check` with `_R_CHECK_LIMIT_CORES_` set, the result is at
+most 2.
 
 ## Usage
 
@@ -24,8 +25,9 @@ detectFreeCores(machine = NULL)
 
 ## Value
 
-Numeric vector of free cores, one per machine and named by it, with
-attributes `"ncores"` (number of cores) and `"used"` (load average).
+Numeric vector of free cores, one per machine, named by `machine` when
+it is given, with attributes `"ncores"` (number of cores) and `"used"`
+(load average).
 
 ## Examples
 
@@ -35,5 +37,5 @@ detectFreeCores()
 #> attr(,"ncores")
 #> [1] 4
 #> attr(,"used")
-#> [1] 1.39
+#> [1] 1.47
 ```

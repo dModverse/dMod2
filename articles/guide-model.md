@@ -52,7 +52,7 @@ adds a reaction to an `eqnlist`.
 [`assignCompartment()`](https://dmodverse.github.io/dMod2/reference/assignCompartment.md)
 places the four nuclear species in the nucleus of volume `Vnuc` relative
 to the cytoplasm. Rates are concentration rates in the compartment of
-the educts, so
+the educts, of the products for a reaction without net educts, so
 
 \\\dot x_i = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{f(r)}\\ v_r(x, p),\\
 
@@ -188,9 +188,9 @@ as.eqnvec(reactions)[c("NfkIkb", "nNfk", "TNF", "TNFR")]
 
 The data are live-cell imaging of NFκB and A20-GFP, immunoblots of the
 cytoplasm, and immunoblots after immunoprecipitation of NFκB or IκBα.
-Each readout measures a sum of species up to a scale `s_` and an offset
-`off_`; imaging signals bleach with rate `tau_`. On the natural log
-scale of the data,
+Each readout but the ratio `ratioNFkBIkBa` measures a sum of species up
+to a scale `s_` and an offset `off_`; imaging signals bleach with rate
+`tau_`. On the natural log scale of the data,
 
 \\y = \log(s\\ x + o) - \tau t .\\
 
@@ -301,8 +301,10 @@ e <- Y(errors, g, modelname = "oppelt_err", compile = FALSE)
 
 The default backend `"cppDE"` integrates by BDF with first- and, with
 `deriv2 = TRUE`, second-order sensitivities; `backend = "Sundials"` uses
-CVODES, `"deSolve"` deSolve. A step is accepted if \\\|\varepsilon_i\|
-\le \mathrm{atol} + \mathrm{rtol}\\\|x_i\|\\:
+CVODES, `"deSolve"` deSolve. A step is accepted if the weighted RMS norm
+of the local errors is at most one, \\\bigl(\tfrac1n \sum_i
+\varepsilon_i^2 / (\mathrm{atol} + \mathrm{rtol}\\\|x_i\|)^2\bigr)^{1/2}
+\le 1\\:
 
 | option | default | controls |
 |----|----|----|

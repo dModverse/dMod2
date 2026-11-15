@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -143,7 +143,9 @@ the best iterate.</p>
 <code>boundary = "reflective"</code> (default) keeps the iterates
 strictly inside and reports the parameters held by a bound in
 <code>atBound</code>; <code>boundary = "clip"</code> takes them out of
-the subproblem and supports no quasi-Newton source.</p>
+the subproblem, runs a single Gauss-Newton phase, reads only
+<code>ftol</code> and <code>mtol</code> and stops with
+<code>"fvalue"</code> or <code>"iterlim"</code>.</p>
 <div class="section level3">
 <h3 id="termination-criteria">Termination criteria<a class="anchor" aria-label="anchor" href="#termination-criteria"></a>
 </h3>
@@ -211,10 +213,11 @@ parameters</td>
 </tr>
 </tbody>
 </table>
-<p>Only <code>"gradient"</code> tests first-order optimality; the value
-and step tests are off in a quasi-Newton phase. <code>ftol</code> and
-<code>gtol</code> belong at or above the numerical error of value and
-gradient; <code>model.R</code> passes them as
+<p>Only <code>"gradient"</code> tests first-order optimality; the last
+quasi-Newton phase ignores the value, model and step tests (<a href="#hessian-phases-and-reverse-sweep">Hessian phases</a>).
+<code>ftol</code> and <code>gtol</code> belong at or above the numerical
+error of value and gradient; <code>model.R</code> defines them as
+<code>tolerances</code>, which the fitting scripts pass as
 <code>tolControl</code>.</p>
 </div>
 </div>
@@ -283,7 +286,8 @@ settings are entries of <code>qnControl</code>:</p>
 <td><code>"never"</code></td>
 <td>
 <code>"stall"</code>: reseed at the current iterate instead of
-stopping on stagnation, at most eight times per phase</td>
+stopping on stagnation or on a step that no longer moves it, where the
+iterate moved since the last reseed, at most eight times per phase</td>
 </tr>
 <tr class="odd">
 <td><code>qnMemory</code></td>
@@ -324,8 +328,11 @@ fewer than phases).</p>
 <p><code>sweep = "reverse"</code> computes the gradient of a
 quasi-Newton phase by one backward sweep, for models built with
 <code>derivMode = c("forward", "reverse")</code>; by default a
-<code>"bfgs"</code> or <code>"sr1"</code> phase sweeps backwards where
-it can. <code>phaseSweep</code> reports the sweep per phase.</p>
+<code>"bfgs"</code> or <code>"sr1"</code> phase of <code>phases</code>
+sweeps backwards where it can, while a run without <code>phases</code>
+sweeps only with <code>sweep = "reverse"</code>. With
+<code>phases</code>, <code>phaseSweep</code> reports the sweep per
+phase.</p>
 </div>
 <div class="section level3">
 <h3 id="sparse-hessians">Sparse Hessians<a class="anchor" aria-label="anchor" href="#sparse-hessians"></a>
@@ -545,15 +552,21 @@ starts are drawn before the fits are distributed, so
 <code>output</code>, <code>cautiousMode</code>
 </td>
 <td><code>FALSE</code></td>
-<td>write every fit to <code>resultPath/name/</code>
-</td>
+<td>
+<code>output</code> writes every fit to
+<code>resultPath/name/trial-&lt;k&gt;-&lt;date&gt;/interRes/</code>
+while the run goes on and the parameter list at the end of the run;
+<code>cautiousMode</code> adds a deparsed <code>.R</code> copy of every
+fit, kept after the run</td>
 </tr>
 </tbody>
 </table>
 <p><code><a href="../reference/msParframe.html">msParframe()</a></code> draws starts from a separate seed, so
-several runs can share them; <code><a href="../reference/load.parlist.html">load.parlist()</a></code> reads fits
-written by <code>output = TRUE</code>. <code>helix.R</code> runs the 200
-fits as 100 array tasks (<a href="guide-remote-computing.html">Remote
+several runs can share them; <code><a href="../reference/load.parlist.html">load.parlist()</a></code> reads the fits
+in <code>interRes/</code> of a run that is still going or was aborted,
+since a finished run removes them and leaves
+<code>parameterList.Rda</code>. <code>helix.R</code> runs the 200 fits
+as 100 array tasks (<a href="guide-remote-computing.html">Remote
 computing</a>):</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
@@ -634,7 +647,8 @@ shooting</a>). It is a control of the objective:</p>
 <span><span class="fu"><a href="../reference/controls.html">controls</a></span><span class="op">(</span><span class="va">obj</span>, <span class="st">"multipleShootingControl"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span>   <span class="co"># single shooting again</span></span></code></pre></div>
 <p>The chain must be <code>g * x * p</code> with one <code><a href="../reference/Xs.html">Xs()</a></code>
 built on <code>odemodel(..., includeTimeZero = FALSE)</code>. Not
-available with it: <code>hessianMethod = "exact"</code>, several phases,
+available with it: <code>hessianMethod = "exact"</code>,
+<code>qnControl$hessianInit = "exact"</code>, several phases,
 <code>switches</code>, <code>hessianReseed</code>,
 <code>qnMemory</code>, <code>nonmonotone</code>,
 <code>boundary = "clip"</code>, <code>minimize = FALSE</code>,

@@ -29,7 +29,8 @@ conditions.
 
 Each function is defined for a set of conditions. The sum is defined for
 their union. A condition present in both is taken from `e2`, with a
-warning.
+warning. A function defined for no specific condition
+(`conditions = NULL`) cannot be added and gives an error.
 
 ## See also
 
@@ -49,7 +50,7 @@ x <- Xd(grid)
 ## An observation function
 g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
        modelname = "prediction_obs", outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/prediction_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/prediction_obs.cpp
 
 ## One parameter transformation per condition
 innerpars <- c(getParameters(x), getParameters(g))

@@ -8,10 +8,10 @@ effects are estimated by maximizing the marginal likelihood.
 
 A group, a level of the grouping of a random term such as a patient or a
 cell line, may own several conditions, which share the random effects of
-the group. Normal, Laplace, spike-and-slab and Dirichlet-process random
-effects of one grouping may be combined. Random terms over several
-groupings, nested or crossed, are normal and integrated per connected
-component of the conditions.
+the group. Normal, spike-and-slab and Dirichlet-process random effects
+of one grouping may be combined. Random terms over several groupings,
+nested or crossed, are normal and integrated per connected component of
+the conditions.
 
 Methods:
 
@@ -19,8 +19,8 @@ Methods:
 
   Laplace approximation at the conditional modes with the exact
   derivative of the volume term. The default, and the method for
-  Laplace, spike-and-slab and Dirichlet-process random effects (at most
-  14 groups) and for several groupings.
+  spike-and-slab and Dirichlet-process random effects (at most 14
+  groups) and for several groupings.
 
 - `"quadrature"`:
 
@@ -72,13 +72,17 @@ em(
 
   Named numeric start with the parameters of `obj` that are neither
   random effects nor created by the effect formulas (those start at 0).
-  It may also set those and the hyperparameters: `omega_*` (log standard
-  deviations and Cholesky entries), `lambda_*` (Laplace), `prob_*` and
-  `tau_*` (spike and slab), `concentration_*` and `tau_*` (Dirichlet
-  process), named `<kind>_<grouping>` and numbered `_1`, `_2`, ... where
-  a grouping has several blocks. An `em` fit as `init` gives the start:
-  the estimates, `fixed` values and random effects of that fit, without
-  those it set to 0, and with sparse random effects the inner modes.
+  It may also set those and the hyperparameters: `omega_<a>_<a>`, the
+  log of the diagonal entry of the Cholesky factor of `Omega` (the log
+  standard deviation of an uncorrelated random effect), and
+  `omega_<a>_<b>`, the entry in row `a` and column `b` below the
+  diagonal, with `a` and `b` the stems of the random effects without
+  `eta_`, as in `omega_cl_cl`; `prob_*` and `tau_*` (spike and slab),
+  `concentration_*` and `tau_*` (Dirichlet process), named
+  `<kind>_<grouping>` and numbered `_1`, `_2`, ... where a grouping has
+  several blocks. An `em` fit as `init` gives the start: the estimates,
+  `fixed` values and random effects of that fit, without those it set to
+  0, and with sparse random effects the inner modes.
 
 - fixed:
 
@@ -129,7 +133,7 @@ em(
       from the estimates; where -2 log L rises by at most `boundary`,
       that fit is returned and names the hyperparameter in `boundary`.
 
-  `quadrature`, `saem`, `laplace`
+  `quadrature`, `saem`, `sparseFit`
 
   :   lists of the sections Quadrature, SAEM and Sparse random effects.
 
@@ -157,15 +161,15 @@ An object of class `em` with, among others:
 - `argument`, `value`, `gradient`, `hessian`:
 
   the estimates, -2 log L of the marginal likelihood with gradient and
-  Hessian (a sparse `Matrix` on the sparse path, `NULL` with Laplace,
+  Hessian (a sparse `Matrix` on the sparse path, `NULL` with
   spike-and-slab or Dirichlet-process random effects).
 
 - `information`:
 
-  with Laplace or spike-and-slab random effects the empirical
-  information that gives the standard errors: `G / (G - 1)` times the
-  sum of the outer products of the centered scores of the `G` groups,
-  plus half the Hessian of the conditions without random effects.
+  with spike-and-slab random effects the empirical information that
+  gives the standard errors: `G / (G - 1)` times the sum of the outer
+  products of the centered scores of the `G` groups, plus half the
+  Hessian of the conditions without random effects.
 
 - `converged`, `iterations`:
 
@@ -182,10 +186,10 @@ An object of class `em` with, among others:
   deviation of 0; a column `data` where a sparse random effect reaches
   no data of the group; such an effect rests at 0 with the prior.
 
-- `strengths`, `slab`:
+- `slab`:
 
-  the hyperparameters of the Laplace blocks and of the spike-and-slab
-  and Dirichlet-process blocks.
+  the hyperparameters of the spike-and-slab and Dirichlet-process
+  blocks.
 
 - `valueSE`:
 
@@ -300,6 +304,12 @@ models. Entries of `control$saem`:
   with Dirichlet-process random effects the particles of the sequential
   importance sampling of -2 log L, default 500.
 
+- `cm1Control`:
+
+  [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+  settings of the Newton steps of the other parameters, default one
+  iteration per SAEM iteration.
+
 With Dirichlet-process random effects a Gibbs sweep draws the clusters
 of the groups (Neal 2000, algorithm 8), the averaging runs `nEM`
 iterations, and the reported clusters are the most frequent partition of
@@ -307,13 +317,13 @@ the late draws.
 
 ## Sparse random effects
 
-With Laplace, spike-and-slab or Dirichlet-process random effects the
-parameters and hyperparameters move in one trust region. The integral of
-a group is exact where the data couple none of the factors and the sum
-over the subsets of the spike-and-slab random effects of the group stays
-within a budget of nodes; else it is the expectation consistent (EC)
+With spike-and-slab or Dirichlet-process random effects the parameters
+and hyperparameters move in one trust region. The integral of a group is
+exact where the data couple none of the factors and the sum over the
+subsets of the spike-and-slab random effects of the group stays within a
+budget of nodes; else it is the expectation consistent (EC)
 approximation, and a trial point at which EC does not converge is a
-failed evaluation. Entries of `control$laplace`:
+failed evaluation. Entries of `control$sparseFit`:
 
 - `maxOuter`:
 
@@ -332,12 +342,12 @@ failed evaluation. Entries of `control$laplace`:
 [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md); the
 guide chapters [Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.html) and
-[Group-specific
-effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.html),
+[Sparse
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html),
 the methods articles [Marginal likelihood of mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/methods-nlme.html)
-and [Sparse random
-effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html).
+and [Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html).
 
 ## Examples
 
@@ -356,10 +366,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/theoph_err.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -432,14 +442,14 @@ c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 #>   359.4032   360.7548   360.7588 
 # }
 if (FALSE) { # \dontrun{
-## Ka and Cl with correlated random effects, V with a Laplace one: a second transformation
-p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = laplace()))),
+## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation
+p2 <- P(insert(trafo, Ka + Cl ~ 1 + (1 | p | ID), V ~ 1 + (1 | gr(ID, dist = spikeSlab()))),
         method = "explicit", compile = FALSE, modelname = "theoph_p2", derivMode = dm,
         outdir = tempdir())
 compile(p2, output = tempfile("theoph"))
 fit2 <- em(normL2(data, g * x * p2, errmodel = err), randomEffects(p2), init = init)
 fit2$omega
-fit2$strengths
+fit2$slab
 AIC(fit, fit2)
 } # }
 ```

@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -408,8 +408,9 @@ worker.</p>
 <p><code>cores</code> per task is one number, a vector named by node, or
 <code>NULL</code> for the free cores at submission.
 <code><a href="../reference/detectFreeCores.html">detectFreeCores()</a></code> counts cores minus the one-minute load
-average, at least 1, locally or over ssh; a node gets at most the free
-cores, with a warning if given more.</p>
+average, on a local Windows machine minus the processor load since the
+previous call, at least 1, locally or over ssh; a node gets at most the
+free cores, with a warning if given more.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/detectFreeCores.html">detectFreeCores</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"localhost"</span>, <span class="st">"server1"</span>, <span class="st">"server2"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <p>On each node <code>slot_&lt;k&gt;.sh</code> calls
@@ -492,8 +493,9 @@ done</td>
 </tr>
 <tr class="odd">
 <td><code>purge(local = FALSE)</code></td>
-<td>deletes remote job folders, with <code>local = TRUE</code> also
-local folder and registry entry</td>
+<td>deletes the job folders on the nodes, on <code>"localhost"</code>
+the local <code>&lt;jobname&gt;_folder/&lt;k&gt;</code>, with
+<code>local = TRUE</code> also local folder and registry entry</td>
 </tr>
 <tr class="even">
 <td><code>terminate()</code></td>
@@ -523,8 +525,10 @@ process group of every slot, on SLURM the job by
 <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> and deletes the job; a job with failed tasks is kept
 for <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">log()</a></code>.</p>
 <p>A job outlives the session. The manifest is in the local
-<code>&lt;jobname&gt;_folder</code>, in every remote node folder and in
-the registry <code>tools::R_user_dir("dMod2", "data")</code> until
+<code>&lt;jobname&gt;_folder</code>, in the
+<code>&lt;jobname&gt;_folder</code> of every remote node until
+<code>purge()</code>, and in the registry
+<code>tools::R_user_dir("dMod2", "data")</code> until
 <code>purge(local = TRUE)</code>; <code><a href="../reference/dMod2Jobs.html">dMod2Jobs()</a></code> lists
 registered jobs. <code>recover = TRUE</code> with a job name returns the
 job functions without resubmitting, from the manifest in the working
@@ -634,8 +638,8 @@ one side of one parameter per task:</p>
 profile.</p>
 <p>An <code><a href="../reference/msem.html">msem()</a></code> multistart splits by <code>which</code>: every
 task draws all starts from the same seed and fits those it names. The
-200 starts of <a href="guide-group-effects.html">Group effects</a>, two
-per task:</p>
+200 starts of <a href="guide-sparse-deviations.html">Sparse
+deviations</a>, two per task:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">compoundsJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span></span>
@@ -664,7 +668,8 @@ multistarts as a local job, <a href="kokMSB2020.html">Kok 2020</a> the
 </h2>
 <ul>
 <li>A POSIX shell locally (on Windows the <code>sh</code> of Rtools) and
-on every remote node.</li>
+on every remote node, bash on remote nodes for
+<code>build = "compile"</code> (default) and <code>"link"</code>.</li>
 <li>Remote nodes: ssh with key authentication, dMod2 and cppDE for the R
 on the node <code>PATH</code> or in <code>libs</code>, a compiler for
 <code>build = "compile"</code>.</li>

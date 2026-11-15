@@ -28,8 +28,9 @@ model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gau
 
 `deriv2 = TRUE` in
 [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
-[`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
-[`P()`](https://dmodverse.github.io/dMod2/reference/P.md) builds
+[`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md),
+[`P()`](https://dmodverse.github.io/dMod2/reference/P.md) and
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) builds
 second-order sensitivities; the objective called with `deriv2 = TRUE`
 and the forward sweep returns the exact Hessian. The equation count
 grows with the square of the parameters, so this suits small models such
@@ -42,8 +43,10 @@ guide model with 63 parameters uses it once below to show the cost.
 The gradient alone comes from one backward sweep of the adjoint system,
 at a cost independent of the parameter count ([Methods \> Reverse
 sweep](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep)).
-Every function object is built with
-`derivMode = c("forward", "reverse")` and the model is called with
+Every function object but
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md), which
+passes the sweep through the Jacobian of the root, is built with
+`derivMode = c("forward", "reverse")`, and the model is called with
 `sweep = "reverse"`. Both passes use the solver `options` alone; solves
 with sensitivities use `optionsSens` merged over `options`.
 
@@ -60,12 +63,13 @@ fit$phaseSweep
 
 Without `sweep`, `"bfgs"` and `"sr1"` phases sweep backwards if the
 objective allows it at the start, otherwise forwards. Gauss-Newton
-always runs forwards, since \\J^\top J\\ needs forward sensitivities;
-with `sweep = "reverse"` the objective warns and returns no Hessian.
-`"exact"` runs forwards by default and backwards with
-`sweep = "reverse"`, where `deriv2 = TRUE` gives the exact Hessian by
-forward over reverse. A change of sweep between phases evaluates the
-current iterate once more.
+always runs forwards, since \\J^\top J\\ needs forward sensitivities; a
+`"gn"` phase with `sweep = "reverse"` is an error, and the objective
+called with `sweep = "reverse"` returns no Gauss-Newton Hessian, with a
+warning where `hessian = TRUE` asks for one. `"exact"` runs forwards by
+default and backwards with `sweep = "reverse"`, where `deriv2 = TRUE`
+gives the exact Hessian by forward over reverse. A change of sweep
+between phases evaluates the current iterate once more.
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
 compares the Hessian sources on the guide model.
 
@@ -79,13 +83,13 @@ accuracy, see
 
 x <- Xs(model, options = list(atol = 1e-8, rtol = 1e-6),
         optionsReverse = list(refine = TRUE, gradtol = 1e-3))
-controls(x, "optionsReverse") <- list(refine = FALSE)   # the grid of the value pass again
+controls(x, name = "optionsReverse") <- list(refine = FALSE)   # the grid of the value pass again
 ```
 
 | entry | controls |
 |----|----|
 | `refine` | `TRUE`: each sweep step passes the error test of the solve, else is redone in substeps |
-| `gradtol` | step share of the gradient as absolute tolerance, fraction of the gradient scale |
+| `gradtol` | absolute tolerance for the share of each step in the gradient |
 
 Under `refine`, value and `chi2` of the reverse objective include the
 change from the computed to the refined trajectory, the attribute
@@ -257,10 +261,10 @@ ggplot2::ggplot(eig, ggplot2::aes(rank, value, color = Hessian)) +
 ![](guide-sensitivities_files/figure-html/unnamed-chunk-11-1.png)
 
 They agree in the large eigenvalues, the well-determined directions. The
-exact Hessian is positive definite with smallest eigenvalue -0.053, the
-Gauss-Newton Hessian has -0.025: the model estimates the standard
-deviations of the imaging readouts, and with an error model Gauss-Newton
-can be indefinite ([Gauss-Newton with an error
+smallest eigenvalue is -0.053 for the exact Hessian and -0.025 for
+Gauss-Newton. The model estimates the standard deviations of the imaging
+readouts, and with an error model Gauss-Newton can be indefinite
+([Gauss-Newton with an error
 model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
 In the flat directions the Hessian sources of
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)

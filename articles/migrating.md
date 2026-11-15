@@ -60,12 +60,12 @@ notation:
 trafo <- branch(trafo, table = covariates)        # one row per condition, columns ID and wt
 trafo <- insert(trafo, "x <- exp(x)", x = c("ka", "cl"))
 trafo <- insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))
-trafo <- insert(trafo, v ~ wt + (1 | gr(ID, dist = laplace())))
+trafo <- insert(trafo, v ~ wt + (1 | gr(ID, dist = spikeSlab())))
 randomEffects(trafo)
 ```
 
-See [Group-specific
-effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md)
+See [Sparse
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md)
 and [Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 

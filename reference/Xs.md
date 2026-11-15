@@ -71,7 +71,10 @@ Xs(
 - names:
 
   Character vector, the states and forcings to return. `NULL` returns
-  all states followed by the forcings.
+  all states followed by the forcings. On the `cppDE` and `Sundials`
+  backends a name that is no state or forcing is dropped, and only an
+  empty result is an error; on the `deSolve` backend such a name is an
+  error.
 
 - condition:
 
@@ -217,9 +220,9 @@ controls of the returned function and read at every solve, so
 [`controls()`](https://dmodverse.github.io/dMod2/reference/controls.md)
 can change them later; on the `deSolve` backend `events` and `fcontrol`
 as well. The controls are named after the arguments, `options`,
-`optionsSens` and `optionsReverse`. A replaced list is merged as
-described in section Solver options, so it only needs the entries it
-changes.
+`optionsSens` and `optionsReverse`. A replaced list is merged over the
+defaults as described in section Solver options, not over the list it
+replaces, so an entry it leaves out returns to the default.
 
 ## Calling a dMod function
 

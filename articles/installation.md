@@ -45,8 +45,15 @@ with them on first use.
 | `python-libsbml` | [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md), [`exportSbml()`](https://dmodverse.github.io/dMod2/reference/exportSbml.md), [`importPEtab()`](https://dmodverse.github.io/dMod2/reference/importPEtab.md), [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md) |
 | `symident` | [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md), [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md) |
 
-With `RETICULATE_PYTHON` set, reticulate uses that Python and installs
-nothing:
+These functions also need R packages that dMod2 only suggests, so
+`install_github()` leaves them out: `rjson` for SBML, `yaml` for PEtab
+and `jsonlite` for the symmetries.
+
+With `RETICULATE_PYTHON` set, reticulate uses that Python and provisions
+nothing; dMod2 installs a missing symident or python-libsbml into it
+with
+[`reticulate::py_install()`](https://rstudio.github.io/reticulate/reference/py_install.html),
+or beforehand:
 
 ``` sh
 python -m pip install sympy numpy scipy python-libsbml symident
@@ -108,7 +115,8 @@ sources into `getOption("dMod2.outdir")`, by default the working
 directory;
 [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
 puts object files and shared object next to them and skips unchanged
-sources. For scratch work:
+sources. `odemodel(backend = "deSolve")` compiles in the working
+directory only. For scratch work:
 
 ``` r
 

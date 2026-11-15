@@ -192,8 +192,9 @@ plot((g * x * p)(seq(0, 50, length.out = 200), best, deriv = FALSE), data)
 ## Profile likelihood
 
 [`profile()`](https://rdrr.io/r/stats/profile.html) moves each parameter
-away from the optimum and reoptimizes the others. A confidence interval
-ends where the profile crosses the threshold.
+away from the optimum, the others following the path on which they stay
+optimal. A confidence interval ends where the profile crosses the
+threshold.
 
 ``` r
 
@@ -246,7 +247,8 @@ one side only, a practical non-identifiability.
 `+` and
 [`branch()`](https://dmodverse.github.io/dMod2/reference/define.md) join
 conditions; `*` composes function objects by the chain rule, so every
-call returns value, gradient and Hessian in the outer parameters.
+call returns values with their derivatives in the outer parameters, the
+objective value, gradient and Hessian.
 
 ## Next steps
 

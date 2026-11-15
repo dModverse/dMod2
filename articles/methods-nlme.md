@@ -40,9 +40,11 @@ Jensen’s inequality gives [\[1\]](#ref-dempster1977maximum)
 with equality at \\\psi = \psi^{(t)}\\. EM alternates forming \\Q =
 \sum_i Q_i\\ and maximizing it, so \\\ell\\ never decreases; near the
 optimum it converges linearly at the fraction of missing information.
-ECM [\[2\]](#ref-meng1993maximum) splits the M-step: \\\Omega\\ in
-closed form, structural parameters by optimization. [Sparse random
-effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#hyperparameters)
+ECM [\[2\]](#ref-meng1993maximum) splits the M-step into conditional
+steps, ECME [\[3\]](#ref-liu1994ecme) takes some of them on the
+likelihood itself: \\\Omega\\ in closed form, structural parameters by
+optimization. [Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#hyperparameters)
 minimizes \\-2Q\\ instead. The methods replace the posterior, which has
 no closed form, by:
 
@@ -50,7 +52,7 @@ no closed form, by:
 |----|----|----|----|
 | `"focei"` | Gaussian at the mode | trust region, Laplace | Laplace |
 | `"quadrature"` | adaptive sparse grid at the mode | trust region, frozen nodes | quadrature |
-| `"laplaceEM"` | Laplace moments, nodes of degree 3 | ECM | quadrature, level \\K + 2\\ |
+| `"laplaceEM"` | Laplace moments, nodes of degree 3 | ECME | quadrature, level \\K + 2\\ |
 | `"saem"` | Metropolis draws, averaged | closed form, averaged Newton | quadrature, level \\K + 2\\ |
 
 ## FOCEI
@@ -58,10 +60,12 @@ no closed form, by:
 ### Laplace approximation
 
 With \\\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta
-\mid \Omega)\\, mode \\\hat\eta_i\\ and curvature \\H_i = \nabla^2\_\eta
-\Phi_i(\hat\eta_i)\\, Laplace’s approximation of (2) is \\-2 \log L_i
-\approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert - K \log(2\pi)\\.
-The prior omits \\K \log(2\pi)\\, so FOCEI minimizes
+\mid \Omega) - K \log(2\pi)\\, the prior without the constant of the
+normal density, mode \\\hat\eta_i\\ and the Gauss-Newton curvature
+\\H_i\\ of \\\Phi_i\\ at \\\hat\eta_i\\, Laplace’s approximation of (2)
+is \\-2 \log L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2
+\rvert\\, the constant canceling against that of the Gaussian integral.
+FOCEI minimizes
 
 \\F(\psi) = \sum_i \Bigl\[ \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert
 \Bigr\] \tag{4}\\
@@ -69,11 +73,11 @@ The prior omits \\K \log(2\pi)\\, so FOCEI minimizes
 plus the full \\-2 \log L\\ of the conditions without a group. \\\log
 \lvert H_i/2 \rvert\\ is the volume term. \\H_i\\ includes the
 derivatives of \\\sigma\\ in \\\eta\\, the interaction of FOCEI
-[\[3\]](#ref-wang2007derivation),
-[\[4\]](#ref-pinheiro1995approximations). Conditional standard errors of
+[\[4\]](#ref-wang2007derivation),
+[\[5\]](#ref-pinheiro1995approximations). Conditional standard errors of
 the modes are the square roots of the diagonal of \\2 H_i^{-1}\\. The
-error has either sign and order \\K / n_i\\ for \\n_i\\ data points in
-the group.
+error has either sign and order \\1 / n_i\\ for \\n_i\\ data points in
+the group, with a factor that grows with \\K\\.
 
 ### Bilevel optimization
 
@@ -112,13 +116,14 @@ For Gauss-Newton \\H_i\\, from second-order sensitivities,
 | `control` | volume term |
 |----|----|
 | `derivMode = "forward-reverse"` (default) | traces from one forward pass and a backward sweep ([Sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.md)); exact gradient, curvature by SR1 |
-| `derivMode = "forward-forward"` | `deriv2 = TRUE` sensitivities; exact Hessian in the outer model |
+| `derivMode = "forward-forward"` | `deriv2 = TRUE` sensitivities; exact gradient, curvature without third-order terms |
 | `secondOrderCorrection = FALSE` | derivative dropped; biased estimates |
 
-The reported Hessian is exact (forward over forward) where the model has
-`deriv2`, as [`summary()`](https://rdrr.io/r/base/summary.html) states.
-For \\\sigma\\ depending on \\\eta\\, quadrature gives better standard
-errors of \\\Omega\\.
+Where the model has `deriv2`, the reported Hessian has the exact Schur
+complement and the curvature of the volume term without third-order
+sensitivities, as [`summary()`](https://rdrr.io/r/base/summary.html)
+states. For \\\sigma\\ depending on \\\eta\\, quadrature gives better
+standard errors of \\\Omega\\.
 
 ## Adaptive sparse-grid quadrature
 
@@ -126,9 +131,9 @@ Laplace biases \\\Omega\\ for skewed posteriors, as for oral doses
 sampled near absorption. The cubature \\\int e^{-\Phi_i/2}\\
 \mathrm{d}\eta \approx \sum_b W_b\\ e^{-\Phi_i(\eta_b)/2}\\ removes that
 error level by level. It combines the nested Genz-Keister rules
-[\[5\]](#ref-genz1996fully), 1, 3, 9, 19 and 35 points exact to degree
+[\[6\]](#ref-genz1996fully), 1, 3, 9, 19 and 35 points exact to degree
 1, 5, 15, 29 and 51, by Smolyak’s sparse grid
-[\[6\]](#ref-smolyak1963quadrature), [\[7\]](#ref-heiss2008likelihood),
+[\[7\]](#ref-smolyak1963quadrature), [\[8\]](#ref-heiss2008likelihood),
 
 \\A(L, K) = \sum\_{\lvert \mathbf{i} \rvert \le L} \Delta^{i_1} \otimes
 \cdots \otimes \Delta^{i_K}, \tag{6}\\
@@ -138,10 +143,14 @@ and \\l - 1\\. Level \\L\\ is exact for total degree \\2(L - K) + 1\\
 against the Gaussian, with nodes polynomial in \\K\\ (for \\K = 3\\,
 levels 3 to 7 have 1, 7, 19, 45, 117); level \\K\\ is the single Laplace
 node. The grid sits on the FOCEI Gaussian \\\mathcal{N}(\hat\eta_i, 2
-H_i^{-1})\\ and moves with \\\psi\\ [\[8\]](#ref-clausen2009maximum).
+H_i^{-1})\\ and moves with \\\psi\\ [\[9\]](#ref-clausen2009maximum).
 Negative weights make \\\log L_i\\ a signed log-sum-exp; a nonpositive
 sum, an unresolved posterior, fails the evaluation, naming the group.
-Gradient and Hessian are exact.
+The gradient is the quadrature of the exact gradient of \\\log L_i\\ on
+the current nodes (Fisher’s identity), the Hessian follows by Louis’
+identity from data Hessians per node that are exact where the model has
+`deriv2` and Gauss-Newton otherwise; the move of the grid with \\\psi\\
+is not differentiated.
 
 `method = "quadrature"` starts from the converged FOCEI fit and
 alternates:
@@ -159,12 +168,13 @@ alternates:
 At the estimate, importance sampling (\\t_5\\ proposal at the mode,
 shifted lattice points) flags groups whose two estimates differ by more
 than three standard errors plus the level error, or with Pareto shape
-[\[9\]](#ref-vehtari2024pareto) above 0.7.
+[\[10\]](#ref-vehtari2024pareto) above 0.7.
 
 ## Laplace EM
 
-`method = "laplaceEM"` runs ECM: a trust-region step of the structural
-parameters on frozen nodes of level \\K + 1\\, then every block of
+`method = "laplaceEM"` runs ECME: a trust-region run of at most
+`maxCm1Iter` (30) iterations of the structural parameters on the
+likelihood over frozen nodes of level \\K + 1\\, then every block of
 \\\Omega\\ from \\S = G^{-1} \sum_i M_i\\ with the posterior second
 moments \\M_i = \hat\eta_i \hat\eta_i^\top + 2 H_i^{-1}\\ (modes alone
 would shrink \\\Omega\\). It stops when parameter change and
@@ -176,15 +186,15 @@ after `maxEcm` (200) iterations. Settings come from
 
 `method = "saem"` uses posterior draws, with no Gaussian assumption and
 equal cost for any \\K\\. Stochastic-approximation EM
-[\[10\]](#ref-delyon1999convergence) averages the sufficient statistics
-by a Robbins-Monro recursion [\[11\]](#ref-robbins1951stochastic),
+[\[11\]](#ref-delyon1999convergence) averages the sufficient statistics
+by a Robbins-Monro recursion [\[12\]](#ref-robbins1951stochastic),
 
 \\s_k = s\_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s\_{k-1} \bigr),
 \qquad \eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} =
 \hat\psi(s_k), \tag{7}\\
 
 converging to a stationary point of \\\ell\\
-[\[10\]](#ref-delyon1999convergence), [\[12\]](#ref-kuhn2004coupling).
+[\[11\]](#ref-delyon1999convergence), [\[13\]](#ref-kuhn2004coupling).
 \\\Omega\\ follows from \\\sum_i \eta_i \eta_i^\top\\, mu-referenced
 fixed effects by generalized least squares, other structural parameters
 from an average of quadratic models at the draws, whose Newton step has
@@ -192,23 +202,23 @@ the marginal score as fixed point.
 
 | phase | rule |
 |----|----|
-| draws | few random-walk Metropolis steps and independence proposals from \\\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})\\ [\[12\]](#ref-kuhn2004coupling); [`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces |
-| burn-in | \\\gamma_k = 1\\, variances shrink at most 5 % per iteration [\[13\]](#ref-lavielle2014mixed); ends when no parameter drifts over `window` |
-| averaging | \\\gamma_k = k^{-0.7}\\, mean of iterates [\[14\]](#ref-polyak1992acceleration); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
+| draws | few random-walk Metropolis steps and independence proposals from \\\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})\\ [\[13\]](#ref-kuhn2004coupling); [`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces |
+| burn-in | \\\gamma_k = 1\\, variances shrink at most 5 % per iteration [\[14\]](#ref-lavielle2014mixed); ends when no parameter drifts over `window` |
+| averaging | \\\gamma_k = k^{-0.7}\\, \\k\\ counted from the end of burn-in, mean of iterates [\[15\]](#ref-polyak1992acceleration); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
 
 SAEM neither forms \\\ell\\ nor raises it in every iteration;
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) reports the
 quadrature of level \\K + 2\\ with standard errors from the quadrature
 Hessian. SAEM suits many random effects and skewed, heavy-tailed or
-multimodal posteriors [\[15\]](#ref-kuhn2005maximum).
+multimodal posteriors [\[16\]](#ref-kuhn2005maximum).
 
 ## Zero variance components
 
-An unsupported variance runs to 0, minus infinity on the log scale. A
-lone normal random effect in a block ending below standard deviation 0.1
-is therefore refitted at 0. If \\-2 \log L\\ rises by at most
-`control$boundary`, the refit is returned, the variance named in
-`boundary`.
+An unsupported variance runs to 0, minus infinity on the log scale. With
+one grouping and several blocks, a normal random effect alone in a block
+whose estimated standard deviation ends below 0.1 is therefore refitted
+at 0. If \\-2 \log L\\ rises by at most `control$boundary`, the refit is
+returned, the variance named in `boundary`.
 
 ## References
 
@@ -228,12 +238,19 @@ algorithm: A general framework,” *Biometrika*, vol. 80, no. 2, pp.
 
 \[3\]
 
+C. Liu and D. B. Rubin, “The ECME algorithm: A simple extension of EM
+and ECM with faster monotone convergence,” *Biometrika*, vol. 81, no. 4,
+pp. 633–648, 1994, doi:
+[10.1093/biomet/81.4.633](https://doi.org/10.1093/biomet/81.4.633).
+
+\[4\]
+
 Y. Wang, “Derivation of various NONMEM estimation methods,” *Journal of
 Pharmacokinetics and Pharmacodynamics*, vol. 34, no. 5, pp. 575–593,
 2007, doi:
 [10.1007/s10928-007-9060-6](https://doi.org/10.1007/s10928-007-9060-6).
 
-\[4\]
+\[5\]
 
 J. C. Pinheiro and D. M. Bates, “Approximations to the log-likelihood
 function in the nonlinear mixed-effects model,” *Journal of
@@ -241,7 +258,7 @@ Computational and Graphical Statistics*, vol. 4, no. 1, pp. 12–35, 1995,
 doi:
 [10.1080/10618600.1995.10474663](https://doi.org/10.1080/10618600.1995.10474663).
 
-\[5\]
+\[6\]
 
 A. Genz and B. D. Keister, “Fully symmetric interpolatory rules for
 multiple integrals over infinite regions with Gaussian weight,” *Journal
@@ -249,66 +266,66 @@ of Computational and Applied Mathematics*, vol. 71, no. 2, pp. 299–309,
 1996, doi:
 [10.1016/0377-0427(95)00232-4](https://doi.org/10.1016/0377-0427(95)00232-4).
 
-\[6\]
+\[7\]
 
 S. A. Smolyak, “Quadrature and interpolation formulas for tensor
 products of certain classes of functions,” *Soviet Mathematics Doklady*,
 vol. 4, pp. 240–243, 1963.
 
-\[7\]
+\[8\]
 
 F. Heiss and V. Winschel, “Likelihood approximation by numerical
 integration on sparse grids,” *Journal of Econometrics*, vol. 144, no.
 1, pp. 62–80, 2008, doi:
 [10.1016/j.jeconom.2007.12.004](https://doi.org/10.1016/j.jeconom.2007.12.004).
 
-\[8\]
+\[9\]
 
 W. H. O. Clausen, B. B. Rønn, and I. M. Skovgaard, “Maximum likelihood
 estimation in nonlinear mixed effect models: Adaptive Gaussian
 quadrature by sparse grid sampling,” in *Population approach group in
 europe (PAGE) 18*, 2009, pp. Abstract 1607.
 
-\[9\]
+\[10\]
 
 A. Vehtari, D. Simpson, A. Gelman, Y. Yao, and J. Gabry, “Pareto
 smoothed importance sampling,” *Journal of Machine Learning Research*,
 vol. 25, no. 72, pp. 1–58, 2024.
 
-\[10\]
+\[11\]
 
 B. Delyon, M. Lavielle, and E. Moulines, “Convergence of a stochastic
 approximation version of the EM algorithm,” *The Annals of Statistics*,
 vol. 27, no. 1, pp. 94–128, 1999, doi:
 [10.1214/aos/1018031103](https://doi.org/10.1214/aos/1018031103).
 
-\[11\]
+\[12\]
 
 H. Robbins and S. Monro, “A stochastic approximation method,” *The
 Annals of Mathematical Statistics*, vol. 22, no. 3, pp. 400–407, 1951,
 doi: [10.1214/aoms/1177729586](https://doi.org/10.1214/aoms/1177729586).
 
-\[12\]
+\[13\]
 
 E. Kuhn and M. Lavielle, “Coupling a stochastic approximation version of
 EM with an MCMC procedure,” *ESAIM: Probability and Statistics*, vol. 8,
 pp. 115–131, 2004, doi:
 [10.1051/ps:2004007](https://doi.org/10.1051/ps:2004007).
 
-\[13\]
+\[14\]
 
 M. Lavielle, *Mixed effects models for the population approach: Models,
 tasks, methods and tools*. Boca Raton: Chapman; Hall/CRC, 2014. doi:
 [10.1201/b17203](https://doi.org/10.1201/b17203).
 
-\[14\]
+\[15\]
 
 B. T. Polyak and A. B. Juditsky, “Acceleration of stochastic
 approximation by averaging,” *SIAM Journal on Control and Optimization*,
 vol. 30, no. 4, pp. 838–855, 1992, doi:
 [10.1137/0330046](https://doi.org/10.1137/0330046).
 
-\[15\]
+\[16\]
 
 E. Kuhn and M. Lavielle, “Maximum likelihood estimation in nonlinear
 mixed effects models,” *Computational Statistics & Data Analysis*, vol.

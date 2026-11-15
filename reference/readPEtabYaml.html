@@ -17,7 +17,7 @@ supported."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -35,7 +35,7 @@ supported."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -56,7 +56,7 @@ supported."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -113,10 +113,12 @@ supported.</p>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list with <code>baseDir</code>, <code>formatVersion</code> (integer major version),
 <code>parameterFile</code>, and a one-element list <code>problems</code> whose entry holds the
-absolute paths <code>sbmlFile</code>, <code>conditionFile</code>, <code>measurementFile</code> and
-<code>observableFile</code>. For v2 the entry also holds <code>experimentFile</code> and
-<code>mappingFile</code> (possibly <code>NULL</code>), <code>modelID</code>, the first model id, and
-<code>models</code>, the SBML path of every model id.</p>
+absolute paths <code>sbmlFile</code>, <code>conditionFile</code>, <code>measurementFile</code>,
+<code>observableFile</code>, <code>experimentFile</code> and <code>mappingFile</code>, as well as <code>modelID</code>,
+the first model id, and <code>models</code>, the SBML path of every model id. A file
+the problem does not name is <code>NULL</code>. For v1, <code>experimentFile</code> and
+<code>mappingFile</code> are <code>NULL</code>, <code>modelID</code> is <code>NA</code> and the one entry of <code>models</code>
+is named <code>"model"</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

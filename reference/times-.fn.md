@@ -29,8 +29,9 @@ and `prdfn * parfn` a `prdfn`, `parfn * parfn` a `parfn` and
 
 ## Details
 
-Both functions must be defined for the same conditions, or one of them
-for no specific condition (`conditions = NULL`).
+A function defined for one condition combines only with one for the same
+condition or for no specific condition (`conditions = NULL`); with one
+for another condition or for several conditions it is an error.
 
 ## See also
 
@@ -48,7 +49,7 @@ x <- Xd(grid)
 ## An observation function
 g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
        modelname = "prediction_obs", outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/prediction_obs.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/prediction_obs.cpp
 
 ## One parameter transformation per condition
 innerpars <- c(getParameters(x), getParameters(g))

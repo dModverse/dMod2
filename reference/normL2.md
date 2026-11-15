@@ -78,7 +78,8 @@ normL2(
     numeric vector for all conditions or a list named by condition.
     `"auto"` cuts segments where they grow, fail or miss their data;
     `"transitions"` places a node before every fast change of the data
-    and keeps the layout fixed.
+    and keeps the layout fixed, and without a fast change in the data it
+    is `"auto"`.
 
   - `growth`: largest spectral radius of a segment's propagation matrix
     that `"auto"` accepts, default `10`.

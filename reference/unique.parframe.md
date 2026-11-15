@@ -21,8 +21,10 @@ unique(x, incomparables = FALSE, tol = 1, ...)
 
 - tol:
 
-  tolerance to decide when values are assumed to be equal, see
+  a value more than `tol` above the lowest value of the current step
+  starts a new step, see
   [`plotValues()`](https://dmodverse.github.io/dMod2/reference/plotValues.md).
+  Default 1.
 
 - ...:
 

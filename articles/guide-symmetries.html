@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -279,10 +279,10 @@ multiplied by <code>eta_split_pNfkpIkb</code> (<span class="math inline">\(X_8\)
 <div class="section level2">
 <h2 id="symmetry-reduction">Symmetry reduction<a class="anchor" aria-label="anchor" href="#symmetry-reduction"></a>
 </h2>
-<p><code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> returns a parameter transformation
-that removes the directions, for scalings by fixing one coordinate per
-direction (<a href="methods-symmetries.html#gauge-and-reduction">Methods
-&gt; Gauge and reduction</a>).</p>
+<p><code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> returns in <code>$trafo</code> a
+parameter transformation that removes the directions, for scalings by
+fixing one coordinate per direction (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
+and reduction</a>).</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># a section of every orbit of the scalings</span></span>
 <span><span class="va">reduction</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryReduction.html">symmetryReduction</a></span><span class="op">(</span><span class="va">symmetries</span>, timeout <span class="op">=</span> <span class="fl">120</span><span class="op">)</span></span></code></pre></div>

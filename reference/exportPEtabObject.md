@@ -59,6 +59,13 @@ Limits:
 - v2 has no parameter scales: values and bounds are written on the
   linear scale, with a warning.
 
+- v2 has no priors on the parameter scale: such a prior is written as
+  the matching prior of the linear parameter, with a warning.
+
+- v1 has no experiment periods, no start time other than 0 and fewer
+  prior distributions: periods and later starts are an error, a prior
+  without a v1 form gives a warning.
+
 - v2 has no `log10` observable transformation: it is written as
   `"log-normal"` noise, with a warning.
 

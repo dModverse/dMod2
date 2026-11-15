@@ -27,11 +27,11 @@ A data frame with 479 rows, one per reading, and 10 columns:
 
 - `condition`:
 
-  the subject, `"ID1"` to `"ID32"`.
+  the subject, `"ID1"` to `"ID33"` without `"ID11"`.
 
 - `id`:
 
-  the subject, 1 to 32.
+  the subject, 1 to 33 without 11.
 
 - `dose`:
 

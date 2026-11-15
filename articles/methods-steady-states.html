@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -141,14 +141,25 @@ states with given totals, has separate roots.</p>
 <div class="section level2">
 <h2 id="pseudo-transient-continuation">Pseudo-transient continuation<a class="anchor" aria-label="anchor" href="#pseudo-transient-continuation"></a>
 </h2>
-<p><code><a href="../reference/Pimpl.html">Pimpl()</a></code> adds the conservation laws <span class="math inline">\(C(p)\, x = T\)</span>, totals <span class="math inline">\(T\)</span> as parameters:</p>
+<p>For an <code>eqnlist</code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> adds the
+conservation laws <span class="math inline">\(C(p)\, x = T\)</span> of
+the stoichiometry, totals <span class="math inline">\(T\)</span> as
+parameters:</p>
 <p><span class="math display">\[G(x, p) = \begin{pmatrix} f(x, p) \\
 C(p)\, x - T \end{pmatrix} = 0 . \tag{3}\]</span></p>
-<p>Pseudo-transient continuation solves (3) by implicit Euler steps of
+<p>Equations given as an <code>eqnvec</code> or character vector have no
+stoichiometry and are solved as they are, so they have to determine
+<span class="math inline">\(x\)</span> themselves. With
+<code>flow = TRUE</code>, the default for an <code>eqnlist</code>,
+pseudo-transient continuation solves (3) by implicit Euler steps of
 <span class="math inline">\(\dot x = f(x, p)\)</span> on the
 conservation manifold, with a pseudo-time step that grows as the
 residual falls. It follows the flow far from the root and becomes
-Newton’s method near it, so it reaches a stable steady state. A state no
+Newton’s method near it. Newton steps may also reach an unstable root,
+which the <a href="#stability">stability test</a> catches. With
+<code>flow = FALSE</code>, the default otherwise, the equations need not
+be the right-hand side of an ODE: the solver takes damped Newton steps,
+without stability test, and returns any regular root. A state no
 reaction changes keeps the given value. The solver is cppDE’s
 <code>ptc()</code>, called from C++ (<a href="https://dmodverse.github.io/cppDE/articles/methods-ptc.html" class="external-link">step,
 convergence and stability tests</a>).</p>
@@ -167,10 +178,13 @@ gives</p>
 <p><span class="math display">\[\frac{\partial G}{\partial x}\,
 \frac{\partial x}{\partial p} = -\frac{\partial G}{\partial p},
 \tag{4}\]</span></p>
-<p>regular where the steady state is isolated in the conservation class.
-Differentiating (4) again gives the second derivatives,
-<code>Pimpl(deriv2 = TRUE)</code>, with the same matrix. A reverse sweep
-uses the transpose of (4) (<a href="methods-sensitivities.html#reverse-sweep">Sensitivities and
+<p>regular where <span class="math inline">\(J = \partial f / \partial
+x\)</span> restricted to the conservation manifold, <span class="math inline">\(N^\top J N\)</span> for a basis <span class="math inline">\(N\)</span> of <span class="math inline">\(\ker
+C\)</span>, is nonsingular; such a root is isolated in the conservation
+class. Where the matrix is singular, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> takes the
+pseudo-inverse and warns. Differentiating (4) again gives the second
+derivatives, <code>Pimpl(deriv2 = TRUE)</code>, with the same matrix. A
+reverse sweep applies the transpose of the solution <span class="math inline">\(\partial x / \partial p\)</span> of (4) (<a href="methods-sensitivities.html#reverse-sweep">Sensitivities and
 Hessians</a>).</p>
 </div>
 <div class="section level2">
@@ -178,27 +192,32 @@ Hessians</a>).</p>
 </h2>
 <p>A root is a resting state only if every eigenvalue <span class="math inline">\(\lambda_k\)</span> of <span class="math inline">\(J = \partial f / \partial x\)</span> on the
 conservation manifold has negative real part. At a root whose leading
-eigenvalue has real part above <code>stabilityTol</code>, the solver
-continues along the leading eigenvector (<a href="https://dmodverse.github.io/cppDE/articles/methods-ptc.html#stability" class="external-link">cppDE</a>);
-the evaluation fails if neither direction leads to a stable root.
+eigenvalue has real part above <code>stabilityTol</code>, or above <span class="math inline">\(10^{-8}\)</span> of the largest eigenvalue modulus
+where that is larger, the solver continues along the leading eigenvector
+(<a href="https://dmodverse.github.io/cppDE/articles/methods-ptc.html#stability" class="external-link">cppDE</a>).
+Where neither direction leads to a stable root, the next start is tried;
+the evaluation fails only when no start reaches one.
 <code>controlsPTC = list(stability = FALSE)</code> returns the unstable
 root.</p>
 <p><code><a href="../reference/constraintStability.html">constraintStability()</a></code> adds a term that rises towards the
 stability boundary:</p>
-<p><span class="math display">\[w \sum_k r_k^2, \qquad
+<p><span class="math display">\[\kappa \sum_k r_k^2, \qquad
   r_k = \frac{\max\bigl(0,\ \mathrm{Re}\,\lambda_k -
 \lambda_0\bigr)}{\lambda_{tol} - \lambda_0},
   \tag{5}\]</span></p>
-<p>with <span class="math inline">\(\lambda_{tol}\)</span> the
-<code>stabilityTol</code> of the <code><a href="../reference/Pimpl.html">Pimpl()</a></code>, onset <span class="math inline">\(\lambda_0 = \lambda_{tol} - 1/T\)</span> and <span class="math inline">\(T\)</span> the time span of the data. The term is
-zero while every perturbation decays faster than the experiment lasts.
-Steady states that agree in all inputs count once. With right and left
-eigenvectors <span class="math inline">\(u_k\)</span>, <span class="math inline">\(w_k\)</span> of <span class="math inline">\(J\)</span> and (4),</p>
+<p>with weight <span class="math inline">\(\kappa\)</span>, <span class="math inline">\(\lambda_{tol}\)</span> the
+<code>stabilityTol</code> of the <code><a href="../reference/Pimpl.html">Pimpl()</a></code> and the onset
+<span class="math inline">\(\lambda_0\)</span> given as
+<code>onset</code>, or <span class="math inline">\(\lambda_0 =
+\lambda_{tol} - 1/t_D\)</span> from <code>duration</code> <span class="math inline">\(= t_D\)</span>, the time the data span. The term
+is zero while every perturbation decays faster than the experiment
+lasts. Steady states that agree in all inputs count once. For a simple
+eigenvalue with right and left eigenvectors <span class="math inline">\(u_k\)</span>, <span class="math inline">\(v_k\)</span> of <span class="math inline">\(J\)</span>, <span class="math inline">\(v_k^{\mathsf H} u_k \ne 0\)</span>, and (4),</p>
 <p><span class="math display">\[
-  \frac{\mathrm{d}\lambda_k}{\mathrm{d}\theta}
-  = \frac{w_k^{\mathsf H} \bigl(\partial_\theta J + \partial_x J\,
-\mathrm{d}x^*/\mathrm{d}\theta\bigr) u_k}
-         {w_k^{\mathsf H} u_k},
+  \frac{\mathrm{d}\lambda_k}{\mathrm{d}p}
+  = \frac{v_k^{\mathsf H} \bigl(\partial_p J + \partial_x J\,
+\mathrm{d}x^*/\mathrm{d}p\bigr) u_k}
+         {v_k^{\mathsf H} u_k},
   \tag{6}
 \]</span></p>
 <p>which needs <code>Pimpl(deriv2 = TRUE)</code>. The term is a model
@@ -207,11 +226,11 @@ likelihood ratios leave it out.</p>
 <p>At the onset, (5) and the gradient are continuous and the curvature
 jumps: below, term and Hessian are zero; above, the Gauss-Newton Hessian
 is</p>
-<p><span class="math display">\[\frac{2 w}{(\lambda_{tol} -
+<p><span class="math display">\[\frac{2 \kappa}{(\lambda_{tol} -
 \lambda_0)^2} \sum_{k \,:\, \mathrm{Re}\,\lambda_k &gt; \lambda_0}
-  \frac{\mathrm{d}\,\mathrm{Re}\,\lambda_k}{\mathrm{d}\theta}
-  \frac{\mathrm{d}\,\mathrm{Re}\,\lambda_k}{\mathrm{d}\theta}^{\mathsf
-T} , \tag{7}\]</span></p>
+  \frac{\mathrm{d}\,\mathrm{Re}\,\lambda_k}{\mathrm{d}p}
+  \frac{\mathrm{d}\,\mathrm{Re}\,\lambda_k}{\mathrm{d}p}^{\mathsf T} ,
+\tag{7}\]</span></p>
 <p>nonzero as <span class="math inline">\(\mathrm{Re}\,\lambda_k \to
 \lambda_0\)</span>. A profile therefore takes small steps across the
 onset (<a href="methods-profiles.html#computing-a-profile">Profile

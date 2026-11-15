@@ -48,7 +48,9 @@ branch(
   random effects; see
   [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md).
   Named arguments in `...` are then placeholders of the formulas,
-  `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`.
+  `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`. A substitution
+  or a second effect formula for a symbol that has an effect formula is
+  an error: set the scale of a symbol before adding effects.
 
 - ...:
 
@@ -64,7 +66,8 @@ branch(
 - conditionMatch:
 
   Regular expression; only the conditions whose names match are changed.
-  Default `NULL`, all.
+  Default `NULL`, all. Needs the tree of a transformation built by
+  `branch()`.
 
 - table:
 
@@ -80,6 +83,7 @@ branch(
   One of `"nothing"` (default), `"insert"` and `"define"`: what is done
   with every non-missing entry `table[condition, column]`, with the
   column name as left-hand side and the entry as right-hand side.
+  Columns named `condition` or `conditions` are skipped.
 
 ## Value
 

@@ -76,7 +76,7 @@ fn <- eqnvec(
   cosine = "cos(6.28*omega*time)"
 )
 g <- Y(fn, parameters = "omega", outdir = tempdir())
-#> Overwriting: /tmp/Rtmp8qFUqD/obsfn.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/obsfn.cpp
 x <- Xt()
 trafo <- lapply(1:3, function(i) eqnvec(omega = paste0("omega_", i)))
 names(trafo) <- paste0("frequency_", 1:3)

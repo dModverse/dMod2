@@ -209,9 +209,10 @@ of the node. `tasks = NULL`, the default, gives one task per worker.
 `cores` per task is one number, a vector named by node, or `NULL` for
 the free cores at submission.
 [`detectFreeCores()`](https://dmodverse.github.io/dMod2/reference/detectFreeCores.md)
-counts cores minus the one-minute load average, at least 1, locally or
-over ssh; a node gets at most the free cores, with a warning if given
-more.
+counts cores minus the one-minute load average, on a local Windows
+machine minus the processor load since the previous call, at least 1,
+locally or over ssh; a node gets at most the free cores, with a warning
+if given more.
 
 ``` r
 
@@ -263,7 +264,7 @@ shared object in the working directory.
 | `wait(interval = 10)` | polls until none runs, reports changes; `TRUE` if all done |
 | `get(combine = TRUE, all = FALSE)` | returns the results |
 | `log(i, lines = 20)` | last output lines of task `i` |
-| `purge(local = FALSE)` | deletes remote job folders, with `local = TRUE` also local folder and registry entry |
+| `purge(local = FALSE)` | deletes the job folders on the nodes, on `"localhost"` the local `<jobname>_folder/<k>`, with `local = TRUE` also local folder and registry entry |
 | `terminate()` | stops the tasks |
 
 A task is done when the result file exists, running while the worker
@@ -294,8 +295,9 @@ with failed tasks is kept for
 [`log()`](https://rdrr.io/r/base/Log.html).
 
 A job outlives the session. The manifest is in the local
-`<jobname>_folder`, in every remote node folder and in the registry
-`tools::R_user_dir("dMod2", "data")` until `purge(local = TRUE)`;
+`<jobname>_folder`, in the `<jobname>_folder` of every remote node until
+`purge()`, and in the registry `tools::R_user_dir("dMod2", "data")`
+until `purge(local = TRUE)`;
 [`dMod2Jobs()`](https://dmodverse.github.io/dMod2/reference/dMod2Jobs.md)
 lists registered jobs. `recover = TRUE` with a job name returns the job
 functions without resubmitting, from the manifest in the working
@@ -424,8 +426,8 @@ parameter into one profile.
 
 An [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md)
 multistart splits by `which`: every task draws all starts from the same
-seed and fits those it names. The 200 starts of [Group
-effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md),
+seed and fits those it names. The 200 starts of [Sparse
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md),
 two per task:
 
 ``` r
@@ -465,7 +467,8 @@ fits as a SLURM array job.
 ## System requirements
 
 - A POSIX shell locally (on Windows the `sh` of Rtools) and on every
-  remote node.
+  remote node, bash on remote nodes for `build = "compile"` (default)
+  and `"link"`.
 - Remote nodes: ssh with key authentication, dMod2 and cppDE for the R
   on the node `PATH` or in `libs`, a compiler for `build = "compile"`.
 - SLURM: an account on the login node, a template from

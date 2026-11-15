@@ -28,18 +28,27 @@ roots.
 
 ## Pseudo-transient continuation
 
+For an `eqnlist`,
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) adds
-the conservation laws \\C(p)\\ x = T\\, totals \\T\\ as parameters:
+the conservation laws \\C(p)\\ x = T\\ of the stoichiometry, totals
+\\T\\ as parameters:
 
 \\G(x, p) = \begin{pmatrix} f(x, p) \\ C(p)\\ x - T \end{pmatrix} = 0 .
 \tag{3}\\
 
-Pseudo-transient continuation solves (3) by implicit Euler steps of
-\\\dot x = f(x, p)\\ on the conservation manifold, with a pseudo-time
-step that grows as the residual falls. It follows the flow far from the
-root and becomes Newton’s method near it, so it reaches a stable steady
-state. A state no reaction changes keeps the given value. The solver is
-cppDE’s `ptc()`, called from C++ ([step, convergence and stability
+Equations given as an `eqnvec` or character vector have no stoichiometry
+and are solved as they are, so they have to determine \\x\\ themselves.
+With `flow = TRUE`, the default for an `eqnlist`, pseudo-transient
+continuation solves (3) by implicit Euler steps of \\\dot x = f(x, p)\\
+on the conservation manifold, with a pseudo-time step that grows as the
+residual falls. It follows the flow far from the root and becomes
+Newton’s method near it. Newton steps may also reach an unstable root,
+which the [stability test](#stability) catches. With `flow = FALSE`, the
+default otherwise, the equations need not be the right-hand side of an
+ODE: the solver takes damped Newton steps, without stability test, and
+returns any regular root. A state no reaction changes keeps the given
+value. The solver is cppDE’s `ptc()`, called from C++ ([step,
+convergence and stability
 tests](https://dmodverse.github.io/cppDE/articles/methods-ptc.html)).
 
 Every root starts from the same guess, a function of parameters and
@@ -56,10 +65,15 @@ gives
 \\\frac{\partial G}{\partial x}\\ \frac{\partial x}{\partial p} =
 -\frac{\partial G}{\partial p}, \tag{4}\\
 
-regular where the steady state is isolated in the conservation class.
-Differentiating (4) again gives the second derivatives,
-`Pimpl(deriv2 = TRUE)`, with the same matrix. A reverse sweep uses the
-transpose of (4) ([Sensitivities and
+regular where \\J = \partial f / \partial x\\ restricted to the
+conservation manifold, \\N^\top J N\\ for a basis \\N\\ of \\\ker C\\,
+is nonsingular; such a root is isolated in the conservation class. Where
+the matrix is singular,
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) takes
+the pseudo-inverse and warns. Differentiating (4) again gives the second
+derivatives, `Pimpl(deriv2 = TRUE)`, with the same matrix. A reverse
+sweep applies the transpose of the solution \\\partial x / \partial p\\
+of (4) ([Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep)).
 
 ## Stability
@@ -67,29 +81,32 @@ Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#
 A root is a resting state only if every eigenvalue \\\lambda_k\\ of \\J
 = \partial f / \partial x\\ on the conservation manifold has negative
 real part. At a root whose leading eigenvalue has real part above
-`stabilityTol`, the solver continues along the leading eigenvector
-([cppDE](https://dmodverse.github.io/cppDE/articles/methods-ptc.html#stability));
-the evaluation fails if neither direction leads to a stable root.
+`stabilityTol`, or above \\10^{-8}\\ of the largest eigenvalue modulus
+where that is larger, the solver continues along the leading eigenvector
+([cppDE](https://dmodverse.github.io/cppDE/articles/methods-ptc.html#stability)).
+Where neither direction leads to a stable root, the next start is tried;
+the evaluation fails only when no start reaches one.
 `controlsPTC = list(stability = FALSE)` returns the unstable root.
 
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
 adds a term that rises towards the stability boundary:
 
-\\w \sum_k r_k^2, \qquad r_k = \frac{\max\bigl(0,\\
+\\\kappa \sum_k r_k^2, \qquad r_k = \frac{\max\bigl(0,\\
 \mathrm{Re}\\\lambda_k - \lambda_0\bigr)}{\lambda\_{tol} - \lambda_0},
 \tag{5}\\
 
-with \\\lambda\_{tol}\\ the `stabilityTol` of the
-[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md), onset
-\\\lambda_0 = \lambda\_{tol} - 1/T\\ and \\T\\ the time span of the
-data. The term is zero while every perturbation decays faster than the
-experiment lasts. Steady states that agree in all inputs count once.
-With right and left eigenvectors \\u_k\\, \\w_k\\ of \\J\\ and (4),
+with weight \\\kappa\\, \\\lambda\_{tol}\\ the `stabilityTol` of the
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) and
+the onset \\\lambda_0\\ given as `onset`, or \\\lambda_0 =
+\lambda\_{tol} - 1/t_D\\ from `duration` \\= t_D\\, the time the data
+span. The term is zero while every perturbation decays faster than the
+experiment lasts. Steady states that agree in all inputs count once. For
+a simple eigenvalue with right and left eigenvectors \\u_k\\, \\v_k\\ of
+\\J\\, \\v_k^{\mathsf H} u_k \ne 0\\, and (4),
 
-\\ \frac{\mathrm{d}\lambda_k}{\mathrm{d}\theta} = \frac{w_k^{\mathsf H}
-\bigl(\partial\_\theta J + \partial_x J\\
-\mathrm{d}x^\*/\mathrm{d}\theta\bigr) u_k} {w_k^{\mathsf H} u_k},
-\tag{6} \\
+\\ \frac{\mathrm{d}\lambda_k}{\mathrm{d}p} = \frac{v_k^{\mathsf H}
+\bigl(\partial_p J + \partial_x J\\ \mathrm{d}x^\*/\mathrm{d}p\bigr)
+u_k} {v_k^{\mathsf H} u_k}, \tag{6} \\
 
 which needs `Pimpl(deriv2 = TRUE)`. The term is a model assumption, not
 data: profiles with `stop = "data"` and likelihood ratios leave it out.
@@ -98,11 +115,11 @@ At the onset, (5) and the gradient are continuous and the curvature
 jumps: below, term and Hessian are zero; above, the Gauss-Newton Hessian
 is
 
-\\\frac{2 w}{(\lambda\_{tol} - \lambda_0)^2} \sum\_{k \\:\\
+\\\frac{2 \kappa}{(\lambda\_{tol} - \lambda_0)^2} \sum\_{k \\:\\
 \mathrm{Re}\\\lambda_k \> \lambda_0}
-\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}\theta}
-\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}\theta}^{\mathsf T}
-, \tag{7}\\
+\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}p}
+\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}p}^{\mathsf T} ,
+\tag{7}\\
 
 nonzero as \\\mathrm{Re}\\\lambda_k \to \lambda_0\\. A profile therefore
 takes small steps across the onset ([Profile

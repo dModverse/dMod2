@@ -45,7 +45,7 @@ explains the code.
 | `refit.R` | fit and profiles of the reduced model, likelihood ratio, saves `results/reduced.rds` |
 | `prediction.R` | prediction band of nuclear IκBα, saves `results/prediction.rds` |
 | `compounds.R` | the changes the compounds cause, by spike-and-slab random effects, saves `results/compounds.rds` |
-| `helix.R` | the expensive runs (multistarts, profiles, optimizers, compounds) as array jobs of one or two cores per task on the Helix cluster |
+| `helix.R` | the expensive runs (multistarts, profiles, optimizers, compounds, the profiles of the reduced model and the prediction profiles) as array jobs of one or two cores per task on the Helix cluster |
 | `petab.R` | the model as a PEtab problem with the resting state as a pre-equilibration, written to `results/petab/` and read back |
 | `plots.R` | figures from the saved results |
 | `results/` | saved results, each with the md5 of the files it is computed from in the attribute `"stamp"` |
@@ -71,8 +71,9 @@ source("petab.R")
 source("plots.R")
 ```
 
-`model.R` uses the free cores of the machine. `plots.R` only reads
-`results/`.
+`model.R` evaluates on the free cores of the machine and compiles on
+six. `plots.R` fits nothing: it reads `results/` and simulates the
+compiled models.
 
 ## Fit
 

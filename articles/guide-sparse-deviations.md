@@ -1,4 +1,4 @@
-# 8. Group-specific effects
+# 8. Sparse deviations
 
 Oppelt et al. [\[1\]](#ref-oppelt2018model) also measured the TNFα
 response under drugs causing liver injury: diclofenac (DCF) with the
@@ -18,10 +18,10 @@ random effects and
 introduced in [Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
-The second part lists the sparse random-effect distributions (Laplace,
-spike-and-slab, Dirichlet-process) and what their fits report;
-derivations are in [Methods \> Sparse random
-effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.md).
+The second part lists the sparse random-effect distributions
+(spike-and-slab, Dirichlet-process) and what their fits report;
+derivations are in [Methods \> Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md).
 
 ## Compound data
 
@@ -77,8 +77,8 @@ compounds and rate constants; \\\rho\\, \\\tau\\ are shared.
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates
 \\\theta\\, \\\rho\\ and \\\tau\\ from the likelihood with the changes
 integrated out, a sum over the subsets of changed rate constants
-([Methods \> Sparse random
-effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#approximate-marginal)).
+([Methods \> Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal)).
 The posterior spike probability \\p_0 = \Pr(\eta\_{ik} = 0 \mid y)\\
 near 0 means a change, near the prior \\1 - \rho\\ no evidence, above it
 evidence against a change.
@@ -87,9 +87,9 @@ Each compound has 20 candidate rate constants, and the subset sum is
 exact; beyond a term budget
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) uses the
 expectation consistent (EC) approximation ([Methods \> Spike and
-slab](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#spike-and-slab)).
+slab](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#spike-and-slab)).
 Comparison with the L1 penalty: [Methods \> Selection of
-deviations](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#selection-of-deviations).
+deviations](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#selection-of-deviations).
 
 ## Compound model
 
@@ -156,7 +156,7 @@ objCompounds <- normL2(dataCompounds, prdCompounds, eCompounds)
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates
 fixed effects, change modes, \\\rho\\ and \\\tau\\ together.
 `compounds.R` runs 200 starts, the reduced optimum with changes at 0 and
-199 around it, redrawing failed starts, split into
+199 around it, redrawing failed starts; `helix.R` splits them into
 [`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md)
 tasks by `msem(which = )` ([Remote
 computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.md)):
@@ -187,7 +187,7 @@ sdStart[known] <- width[known]
 # end, with up to 1000 iterations of the trust region, one core each
 set.seed(3)
 fitCompounds <- msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced,
-                     control = list(laplace = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
+                     control = list(sparseFit = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
                      fits = 200, sd = sdStart, keepFits = TRUE,
                      cores = getOption("dMod2.cores"))
 ```
@@ -238,7 +238,7 @@ the best 100 starts; a plateau is one optimum.
 plotValues(fit, rank(value, ties.method = "first") <= 100)
 ```
 
-![](guide-group-effects_files/figure-html/unnamed-chunk-6-1.png)
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-6-1.png)
 
 Of the 200 starts, 54 end within 1 of the best -2 log L, 20 did not
 converge and 0 failed.
@@ -299,7 +299,7 @@ ggplot2::ggplot(shown, ggplot2::aes(group, eta)) +
   theme_dMod()
 ```
 
-![](guide-group-effects_files/figure-html/unnamed-chunk-10-1.png)
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-10-1.png)
 
 Each tile is one \\\eta\_{ik}\\; rate constants follow the pathway from
 IKK (top) to A20 (bottom). Color is the log-scale mode of the most
@@ -358,26 +358,23 @@ ggplot2::ggplot(mapping = ggplot2::aes(time, value, color = treatment)) +
   ggplot2::theme(legend.position = "bottom")
 ```
 
-![](guide-group-effects_files/figure-html/unnamed-chunk-11-1.png)
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-11-1.png)
 
 ## Sparse random-effect distributions
 
 `gr(group, dist = )` sets the random-effect distribution of a term.
 Besides
-[`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md),
-three have deviations exactly zero unless the data need them:
+[`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md), two
+have deviations exactly zero unless the data need them:
 
 | distribution | a deviation \\\eta\\ of a group | hyperparameters |
 |----|----|----|
-| [`laplace()`](https://dmodverse.github.io/dMod2/reference/normal.md) | density \\\tfrac{\lambda}{2} e^{-\lambda \lvert \eta \rvert}\\ | `lambda_<grouping>` |
 | [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\ | `prob_<grouping>`, `tau_<grouping>` |
 | [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md) | cluster value: \\0\\ for the population cluster, else one \\\mathcal{N}(0, \tau^2)\\ draw | `concentration_<grouping>`, `tau_<grouping>` |
 
 Hyperparameters are shared by the symbols of a term, numbered `_1`,
 `_2`, … for several terms of one grouping, and estimated with the fixed
-effects unless given, as in `laplace(lambda = 2)`. A Laplace mode is
-exactly zero unless the data pull it away, which sorts shared from
-group-specific parameters, one \\\lambda\\ per term. A spike-and-slab
+effects unless given, as in `spikeSlab(tau = 0.5)`. A spike-and-slab
 deviation is zero with a probability reported per group. Under the
 Dirichlet process groups share deviations in clusters with the
 population value, see [Dirichlet-process random
@@ -389,18 +386,20 @@ Dirichlet-process ones also `method = "saem"`.
 
 `em(method = "focei")` integrates sparse random effects on the Laplace
 approximation of the data term at the joint mode of a group, exactly
-where possible, by EC where the data couple them. Fixed effects and
-hyperparameters move in one trust region: no EM iteration count, no
-random numbers. `fit$coupling` is `"expectationConsistent"` if a group
-needed EC, `NULL` if all are exact. Integral, gradient and
+where possible, the spike-and-slab effects of a group jointly even where
+the data couple them, and by EC where the data link a Dirichlet-process
+effect to another factor or the subset sum leaves the budget. Fixed
+effects and hyperparameters move in one trust region: no EM iteration
+count, no random numbers. `fit$coupling` is `"expectationConsistent"` if
+a group needed EC, `NULL` if all are exact. Integral, gradient and
 hyperparameter steps: [Methods \> Approximate
-marginal](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#approximate-marginal),
+marginal](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal),
 [Methods \> Expectation consistent
-approximation](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#expectation-consistent-approximation)
+approximation](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#expectation-consistent-approximation)
 and [Methods \> Joint trust
-region](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#joint-trust-region).
+region](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#joint-trust-region).
 
-| entry of `control$laplace` | default | controls |
+| entry of `control$sparseFit` | default | controls |
 |----|----|----|
 | `maxOuter` | `200` | joint trust-region iterations, all runs |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) |
@@ -411,16 +410,16 @@ models](https://dmodverse.github.io/dMod2/articles/guide-model.md),
 above the solver error in value and gradient. A run stopping short of
 `mtol` restarts while runs lower \\-2 \log L\\ by more than `mtol`.
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) perturbs
-strengths, concentrations and slab standard deviations on log scale,
-slab probabilities on logit scale.
+concentrations and slab standard deviations on log scale, slab
+probabilities on logit scale.
 
 ## Reported structure
 
 The fit reports the most probable structure: subset of deviations (spike
 and slab) or partition (Dirichlet process). Spike deviations are exactly
-zero, slab deviations the posterior mean given the structure, Laplace
-deviations the joint mode ([Methods \> Reported
-structure](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#reported-structure)).
+zero, slab deviations the posterior mean given the structure ([Methods
+\> Reported
+structure](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#reported-structure)).
 `fit$random` has a row per group and random effect:
 
 - `mode`, this value;
@@ -434,13 +433,12 @@ structure](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effe
 A sparse random effect reaching no data of the group (through
 transformations, ODE, observables, error model) rests at 0 with the
 prior standard deviation and, for spike and slab, \\p_0 = 1 - \rho\\.
-`fit$strengths` lists Laplace strengths, `fit$slab` probabilities,
-concentrations and slab standard deviations, each with term symbols,
-estimate and whether fixed.
+`fit$slab` lists probabilities, concentrations and slab standard
+deviations, each with term symbols, estimate and whether fixed.
 
 ## Standard errors
 
-With Laplace or spike-and-slab random effects `fit$hessian` is `NULL`;
+With spike-and-slab random effects `fit$hessian` is `NULL`;
 [`vcov()`](https://rdrr.io/r/stats/vcov.html) inverts `fit$information`,
 the empirical information from the group scores. It needs more groups
 than parameters, or conditions without random effects plus priors for
@@ -451,7 +449,7 @@ the prior complete the five compounds.
 [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md)
 fits have neither; `confint(method = "profile")` gives intervals.
 Details: [Methods \> Standard
-errors](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#standard-errors).
+errors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#standard-errors).
 
 ## Dirichlet-process random effects
 
@@ -467,16 +465,15 @@ fitted without it.
 `method = "focei"` sums exactly over partitions of up to 14 groups.
 `method = "saem"` draws partitions, allowing normal random effects
 alongside but no other sparse ones, and reports the most frequent
-partition after burn-in, with standard error `valueSE` of \\-2 \log L\\.
-`control$saem$particles` sets the importance-sampling particles, default
-500; `converged` says whether burn-in ended by the drift test. An SAEM
-fit has no gradient, Hessian or empirical information. Details: [Methods
-\> Sparse random
-effects](https://dmodverse.github.io/dMod2/articles/methods-sparse-random-effects.html#dirichlet-process-random-effects).
+partition of the late draws, from `window` iterations after burn-in,
+with standard error `valueSE` of \\-2 \log L\\. `control$saem$particles`
+sets the importance-sampling particles, default 500; `converged` says
+whether burn-in ended by the drift test. An SAEM fit has no gradient,
+Hessian or empirical information. Details: [Methods \> Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#dirichlet-process-random-effects).
 
 Reference:
 [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md),
-[`laplace()`](https://dmodverse.github.io/dMod2/reference/normal.md),
 [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md),
 [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md),
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md),

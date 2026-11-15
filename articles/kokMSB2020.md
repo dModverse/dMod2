@@ -13,8 +13,8 @@ Shows:
 
 IFN-alpha sensitization in Huh7.5 cells after Kok et al. (2020), Mol
 Syst Biol 16:e8955: model, structural identifiability, forward and
-reverse gradient, the multistart of the publication and the fit at the
-optimum.
+reverse gradient, a multistart of 200 fits around the published optimum
+and the fit at the optimum.
 
 ## Files
 

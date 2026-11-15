@@ -53,8 +53,9 @@ importPEtab(
 
 - deriv:
 
-  Logical. If `FALSE`, the model is built without sensitivities; the
-  objective is then evaluated with `deriv = FALSE`. Default `TRUE`.
+  Logical. If `FALSE`, the model is built without sensitivities, which
+  needs `backend = "cppDE"` or `"Sundials"`; the objective then has to
+  be called with `deriv = FALSE`. Default `TRUE`.
 
 - derivMode:
 
@@ -86,25 +87,31 @@ importPEtab(
 
 A list of class `"petabproblem"` with components `dataList`,
 `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite
-`g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. `obj` has the
-PEtab fixed parameters set; `bestfit` is the PEtab `nominalValue` of
-each estimated parameter, with the PEtab scales in the attribute
-`"petab_scales"`. The attribute `"petab_meta"` of the list holds what
+`g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. With several
+models, `reactions`, `odemodel`, `g`, `x` and `p` are lists by model id.
+`obj` has the PEtab fixed parameters set; `bestfit` is the PEtab
+`nominalValue` of each estimated parameter on the PEtab
+`parameterScale`, with the scales in the attribute `"petab_scales"`, and
+`parlower` and `parupper` are the bounds on that scale. The attribute
+`"petab_meta"` of the list holds what
 [`exportPEtabObject()`](https://dmodverse.github.io/dMod2/reference/exportPEtabObject.md)
-needs, among it the fixed parameters as `fixed`.
+needs, among it the fixed parameters as `fixed`, on the linear scale.
 
 ## Details
 
 Supported: one problem per YAML file with any number of v2 model files;
-preequilibration (at most two periods per v2 experiment); observable
-transformations `lin`, `log` and `log10`; the noise distribution
-`normal`, and `log-normal` in v2; a v2 mapping table. Priors of the
-distributions `uniform`, `normal`, `log-normal`, `cauchy`, `chisquare`,
-`exponential`, `gamma`, `laplace`, `log-laplace`, `log-uniform` and
-`rayleigh`, also with the `parameterScale` prefix, are added to `obj`,
-truncated to the parameter bounds. Not supported: model languages other
-than SBML, other noise distributions, and a plain `normal` or `laplace`
-prior on a parameter whose scale is not `lin`.
+preequilibration; any number of periods per v2 experiment, those after
+the first applied as events, with one schedule for all experiments that
+start in the same condition; observable transformations `lin`, `log` and
+`log10`; the noise distribution `normal`, and `log-normal` in v2; a v2
+mapping table. Priors of the distributions `uniform`, `normal`,
+`log-normal`, `cauchy`, `chisquare`, `exponential`, `gamma`, `laplace`,
+`log-laplace`, `log-uniform` and `rayleigh`, also with the
+`parameterScale` prefix, are added to `obj`, truncated to the parameter
+bounds. A prior without the prefix is on the linear parameter: for a
+parameter on `log` or `log10` scale it is the density at the
+back-transformed value, without a Jacobian term. Not supported: model
+languages other than SBML and other noise distributions.
 
 ## See also
 

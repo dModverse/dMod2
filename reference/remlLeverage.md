@@ -69,17 +69,17 @@ observable the number of data points minus the summed leverage.
 old <- options(dMod2.outdir = tempdir())
 f <- addReaction(eqnlist(), from = "A", to = "", rate = "k*A")
 x <- Xs(odemodel(f, modelname = "reml_x", compile = FALSE))
-#> Overwriting existing file: /tmp/Rtmp8qFUqD/reml_x.cpp
-#> Overwriting existing file: /tmp/Rtmp8qFUqD/reml_x_s.cpp
+#> Overwriting existing file: /tmp/Rtmp2N4Zxw/reml_x.cpp
+#> Overwriting existing file: /tmp/Rtmp2N4Zxw/reml_x_s.cpp
 g <- Y(c(y = "A"), f = x, attachInput = FALSE, modelname = "reml_g",
        compile = FALSE)
-#> Overwriting: /tmp/Rtmp8qFUqD/reml_g.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/reml_g.cpp
 e <- Y(c(y = "sigma_y"), f = g, attachInput = FALSE, condition = "C1",
        modelname = "reml_e", compile = FALSE)
-#> Overwriting: /tmp/Rtmp8qFUqD/reml_e_C1.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/reml_e_C1.cpp
 p <- P(eqnvec(A = "exp(logA)", k = "exp(logk)", sigma_y = "sigma_y"),
        condition = "C1", modelname = "reml_p", compile = FALSE)
-#> Overwriting: /tmp/Rtmp8qFUqD/reml_p_C1.cpp
+#> Overwriting: /tmp/Rtmp2N4Zxw/reml_p_C1.cpp
 compile(x, g, e, p, output = "reml_example", cores = 1)
 #> Warning: A shared library named 'reml_example' is already loaded; overwriting it is not portable. Using 'reml_example_2' instead.
 #> using C++ compiler: g++

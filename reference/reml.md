@@ -65,7 +65,7 @@ reml(
 - optimizer:
 
   Optimizer for the mean step, called as
-  `optimizer(objfun, parinit, fixed = , ...)`. Default
+  `optimizer(objfun, parinit, fixed = , cores = , ...)`. Default
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md).
 
 - control:
@@ -80,7 +80,8 @@ reml(
 
 - ...:
 
-  Further arguments for `objfun`.
+  Further arguments for `objfun` in the mean step, passed through
+  `optimizer`. `value.plain` is evaluated without them.
 
 ## Value
 

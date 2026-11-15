@@ -24,7 +24,8 @@ as.parvec(x, index = 1, ...)
 - index:
 
   integer, select the row with the `index`-th lowest objective value.
-  Default 1, the best fit. Without a `value` column, the `index`-th row.
+  Default 1, the best fit. If `"value"` is not among the metanames of
+  `x`, the `index`-th row.
 
 - ...:
 
@@ -33,7 +34,8 @@ as.parvec(x, index = 1, ...)
 ## Value
 
 Object of class `parvec` with the parameter columns of the selected row.
-A warning is issued if that fit did not converge.
+A warning is issued if `"converged"` is among the metanames of `x` and
+that fit did not converge.
 
 ## See also
 

@@ -45,7 +45,8 @@ P(
 - compile:
 
   Logical. `TRUE` compiles all conditions into one shared object named
-  `modelname`, `FALSE` (default) leaves it to
+  `modelname`, or with `modelname = NULL` into one shared object per
+  condition; `FALSE` (default) leaves it to
   [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md).
 
 - modelname:

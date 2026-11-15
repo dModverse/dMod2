@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -31,7 +31,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -52,7 +52,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -85,6 +85,26 @@
       <small>Source: <a href="https://github.com/dModverse/dMod2/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.15.8" id="dmod2-0158">dMod2 0.15.8<a class="anchor" aria-label="anchor" href="#dmod2-0158"></a></h2>
+<ul><li>
+<code>laplace()</code> is removed. A Laplace prior has no mass at 0, so the deviations it sets to 0 at the joint mode are not a selection by the marginal likelihood; <code><a href="../reference/normal.html">spikeSlab()</a></code> and <code><a href="../reference/normal.html">dirichletProcess()</a></code> select deviations, and <code><a href="../reference/trust.html">trustL1()</a></code> keeps the L1 penalty. <code><a href="../reference/em.html">em()</a></code> takes the settings of the sparse fit in <code>control$sparseFit</code>, formerly <code>control$laplace</code>, and returns no <code>strengths</code>.</li>
+<li>The guide chapter on sparse random effects is Sparse deviations, the methods article Sparsity priors, both under new addresses. The methods article describes the Dirichlet process as a grouping of the groups and the clustered lasso, <code>fuse</code> of <code><a href="../reference/trust.html">trustL1()</a></code>, as the penalized counterpart.</li>
+<li>
+<code>trustL1(one.sided = TRUE)</code> penalizes values below <code>mu</code> by <code>lambda * (mu - p)</code> and leaves values above free: a parameter on <code>mu</code> stays there only while the objective pulls it down by at most <code>lambda</code>, and <code>mu</code> is no lower bound.</li>
+<li>
+<code><a href="https://rdrr.io/r/stats/profile.html" class="external-link">profile()</a></code> no longer doubles a step it has just shrunk.</li>
+<li>
+<code><a href="../reference/importPEtab.html">importPEtab()</a></code> evaluates a prior without the <code>parameterScale</code> prefix on the linear parameter: for a parameter on <code>log</code> or <code>log10</code> scale at the back-transformed value, without a Jacobian term, as other PEtab tools do. A plain <code>normal</code> or <code>laplace</code> prior on such a parameter is no longer an error.</li>
+<li>
+<code><a href="../reference/exportSbml.html">exportSbml()</a></code> writes an event with <code>method = "add"</code> or <code>"multiply"</code> as <code>x + value</code> or <code>x * value</code> on the old value.</li>
+<li>
+<code><a href="../reference/localNode.html">slurmCluster()</a></code> without <code>walltime</code> leaves out the directive lines of the job script template whose field has no value, so the shipped template runs without one.</li>
+<li>The flags of <code>compile(args = )</code> reach the link as well.</li>
+<li>Composing two functions defined for different single conditions with <code>*</code> is an error.</li>
+<li>The methods articles, the guide, the example projects and the reference pages are corrected where they did not match the code or the mathematics, among them the partition sum of the Dirichlet process, the hard case of the trust-region subproblem, the regularity of steady-state roots, the scaling test of the symmetry detection and the growth criterion of multiple shooting.</li>
+<li>The README links the guide chapters instead of repeating them.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.15.7" id="dmod2-0157">dMod2 0.15.7<a class="anchor" aria-label="anchor" href="#dmod2-0157"></a></h2>
 <ul><li>

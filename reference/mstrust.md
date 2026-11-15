@@ -90,9 +90,9 @@ mstrust(
 
 - cautiousMode:
 
-  Logical, also write every fit deparsed to an `.R` file in `interRes/`,
-  which is kept after the run while the `.Rda` files in it are removed.
-  Default `FALSE`.
+  Logical. With `output = TRUE`, also write every fit deparsed to an
+  `.R` file in `interRes/`, which is kept after the run while the `.Rda`
+  files in it are removed. Default `FALSE`.
 
 - startFromCenter:
 
@@ -177,10 +177,10 @@ as.parframe(fits)
 #> 5     5 5.083307e-12      TRUE         34     fvalue    35      0         0
 #>   nSwitch elapsed         a         b
 #> 1       0   0.001 1.0000000 1.0000000
-#> 2       0   0.008 1.0000000 1.0000000
-#> 3       0   0.000 1.0000000 1.0000000
-#> 4       0   0.000 1.0000000 0.9999999
-#> 5       0   0.001 0.9999978 0.9999955
+#> 2       0   0.012 1.0000000 1.0000000
+#> 3       0   0.001 1.0000000 1.0000000
+#> 4       0   0.001 1.0000000 0.9999999
+#> 5       0   0.000 0.9999978 0.9999955
 
 # Reproducible starts from a parframe
 starts <- msParframe(c(a = 0, b = 0), n = 5, sd = 2)
@@ -193,9 +193,9 @@ as.parframe(fits)
 #> 4     1 2.178106e-14      TRUE         15     fvalue    16      0         0
 #> 5     3 2.523921e-14      TRUE         20     fvalue    21      0         0
 #>   nSwitch elapsed         a         b
-#> 1       0   0.001 1.0000000 1.0000000
+#> 1       0   0.000 1.0000000 1.0000000
 #> 2       0   0.000 1.0000000 1.0000000
 #> 3       0   0.001 0.9999999 0.9999997
-#> 4       0   0.000 0.9999999 0.9999998
-#> 5       0   0.000 0.9999999 0.9999997
+#> 4       0   0.001 0.9999999 0.9999998
+#> 5       0   0.001 0.9999999 0.9999997
 ```

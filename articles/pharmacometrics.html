@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="active nav-item dropdown">
@@ -122,8 +122,8 @@
 <p>[1] TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE TRUE
 TRUE TRUE [16] TRUE TRUE TRUE TRUE TRUE TRUE</p>
 <p>Shows: <code><a href="../reference/randomEffects.html">randomEffects()</a></code>, <code><a href="../reference/em.html">em()</a></code>,
-<code><a href="../reference/msem.html">msem()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, <code><a href="../reference/plotVPC.html">plotVPC()</a></code>,
-<code><a href="../reference/plotResiduals.html">plotResiduals()</a></code>, <code><a href="../reference/plotRandomEffects.html">plotRandomEffects()</a></code>.</p>
+<code><a href="../reference/plotVPC.html">plotVPC()</a></code>, <code><a href="../reference/plotResiduals.html">plotResiduals()</a></code>,
+<code><a href="../reference/plotRandomEffects.html">plotRandomEffects()</a></code>.</p>
 <p>Theophylline, warfarin PK/PD and mavoglurant with occasions: FOCEI
 and SAEM multistarts and the diagnostics of the fits.</p>
 <div class="section level2">
@@ -145,7 +145,9 @@ and SAEM multistarts and the diagnostics of the fits.</p>
 </tr>
 <tr class="even">
 <td><code>results/cache.rds</code></td>
-<td>saved fits; delete it to fit again</td>
+<td>saved fits; delete it to fit again, on Windows with
+<code>cores &lt;- 1</code> in <code>analysis.R</code>, where
+<code><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">parallel::mclapply()</a></code> runs on one core only</td>
 </tr>
 <tr class="odd">
 <td><code>theophyllineMultistart.R</code></td>

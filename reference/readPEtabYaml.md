@@ -20,10 +20,12 @@ readPEtabYaml(yamlPath)
 
 A list with `baseDir`, `formatVersion` (integer major version),
 `parameterFile`, and a one-element list `problems` whose entry holds the
-absolute paths `sbmlFile`, `conditionFile`, `measurementFile` and
-`observableFile`. For v2 the entry also holds `experimentFile` and
-`mappingFile` (possibly `NULL`), `modelID`, the first model id, and
-`models`, the SBML path of every model id.
+absolute paths `sbmlFile`, `conditionFile`, `measurementFile`,
+`observableFile`, `experimentFile` and `mappingFile`, as well as
+`modelID`, the first model id, and `models`, the SBML path of every
+model id. A file the problem does not name is `NULL`. For v1,
+`experimentFile` and `mappingFile` are `NULL`, `modelID` is `NA` and the
+one entry of `models` is named `"model"`.
 
 ## See also
 

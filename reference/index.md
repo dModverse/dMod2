@@ -299,7 +299,6 @@ and their diagnostics.
   [`print(`*`<randomeffects>`*`)`](https://dmodverse.github.io/dMod2/reference/randomEffects.md)
   : Random effects of a parameter transformation
 - [`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md)
-  [`laplace()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   : Distributions of random effects

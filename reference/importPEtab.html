@@ -19,7 +19,7 @@ read by importSbml()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -37,7 +37,7 @@ read by importSbml()."></head><body>
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -58,7 +58,7 @@ read by importSbml()."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -145,8 +145,9 @@ name of the YAML file.</p></dd>
 
 
 <dt id="arg-deriv">deriv<a class="anchor" aria-label="anchor" href="#arg-deriv"></a></dt>
-<dd><p>Logical. If <code>FALSE</code>, the model is built without sensitivities;
-the objective is then evaluated with <code>deriv = FALSE</code>. Default <code>TRUE</code>.</p></dd>
+<dd><p>Logical. If <code>FALSE</code>, the model is built without sensitivities,
+which needs <code>backend = "cppDE"</code> or <code>"Sundials"</code>; the objective then has to
+be called with <code>deriv = FALSE</code>. Default <code>TRUE</code>.</p></dd>
 
 
 <dt id="arg-derivmode">derivMode<a class="anchor" aria-label="anchor" href="#arg-derivmode"></a></dt>
@@ -176,24 +177,30 @@ working directory.</p></dd>
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A list of class <code>"petabproblem"</code> with components <code>dataList</code>,
 <code>reactions</code>, <code>odemodel</code>, <code>g</code>, <code>x</code>, <code>p</code>, <code>e</code>, <code>prd</code> (the composite
-<code>g * x * p</code>), <code>obj</code>, <code>bestfit</code>, <code>parlower</code> and <code>parupper</code>. <code>obj</code> has the
-PEtab fixed parameters set; <code>bestfit</code> is the PEtab <code>nominalValue</code> of each
-estimated parameter, with the PEtab scales in the attribute
-<code>"petab_scales"</code>. The attribute <code>"petab_meta"</code> of the list holds what
-<code><a href="exportPEtabObject.html">exportPEtabObject()</a></code> needs, among it the fixed parameters as <code>fixed</code>.</p>
+<code>g * x * p</code>), <code>obj</code>, <code>bestfit</code>, <code>parlower</code> and <code>parupper</code>. With several
+models, <code>reactions</code>, <code>odemodel</code>, <code>g</code>, <code>x</code> and <code>p</code> are lists by model id.
+<code>obj</code> has the PEtab fixed parameters set; <code>bestfit</code> is the PEtab
+<code>nominalValue</code> of each estimated parameter on the PEtab <code>parameterScale</code>,
+with the scales in the attribute <code>"petab_scales"</code>, and <code>parlower</code> and
+<code>parupper</code> are the bounds on that scale. The attribute <code>"petab_meta"</code> of the
+list holds what <code><a href="exportPEtabObject.html">exportPEtabObject()</a></code> needs, among it the fixed parameters
+as <code>fixed</code>, on the linear scale.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
     <p>Supported: one problem per YAML file with any number of v2 model files;
-preequilibration (at most two periods per v2 experiment); observable
-transformations <code>lin</code>, <code>log</code> and <code>log10</code>; the noise distribution <code>normal</code>,
-and <code>log-normal</code> in v2; a v2 mapping table. Priors of the distributions
+preequilibration; any number of periods per v2 experiment, those after the
+first applied as events, with one schedule for all experiments that start in
+the same condition; observable transformations <code>lin</code>, <code>log</code> and <code>log10</code>; the
+noise distribution <code>normal</code>, and <code>log-normal</code> in v2; a v2 mapping table.
+Priors of the distributions
 <code>uniform</code>, <code>normal</code>, <code>log-normal</code>, <code>cauchy</code>, <code>chisquare</code>, <code>exponential</code>,
 <code>gamma</code>, <code>laplace</code>, <code>log-laplace</code>, <code>log-uniform</code> and <code>rayleigh</code>, also with
 the <code>parameterScale</code> prefix, are added to <code>obj</code>, truncated to the parameter
-bounds. Not supported: model languages other than SBML, other noise
-distributions, and a plain <code>normal</code> or <code>laplace</code> prior on a parameter whose
-scale is not <code>lin</code>.</p>
+bounds. A prior without the prefix is on the linear parameter: for a
+parameter on <code>log</code> or <code>log10</code> scale it is the density at the back-transformed
+value, without a Jacobian term. Not supported: model languages other than
+SBML and other noise distributions.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

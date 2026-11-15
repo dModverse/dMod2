@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
-<title>Sparse random effects • dMod2</title>
+<title>Sparsity priors • dMod2</title>
 <!-- mathjax math --><script src="https://cdn.jsdelivr.net/npm/mathjax@3.2.2/es5/tex-mml-chtml.js" integrity="sha256-MASABpB4tYktI2Oitl4t+78w/lyA+D7b/s9GEP0JOGI=" crossorigin="anonymous"></script><script>
   window.MathJax = {
     chtml: {
@@ -17,7 +17,7 @@
 <script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet">
 <link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet">
 <script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet">
-<script src="../extra.js"></script><meta property="og:title" content="Sparse random effects">
+<script src="../extra.js"></script><meta property="og:title" content="Sparsity priors">
 </head>
 <body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -110,11 +110,11 @@
 <div class="row">
   <main id="main" class="col-md-9"><div class="page-header">
 
-      <h1>Sparse random effects</h1>
+      <h1>Sparsity priors</h1>
             
       
-      <small class="dont-index">Source: <a href="https://github.com/dModverse/dMod2/blob/master/vignettes/articles/methods-sparse-random-effects.Rmd" class="external-link"><code>vignettes/articles/methods-sparse-random-effects.Rmd</code></a></small>
-      <div class="d-none name"><code>methods-sparse-random-effects.Rmd</code></div>
+      <small class="dont-index">Source: <a href="https://github.com/dModverse/dMod2/blob/master/vignettes/articles/methods-sparsity-priors.Rmd" class="external-link"><code>vignettes/articles/methods-sparsity-priors.Rmd</code></a></small>
+      <div class="d-none name"><code>methods-sparsity-priors.Rmd</code></div>
     </div>
 
     
@@ -135,13 +135,6 @@ in an effect formula sets the distribution:</p>
 </tr></thead>
 <tbody>
 <tr class="odd">
-<td><code><a href="../reference/normal.html">laplace()</a></code></td>
-<td>density <span class="math inline">\(\tfrac{\lambda}{2} e^{-\lambda
-\lvert \eta \rvert}\)</span>
-</td>
-<td><code>lambda_&lt;grouping&gt;</code></td>
-</tr>
-<tr class="even">
 <td><code><a href="../reference/normal.html">spikeSlab()</a></code></td>
 <td>
 <span class="math inline">\(0\)</span> with probability <span class="math inline">\(1 - \rho\)</span>, else <span class="math inline">\(\mathcal{N}(0, \tau^2)\)</span>
@@ -151,7 +144,7 @@ in an effect formula sets the distribution:</p>
 <code>tau_&lt;grouping&gt;</code>
 </td>
 </tr>
-<tr class="odd">
+<tr class="even">
 <td><code><a href="../reference/normal.html">dirichletProcess()</a></code></td>
 <td>value of the cluster of the group: <span class="math inline">\(0\)</span> for the population cluster, else one
 <span class="math inline">\(\mathcal{N}(0, \tau^2)\)</span> draw per
@@ -163,7 +156,11 @@ cluster</td>
 </tr>
 </tbody>
 </table>
-<p>Guide: <a href="guide-group-effects.html">Group-specific effects</a>;
+<p>The spike and slab decides for every group alone whether it deviates.
+The Dirichlet process also groups the groups: the groups of one cluster
+share one deviation, so a fit tells which groups behave alike, not only
+which differ from the population value.</p>
+<p>Guide: <a href="guide-sparse-deviations.html">Sparse deviations</a>;
 normal random effects: <a href="methods-nlme.html">Marginal likelihood
 of mixed-effects models</a>.</p>
 <div class="section level2">
@@ -177,18 +174,17 @@ group. The random effects of a group split into normal coordinates <span class="
 <p><code><a href="../reference/em.html">em()</a></code> first finds the joint mode <span class="math inline">\(\hat\eta\)</span>, minimizing</p>
 <p><span class="math display">\[\begin{aligned}
 \Phi(\eta) = {} &amp; \sum_i \Bigl[ D_i(\eta_i) + \eta_{iN}^\top
-\Omega^{-1} \eta_{iN} \Bigr] \\
-&amp; + \sum_{\text{Laplace}} 2 \lambda \lvert \eta \rvert
+\Omega^{-1} \eta_{iN} \Bigr]
 + \sum_{\text{spike and slab, Dirichlet}} \frac{\eta^2}{\tau^2} :
 \end{aligned} \tag{1}\]</span></p>
-<p>data, normal prior, Laplace L1 penalty, and the slab alone for
-spike-and-slab and Dirichlet-process coordinates. Each group is
-minimized separately, by <code><a href="../reference/trust.html">trustL1()</a></code> (<a href="guide-optimization.html">Optimization</a>) with Laplace
-coordinates, by <code><a href="../reference/trust.html">trust()</a></code> otherwise, on Gauss-Newton plus a
-BFGS correction from the points that lowered <span class="math inline">\(\Phi\)</span> (Gauss-Newton alone overestimates
-the curvature at large residuals). The mode is smooth in the parameters,
-so the marginal does not jump where the most probable structure changes.
-Random effects that reach no data rest at 0 (<a href="#reported-structure">Reported structure</a>).</p>
+<p>data, normal prior, and the slab alone for spike-and-slab and
+Dirichlet-process coordinates. Each group is minimized separately by
+<code><a href="../reference/trust.html">trust()</a></code>, on Gauss-Newton plus a BFGS correction from the
+points that lowered <span class="math inline">\(\Phi\)</span>
+(Gauss-Newton alone overestimates the curvature at large residuals). The
+mode is smooth in the parameters, so the marginal does not jump where
+the most probable structure changes. Random effects that reach no data
+rest at 0 (<a href="#reported-structure">Reported structure</a>).</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -206,7 +202,11 @@ step (<a href="#exact-gradient">Exact gradient</a>)</td>
 </tr>
 <tr class="even">
 <td>tolerance</td>
-<td>that of the outer trust region, default <span class="math inline">\(10^{-10}\)</span>
+<td>
+<code>ftol</code> and <code>mtol</code> of the
+<code>tolControl</code> of the outer trust region where given, else
+<span class="math inline">\(10^{-10}\)</span>; <code>gtol</code> where
+given, else that of <code><a href="../reference/trust.html">trust()</a></code>
 </td>
 </tr>
 <tr class="odd">
@@ -266,10 +266,10 @@ p(\eta_S)\, d\eta_S \tag{5}\]</span></p>
 <p><span class="math inline">\(p\)</span> the sparse prior. Without
 sparse coordinates (4) is the <a href="methods-nlme.html#focei">FOCEI
 value</a>. Every structure, a subset of spike coordinates or a partition
-into clusters, is a Gaussian integral. Laplace and spike-and-slab priors
-factor over groups, the Dirichlet process couples the groups of a
-symbol, and off-diagonal entries of <span class="math inline">\(P_i\)</span> couple the coordinates of a
-group.</p>
+into clusters, is a Gaussian integral. Spike-and-slab priors factor over
+groups, the Dirichlet process couples the groups of a symbol, and
+off-diagonal entries of <span class="math inline">\(P_i\)</span> couple
+the coordinates of a group.</p>
 </div>
 </div>
 <div class="section level2">
@@ -278,8 +278,6 @@ group.</p>
 <p><span class="math inline">\(I\)</span> is evaluated in exactly
 integrated factors:</p>
 <ul>
-<li>every Laplace symbol over all groups, a product of one-dimensional
-integrals;</li>
 <li>every Dirichlet-process symbol, all groups jointly;</li>
 <li>the spike-and-slab symbols of a group jointly, within a budget of
 terms, beyond it each alone.</li>
@@ -296,32 +294,6 @@ Fisher’s identity,</p>
 <p>and a hyperparameter derivative is the posterior expectation of the
 derivative of the log prior.</p>
 <div class="section level3">
-<h3 id="laplace">Laplace<a class="anchor" aria-label="anchor" href="#laplace"></a>
-</h3>
-<p>Against the tilt <span class="math inline">\((h, t)\)</span>, <span class="math inline">\(t &gt; 0\)</span>,</p>
-<p><span class="math display">\[\begin{aligned}
-Z(h, t, \lambda) &amp;= \int \frac{\lambda}{2} e^{-\lambda \lvert \eta
-\rvert}\, e^{h \eta - t \eta^2 / 2}\, d\eta \\
-&amp;= \frac{\lambda}{2} \sqrt{\frac{\pi}{2t}}\,
-\bigl[ \operatorname{erfcx}(x_+) + \operatorname{erfcx}(x_-) \bigr],
-\qquad
-x_\pm = \frac{\lambda \mp h}{\sqrt{2t}},
-\end{aligned} \tag{7}\]</span></p>
-<p>one term per half <span class="math inline">\(\eta \gtrless
-0\)</span>, <span class="math inline">\(\operatorname{erfcx}(x) =
-e^{x^2} \operatorname{erfc}(x)\)</span>. <span class="math inline">\(\log \operatorname{erfcx}\)</span> comes from the
-log normal distribution function up to <span class="math inline">\(x =
-10\)</span> and the asymptotic series beyond, so (7) stays finite where
-<span class="math inline">\(\operatorname{erfc}\)</span> underflows. The
-moments of <span class="math inline">\(u = \eta \sqrt t\)</span> in each
-truncated-normal half follow from the recurrence <span class="math inline">\(I_k + \alpha I_{k-1} = (k-1) I_{k-2}\)</span> of
-<span class="math inline">\(I_k = \int_0^\infty u^k e^{-u^2/2 - \alpha
-u}\, du\)</span>: forward for small <span class="math inline">\(\alpha =
-\sqrt{2}\, x_\pm\)</span>, by continued fraction of <span class="math inline">\(I_k / I_{k-1}\)</span> beyond, accurate as <span class="math inline">\(t \to 0\)</span>. <span class="math inline">\(\mathbb{E}\, \lvert \eta \rvert = 1/\lambda -
-\partial \log Z / \partial
-\lambda\)</span>.</p>
-</div>
-<div class="section level3">
 <h3 id="spike-and-slab">Spike and slab<a class="anchor" aria-label="anchor" href="#spike-and-slab"></a>
 </h3>
 <p>The prior <span class="citation"><a href="#ref-mitchell1988bayesian">[1]</a>, <a href="#ref-george1993variable">[2]</a></span> is a point mass at 0 of
@@ -331,9 +303,9 @@ of weight <span class="math inline">\(\rho\)</span>. With <span class="math inli
 <p><span class="math display">\[Z = \sum_F \rho^{|F|} (1 - \rho)^{K -
 |F|}\,
 \frac{\lvert V_F \rvert^{1/2}}{\tau^{|F|}}\,
-\exp\bigl( \tfrac12 h_F^\top V_F\, h_F \bigr) , \tag{8}\]</span></p>
+\exp\bigl( \tfrac12 h_F^\top V_F\, h_F \bigr) , \tag{7}\]</span></p>
 <p><span class="math inline">\(2^K\)</span> Gaussian integrals, the
-factors <span class="math inline">\(2\pi\)</span> cancelling. <span class="math inline">\(\Pr(F \mid y)\)</span> is the term of <span class="math inline">\(F\)</span> over <span class="math inline">\(Z\)</span>; given <span class="math inline">\(F\)</span>, <span class="math inline">\(\eta_F
+factors <span class="math inline">\(2\pi\)</span> canceling. <span class="math inline">\(\Pr(F \mid y)\)</span> is the term of <span class="math inline">\(F\)</span> over <span class="math inline">\(Z\)</span>; given <span class="math inline">\(F\)</span>, <span class="math inline">\(\eta_F
 \sim \mathcal{N}(V_F h_F, V_F)\)</span> and the rest is 0. The mixture
 has</p>
 <p><span class="math display">\[\begin{aligned}
@@ -341,7 +313,7 @@ has</p>
 \mathbb{E}\, \eta &amp;= \sum_F \Pr(F \mid y)\, \mu_F, \\
 \mathbb{E}\, \eta \eta^\top &amp;= \sum_F \Pr(F \mid y) \bigl( V_F +
 \mu_F \mu_F^\top \bigr),
-\end{aligned} \tag{9}\]</span></p>
+\end{aligned} \tag{8}\]</span></p>
 <p><span class="math inline">\(\mu_F\)</span>, <span class="math inline">\(V_F\)</span> zero-filled outside <span class="math inline">\(F\)</span>; the second moment is full within the
 factor. Summed over coordinates sharing them,</p>
 <p><span class="math display">\[\begin{aligned}
@@ -349,7 +321,7 @@ factor. Summed over coordinates sharing them,</p>
 p_{0k}}{\rho} - \frac{p_{0k}}{1 - \rho} \Bigr), \\
 \frac{\partial \log Z}{\partial \tau} &amp;= \sum_k \Bigl( -\frac{1 -
 p_{0k}}{\tau} + \frac{\mathbb{E}\, \eta_k^2}{\tau^3} \Bigr) .
-\end{aligned} \tag{10}\]</span></p>
+\end{aligned} \tag{9}\]</span></p>
 <p>The sum is a depth-first search, each coordinate in or out:</p>
 <table class="table">
 <colgroup>
@@ -412,13 +384,17 @@ the groups (<a href="#partition-sum">Partition sum</a>).</p>
 <div class="section level2">
 <h2 id="expectation-consistent-approximation">Expectation consistent approximation<a class="anchor" aria-label="anchor" href="#expectation-consistent-approximation"></a>
 </h2>
-<p>A group is exact where no Dirichlet-process symbol joins it to others
-and the data do not couple the factors of the group. Where off-diagonal
-blocks <span class="math inline">\(P_{ff'}\)</span> couple factors,
-or the joint spike-and-slab sum exceeds the budget, <span class="math inline">\(I\)</span> is the EC approximation <span class="citation"><a href="#ref-opper2005expectation">[3]</a></span>.
-With the coupling <span class="math inline">\(\mathcal{G}(\eta) =
-\prod_i \exp(-\tfrac12 \eta_i^\top P_i \eta_i + b_i^\top
-\eta_i)\)</span> and the statistics <span class="math inline">\(\phi(\eta) = (\eta_k, -\eta_k^2/2)_k\)</span>:</p>
+<p>Where no Dirichlet-process symbol joins two groups, the groups are
+integrated one by one, a group exactly where the data do not couple the
+factors of the group and the joint spike-and-slab sum stays within the
+budget. Where a Dirichlet-process symbol joins two groups, all groups
+are integrated together, exactly where this holds for every group.
+Otherwise <span class="math inline">\(I\)</span> is the EC approximation
+<span class="citation"><a href="#ref-opper2005expectation">[3]</a></span>, of the group, or of all
+groups where they are integrated together. With the coupling <span class="math inline">\(\mathcal{G}(\eta) = \prod_i \exp(-\tfrac12
+\eta_i^\top P_i \eta_i + b_i^\top \eta_i)\)</span> and the statistics
+<span class="math inline">\(\phi(\eta) = (\eta_k,
+-\eta_k^2/2)_k\)</span>:</p>
 <ul>
 <li>
 <span class="math inline">\(q \propto p\, e^{\lambda^\top
@@ -435,7 +411,7 @@ of one-dimensional Gaussians <span class="math inline">\(A_s(\nu) = \log
 \int e^{\nu^\top \phi}\)</span>,</p>
 <p><span class="math display">\[\log I \;\approx\; A_q(\lambda) +
 A_r(\gamma) - A_s(\nu), \qquad \nu = \lambda + \gamma,
-\tag{11}\]</span></p>
+\tag{10}\]</span></p>
 <p>where <span class="math inline">\(q\)</span>, <span class="math inline">\(r\)</span> and <span class="math inline">\(e^{\nu^\top \phi}\)</span> agree in mean and
 variance of every coordinate. The cavity is the self-consistent field of
 the other factors. The result is exact without coupling and for Gaussian
@@ -446,7 +422,7 @@ factors, and no bound.</p>
 / \operatorname{Var}\,
 \eta_k\)</span>. The inner loop minimizes the convex</p>
 <p><span class="math display">\[\Psi_\nu(\lambda) = A_q(\lambda) +
-A_r(\nu - \lambda), \tag{12}\]</span></p>
+A_r(\nu - \lambda), \tag{11}\]</span></p>
 <p>by Newton steps on <span class="math inline">\(\operatorname{Cov}_q
 \phi + \operatorname{Cov}_r \phi\)</span> with backtracking,
 quadratically convergent. <span class="math inline">\(\operatorname{Cov}_q \phi\)</span> includes third
@@ -457,8 +433,7 @@ difference <span class="math inline">\(1 / \operatorname{Var}_r \eta_k -
 \gamma_{t,k}\)</span>, and site precisions may be negative. Steps stay
 in the domains: Gaussian part positive definite (Cholesky of the
 Jacobi-scaled precision), <span class="math inline">\(\lambda_t &gt;
--\tau^{-2}\)</span> for slab, <span class="math inline">\(\lambda_t &gt;
-0\)</span> for Laplace coordinates, <span class="math inline">\(\tau^{-2} + \sum_g \min(\lambda_{t,g}, 0) &gt;
+-\tau^{-2}\)</span> for slab coordinates, <span class="math inline">\(\tau^{-2} + \sum_g \min(\lambda_{t,g}, 0) &gt;
 0\)</span> for a Dirichlet-process symbol. Evaluations start from the
 last accepted sites.</p>
 <p>The outer fixed-point step converges linearly, slowly for tight
@@ -471,7 +446,7 @@ coupling, so the outer loop takes Newton steps on <span class="math inline">\(\m
 <p><span class="math display">\[\operatorname{Cov}_q \phi\,
 (\operatorname{Cov}_q \phi + \operatorname{Cov}_r \phi)^{-1}
 \operatorname{Cov}_r \phi - \operatorname{Cov}_s \phi ,
-\tag{13}\]</span></p>
+\tag{12}\]</span></p>
 <p>solved with row and column scaling, since pinned coordinates have
 tiny second moments. The cavities move with <span class="math inline">\(\mathrm{d}\lambda^*\)</span>, starting the next
 inner loop near the solution.</p>
@@ -495,14 +470,16 @@ deviations and variances within <span class="math inline">\(10^{-10}\)</span> re
 <tr class="even">
 <td>outer</td>
 <td>marginals of <span class="math inline">\(r\)</span> match the
-Gaussians of <span class="math inline">\(\nu\)</span> to <span class="math inline">\(10^{-10}\)</span>; or within <span class="math inline">\(10^{-4}\)</span> when the mismatch stops falling
-for twenty rounds (rounding of an ill-conditioned Gaussian part)</td>
+Gaussians of <span class="math inline">\(\nu\)</span> to <span class="math inline">\(10^{-10}\)</span>; or within <span class="math inline">\(10^{-4}\)</span> when a fixed-point step no longer
+raises the free energy <span class="math inline">\(F = A_q + A_r -
+A_s\)</span> (rounding of an ill-conditioned Gaussian part)</td>
 </tr>
 <tr class="odd">
-<td>outer Newton fallback</td>
-<td>a step that does not lower the largest moment mismatch is replaced
-by the fixed-point step from the previous iterate, followed by ten
-fixed-point rounds</td>
+<td>outer Newton step</td>
+<td>accepted where it raises <span class="math inline">\(F\)</span> by
+the Armijo condition, the step halved down to a sixteenth; else the
+fixed-point step, which always raises <span class="math inline">\(F\)</span>
+</td>
 </tr>
 <tr class="even">
 <td>failure</td>
@@ -523,7 +500,7 @@ gives</p>
 \mathbb{E}\, \eta_{iS}, \qquad
 \frac{\partial \log I}{\partial P_i} = -\tfrac12 \bigl( \mathbb{E}\,
 \eta_{iS}\, \mathbb{E}\, \eta_{iS}^\top + \Sigma_i \bigr),
-\tag{14}\]</span></p>
+\tag{13}\]</span></p>
 <p><span class="math inline">\(\Sigma_i\)</span> the posterior
 covariance, block diagonal over factors. Under EC, <span class="math inline">\(\mathbb{E}\)</span> is <span class="math inline">\(\mathbb{E}_r\)</span>, <span class="math inline">\(\Sigma_i\)</span> the covariance of <span class="math inline">\(r\)</span>, full within the group, and
 hyperparameter derivatives are taken per factor at the cavity.</p>
@@ -531,21 +508,19 @@ hyperparameter derivatives are taken per factor at the cavity.</p>
 \eta_{iS} - \hat\eta_{iS}\)</span>, the derivatives of <span class="math inline">\(-2 \log L\)</span> in <span class="math inline">\(\nabla_S D_i\)</span>, <span class="math inline">\(\tilde H_i\)</span> and the mode are</p>
 <p><span class="math display">\[\delta_i, \qquad \tfrac12 \bigl(
 \delta_i \delta_i^\top + \Sigma_i \bigr), \qquad
--\tilde H_i\, \delta_i - \nabla_S D_i , \tag{15}\]</span></p>
+-\tilde H_i\, \delta_i - \nabla_S D_i , \tag{14}\]</span></p>
 <p>and through (2) those in <span class="math inline">\(H_i\)</span> and
 <span class="math inline">\(\Omega\)</span>. The chain then needs <span class="math inline">\(\partial \nabla D_i / \partial
 \psi\)</span> from the exact data Hessian, <span class="math inline">\(\partial H_i / \partial \psi\)</span> and <span class="math inline">\(\partial H_i / \partial \eta\)</span> from second
 derivatives as for <a href="methods-nlme.html#volume-term">the FOCEI
 volume term</a>, and the mode shift.</p>
-<p>The mode moves in the free coordinates: normal, spike-and-slab,
-Dirichlet-process, and Laplace coordinates away from zero. With <span class="math inline">\(W\)</span> selecting them, <span class="math inline">\(\eta = W \xi\)</span>, the inner stationarity
-<span class="math inline">\(W^\top (\nabla_\eta \Phi +
-\text{subgradient}) = 0\)</span> gives</p>
-<p><span class="math display">\[\frac{d \xi}{d \psi} = -\bigl( W^\top
-\nabla^2_\eta \Phi\, W \bigr)^{-1} W^\top \nabla^2_{\eta \psi} \Phi ,
-\tag{16}\]</span></p>
-<p>group by group. The derivative of the subgradient, <span class="math inline">\(2 \operatorname{sign} \eta\)</span> in <span class="math inline">\(\lambda\)</span> and <span class="math inline">\(-4 \eta / \tau^3\)</span> in <span class="math inline">\(\tau\)</span>, gives the mode shift in these
-hyperparameters; <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\alpha\)</span> do not move the mode. The shift
+<p>The mode moves in all coordinates, normal, spike-and-slab and
+Dirichlet-process. The inner stationarity <span class="math inline">\(\nabla_\eta \Phi = 0\)</span> gives</p>
+<p><span class="math display">\[\frac{d \hat\eta}{d \psi} = -\bigl(
+\nabla^2_\eta \Phi \bigr)^{-1} \nabla^2_{\eta \psi} \Phi ,
+\tag{15}\]</span></p>
+<p>group by group. The derivative of the slab gradient in <span class="math inline">\(\tau\)</span>, <span class="math inline">\(-4 \eta
+/ \tau^3\)</span>, gives the mode shift in <span class="math inline">\(\tau\)</span>; <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\alpha\)</span> do not move the mode. The shift
 also starts the inner search at the next trial point. The gradient is
 exact for the approximate marginal.</p>
 </div>
@@ -569,13 +544,13 @@ of <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\ta
 \log \rho - 2 (1 - z_{ik}) \log (1 - \rho) \\
 &amp; + z_{ik} \Bigl( 2 \log \tau + \frac{\eta_{ik}^2}{\tau^2} \Bigr)
 \Bigr] .
-\end{aligned} \tag{17}\]</span></p>
+\end{aligned} \tag{16}\]</span></p>
 <p>The posterior expectation is</p>
 <p><span class="math display">\[\begin{aligned}
 -2Q(\rho, \tau) = {} &amp; -2 \bar n \log \rho - 2 (n - \bar n) \log (1
 - \rho) \\
 &amp; + 2 \bar n \log \tau + \frac{\mathbb{E} \sum v^2}{\tau^2} ,
-\end{aligned} \tag{18}\]</span></p>
+\end{aligned} \tag{17}\]</span></p>
 <p><span class="math inline">\(n\)</span> the number of deviations of
 the term, and the statistics</p>
 <p><span class="math display">\[\begin{aligned}
@@ -583,26 +558,26 @@ the term, and the statistics</p>
 p_{0,ik}), \\
 \mathbb{E} \sum v^2 &amp;= \sum_{i,k} \mathbb{E}\, z_{ik} \eta_{ik}^2 =
 \sum_{i,k} \mathbb{E}\, \eta_{ik}^2 ,
-\end{aligned} \tag{19}\]</span></p>
+\end{aligned} \tag{18}\]</span></p>
 <p>since <span class="math inline">\(\eta_{ik} = 0\)</span> wherever
 <span class="math inline">\(z_{ik} = 0\)</span>. The expectations are
 under the posterior of the approximate marginal, the quadratic model at
 the joint mode (<a href="#normal-coordinates">Normal coordinates</a>)
 times the exact prior, independent over groups:</p>
 <p><span class="math display">\[p(\eta_{iS} \mid y_i) \propto \exp\Bigl(
--\tfrac12 (\eta_{iS} - m_i)^\top P_i\, (\eta_{iS} - m_i) \Bigr)
-\prod_k p(\eta_{ik}) , \tag{20}\]</span></p>
-<p>The spike-and-slab symbols of a group form one factor (<a href="#spike-and-slab">Spike and slab</a>), exact on <span class="math inline">\((P_i, m_i)\)</span> without coupled sparse
+-\tfrac12\, \eta_{iS}^\top P_i\, \eta_{iS} + b_i^\top \eta_{iS} \Bigr)
+\prod_k p(\eta_{ik}) , \tag{19}\]</span></p>
+<p>The spike-and-slab symbols of a group form one factor (<a href="#spike-and-slab">Spike and slab</a>), exact on <span class="math inline">\((P_i, b_i)\)</span> without coupled sparse
 coordinates. Under EC each coordinate is a factor on a one-dimensional
 Gaussian of precision <span class="math inline">\(a\)</span> and center
 <span class="math inline">\(m\)</span>, a sum of two terms, with slab
 posterior</p>
 <p><span class="math display">\[V = \frac{1}{a + \tau^{-2}}, \qquad \mu
-= V a\, m . \tag{21}\]</span></p>
+= V a\, m . \tag{20}\]</span></p>
 <p>deviation probability</p>
 <p><span class="math display">\[1 - p_0 = \operatorname{logit}^{-1}
 \Bigl( \operatorname{logit} \rho + \frac{\mu^2}{2 V}
-+ \tfrac12 \log \frac{V}{\tau^2} \Bigr) : \tag{22}\]</span></p>
++ \tfrac12 \log \frac{V}{\tau^2} \Bigr) : \tag{21}\]</span></p>
 <p>prior log odds, exponent gain at the slab mean, and log width ratio.
 The moments are</p>
 <p><span class="math display">\[\begin{aligned}
@@ -610,22 +585,22 @@ The moments are</p>
 \mathbb{E}\, \eta^2 &amp;= (1 - p_0)\, (\mu^2 + V), \\
 \operatorname{Var} \eta &amp;= \mathbb{E}\, \eta^2 - (\mathbb{E}\,
 \eta)^2 .
-\end{aligned} \tag{23}\]</span></p>
+\end{aligned} \tag{22}\]</span></p>
 <p>Here <span class="math inline">\(a = a^c_{ik}\)</span>, <span class="math inline">\(m = m^c_{ik}\)</span> is the cavity (<a href="#expectation-consistent-approximation">EC</a>); the moments are
 those of <span class="math inline">\(q\)</span>, equal to those of <span class="math inline">\(r\)</span> at the fixed point, and <span class="math inline">\(\Sigma_i = (P_i + \operatorname{diag}
-\Lambda_i)^{-1}\)</span>.</p>
+\gamma_{t,i})^{-1}\)</span> with the site precisions <span class="math inline">\(\gamma_{t,i}\)</span> of the group.</p>
 <p>Given the sparse coordinates, on the expansion</p>
 <p><span class="math display">\[\begin{aligned}
 \eta_{iN} \mid \eta_{iS} &amp;\sim \mathcal{N}\bigl( \hat\eta_{iN} -
 R_i\, (\eta_{iS} - \hat\eta_{iS}),\;
 2 H_{NN}^{-1} \bigr), \\
 R_i &amp;= H_{NN}^{-1} H_{NS} ,
-\end{aligned} \tag{24}\]</span></p>
+\end{aligned} \tag{23}\]</span></p>
 <p>so <code>fit$etaCov</code>, the posterior covariance of all random
 effects of the group, has the blocks</p>
 <p><span class="math display">\[\Sigma_{NN} = 2 H_{NN}^{-1} + R_i
 \Sigma_{SS} R_i^\top, \qquad \Sigma_{NS} = -R_i \Sigma_{SS} ,
-\tag{25}\]</span></p>
+\tag{24}\]</span></p>
 <p>and <code>se</code> of <code>fit$random</code> is the square root of
 the diagonal. <span class="math inline">\(\Omega\)</span> has no M-step;
 it moves with the fixed parameters.</p>
@@ -636,7 +611,7 @@ it moves with the fixed parameters.</p>
 n}{\rho} - \frac{n - \bar n}{1 - \rho} \Bigr), \\
 \frac{\partial (-2Q)}{\partial \tau} &amp;= 2 \Bigl( \frac{\bar n}{\tau}
 - \frac{\mathbb{E} \sum v^2}{\tau^3} \Bigr),
-\end{aligned} \tag{26}\]</span></p>
+\end{aligned} \tag{25}\]</span></p>
 <p>the marginal gradient in <span class="math inline">\(\tau\)</span>
 adding the mode shift (<a href="#exact-gradient">Exact
 gradient</a>).</p>
@@ -651,32 +626,30 @@ process. With <span class="math inline">\(n\)</span> the number of
 deviations of a term (groups times symbols), <span class="math inline">\(\bar n\)</span> the expected number of slab
 deviations or of clusters off the population value, and <span class="math inline">\(\mathbb{E} \sum v^2\)</span> the expected sum of
 their squares,</p>
-<p><span class="math display">\[\begin{aligned}
-\lambda &amp;= \frac{n}{\sum \mathbb{E} \lvert \eta \rvert}, &amp;
-\tau^2 &amp;= \frac{\mathbb{E} \sum v^2}{\bar n}, \\
-\rho &amp;= \frac{\bar n}{n}, &amp;
-\bar n &amp;= \sum_k \sum_{i=1}^{G} \frac{\alpha}{\alpha + i} ,
-\end{aligned} \tag{27}\]</span></p>
+<p><span class="math display">\[\tau^2 = \frac{\mathbb{E} \sum v^2}{\bar
+n}, \qquad
+\rho = \frac{\bar n}{n}, \qquad
+\bar n = \sum_k \sum_{i=1}^{G} \frac{\alpha}{\alpha + i} ,
+\tag{26}\]</span></p>
 <p>the last for the concentration, summed over the symbols <span class="math inline">\(k\)</span> of the term; the sum increases in <span class="math inline">\(\alpha\)</span>, and Newton’s method on <span class="math inline">\(\log \alpha\)</span> solves it.</p>
 <p>Near the optimum an M-step is a gradient step scaled by the
 complete-data information <span class="math inline">\(\mathcal{I}_c\)</span>, while the data hold <span class="math inline">\(\mathcal{I}_{\text{obs}} = \mathcal{I}_c -
 \mathcal{I}_{\text{mis}}\)</span>. The error shrinks per iteration by
 the fraction of missing information <span class="citation"><a href="#ref-dempster1977maximum">[5]</a></span>,</p>
 <p><span class="math display">\[\mathcal{I}_c^{-1}
-\mathcal{I}_{\text{mis}} , \tag{28}\]</span></p>
-<p>close to one for a strength from a few groups. Newton on the
+\mathcal{I}_{\text{mis}} , \tag{27}\]</span></p>
+<p>close to one for a hyperparameter from a few groups. Newton on the
 curvature of <span class="math inline">\(-2Q\)</span> is worse far from
-the optimum: on <span class="math inline">\(u = \log \lambda\)</span>
-with M-step <span class="math inline">\(u^* = \log(n / \sum \mathbb{E}
-\lvert \eta \rvert)\)</span> it steps <span class="math inline">\(e^{u^*
-- u} - 1\)</span>, which is <span class="math inline">\(-1\)</span> for
-<span class="math inline">\(u^*\)</span> five below and <span class="math inline">\(147\)</span> for five above.</p>
+the optimum: on <span class="math inline">\(u = \log \tau\)</span> with
+M-step <span class="math inline">\(u^* = \tfrac12 \log(\mathbb{E} \sum
+v^2 / \bar n)\)</span> it steps <span class="math inline">\(\bigl(1 -
+e^{-2(u^* - u)}\bigr) / 2\)</span>, which is <span class="math inline">\(0.5\)</span> for <span class="math inline">\(u^*\)</span> five above and <span class="math inline">\(-11013\)</span> for five below.</p>
 </div>
 <div class="section level3">
 <h3 id="joint-trust-region">Joint trust region<a class="anchor" aria-label="anchor" href="#joint-trust-region"></a>
 </h3>
 <p><code><a href="../reference/em.html">em()</a></code> moves fixed parameters and hyperparameters, on
-<span class="math inline">\(\log \lambda\)</span>, <span class="math inline">\(\log \tau\)</span>, <span class="math inline">\(\log \alpha\)</span>, <span class="math inline">\(\operatorname{logit} \rho\)</span>, in one trust
+<span class="math inline">\(\log \tau\)</span>, <span class="math inline">\(\log \alpha\)</span>, <span class="math inline">\(\operatorname{logit} \rho\)</span>, in one trust
 region with the exact marginal gradient.</p>
 <p>For the fixed parameters the model Hessian is the Schur complement
 over all random effects, the sparse ones at the curvature of their
@@ -685,68 +658,63 @@ posterior: a factor with posterior covariance <span class="math inline">\(\Sigma
 the block of the factor after eliminating the normal coordinates is
 <span class="math inline">\(2 \Sigma^{-1}\)</span>; under EC the prior
 curvature is <span class="math inline">\(2
-\operatorname{diag}(\Lambda)\)</span>. The data Hessian blocks are all
-Gauss-Newton (forward over reverse), making the Schur complement
-positive semidefinite, or all exact (second-order sensitivities); mixed
-blocks can be far from definite. Exact rows enter gradient and mode
-shift. With normal random effects alone this is the FOCEI Schur
-complement. A Schur complement over the free modes alone would lack
-curvature in a fixed parameter with free Laplace deviations and jump
-where they reach zero.</p>
+\operatorname{diag}(\gamma_t)\)</span>, negative site precisions set to
+0. The data Hessian blocks are all Gauss-Newton (forward over reverse),
+making the Schur complement positive semidefinite, or all exact
+(second-order sensitivities); mixed blocks can be far from definite.
+Exact rows enter gradient and mode shift. With normal random effects
+alone this is the FOCEI Schur complement.</p>
 <p>For every hyperparameter the model Hessian is the secant to the
 M-step,</p>
 <p><span class="math display">\[\kappa_h = \frac{\partial_u (-2Q)}{u -
-u^*}, \tag{29}\]</span></p>
+u^*}, \tag{28}\]</span></p>
 <p>with</p>
 <p><span class="math display">\[\partial_u (-2Q) = \begin{cases}
-2 \bigl( \lambda \sum \mathbb{E} \lvert \eta \rvert - n \bigr) &amp;
-\text{for } \lambda, \\
 2 \bigl( \bar n - \mathbb{E} \sum v^2 / \tau^2 \bigr) &amp; \text{for }
 \tau, \\
 -2 \, (\bar n - n \rho) &amp; \text{for } \rho, \\
 -2 \bigl( \bar n - \sum_k \sum_{i=1}^{G} \alpha / (\alpha + i) \bigr)
 &amp; \text{for } \alpha .
-\end{cases} \tag{30}\]</span></p>
+\end{cases} \tag{29}\]</span></p>
 <p><span class="math inline">\(-2Q\)</span> is convex in <span class="math inline">\(u\)</span>, so <span class="math inline">\(\kappa_h &gt; 0\)</span>; at <span class="math inline">\(u = u^*\)</span>, <span class="math inline">\(\kappa_h\)</span> is the complete-data
 information</p>
 <p><span class="math display">\[\partial_u^2 (-2Q) = \begin{cases}
-2 \lambda \sum \mathbb{E} \lvert \eta \rvert &amp; \text{for } \lambda,
-\\
 4\, \mathbb{E} \sum v^2 / \tau^2 &amp; \text{for } \tau, \\
 2 n \rho (1 - \rho) &amp; \text{for } \rho, \\
 2 \sum_k \sum_{i=1}^{G} \alpha\, i / (\alpha + i)^2 &amp; \text{for }
 \alpha ,
-\end{cases} \tag{31}\]</span></p>
+\end{cases} \tag{30}\]</span></p>
 <p>and <span class="math inline">\(\kappa_h \ge 10^{-8}\)</span>. A
 Newton step on <span class="math inline">\(\kappa_h\)</span> alone moves
 <span class="math inline">\(u\)</span> by</p>
 <p><span class="math display">\[\Delta u = -\frac{1}{\kappa_h}
 \frac{\partial (-2 \log L)}{\partial u}
 = u^* - u - \frac{1}{\kappa_h}\, \nabla_{\hat\eta} (-2 \log L)^\top
-\frac{d \hat\eta}{d u} , \tag{32}\]</span></p>
+\frac{d \hat\eta}{d u} , \tag{31}\]</span></p>
 <p>with the mode shift <span class="math inline">\(d \hat\eta / d
 u\)</span> of <a href="#exact-gradient">Exact gradient</a>: the exact
-M-step for <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\alpha\)</span>, plus a term for <span class="math inline">\(\tau\)</span> and <span class="math inline">\(\lambda\)</span> that vanishes where the data term
-is quadratic in the random effects.</p>
+M-step for <span class="math inline">\(\rho\)</span> and <span class="math inline">\(\alpha\)</span>, plus a term for <span class="math inline">\(\tau\)</span> that vanishes where the data term is
+quadratic in the random effects.</p>
 <p>A BFGS correction learns the missing information and the cross
 curvature <span class="citation"><a href="#ref-lange1995quasi">[6]</a>,
 <a href="#ref-jamshidian1997acceleration">[7]</a></span> from every step
 between two points that lowered <span class="math inline">\(-2 \log
-L\)</span>. Pairs with inner product at most <span class="math inline">\(10^{-8}\)</span> times the product of norms are
-skipped; an update that would make the model indefinite drops the
-correction. Far from the optimum a step is an EM step in the
-hyperparameters and a Gauss-Newton step in the fixed parameters, at one
-marginal evaluation; near it the model approaches the marginal Hessian
-and convergence is superlinear. Gradient and bounded Hessian suffice for
-convergence <span class="citation"><a href="#ref-conn2000trust">[8]</a></span>, and no number of EM iterations
-is chosen.</p>
+L\)</span>. Pairs with <span class="math inline">\(0 &lt; s^\top y \le
+10^{-8} \lVert s \rVert \lVert y \rVert\)</span> are skipped; a pair
+with <span class="math inline">\(s^\top y \le 0\)</span>, or an update
+that would make the model indefinite, drops the correction. Far from the
+optimum a step is an EM step in the hyperparameters and a Gauss-Newton
+step in the fixed parameters, at one marginal evaluation; near it the
+model approaches the marginal Hessian and convergence is superlinear.
+Gradient and bounded Hessian suffice for convergence <span class="citation"><a href="#ref-conn2000trust">[8]</a></span>, and no
+number of EM iterations is chosen.</p>
 <p>The trust region stops at a predicted reduction below
 <code>mtol</code>; a run ending short of it restarts with a fresh
 correction while runs lower <span class="math inline">\(-2 \log
 L\)</span> by more than <code>mtol</code>. <code><a href="../reference/msem.html">msem()</a></code>
-multistarts with strengths, concentrations and slab standard deviations
-perturbed on the log scale, slab probabilities on the logit scale. No
-model Hessian is the marginal Hessian, so <code>fit$hessian</code> is
+multistarts with concentrations and slab standard deviations perturbed
+on the log scale, slab probabilities on the logit scale. No model
+Hessian is the marginal Hessian, so <code>fit$hessian</code> is
 <code>NULL</code> and standard errors come from the group scores (<a href="#standard-errors">Standard errors</a>).</p>
 </div>
 </div>
@@ -760,8 +728,7 @@ Spike deviations are exactly zero. A slab deviation is the slab mean
 given that structure: in a joint factor <span class="math inline">\(\mu_{F^*} = V_{F^*} b_{F^*}\)</span>; for a
 coordinate alone or under EC, <span class="math inline">\(\mu = V a\,
 m\)</span> (<a href="#e-step">E-step</a>) where <span class="math inline">\(1 - p_0 &gt; \tfrac12\)</span>, at the cavity
-under EC. Free clusters take the posterior mean given the partition,
-Laplace deviations the joint mode.</p>
+under EC. Free clusters take the posterior mean given the partition.</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -812,14 +779,15 @@ every root otherwise. No path means a sensitivity of 0 for all parameter
 values.</p>
 <p>A random effect without data rests at 0: no mode search, integral
 factor 1, no part in the hyperparameter updates, reported with the prior
-standard deviation and, for the spike and slab, <span class="math inline">\(p_0 = 1 - \rho\)</span>. A Dirichlet-process group
-without data leaves the partition without changing the others, since the
-Ewens prior of a subset is that of the subset. This removes flat
-directions of mode and integral.</p>
-<p><code>fit$strengths</code> lists the Laplace strengths,
-<code>fit$slab</code> the probabilities, concentrations and slab
-standard deviations, each with the symbols, the estimate and whether it
-was fixed.</p>
+standard deviation, for a Dirichlet-process one with the slab standard
+deviation <span class="math inline">\(\tau\)</span>, and, for the spike
+and slab, <span class="math inline">\(p_0 = 1 - \rho\)</span>. A
+Dirichlet-process group without data leaves the partition without
+changing the others, since the Ewens prior of a subset is that of the
+subset. This removes flat directions of mode and integral.</p>
+<p><code>fit$slab</code> lists the probabilities, concentrations and
+slab standard deviations, each with the symbols, the estimate and
+whether it was fixed.</p>
 </div>
 <div class="section level2">
 <h2 id="selection-of-deviations">Selection of deviations<a class="anchor" aria-label="anchor" href="#selection-of-deviations"></a>
@@ -828,20 +796,32 @@ was fixed.</p>
 likelihood-ratio test per coordinate depends on which others are free
 and, for coupled coordinates, on the test order.</p>
 <p>An L1 penalty <span class="math inline">\(\lambda \sum \lvert \eta
-\rvert\)</span>, the Laplace mode <span class="citation"><a href="#ref-tibshirani1996regression">[9]</a></span>, sets small
-deviations to 0, shrinks every selected one by the same amount, and
-compensates by selecting more small ones. Of coordinates the data tie
-together it keeps one, unstably, since the lasso condition for the right
-set fails for such correlations. It gives no probability of a
-deviation.</p>
+\rvert\)</span> <span class="citation"><a href="#ref-tibshirani1996regression">[9]</a></span>, as in
+<code><a href="../reference/trust.html">trustL1()</a></code>, sets small deviations to 0, shrinks every
+selected one by the same amount, and compensates by selecting more small
+ones. Of coordinates the data tie together it keeps one, unstably, since
+the lasso condition for the right set fails for such correlations. It
+gives no probability of a deviation.</p>
 <p>The spike and slab separates decision and size: a deviation is 0 or
-from the slab, which shrinks little, and (8) weighs every structure by
+from the slab, which shrinks little, and (7) weighs every structure by
 the marginal likelihood, with <span class="math inline">\(\rho\)</span>
 and <span class="math inline">\(\tau\)</span> estimated instead of
 scanned. Coupled coordinates the data cannot separate share the
 posterior, with intermediate <span class="math inline">\(p_0\)</span>.
 Both statements hold within the Laplace approximation of the data
 term.</p>
+<p>Groups that deviate alike are a second structure. The Dirichlet
+process (<a href="#dirichlet-process-random-effects">Dirichlet-process
+random effects</a>) weighs every partition of the groups into clusters
+with one common deviation by the marginal likelihood, the population
+value one of the clusters. The penalized counterpart is the clustered
+lasso <span class="citation"><a href="#ref-hauber2023uncovering">[10]</a></span>, a penalty on the
+pairwise differences of the group parameters, for which Hauber et
+al. favor the exponent 0.8 over the L1 norm; <code>fuse</code> of
+<code><a href="../reference/trust.html">trustL1()</a></code> is the L1 form: groups with equal values move as
+one, and without an anchor no group is the reference. Like the L1
+penalty it is scanned over the penalty strength and gives no probability
+of a cluster.</p>
 <p>Where the data leave fixed-effect directions flat, the fixed-effect
 prior decides between equally good structures, and the selection moves
 with the width of that prior. Only a model reduced to what the data
@@ -850,15 +830,16 @@ determine resolves this.</p>
 <div class="section level2">
 <h2 id="standard-errors">Standard errors<a class="anchor" aria-label="anchor" href="#standard-errors"></a>
 </h2>
-<p>With Laplace and spike-and-slab random effects, <span class="math inline">\(-2 \log L = -2 \sum_i \log L_i + D_0\)</span>.
-Mode, curvature and integral of a group depend on the data of that group
-alone, and the mode shift is block diagonal, so the exact gradient
-splits into the group gradients. With the scores <span class="math inline">\(s_i = \nabla \log L_i\)</span> and their mean
-<span class="math inline">\(\bar s\)</span>, the empirical information
-is</p>
+<p>With spike-and-slab random effects, <span class="math inline">\(-2
+\log L = -2 \sum_i \log L_i + D_0\)</span>. Mode, curvature and integral
+of a group depend on the data of that group alone, and the mode shift is
+block diagonal, so the exact gradient splits into the group gradients.
+With the scores <span class="math inline">\(s_i = \nabla \log
+L_i\)</span> and their mean <span class="math inline">\(\bar s\)</span>,
+the empirical information is</p>
 <p><span class="math display">\[\mathcal{I} = \frac{G}{G - 1}
 \sum_{i=1}^{G} (s_i - \bar s)(s_i - \bar s)^\top + \tfrac12 H_0 ,
-\tag{33}\]</span></p>
+\tag{32}\]</span></p>
 <p><span class="math inline">\(H_0\)</span> the Hessian of <span class="math inline">\(D_0\)</span>, priors included;
 <code>fit$information</code> holds it, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code> inverts it.
 At the optimum the scores sum to <span class="math inline">\(\tfrac12
@@ -878,7 +859,8 @@ groups, so there is neither Hessian nor empirical information;
 deviations: groups and the population value, the anchor, form clusters;
 the anchor cluster has deviation zero, every other one a common slab
 deviation <span class="math inline">\(\mathcal{N}(0, \tau^2)\)</span>.
-<span class="math inline">\(\alpha\)</span> and <span class="math inline">\(\tau\)</span> are estimated by marginal maximum
+The reported partition is a grouping of the groups by their behavior,
+found by the fit rather than given. <span class="math inline">\(\alpha\)</span> and <span class="math inline">\(\tau\)</span> are estimated by marginal maximum
 likelihood, without a penalty scan. The reported structure is that of
 the spike and slab with clusters for deviations. The guide compounds are
 fitted without it.</p>
@@ -887,14 +869,14 @@ fitted without it.</p>
 </h3>
 <p>The partitions <span class="math inline">\(\mathcal{C}\)</span> of
 the <span class="math inline">\(G\)</span> groups and the anchor follow
-the Ewens distribution <span class="citation"><a href="#ref-ewens1972sampling">[10]</a></span> of the Chinese restaurant
+the Ewens distribution <span class="citation"><a href="#ref-ewens1972sampling">[11]</a></span> of the Chinese restaurant
 process, anchor seated first: a group joins a cluster with probability
 proportional to the size, anchor counted, or opens one with probability
 proportional to <span class="math inline">\(\alpha\)</span>,</p>
 <p><span class="math display">\[\Pr(\mathcal{C}) = \frac{\alpha^{\lvert
 \mathcal{C} \rvert - 1} \prod_{T \in \mathcal{C}} (\lvert T \rvert -
 1)!}
-{\prod_{i=1}^{G} (\alpha + i)} , \tag{34}\]</span></p>
+{\prod_{i=1}^{G} (\alpha + i)} , \tag{33}\]</span></p>
 <p><span class="math inline">\(\lvert \mathcal{C} \rvert\)</span> the
 number of clusters, <span class="math inline">\(\lvert T \rvert\)</span>
 their sizes. The prior depends on the sizes only: it is exchangeable,
@@ -906,27 +888,26 @@ the expected number of free clusters is <span class="math inline">\(\sum_{i=1}^{
 <h3 id="partition-sum">Partition sum<a class="anchor" aria-label="anchor" href="#partition-sum"></a>
 </h3>
 <p>The data term is expanded at the mode under the slab alone. Per
-symbol, on the group factors <span class="math inline">\((a_i,
-m_i)\)</span>, a cluster <span class="math inline">\(T\)</span> with</p>
+symbol, on the group factors <span class="math inline">\(\exp(-\tfrac12
+a_i \eta^2 + b_i \eta)\)</span> of the natural form (5), a cluster <span class="math inline">\(T\)</span> with</p>
 <p><span class="math display">\[A_T = \sum_{i \in T} a_i, \qquad B_T =
-\sum_{i \in T} a_i m_i, \qquad C_T = \sum_{i \in T} a_i m_i^2
-\tag{35}\]</span></p>
+\sum_{i \in T} b_i \tag{34}\]</span></p>
 <p>has the weight</p>
-<p><span class="math display">\[w(T) = (\lvert T \rvert - 1)!\; e^{-C_T
-/ 2} \tag{36}\]</span></p>
-<p>with the anchor, and without it, the cluster value integrated over
-the slab,</p>
+<p><span class="math display">\[w(T) = (\lvert T \rvert - 1)!
+\tag{35}\]</span></p>
+<p>with the anchor, at deviation 0, and without it, the cluster value
+integrated over the slab,</p>
 <p><span class="math display">\[w(T) = \alpha\, (\lvert T \rvert - 1)!\;
 \bigl(1 + \tau^2 A_T\bigr)^{-1/2}
-\exp\Bigl( -\frac{C_T}{2} + \frac{B_T^2}{2 (A_T + \tau^{-2})} \Bigr) .
-\tag{37}\]</span></p>
+\exp\Bigl( \frac{B_T^2}{2 (A_T + \tau^{-2})} \Bigr) .
+\tag{36}\]</span></p>
 <p>With <span class="math inline">\(\mathcal{Z}(X)\)</span> the sum over
 the partitions of <span class="math inline">\(X\)</span> of the products
 of cluster weights,</p>
 <p><span class="math display">\[\mathcal{Z}(X) = \sum_{T \subseteq X,\
 \min X \in T} w(T)\, \mathcal{Z}(X \setminus T), \qquad
 I = \frac{\mathcal{Z}(U)}{\prod_{i=1}^{G} (\alpha + i)} ,
-\tag{38}\]</span></p>
+\tag{37}\]</span></p>
 <p><span class="math inline">\(3^{G+1}\)</span> terms, exact for up to
 14 groups. <span class="math inline">\(T\)</span> is a cluster with
 probability <span class="math inline">\(w(T)\, \mathcal{Z}(U \setminus
@@ -945,7 +926,7 @@ sum.</p>
 = \frac{\bar n}{\alpha} - \sum_{i=1}^{G} \frac{1}{\alpha + i},
 \qquad
 \frac{\partial \log I}{\partial \tau} = -\frac{\bar n}{\tau} +
-\frac{\mathbb{E} \sum v^2}{\tau^3} , \tag{39}\]</span></p>
+\frac{\mathbb{E} \sum v^2}{\tau^3} , \tag{38}\]</span></p>
 <p><span class="math inline">\(\bar n\)</span> the expected number of
 free clusters, <span class="math inline">\(\mathbb{E} \sum v^2\)</span>
 the expected sum of their squares; the chain through <span class="math inline">\(\nabla D_i\)</span>, <span class="math inline">\(H_i\)</span> and the mode is as above. The mode
@@ -966,7 +947,7 @@ random-walk Metropolis steps, step size adapted in burn-in toward
 acceptance 0.4.</li>
 <li>
 <strong>Clusters.</strong> One Gibbs sweep per symbol, Neal’s
-algorithm 8 with two auxiliary clusters <span class="citation"><a href="#ref-neal2000markov">[11]</a></span>: each group, in random order,
+algorithm 8 with two auxiliary clusters <span class="citation"><a href="#ref-neal2000markov">[12]</a></span>: each group, in random order,
 joins an existing cluster with probability proportional to size (anchor
 counted) times likelihood at the cluster value, or an auxiliary one with
 a slab draw with probability proportional to <span class="math inline">\(\alpha / 2\)</span> times likelihood. A group
@@ -1018,7 +999,7 @@ value</td>
 <h3 id="importance-sampling">Importance sampling<a class="anchor" aria-label="anchor" href="#importance-sampling"></a>
 </h3>
 <p>The <span class="math inline">\(-2 \log L\)</span> of an SAEM fit
-comes from sequential importance sampling under the expansion <span class="citation"><a href="#ref-liu1996nonparametric">[12]</a></span>. A
+comes from sequential importance sampling under the expansion <span class="citation"><a href="#ref-liu1996nonparametric">[13]</a></span>. A
 particle seats the groups in turn; group <span class="math inline">\(i\)</span> joins a cluster of every symbol,
 existing or new, with probability proportional to the Ewens prior times
 the predictive density given the seated groups, the cluster values
@@ -1028,11 +1009,11 @@ factors, the weight is</p>
 <p><span class="math display">\[\zeta = \prod_{i=1}^{G} \sum_{T} \Pr(T
 \mid \mathcal{C}_{i-1})\,
 \frac{Z(\mathcal{C}_{i-1} + T)}{Z(\mathcal{C}_{i-1})} ,
-\tag{40}\]</span></p>
+\tag{39}\]</span></p>
 <p>summed over the seats <span class="math inline">\(T\)</span> of group
 <span class="math inline">\(i\)</span>. The mean <span class="math inline">\(\bar\zeta\)</span> over <span class="math inline">\(M\)</span> particles is unbiased for <span class="math inline">\(I\)</span>; by the delta method on <span class="math inline">\(\log \bar\zeta\)</span>,</p>
 <p><span class="math display">\[\texttt{valueSE} = \frac{2\,
-\operatorname{sd}(\zeta)}{\sqrt{M}\, \bar\zeta} . \tag{41}\]</span></p>
+\operatorname{sd}(\zeta)}{\sqrt{M}\, \bar\zeta} . \tag{40}\]</span></p>
 <p>The symbols of a group are seated together on the full <span class="math inline">\(P_i\)</span>. <code>control$saem$particles</code>
 sets <span class="math inline">\(M\)</span> (500). An SAEM fit has no
 gradient, Hessian or empirical information.</p>
@@ -1108,22 +1089,29 @@ Tibshirani, <span>“Regression shrinkage and selection via the
 lasso,”</span> <em>Journal of the Royal Statistical Society: Series
 B</em>, vol. 58, no. 1, pp. 267–288, 1996, doi: <a href="https://doi.org/10.1111/j.2517-6161.1996.tb02080.x" class="external-link">10.1111/j.2517-6161.1996.tb02080.x</a>.</div>
 </div>
-<div id="ref-ewens1972sampling" class="csl-entry">
+<div id="ref-hauber2023uncovering" class="csl-entry">
 <div class="csl-left-margin">[10] </div>
+<div class="csl-right-inline">A.
+L. Hauber, M. Rosenblatt, and J. Timmer, <span>“Uncovering specific
+mechanisms across cell types in dynamical models,”</span> <em>PLOS
+Computational Biology</em>, vol. 19, no. 9, p. e1010867, 2023, doi: <a href="https://doi.org/10.1371/journal.pcbi.1010867" class="external-link">10.1371/journal.pcbi.1010867</a>.</div>
+</div>
+<div id="ref-ewens1972sampling" class="csl-entry">
+<div class="csl-left-margin">[11] </div>
 <div class="csl-right-inline">W.
 J. Ewens, <span>“The sampling theory of selectively neutral
 alleles,”</span> <em>Theoretical Population Biology</em>, vol. 3, no. 1,
 pp. 87–112, 1972, doi: <a href="https://doi.org/10.1016/0040-5809(72)90035-4" class="external-link">10.1016/0040-5809(72)90035-4</a>.</div>
 </div>
 <div id="ref-neal2000markov" class="csl-entry">
-<div class="csl-left-margin">[11] </div>
+<div class="csl-left-margin">[12] </div>
 <div class="csl-right-inline">R.
 M. Neal, <span>“Markov chain sampling methods for <span>Dirichlet</span>
 process mixture models,”</span> <em>Journal of Computational and
 Graphical Statistics</em>, vol. 9, no. 2, pp. 249–265, 2000, doi: <a href="https://doi.org/10.1080/10618600.2000.10474879" class="external-link">10.1080/10618600.2000.10474879</a>.</div>
 </div>
 <div id="ref-liu1996nonparametric" class="csl-entry">
-<div class="csl-left-margin">[12] </div>
+<div class="csl-left-margin">[13] </div>
 <div class="csl-right-inline">J.
 S. Liu, <span>“Nonparametric hierarchical <span>Bayes</span> via
 sequential imputations,”</span> <em>The Annals of Statistics</em>, vol.

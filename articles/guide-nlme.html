@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.7</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,7 +47,7 @@
     <li><a class="dropdown-item" href="../articles/guide-profiles.html">5. Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/guide-prediction-uncertainty.html">6. Prediction uncertainty</a></li>
     <li><a class="dropdown-item" href="../articles/guide-nlme.html">7. Nonlinear mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/guide-group-effects.html">8. Group-specific effects</a></li>
+    <li><a class="dropdown-item" href="../articles/guide-sparse-deviations.html">8. Sparse deviations</a></li>
     <li><hr class="dropdown-divider"></li>
     <li><h6 class="dropdown-header" data-toc-skip>Tools</h6></li>
     <li><a class="dropdown-item" href="../articles/guide-alignment.html">9. Alignment of relative data measurements</a></li>
@@ -70,7 +70,7 @@
     <li><a class="dropdown-item" href="../articles/methods-profiles.html">Profile likelihood</a></li>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
-    <li><a class="dropdown-item" href="../articles/methods-sparse-random-effects.html">Sparse random effects</a></li>
+    <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -233,17 +233,18 @@ random slope, correlated with the intercept.</li>
 <code>Cl ~ 1 + (1 | ID) + (1 | ID:OCC)</code>: variability between
 subjects and between occasions.</li>
 <li>
-<code>Cl ~ 1 + (1 | gr(ID, dist = laplace()))</code>: Laplace
-instead of normal random effects.</li>
+<code>Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))</code>:
+spike-and-slab instead of normal random effects.</li>
 </ul>
 <p>A group (a level of the grouping, such as a subject) may own several
 conditions, which share the group random effects; a condition outside
 every group has none. The random effects of one ID, or of one term
 without ID, form a block with full covariance, so <span class="math inline">\(\Omega\)</span> is block diagonal;
 <code>omega_&lt;a&gt;_&lt;b&gt;</code> are the entries of the Cholesky
-factor of each block, log standard deviations on the diagonal. This
-chapter treats normal random effects; Laplace, spike-and-slab and
-Dirichlet-process ones are in <a href="guide-group-effects.html">Group-specific effects</a>.</p>
+factor of each block, with the log of the factor diagonal on the
+diagonal, for a random effect alone in a block the log of the standard
+deviation of that effect. This chapter treats normal random effects;
+spike-and-slab and Dirichlet-process ones are in <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="marginal-likelihood">Marginal likelihood<a class="anchor" aria-label="anchor" href="#marginal-likelihood"></a>
@@ -332,23 +333,25 @@ standard deviations start at <code>control$sd</code>.</p>
 <span><span class="co">#&gt;    sd   Cl   Cl   0.2629 0.06521</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Shrinkage: eta_Ka = 0.018, eta_V = 0.103, eta_Cl = 0.039</span></span></code></pre>
-<p><code>omega_*</code> are log standard deviations, shown on natural
-scale in the random-effects table. Shrinkage near 0 means the modes
-spread as widely as the random effects, near 1 that the data of a
-subject hardly move the individual parameter.</p>
+<p>Every block here holds one random effect, so <code>omega_*</code> are
+log standard deviations, shown on natural scale in the random-effects
+table. Shrinkage near 0 means the modes spread as widely as the random
+effects, near 1 that the data of a subject hardly move the individual
+parameter.</p>
 <p><code>value</code> is <span class="math inline">\(-2 \log L\)</span>
-with all data constants; <code>valueNonmem</code>, <span class="math inline">\(-2 \log L\)</span> less <span class="math inline">\(N_{\text{obs}} \log(2\pi)\)</span>, compares with
-the NONMEM <code>OBJ</code>. The fit holds <code>argument</code>,
-<code>Omega</code>, <code>omega</code> (standard deviations and
-correlations with standard errors), <code>random</code> (modes per group
-with conditional standard errors), <code>etaModes</code>,
-<code>etaSE</code> and <code>shrinkage</code>. Methods:
-<code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> (Wald
-or <code>method = "profile"</code>), <code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>,
-<code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC()</a></code>, <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> of nested
-fits, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> (individual and population),
-<code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>, <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> and the plots
-below.</p>
+with all data constants; <code>valueNonmem</code>, <span class="math inline">\(-2 \log L\)</span> less <span class="math inline">\(\log(2\pi)\)</span> per reading above the limit of
+quantification, compares with the NONMEM <code>OBJ</code>
+(<code>NA</code> for <code><a href="../reference/normT.html">normT()</a></code>). The fit holds
+<code>argument</code>, <code>Omega</code>, <code>omega</code> (standard
+deviations and correlations with standard errors), <code>random</code>
+(modes per group with conditional standard errors),
+<code>etaModes</code>, <code>etaSE</code> and <code>shrinkage</code>.
+Methods: <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>,
+<code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> (Wald or <code>method = "profile"</code>),
+<code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC()</a></code>,
+<code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> of nested fits, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> (individual
+and population), <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>, <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> and
+the plots below.</p>
 </div>
 <div class="section level3">
 <h3 id="focei-settings">FOCEI settings<a class="anchor" aria-label="anchor" href="#focei-settings"></a>
@@ -513,9 +516,11 @@ maximization on the Laplace approximation and reports the quadrature of
 level <span class="math inline">\(K + 2\)</span>. Settings in
 <code>control$quadrature</code>: convergence tolerance
 <code>epsEcm</code> (default <code>1e-5</code>), iterations
-<code>maxEcm</code> (default 200), and those of the quadrature above.
-Details: <a href="methods-nlme.html#laplace-em">Methods &gt; Laplace
-EM</a>.</p>
+<code>maxEcm</code> (default 200), and of the quadrature above
+<code>cm1Control</code>, <code>maxCm1Iter</code>, <code>pruneTol</code>
+and <code>maxLevel</code>; the levels are <span class="math inline">\(K
++ 1\)</span> and <span class="math inline">\(K + 2\)</span>, and the fit
+has no certificate. Details: <a href="methods-nlme.html#laplace-em">Methods &gt; Laplace EM</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="stochastic-approximation-em-saem">Stochastic approximation EM (SAEM)<a class="anchor" aria-label="anchor" href="#stochastic-approximation-em-saem"></a>
@@ -707,7 +712,7 @@ integrates them by FOCEI per connected component of the conditions; the
 mavoglurant with between-occasion variability this way:</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/define.html">insert</a></span><span class="op">(</span><span class="va">trafo</span>, <span class="va">Cl</span> <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">ID</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">ID</span><span class="op">:</span><span class="va">OCC</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>Which groups differ at all, rather than by how much: <a href="guide-group-effects.html">Group-specific effects</a>.</p>
+<p>Which groups differ at all, rather than by how much: <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="multistart-optimization">Multistart optimization<a class="anchor" aria-label="anchor" href="#multistart-optimization"></a>
@@ -818,8 +823,8 @@ waterfall.</p>
 <code><a href="../reference/plotVPC.html">plotVPC()</a></code>, <code><a href="../reference/plotRandomEffects.html">plotRandomEffects()</a></code>,
 <code><a href="../reference/plotTrace.html">plotTrace()</a></code>, <code><a href="../reference/plotValues.html">plotValues()</a></code></p>
 <p><a href="guide-prediction-uncertainty.html">← 6. Prediction
-uncertainty</a> | <a href="guide-group-effects.html">8. Group-specific
-effects →</a></p>
+uncertainty</a> | <a href="guide-sparse-deviations.html">8. Sparse
+deviations →</a></p>
 </div>
 </div>
 <div class="section level2">

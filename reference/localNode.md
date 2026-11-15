@@ -56,7 +56,8 @@ slurmCluster(
 - walltime:
 
   The maximum runtime of an array task, `"HH:MM:SS"`, filled into the
-  job script. Default `NULL`, none.
+  job script. Default `NULL`, none: a directive or comment line of the
+  template with a field that has no value is left out.
 
 - memPerCore:
 

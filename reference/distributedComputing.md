@@ -109,17 +109,18 @@ With `wait = TRUE` the results of
 
 - `check()`:
 
-  reports how many tasks are done, running or failed and returns `TRUE`
-  once no task runs any more, with a warning when some failed. A task
-  fails when the task process ends without a result. A task without a
-  result on a node that does not answer, or whose queue does not, counts
-  as running.
+  reports how many tasks are done, running, failed or not reachable and
+  returns `TRUE` once no task runs or is not reachable, with a warning
+  when some failed. A task fails when the task process ends without a
+  result. A task without a result on a node that does not answer, or
+  whose queue does not, is not reachable.
 
 - `wait(interval = 10)`:
 
-  polls every `interval` seconds until no task runs, reports each change
-  as a message and returns `TRUE` when every task is done. While a node
-  does not answer, the pause between polls doubles up to 10 minutes.
+  polls every `interval` seconds until no task runs or is not reachable,
+  reports each change as a message and returns `TRUE` when every task is
+  done. While a node does not answer, the pause between polls doubles up
+  to 10 minutes.
 
 - `get(combine = TRUE, all = FALSE)`:
 
@@ -180,8 +181,8 @@ The model files are those of the
 [obsfn](https://dmodverse.github.io/dMod2/reference/obsfn.md),
 [parfn](https://dmodverse.github.io/dMod2/reference/parfn.md),
 [prdfn](https://dmodverse.github.io/dMod2/reference/prdfn.md) and
-objective objects in `input`; objects without them take every file of
-`getOption("dMod2.outdir")`, else of the working directory.
+objective objects in `input`; when none of them has model files, those
+in `getOption("dMod2.outdir")`, else in the working directory.
 
 - `build = "compile"`: the C/C++ sources are copied and compiled once
   per node into one shared object, against the cppDE installed there.

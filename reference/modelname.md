@@ -35,7 +35,7 @@ modelname(x, conditions = NULL, ...) <- value
 - x:
 
   object of class `prdfn`, `parfn`, `obsfn` or `objfn`, or a character
-  naming such an object in the calling environment.
+  naming such an object in the global environment.
 
 - ...:
 

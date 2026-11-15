@@ -127,18 +127,19 @@ parameters. Further forms:
   correlated with the intercept.
 - `Cl ~ 1 + (1 | ID) + (1 | ID:OCC)`: variability between subjects and
   between occasions.
-- `Cl ~ 1 + (1 | gr(ID, dist = laplace()))`: Laplace instead of normal
-  random effects.
+- `Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))`: spike-and-slab instead of
+  normal random effects.
 
 A group (a level of the grouping, such as a subject) may own several
 conditions, which share the group random effects; a condition outside
 every group has none. The random effects of one ID, or of one term
 without ID, form a block with full covariance, so \\\Omega\\ is block
 diagonal; `omega_<a>_<b>` are the entries of the Cholesky factor of each
-block, log standard deviations on the diagonal. This chapter treats
-normal random effects; Laplace, spike-and-slab and Dirichlet-process
-ones are in [Group-specific
-effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md).
+block, with the log of the factor diagonal on the diagonal, for a random
+effect alone in a block the log of the standard deviation of that
+effect. This chapter treats normal random effects; spike-and-slab and
+Dirichlet-process ones are in [Sparse
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md).
 
 ## Marginal likelihood
 
@@ -206,15 +207,17 @@ summary(fit)
     #> 
     #> Shrinkage: eta_Ka = 0.018, eta_V = 0.103, eta_Cl = 0.039
 
-`omega_*` are log standard deviations, shown on natural scale in the
-random-effects table. Shrinkage near 0 means the modes spread as widely
-as the random effects, near 1 that the data of a subject hardly move the
-individual parameter.
+Every block here holds one random effect, so `omega_*` are log standard
+deviations, shown on natural scale in the random-effects table.
+Shrinkage near 0 means the modes spread as widely as the random effects,
+near 1 that the data of a subject hardly move the individual parameter.
 
 `value` is \\-2 \log L\\ with all data constants; `valueNonmem`, \\-2
-\log L\\ less \\N\_{\text{obs}} \log(2\pi)\\, compares with the NONMEM
-`OBJ`. The fit holds `argument`, `Omega`, `omega` (standard deviations
-and correlations with standard errors), `random` (modes per group with
+\log L\\ less \\\log(2\pi)\\ per reading above the limit of
+quantification, compares with the NONMEM `OBJ` (`NA` for
+[`normT()`](https://dmodverse.github.io/dMod2/reference/normT.md)). The
+fit holds `argument`, `Omega`, `omega` (standard deviations and
+correlations with standard errors), `random` (modes per group with
 conditional standard errors), `etaModes`, `etaSE` and `shrinkage`.
 Methods: [`coef()`](https://rdrr.io/r/stats/coef.html),
 [`vcov()`](https://rdrr.io/r/stats/vcov.html),
@@ -288,8 +291,10 @@ diagnostics](#model-diagnostics)).
 `method = "laplaceEM"` runs expectation conditional maximization on the
 Laplace approximation and reports the quadrature of level \\K + 2\\.
 Settings in `control$quadrature`: convergence tolerance `epsEcm`
-(default `1e-5`), iterations `maxEcm` (default 200), and those of the
-quadrature above. Details: [Methods \> Laplace
+(default `1e-5`), iterations `maxEcm` (default 200), and of the
+quadrature above `cm1Control`, `maxCm1Iter`, `pruneTol` and `maxLevel`;
+the levels are \\K + 1\\ and \\K + 2\\, and the fit has no certificate.
+Details: [Methods \> Laplace
 EM](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#laplace-em).
 
 ## Stochastic approximation EM (SAEM)
@@ -484,8 +489,8 @@ fits mavoglurant with between-occasion variability this way:
 insert(trafo, Cl ~ 1 + (1 | ID) + (1 | ID:OCC))
 ```
 
-Which groups differ at all, rather than by how much: [Group-specific
-effects](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md).
+Which groups differ at all, rather than by how much: [Sparse
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md).
 
 ## Multistart optimization
 
@@ -635,7 +640,7 @@ Reference:
 
 [← 6. Prediction
 uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncertainty.md)
-\| [8. Group-specific effects
-→](https://dmodverse.github.io/dMod2/articles/guide-group-effects.md)
+\| [8. Sparse deviations
+→](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md)
 
 ## References
