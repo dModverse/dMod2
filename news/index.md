@@ -1,5 +1,11 @@
 # Changelog
 
+## dMod2 0.15.10
+
+- The example of
+  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
+  runs only where symident finds msolve.
+
 ## dMod2 0.15.9
 
 - [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)

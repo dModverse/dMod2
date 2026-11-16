@@ -44,10 +44,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmptyY1gm/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpriQ23f/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmptyY1gm/theoph_err.cpp
+#> Overwriting: /tmp/RtmpriQ23f/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

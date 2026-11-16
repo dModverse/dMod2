@@ -94,87 +94,12 @@ Press, London.
 ## Examples
 
 ``` r
+if (FALSE) { # requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident.install") && !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))
 # two compartments, an input u into the first, the second observed
 f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
 res <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
-#> Error: discreteSymmetries() needs msolve: confirm the msolve installation in an interactive session, or set SYMIDENT_MSOLVE to an msolve executable.
 res
-#> function (data, out, err = NULL) 
-#> {
-#>     obs <- as.character(data$name)
-#>     n <- nrow(data)
-#>     times <- sort(unique(data$time))
-#>     names <- unique(obs)
-#>     ti <- .matchNum(times, out[, 1])[.matchNum(data$time, times)]
-#>     ni <- match(names, colnames(out))[match(obs, names)]
-#>     if (anyNA(ni)) 
-#>         stop("Observable not found: ", paste(setdiff(names, colnames(out)), 
-#>             collapse = ", "))
-#>     if (anyNA(ti)) 
-#>         stop("Some data$time not found in out[,1]")
-#>     pred <- out[cbind(ti, ni)]
-#>     deriv <- NULL
-#>     if (!is.null(d <- attr(out, "deriv"))) {
-#>         oi <- match(obs, dimnames(d)[[2]])
-#>         np <- dim(d)[3]
-#>         deriv <- matrix(d[cbind(rep(ti, np), rep(oi, np), rep(seq_len(np), 
-#>             each = n))], n, np, dimnames = list(NULL, dimnames(d)[[3]]))
-#>     }
-#>     deriv2 <- NULL
-#>     if (!is.null(d2 <- attr(out, "deriv2"))) {
-#>         oi2 <- match(obs, dimnames(d2)[[2]])
-#>         np2 <- dim(d2)[3]
-#>         idx <- cbind(rep(ti, np2 * np2), rep(oi2, np2 * np2), 
-#>             rep(rep(seq_len(np2), each = n), np2), rep(seq_len(np2), 
-#>                 each = n * np2))
-#>         deriv2 <- array(d2[idx], c(n, np2, np2), dimnames = list(NULL, 
-#>             dimnames(d2)[[3]], dimnames(d2)[[4]]))
-#>     }
-#>     sig <- data$sigma
-#>     sNA <- is.na(sig)
-#>     derr <- NULL
-#>     derr2 <- NULL
-#>     if (any(sNA)) {
-#>         if (is.null(err)) 
-#>             stop("NA sigmas but no errmodel")
-#>         ti_e <- .matchNum(times, err[, 1])[.matchNum(data$time, 
-#>             times)]
-#>         ni_e <- match(names, colnames(err))[match(obs, names)]
-#>         sig[sNA] <- err[cbind(ti_e, ni_e)][sNA]
-#>         if (!is.null(de <- attr(err, "deriv"))) {
-#>             oi <- match(obs, dimnames(de)[[2]])
-#>             np <- dim(de)[3]
-#>             ns <- sum(sNA)
-#>             derr <- matrix(0, n, np, dimnames = list(NULL, dimnames(de)[[3]]))
-#>             derr[sNA, ] <- matrix(de[cbind(rep(ti_e[sNA], np), 
-#>                 rep(oi[sNA], np), rep(seq_len(np), each = ns))], 
-#>                 ns, np)
-#>         }
-#>         if (!is.null(de2 <- attr(err, "deriv2"))) {
-#>             oi <- match(obs, dimnames(de2)[[2]])
-#>             np2 <- dim(de2)[3]
-#>             ns <- sum(sNA)
-#>             derr2 <- array(0, c(n, np2, np2), dimnames = list(NULL, 
-#>                 dimnames(de2)[[3]], dimnames(de2)[[4]]))
-#>             idx <- cbind(rep(ti_e[sNA], np2 * np2), rep(oi[sNA], 
-#>                 np2 * np2), rep(rep(seq_len(np2), each = ns), 
-#>                 np2), rep(seq_len(np2), each = ns * np2))
-#>             derr2[sNA, , ] <- array(de2[idx], c(ns, np2, np2))
-#>         }
-#>     }
-#>     val <- pmax(data$value, data$lloq)
-#>     resi <- pred - val
-#>     inv <- 1/sig
-#>     objframe(data.table::data.table(time = data$time, name = obs, 
-#>         value = val, prediction = pred, sigma = sig, residual = resi, 
-#>         weighted.residual = resi * inv, bloq = val <= data$lloq, 
-#>         weighted.0 = pred * inv), deriv = deriv, deriv.err = derr, 
-#>         deriv2 = deriv2, deriv2.err = derr2)
-#> }
-#> <bytecode: 0x5594ad5312c8>
-#> <environment: namespace:dMod2>
 res$discreteSymmetries[[1]]$map
-#> Error in res$discreteSymmetries: object of type 'closure' is not subsettable
 res$info$discrete$fundamentalDomain
-#> Error in res$info: object of type 'closure' is not subsettable
+}
 ```

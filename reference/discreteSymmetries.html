@@ -31,7 +31,7 @@ symmetryReduction() first and the reduced model is analyzed.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -191,89 +191,14 @@ Academic Press, London.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># two compartments, an input u into the first, the second observed</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># requireNamespace("reticulate", quietly = TRUE) &amp;&amp; reticulate::py_module_available("symident.install") &amp;&amp; !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))</span></span></span>
+<span class="r-in"><span><span class="co"># two compartments, an input u into the first, the second observed</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>x1 <span class="op">=</span> <span class="st">"-(k21 + k01)*x1 + k12*x2 + u"</span>, x2 <span class="op">=</span> <span class="st">"k21*x1 - k12*x2"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">f</span>, <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"x2"</span><span class="op">)</span>, knownInputs <span class="op">=</span> <span class="st">"u"</span>, discrete <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error:</span> discreteSymmetries() needs msolve: confirm the msolve installation in an interactive session, or set SYMIDENT_MSOLVE to an msolve executable.</span>
 <span class="r-in"><span><span class="va">res</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> function (data, out, err = NULL) </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> {</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     obs &lt;- as.character(data$name)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     n &lt;- nrow(data)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     times &lt;- sort(unique(data$time))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     names &lt;- unique(obs)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     ti &lt;- .matchNum(times, out[, 1])[.matchNum(data$time, times)]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     ni &lt;- match(names, colnames(out))[match(obs, names)]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     if (anyNA(ni)) </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         stop("Observable not found: ", paste(setdiff(names, colnames(out)), </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             collapse = ", "))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     if (anyNA(ti)) </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         stop("Some data$time not found in out[,1]")</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     pred &lt;- out[cbind(ti, ni)]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     deriv &lt;- NULL</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     if (!is.null(d &lt;- attr(out, "deriv"))) {</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         oi &lt;- match(obs, dimnames(d)[[2]])</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         np &lt;- dim(d)[3]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         deriv &lt;- matrix(d[cbind(rep(ti, np), rep(oi, np), rep(seq_len(np), </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             each = n))], n, np, dimnames = list(NULL, dimnames(d)[[3]]))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     }</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     deriv2 &lt;- NULL</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     if (!is.null(d2 &lt;- attr(out, "deriv2"))) {</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         oi2 &lt;- match(obs, dimnames(d2)[[2]])</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         np2 &lt;- dim(d2)[3]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         idx &lt;- cbind(rep(ti, np2 * np2), rep(oi2, np2 * np2), </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             rep(rep(seq_len(np2), each = n), np2), rep(seq_len(np2), </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                 each = n * np2))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         deriv2 &lt;- array(d2[idx], c(n, np2, np2), dimnames = list(NULL, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             dimnames(d2)[[3]], dimnames(d2)[[4]]))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     }</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     sig &lt;- data$sigma</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     sNA &lt;- is.na(sig)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     derr &lt;- NULL</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     derr2 &lt;- NULL</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     if (any(sNA)) {</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         if (is.null(err)) </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             stop("NA sigmas but no errmodel")</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         ti_e &lt;- .matchNum(times, err[, 1])[.matchNum(data$time, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             times)]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         ni_e &lt;- match(names, colnames(err))[match(obs, names)]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         sig[sNA] &lt;- err[cbind(ti_e, ni_e)][sNA]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         if (!is.null(de &lt;- attr(err, "deriv"))) {</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             oi &lt;- match(obs, dimnames(de)[[2]])</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             np &lt;- dim(de)[3]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             ns &lt;- sum(sNA)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             derr &lt;- matrix(0, n, np, dimnames = list(NULL, dimnames(de)[[3]]))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             derr[sNA, ] &lt;- matrix(de[cbind(rep(ti_e[sNA], np), </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                 rep(oi[sNA], np), rep(seq_len(np), each = ns))], </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                 ns, np)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         }</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         if (!is.null(de2 &lt;- attr(err, "deriv2"))) {</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             oi &lt;- match(obs, dimnames(de2)[[2]])</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             np2 &lt;- dim(de2)[3]</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             ns &lt;- sum(sNA)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             derr2 &lt;- array(0, c(n, np2, np2), dimnames = list(NULL, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                 dimnames(de2)[[3]], dimnames(de2)[[4]]))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             idx &lt;- cbind(rep(ti_e[sNA], np2 * np2), rep(oi[sNA], </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                 np2 * np2), rep(rep(seq_len(np2), each = ns), </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                 np2), rep(seq_len(np2), each = ns * np2))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>             derr2[sNA, , ] &lt;- array(de2[idx], c(ns, np2, np2))</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         }</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     }</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     val &lt;- pmax(data$value, data$lloq)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     resi &lt;- pred - val</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     inv &lt;- 1/sig</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>     objframe(data.table::data.table(time = data$time, name = obs, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         value = val, prediction = pred, sigma = sig, residual = resi, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         weighted.residual = resi * inv, bloq = val &lt;= data$lloq, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         weighted.0 = pred * inv), deriv = deriv, deriv.err = derr, </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>         deriv2 = deriv2, deriv2.err = derr2)</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> }</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;bytecode: 0x5594ad5312c8&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;environment: namespace:dMod2&gt;</span>
 <span class="r-in"><span><span class="va">res</span><span class="op">$</span><span class="va">discreteSymmetries</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">map</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in res$discreteSymmetries:</span> object of type 'closure' is not subsettable</span>
 <span class="r-in"><span><span class="va">res</span><span class="op">$</span><span class="va">info</span><span class="op">$</span><span class="va">discrete</span><span class="op">$</span><span class="va">fundamentalDomain</span></span></span>
-<span class="r-err co"><span class="r-pr">#&gt;</span> <span class="error">Error in res$info:</span> object of type 'closure' is not subsettable</span>
+<span class="r-in"><span><span class="op">}</span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
