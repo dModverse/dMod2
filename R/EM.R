@@ -89,7 +89,8 @@
 #'     \item{`argument`, `value`, `gradient`, `hessian`}{the estimates, -2 log
 #'       L of the marginal likelihood with gradient and Hessian (a sparse
 #'       `Matrix` on the sparse path, `NULL` with spike-and-slab or
-#'       Dirichlet-process random effects).}
+#'       Dirichlet-process random effects); on the sparse path `lowrank`, the
+#'       part of the Hessian kept apart (see [objlist()]).}
 #'     \item{`information`}{with spike-and-slab random effects the
 #'       empirical information that gives the standard errors: `G / (G - 1)`
 #'       times the sum of the outer products of the centered scores of the `G`

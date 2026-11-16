@@ -356,7 +356,7 @@ test_that("the native chain gives the objective of the R path, error model and c
   ec <- .nl2_fx()$prop
   pars <- c(A = 1.0, k = 0.5, srel = 0.1)
   data <- fx_decay_data_bloq(pars = pars[c("A", "k")], sigma = 0.05, lloq = 0.1, times = seq(0, 10, by = 1))
-  data$C1$sigma[c(TRUE, FALSE)] <- NA_real_
+  data$C1$sigma[seq(1L, nrow(data$C1), by = 2L)] <- NA_real_
   obj <- normL2(data, ec$prd, errmodel = ec$e, optBLOQ = "M3")
   run <- function(chain, ...) withr::with_options(list(dMod2.evaluation = if (chain) "C++" else "R"), obj(...))
   for (args in list(list(pars), list(pars, deriv = FALSE), list(pars[-1], fixed = pars[1]))) {

@@ -162,7 +162,36 @@ different choice of units. [Optimization](guide-optimization.html) fits the rema
 `r length(setdiff(getParameters(p), names(gauge)))` parameters,
 [Profile likelihood](guide-profiles.html) checks which the data determine.
 
-Reference: `symmetryDetection()`, `symmetryReduction()`
+## Discrete symmetries
+
+A locally identifiable model can still give the output of a parameter value at other, isolated
+values: a discrete symmetry. `symmetryDetection(discrete = TRUE)`, or `discreteSymmetries()` on a
+result, counts these values in the domain and reconstructs the maps between them where they are
+rational functions of the coordinates; the search needs msolve and a model with one condition
+and no events. In the two-compartment model of Godfrey [@godfrey1983compartmental], with the
+amounts $x_1$ and $x_2$, an input $u$ into the first compartment and the second observed,
+
+```{r, eval = FALSE}
+f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
+compartments <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
+compartments
+```
+
+```text
+#> Result:  structurally locally identifiable (rank 5 / 5)
+#>
+#> Discrete symmetries: 1, 2 solutions over the algebraic closure
+#>   k01 -> k12, x1 -> (k01*x2 - k12*x2 + k21*x1)/k21, k12 -> k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 > 0]
+#>   fundamental domain: k01 < k12
+```
+
+the map exchanges the elimination rate $k_{01}$ and the return rate $k_{12}$ and moves the
+initial value of $x_1$, so the model is locally but not globally identifiable. `exact` means
+proven by a map of the states. The fundamental domain $k_{01} < k_{12}$ keeps one of the two
+points; a fit restricted to it has a unique optimum. A model with directions is reduced first,
+and the maps are stated in the coordinates of the reduced model.
+
+Reference: `symmetryDetection()`, `symmetryReduction()`, `discreteSymmetries()`
 
 [← 1. Setting up models](guide-model.html) | [3. Sensitivities →](guide-sensitivities.html)
 

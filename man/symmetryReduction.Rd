@@ -109,6 +109,11 @@ no reduction.}
 the positive orthant.}
 \item{\code{alternatives}}{the other charts, each with \code{trafo}, \code{removed},
 \code{remaining}, \code{rational} and \code{pins}.}
+\item{\code{discrete}}{with discrete symmetries in \code{object} (see
+\code{\link[=discreteSymmetries]{discreteSymmetries()}}): the \code{symmetries} that can map a point of the domain
+into it, the \code{fundamentalDomain}, inequalities that keep one point of each of
+their orbits, and the \code{coordinates} they are stated in, the reduced model's for
+a model with directions.}
 \item{\code{coordinates}, \code{fixed}, \code{settings}, \code{call}}{provenance.}
 }
 \code{print()} shows the verdict, the trafo, the new parameters and the sections,

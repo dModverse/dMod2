@@ -14,7 +14,7 @@
     sum(d$value > d$lloq)
   }, 0))
   out <- list(argument = fit$argument, value = fit$value, gradient = fit$gradient,
-              hessian = fit$hessian, information = fit$information, converged = fit$converged,
+              hessian = fit$hessian, lowrank = fit$lowrank, information = fit$information, converged = fit$converged,
               iterations = fit$iterations, trustIterations = fit$trustIterations,
               stopReason = fit$stopReason, failures = fit$failures,
               method = method, fixed = fixed,
@@ -25,7 +25,7 @@
               hessianExact = fit$hessianExact, innerModes = fit$innerModes)
   if (is.null(design$groupings)) {
     gr <- .groupingResult(design, pars, .emCurvature(fit), fit$etaModes, fit$etaCov, fit$clusters, fit$spike,
-                          design$reach)
+                          design$reach, lowrank = if (!is.null(fit$hessian)) fit$lowrank)
     out <- c(out, gr[c("Omega", "etaModes", "etaCov", "etaSE", "shrinkage", "omega", "random")])
     out$eta <- .etaVector(list(design = design, etaModes = fit$etaModes))
   } else {
@@ -36,7 +36,7 @@
         V <- fit$etaCovUnits[[which(vapply(fit$etaCovUnits, function(V) all(en %in% rownames(V)), TRUE))[1]]]
         V[en, en, drop = FALSE]
       })
-      .groupingResult(sd, pars, fit$hessian, modes, setNames(cov, sd$groups))
+      .groupingResult(sd, pars, fit$hessian, modes, setNames(cov, sd$groups), lowrank = fit$lowrank)
     })
     for (f in c("Omega", "etaModes", "etaCov", "etaSE", "shrinkage")) out[[f]] <- lapply(per, `[[`, f)
     for (f in c("omega", "random")) out[[f]] <- do.call(rbind, Map(function(t, g) cbind(grouping = g, t),
@@ -49,12 +49,13 @@
 }
 
 ## Omega, modes, conditional standard errors, shrinkage and the tables of one grouping.
-.groupingResult <- function(sd, pars, hessian, etaModes, etaCov, clusters = NULL, spike = NULL, reach = NULL) {
+.groupingResult <- function(sd, pars, hessian, etaModes, etaCov, clusters = NULL, spike = NULL, reach = NULL,
+                            lowrank = NULL) {
   lay <- sd$normal
   Omega <- if (lay$K) tcrossprod(.choleskyFactor(lay, pars))
   info <- .etaInfo(etaCov, Omega, etaModes)
   list(Omega = Omega, etaModes = etaModes, etaCov = etaCov, etaSE = info$se, shrinkage = info$shrinkage,
-       omega = .omegaTable(sd, pars, hessian), random = .randomTable(sd, etaModes, info$se, clusters, spike, reach))
+       omega = .omegaTable(sd, pars, hessian, lowrank), random = .randomTable(sd, etaModes, info$se, clusters, spike, reach))
 }
 
 ## The modes of every random effect as one named vector, eta names as in the model.
@@ -82,8 +83,8 @@
 
 
 ## Omega as standard deviations and correlations with standard errors by the delta method on
-## the covariance of the Cholesky parameters.
-.omegaTable <- function(design, pars, hessian) {
+## the covariance of the Cholesky parameters, from the Hessian plus its low-rank part.
+.omegaTable <- function(design, pars, hessian, lowrank = NULL) {
   lay <- design$normal
   if (!lay$K) return(NULL)
   L <- .choleskyFactor(lay, pars)
@@ -113,7 +114,7 @@
   # fixed Cholesky entries have no variance
   cp <- intersect(lay$cholPars, rownames(hessian))
   if (!is.null(hessian) && length(cp)) {
-    V <- tryCatch(if (.isSparse(hessian)) .vcovSparse(hessian, NULL, cp) else solve(hessian / 2),
+    V <- tryCatch(if (.isSparse(hessian)) .vcovSparse(hessian, NULL, cp, lowrank) else solve(hessian / 2),
                   error = function(e) NULL)
     Jf <- J[, match(cp, lay$cholPars), drop = FALSE]
     if (!is.null(V)) se <- sqrt(pmax(rowSums((Jf %*% V[cp, cp, drop = FALSE]) * Jf), 0))
@@ -228,6 +229,7 @@ vcov.em <- function(object, ...) {
   if (is.null(H))
     stop("vcov: the fit has no Hessian of the marginal -2 log L and, with Dirichlet-process random effects, ",
          "no empirical information; confint(method = \"profile\") gives intervals.", call. = FALSE)
+  if (is.null(object$hessian)) object$lowrank <- NULL
   object$hessian <- H
   vcov.trustfit(object, ...)
 }
@@ -248,7 +250,7 @@ vcov.em <- function(object, ...) {
   est <- object$argument
   se <- setNames(rep(NA_real_, length(est)), names(est))
   if (.isSparse(object$hessian)) {
-    d <- tryCatch(.sparseVarianceDiagonal(object$hessian, names(est)), error = function(e) NULL)
+    d <- tryCatch(.sparseVarianceDiagonal(object$hessian, names(est), lowrank = object$lowrank), error = function(e) NULL)
     if (!is.null(d)) se[names(d)] <- sqrt(ifelse(d < 0, NA_real_, d))
     return(se)
   }

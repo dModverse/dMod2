@@ -200,6 +200,13 @@ test_that("without random terms every experiment is a condition and trust() runs
   d <- .alignmentSim(5)
   m <- .rel(d)
   expect_setequal(unique(dMod2:::.alignmentConditions(m)), unique(d$gel))
+  # the dense normalization block is a sparse part plus a low-rank one
+  obj <- dMod2:::.alignmentObjective(m) + dMod2:::.alignmentNormalization(m)
+  q <- dMod2:::.alignmentStart(m, dMod2:::.alignmentPars(m)$fixed) + 0.1
+  lr <- obj(q, hessian = "sparse")
+  expect_true(length(lr$lowrank$d) > 0)
+  expect_equal(Matrix::nnzero(lr$hessian), Matrix::nnzero(dMod2:::.alignmentObjective(m)(q, hessian = "sparse")$hessian))
+  expect_equal(.fullHessian(lr)[names(q), names(q)], obj(q)$hessian[names(q), names(q)], tolerance = 1e-12)
   # the scale of every experiment starts at the median of the scales that meet the experiment readings
   st <- dMod2:::.alignmentStart(m, dMod2:::.alignmentPars(m)$fixed)
   lin <- dMod2:::.alignmentPredictors(m, seq_len(nrow(d)), st)
@@ -208,6 +215,7 @@ test_that("without random terms every experiment is a condition and trust() runs
   fit <- withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)),
                               suppressMessages(align(m, fits = 1)))
   expect_s4_class(fit$fit$hessian, "sparseMatrix")
+  expect_false(is.null(fit$fit$lowrank))
   dense <- suppressMessages(align(m, fits = 1))
   expect_true(is.matrix(dense$fit$hessian))
   expect_equal(dense$value, fit$value, tolerance = 1e-6)
@@ -222,6 +230,25 @@ test_that("without random terms every experiment is a condition and trust() runs
   expect_equal(all$gradient[nm], one$gradient[nm], tolerance = 1e-12)
   expect_equal(all$hessian[nm, nm], one$hessian[nm, nm], tolerance = 1e-12)
   expect_equal(o(p, sweep = "reverse")$gradient[nm], all$gradient[nm], tolerance = 1e-10)
+})
+
+test_that("an experiment split into parts of the biological values has the objective of the whole", {
+  d <- .alignmentSim(3)
+  m <- .rel(d)
+  o <- dMod2:::.alignmentObjective(m)
+  p <- dMod2:::.alignmentStart(m, dMod2:::.alignmentPars(m)$fixed) + 0.05
+  whole <- o(p, deriv2 = TRUE)
+  chunks <- dMod2:::.alignmentChunks
+  local_mocked_bindings(.alignmentChunks = function(m, cond, size) chunks(m, cond, 2L))
+  cond <- dMod2:::.alignmentConditions(m)
+  expect_equal(length(unique(cond)), 3L * 3L)
+  expect_true(all(tapply(d$time, cond, function(x) length(unique(x))) <= 2L))
+  expect_true(all(tapply(d$gel, cond, function(x) length(unique(x))) == 1L))
+  parts <- dMod2:::.alignmentObjective(m)(p, deriv2 = TRUE)
+  nm <- names(p)
+  expect_equal(parts$value, whole$value, tolerance = 1e-12)
+  expect_equal(parts$gradient[nm], whole$gradient[nm], tolerance = 1e-12)
+  expect_equal(parts$hessian[nm, nm], whole$hessian[nm, nm], tolerance = 1e-12)
 })
 
 test_that("a prior enters the objective, and the values of a symbol without trafo have the mean 0", {
@@ -299,18 +326,18 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   expect_null(shared$vjpEvalMany)
   expect_equal(sp$value, dense$value, tolerance = 1e-8)
   expect_equal(sp$gradient[nm], dense$gradient[nm], tolerance = 1e-6)
-  expect_equal(as.matrix(sp$hessian)[nm, nm], dense$hessian[nm, nm], tolerance = 1e-6)
+  expect_equal(.fullHessian(sp)[nm, nm], dense$hessian[nm, nm], tolerance = 1e-6)
   fs <- withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)),
                             suppressMessages(align(m, fits = 1, reml = FALSE)))
   expect_s4_class(fs$fit$hessian, "sparseMatrix")
   # the standard errors of the sparse solve are those of the dense one on the same Hessian
   free <- intersect(names(fs$fit$argument), rownames(fs$fit$hessian))
   X <- m$design$yi$X[!duplicated(m$data$time), , drop = FALSE]
-  H <- if (identical(fs$seSource, "Hessian")) fs$fit$hessian
+  H <- if (identical(fs$seSource, "Hessian")) fs$fit
        else dMod2:::.alignmentGaussNewton(fs$model, fs$objfn, fs$randomEffects, fs$fit)
-  expect_s4_class(H, "sparseMatrix")
-  expect_equal(fs$aligned$se, sqrt(dMod2:::.alignmentVariance(as.matrix(H), free)(X)))
-  expect_equal(sqrt(dMod2:::.alignmentVariance(sp$hessian, nm)(X)),
+  expect_s4_class(H$hessian, "sparseMatrix")
+  expect_equal(fs$aligned$se, sqrt(dMod2:::.alignmentVariance(.fullHessian(H), free)(X)))
+  expect_equal(sqrt(dMod2:::.alignmentVariance(sp$hessian, nm, sp$lowrank)(X)),
                sqrt(dMod2:::.alignmentVariance(dense$hessian, nm)(X)), tolerance = 1e-5)
 })
 
@@ -345,8 +372,9 @@ test_that("technical replicates are averaged per sample, and the fit is that of 
   fit <- suppressMessages(align(m, fits = 1))
   ref <- suppressMessages(align(.rel(hand), fits = 1))
   expect_equal(fit$value, ref$value, tolerance = 1e-10)
-  expect_equal(fit$parameters, ref$parameters, tolerance = 1e-10)
-  expect_equal(fit$aligned, ref$aligned, tolerance = 1e-10)
+  # the rounds of the restricted likelihood stop at moves of the error parameters below 1e-4
+  expect_equal(fit$parameters, ref$parameters, tolerance = 1e-4)
+  expect_equal(fit$aligned, ref$aligned, tolerance = 1e-4)
   # an absolute error model: the arithmetic mean; a sample with censored readings is censored at
   # the mean of the sample readings with the limits in place of the censored ones
   lanes$value <- log2(lanes$value)
@@ -786,7 +814,7 @@ test_that("a fit reports the modes at the fit parameters, a positive definite He
   ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
   at <- suppressMessages(em(fit$objfn, fit$randomEffects, fit$fit$argument, control = ctl, verbose = FALSE))
   expect_equal(fit$fit$etaModes, at$etaModes, tolerance = 1e-4)
-  H <- as.matrix(fit$fit$hessian)
+  H <- .fullHessian(fit$fit)
   expect_gt(min(eigen((H + t(H)) / 2, symmetric = TRUE, only.values = TRUE)$values), 0)
   expect_identical(fit$seSource, "Hessian")
   expect_true(all(is.finite(fit$aligned$se)))
@@ -795,7 +823,7 @@ test_that("a fit reports the modes at the fit parameters, a positive definite He
   gn <- dMod2:::.alignmentGaussNewton(fit$model, fit$objfn, fit$randomEffects, fit$fit)
   on <- names(fit$fit$argument)
   X <- m$design$yi$X[!duplicated(m$data$time), , drop = FALSE]
-  se <- sqrt(dMod2:::.alignmentVariance(as.matrix(gn), on)(X))
+  se <- sqrt(dMod2:::.alignmentVariance(.fullHessian(gn), on)(X))
   expect_true(all(is.finite(se)))
   expect_lt(max(abs(log(se / fit$aligned$se))), log(2))
 })
@@ -816,10 +844,10 @@ test_that("the Gauss-Newton fallback is the expected information, positive defin
   # the Schur complement of the first-order Hessian of the joint at the modes is indefinite
   design <- dMod2:::.emDesign(fit$objfn, fit$randomEffects)
   joint <- design$objfn + dMod2:::.normalPrior(design)
-  H <- as.matrix(joint(pars = c(f$argument, eta), fixed = f$fixed, hessian = "sparse")$hessian)[free, free]
+  H <- .fullHessian(joint(pars = c(f$argument, eta), fixed = f$fixed, hessian = "sparse"))[free, free]
   first <- H[on, on] - H[on, e] %*% solve(H[e, e], H[e, on])
   expect_lt(min(eigen(first, symmetric = TRUE, only.values = TRUE)$values), 0)
-  gn <- as.matrix(dMod2:::.alignmentGaussNewton(m, fit$objfn, fit$randomEffects, f))
+  gn <- .fullHessian(dMod2:::.alignmentGaussNewton(m, fit$objfn, fit$randomEffects, f))
   expect_gt(min(eigen(gn, symmetric = TRUE, only.values = TRUE)$values), 0)
   # the information of the readings, 2 / sigma^2 in the prediction and 4 / sigma^2 in sigma
   n <- nrow(d)

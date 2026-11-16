@@ -224,18 +224,21 @@
 #'   the number of the evaluation (column \code{Iteration}), objective value
 #'   and parameters. Default \code{NULL}, no file.
 #' @param sparse \code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
-#'   \code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
-#'   the sparse Gauss-Newton Hessian it returns (a \code{Matrix}) is factorized by sparse
-#'   Cholesky. Minimization without phases and bounds only; of the other
-#'   settings only
-#'   \code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
-#'   \code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
-#'   this path for a Gauss-Newton minimization without phases, bounds, exact
-#'   Hessian, trace or multiple shooting when \code{parinit} has at least
-#'   \code{parameters} entries and the sparse Hessian at \code{parinit} fills
-#'   at most \code{fill} of the matrix, both from
-#'   \code{getOption("dMod2.sparseAuto")}, a list that defaults to
-#'   \code{parameters = 500} and \code{fill = 0.05}.
+#'   \code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"}, and
+#'   the subproblem of every step is solved on sparse Cholesky factors of the
+#'   Hessian it returns (a \code{Matrix}), a low-rank part \code{lowrank} (see
+#'   [objlist()]) added by Woodbury, where the dense path takes the
+#'   eigendecomposition: the same steps to rounding, with every setting of
+#'   \code{trust()}; the Hessian comes from the objective,
+#'   \code{hessianMethod} \code{"gn"} or \code{"exact"}, and
+#'   \code{boundary = "reflective"}. \code{"auto"} takes the sparse path where
+#'   that holds, outside multiple shooting, when \code{parinit} has at least
+#'   \code{parameters} entries and a step on the sparse Hessian at
+#'   \code{parinit} costs fewer flops than the dense one, by the symbolic
+#'   factorization; \code{parameters} (default 100) comes from
+#'   \code{getOption("dMod2.sparseAuto")}, where a \code{fill} replaces the
+#'   cost by the rule that the sparse Hessian fills at most \code{fill} of the
+#'   matrix.
 #' @param ... Further named arguments passed to \code{objfun}.
 #'
 #' @return A list of class \code{trustfit} with components
@@ -277,9 +280,9 @@
 #'   \code{gradient}, \code{hessian}, \code{iterations}, \code{converged},
 #'   \code{atBound} and \code{stopReason}, plus the trace.
 #'
-#'   The sparse path, see \code{sparse}, returns only \code{argument},
-#'   \code{value}, \code{gradient}, \code{hessian} (a sparse \code{Matrix}),
-#'   \code{iterations} and \code{converged}.
+#'   On the sparse path, see \code{sparse}, \code{hessian} is a sparse
+#'   \code{Matrix}, and \code{lowrank} where the objective returns one: the
+#'   Hessian is then \code{hessian} plus that part.
 #'
 #'   \code{trustL1} returns a list without class with \code{argument},
 #'   \code{value}, \code{gradient}, \code{hessian}, \code{iterations},
@@ -381,22 +384,6 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
                   ...) {
   dots <- list(...)
   .checkSparse(sparse, "trust")
-  first <- NULL
-  if (identical(sparse, "auto")) {
-    plain <- is.null(phases) && is.null(parupper) && is.null(parlower) && minimize &&
-      identical(match.arg(hessianMethod), "gn") && !blather && is.null(traceFile) &&
-      !isTRUE(dots$deriv2) && !identical(dots$sweep, "reverse") && !length(.shootingTerms(objfun))
-    choice <- if (plain) .sparseChoice(objfun, parinit, dots) else list(sparse = FALSE)
-    sparse <- choice$sparse
-    first <- choice$first
-  }
-  if (isTRUE(sparse)) {
-    if (!is.null(phases) || !is.null(parupper) || !is.null(parlower) || !minimize)
-      stop("trust(sparse = TRUE) minimizes without phases and bounds.", call. = FALSE)
-    tol <- utils::modifyList(.trustDefaults()$tolControl, as.list(tolControl))
-    return(.trustFit(.trustSparse(objfun, parinit, rinit, rmax, as.integer(iterlim),
-                                  tol$ftol, tol$mtol, dots, printIter, first)))
-  }
   .trustRejectMoved(names(dots), "trust")
   if (!is.null(phases) && !missing(hessianMethod))
     stop("trust: with `phases`, every phase names the hessianMethod.",
@@ -417,6 +404,19 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   boundary <- match.arg(boundary)
   step$boundary <- boundary
   ph <- .trustPhases(phases, switches, hessianMethod, qnControl)
+
+  # the sparse model takes the Hessian of the objective, in every phase
+  fromObjective <- all(vapply(ph$phases, function(p) p$hessianMethod %in% c("gn", "exact"), TRUE))
+  first <- NULL
+  if (identical(sparse, "auto")) {
+    choice <- if (fromObjective && boundary == "reflective" && !length(.shootingTerms(objfun)))
+      .sparseChoice(objfun, parinit, dots) else list(sparse = FALSE)
+    sparse <- choice$sparse
+    first <- choice$first
+  }
+  if (isTRUE(sparse) && (!fromObjective || boundary != "reflective"))
+    stop("trust(sparse = TRUE) takes the Hessian of the objective, hessianMethod \"gn\" or \"exact\", ",
+         "with boundary = \"reflective\".", call. = FALSE)
 
   # The objective decides: a normL2 with a multipleShootingControl, alone or
   # in a sum, is optimized by multiple shooting, with the same controls.
@@ -460,13 +460,29 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
     d
   })
 
+  pnames <- names(parinit)
   fn <- function(x, want = 2L, phase = 0L) {
     want <- as.integer(want)
-    args <- list(x, deriv = want >= 1L, hessian = want >= 2L)
+    # the evaluation of the sparse choice at parinit is the first one of the kernel
+    if (!is.null(first) && want == 2L && identical(unname(x), unname(parinit))) {
+      out <- first
+      first <<- NULL
+      return(.kernelHessian(out, pnames))
+    }
+    args <- list(x, deriv = want >= 1L, hessian = if (want >= 2L) (if (sparse) "sparse" else TRUE) else FALSE)
     if (want >= 3L) args$deriv2 <- TRUE
     d <- phaseDots[[phase + 1L]]
     if (!is.null(phases) && want == 2L) d$sweep <- NULL
-    .tryObjective(do.call(objfun, c(args, d)))
+    out <- .tryObjective(do.call(objfun, c(args, d)))
+    if (!sparse || want < 2L || inherits(out, "try-error")) return(out)
+    if (!is.null(out$hessian) && !.isSparse(out$hessian)) {
+      dense <- .denseTerms(objfun, x, d)
+      return(structure(paste0("trust(sparse = TRUE): the objective returns a dense Hessian",
+                              if (length(dense) && inherits(objfun, "objfn"))
+                                paste0(", from term ", paste(dense, collapse = ", "), " of the sum"),
+                              "; use sparse = FALSE."), class = "try-error"))
+    }
+    .kernelHessian(out, pnames)
   }
   qfield <- function(f) lapply(ph$phases, function(p) p$qnControl[[f]])
   fit <- trust_impl(fn, parinit, rinit, rmax, NULL, as.integer(iterlim),
@@ -483,7 +499,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
              vapply(qfield("qnCautious"), as.numeric, 1),
              vapply(qfield("qnRejected"), isTRUE, TRUE),
              ph$switches,
-             step$nonmonotone, minimize, blather,
+             step$nonmonotone, isTRUE(sparse), minimize, blather,
              parupper, parlower, printIter, traceFile)
   if (!is.null(fit$phaseIterations)) {
     n <- length(fit$phaseIterations)
@@ -491,6 +507,22 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   }
   if (!is.null(phases)) fit$phaseSweep <- stats::setNames(sweeps, ph$labels)
   .trustFit(fit)
+}
+
+# An objlist with its sparse Hessian over `pnames` as the kernel reads it, `kernel`: the upper
+# triangle in compressed columns and the low-rank part, list(p, i, x, U, d). A dense or missing
+# Hessian leaves it without, which the kernel takes as no Hessian.
+.kernelHessian <- function(out, pnames) {
+  if (!is.list(out) || !.isSparse(out$hessian)) return(out)
+  out$hessian <- .sparseOver(out$hessian, pnames)
+  T <- methods::as(out$hessian, "TsparseMatrix")
+  up <- T@i <= T@j
+  U <- Matrix::sparseMatrix(i = T@i[up] + 1L, j = T@j[up] + 1L, x = T@x[up], dims = rep(length(pnames), 2L))
+  lr <- .lowrankOver(out$lowrank, pnames)
+  out$lowrank <- lr
+  out$kernel <- list(p = U@p, i = U@i, x = U@x, U = if (is.null(lr)) matrix(0, length(pnames), 0L) else lr$U,
+                     d = if (is.null(lr)) numeric(0) else as.numeric(lr$d))
+  out
 }
 
 

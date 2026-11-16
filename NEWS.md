@@ -1,3 +1,33 @@
+# dMod2 0.15.9
+
+* `symmetryDetection()` and `symmetryReduction()` need symident 0.14.0. An added, multiplied or
+  replaced dose on a state under a free exponent or a Hill term moves the power of the state with
+  it, at the start and later, also under `equilibrate`; an initial value such as `B*V + D` of
+  such a state is accepted. An event value with `exp()`, `log()`, a non-integer power, `sin()`,
+  `cos()` or `tan()` of a state reads the state at the event, where symident 0.13.5 read the
+  initial value.
+* `discreteSymmetries()`, or `symmetryDetection(discrete = TRUE)`, searches the discrete
+  symmetries of a detection result, other points of the domain with the same output, and
+  reconstructs the maps between them with the fundamental domain; `symmetryReduction()` holds
+  them in `$discrete`. `symmetryDetection(knownInputs = )` declares known functions of time.
+* `trust()` runs one optimizer on dense and sparse Hessians: the sparse path solves the
+  subproblem of the same steps on sparse Cholesky factors and takes every setting of `trust()` for
+  a Hessian of the objective (`"gn"`, `"exact"`), bounds and phases included. `sparse = "auto"`
+  takes it above 100 parameters where a step costs fewer flops than a dense one, by the symbolic
+  factorization; `options(dMod2.sparseAuto = list(fill = ))` keeps the rule by fill.
+* `hessian = "sparse"` may return part of a Hessian as a low-rank part `lowrank` (see `objlist()`),
+  which `trust()`, `profile()`, `vcov()`, the restricted likelihood of `align()` and the results
+  of `em()` add by Woodbury.
+* `align()` keeps the Hessian of large alignments sparse. The normalization of the values per
+  block enters it as a sparse part plus a low-rank one, and an experiment is split into conditions
+  of at most 16 biological values, so the derivatives per condition stay small.
+* `em()` and `align()` with random effects keep the Hessian sparse where a group couples many
+  parameters, as a random scale per gel does: the Schur complement over the random effects of
+  such a group and the curvature of its volume term enter as low-rank parts. FOCEI runs one outer
+  optimizer on dense and sparse Hessians, which reach the same fit.
+* `align()` with random effects gives standard errors `NA` instead of an error where the
+  Gauss-Newton information of the random effects is singular.
+
 # dMod2 0.15.8
 
 * `laplace()` is removed. A Laplace prior has no mass at 0, so the deviations it sets to 0 at the

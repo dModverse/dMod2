@@ -69,6 +69,10 @@ focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, con
     .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
 }
 
+focei_run_sparse <- function(trial, complete, init, N, K, outer_ctrl, inner_rinit) {
+    .Call(`_dMod2_focei_run_sparse`, trial, complete, init, N, K, outer_ctrl, inner_rinit)
+}
+
 release_heap <- function() {
     invisible(.Call(`_dMod2_release_heap`))
 }
@@ -133,8 +137,16 @@ trustL1_impl <- function(objfun, parinit, mu, lambda, one_sided, rinit, rmax, pa
     .Call(`_dMod2_trustL1_impl`, objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile, gate, fuse)
 }
 
-trust_impl <- function(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches = 0L, nonmonotone = 0.0, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
-    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches, nonmonotone, minimize, blather, parupper, parlower, printIter, traceFile)
+trust_impl <- function(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches = 0L, nonmonotone = 0.0, sparse = FALSE, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
+    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches, nonmonotone, sparse, minimize, blather, parupper, parlower, printIter, traceFile)
+}
+
+sparse_factor_cost <- function(p, i, n) {
+    .Call(`_dMod2_sparse_factor_cost`, p, i, n)
+}
+
+trust_model_step <- function(kernel, H, g, r, sparse) {
+    .Call(`_dMod2_trust_model_step`, kernel, H, g, r, sparse)
 }
 
 trust_step_impl <- function(x, g, H, r, lower, upper, parscale, thetamax) {

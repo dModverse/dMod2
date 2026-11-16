@@ -256,7 +256,7 @@ lbind <- function(mylist) {
 #' transduction. Mol Syst Biol 16:e8955, \doi{10.15252/msb.20198955}. Values
 #' as fitted for the Huh7.5 core model of the publication.
 #' @seealso The example project
-#'   [IFN-α sensitization (Kok 2020)](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html)
+#'   [IFN-alpha sensitization (Kok 2020)](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html)
 #'   builds the model.
 #' @examples
 #' data(kok)

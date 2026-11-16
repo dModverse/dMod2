@@ -233,13 +233,22 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
   # W = "identity" steps along whichPar alone; the reoptimization sets the others.
   identity <- aControl$W == "identity"
 
-  # Solutions of M x = rhs; a singular matrix takes the pseudoinverse without the
-  # singular values below reg. The sparse LU decides singularity by the pivots.
-  solveM <- function(M, rhs) {
+  # Solutions of M x = rhs, a low-rank part `lr` of M by Woodbury where the sparse M is regular; a
+  # singular M, the low-rank part added, takes the pseudoinverse without the singular values below
+  # reg, decided for a sparse M by the pivots of its LU.
+  solveM <- function(M, rhs, lr = NULL) {
     if (sparse) {
       lu <- Matrix::lu(M, errSing = FALSE)
-      if (!.luSingular(lu))
+      if (!.luSingular(lu) && is.null(lr))
         return(list(sol = as.matrix(Matrix::solve(lu, rhs)), singular = FALSE))
+      if (!.luSingular(lu)) {
+        x <- as.matrix(Matrix::solve(lu, rhs))
+        W <- as.matrix(Matrix::solve(lu, lr$U))
+        K <- diag(1 / lr$d, length(lr$d)) + crossprod(lr$U, W)
+        if (rcond(K) > sqrt(.Machine$double.eps))
+          return(list(sol = x - W %*% solve(K, crossprod(lr$U, x)), singular = FALSE))
+      }
+      if (!is.null(lr)) M <- .lowrankDense(M, lr)
       if (nrow(M) > 5001L) {
         cols <- setdiff(.luSingularColumns(M), n + 1L)
         stop("the sparse path equation is singular; fix the non-identifiable parameters",
@@ -268,8 +277,11 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
       dy <- dy0 <- gdot
     } else {
       M <- rbind(cbind(out$hessian, gdot), c(gdot, 0))
+      lr <- .lowrankOver(out$lowrank, names(y))
+      if (!is.null(lr)) lr$U <- rbind(lr$U, 0)
       if (sparse) M <- methods::as(methods::as(M, "CsparseMatrix"), "generalMatrix")
-      st <- solveM(M, cbind(c(-gamma * out$gradient, 1), c(rep(0, n), 1)))
+      else if (!is.null(lr)) M <- M + lr$U %*% (lr$d * t(lr$U))
+      st <- solveM(M, cbind(c(-gamma * out$gradient, 1), c(rep(0, n), 1)), if (sparse) lr)
       dy <- st$sol[seq_len(n), 1]
       dy0 <- st$sol[seq_len(n), 2]
       singular <- st$singular
@@ -660,7 +672,7 @@ vcov.objlist <- function(object, fixed = NULL, which = NULL, ...) {
   if (length(unknown))
     stop("`which` names parameters the Hessian does not have: ",
          paste(unknown, collapse = ", "), ".", call. = FALSE)
-  if (.isSparse(H)) return(.vcovSparse(H, fixed, which))
+  if (.isSparse(H)) return(.vcovSparse(H, fixed, which, object[["lowrank"]]))
 
   V <- 0*H
   isFixed <- colnames(H) %in% fixed
@@ -673,31 +685,30 @@ vcov.objlist <- function(object, fixed = NULL, which = NULL, ...) {
 
 }
 
-# The covariance block of `which` from a sparse Hessian: one sparse Cholesky
-# factor, solved for the free columns of `which`.
-.vcovSparse <- function(H, fixed, which) {
+# The covariance block of `which` from a sparse Hessian plus its low-rank part: one sparse
+# Cholesky factor, solved for the free columns of `which`, the low-rank part by Woodbury.
+.vcovSparse <- function(H, fixed, which, lowrank = NULL) {
   V <- matrix(0, length(which), length(which), dimnames = list(which, which))
   free <- setdiff(colnames(H), fixed)
   cols <- intersect(which, free)
   if (!length(cols)) return(V)
-  Hfree <- Matrix::forceSymmetric(0.5 * H[free, free, drop = FALSE])
-  ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Hfree, perm = TRUE, LDL = FALSE)),
-                 error = function(e) NULL)
-  if (!is.null(ch) && .cholSingular(ch)) ch <- NULL
-  if (is.null(ch)) {
+  Hfree <- 0.5 * H[free, free, drop = FALSE]
+  lr <- .lowrankOver(lowrank, free)
+  if (!is.null(lr)) lr$d <- lr$d / 2
+  f <- .lowrankCholesky(Hfree, lr)
+  if (is.null(f)) {
     if (length(free) > 5000L)
       stop("The sparse Hessian is singular on the ", length(free), " free parameters; ",
            "fix the non-identifiable ones or ask for the block of an identifiable set.",
            call. = FALSE)
-    Vfree <- MASS::ginv(as.matrix(Hfree))
+    Vfree <- MASS::ginv(as.matrix(.lowrankDense(Hfree, lr)))
     dimnames(Vfree) <- list(free, free)
     V[cols, cols] <- Vfree[cols, cols]
     return(V)
   }
   E <- Matrix::sparseMatrix(i = match(cols, free), j = seq_along(cols), x = 1,
                             dims = c(length(free), length(cols)))
-  X <- as.matrix(Matrix::solve(ch, E))
-  V[cols, cols] <- X[match(cols, free), , drop = FALSE]
+  V[cols, cols] <- .lowrankQuadratic(f, .lowrankZ(f, E), diagonal = FALSE)
   V
 }
 
@@ -730,8 +741,9 @@ vcov.trustfit <- function(object, parupper = NULL, parlower = NULL, which = NULL
       which(value <= parlower + reltol * pmax(1, abs(parlower)))])
   }
 
-  vcov.objlist(objlist(object[["value"]], object[["gradient"]], object[["hessian"]]),
-               fixed = fixed, which = which)
+  ol <- objlist(object[["value"]], object[["gradient"]], object[["hessian"]])
+  ol$lowrank <- object[["lowrank"]]
+  vcov.objlist(ol, fixed = fixed, which = which)
 
 }
 
@@ -911,7 +923,7 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
     if (!is.list(fit)) fit <- list(error = fit)
 
     fit[["parinit"]] <- start
-    fit$hessian <- NULL
+    fit$hessian <- fit$lowrank <- NULL
     fit$elapsed <- proc.time()[["elapsed"]] - t0
 
     if (output) {

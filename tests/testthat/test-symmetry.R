@@ -228,3 +228,30 @@ test_that("the reduction refuses open directions unless allowOpen", {
   expect_identical(red$removed, "X\u2081")
   expect_identical(red$remaining, "X\u2082")
 })
+
+test_that("discrete symmetries with a known input, kept by the reduction, and of a reduced model", {
+  skip_if(inherits(try(reticulate::import("symident.sym.msolve")$`_msolve_binary`(), silent = TRUE), "try-error"),
+          "msolve not available")
+  f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
+  r <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = list(points = 2))
+  expect_true(r$identifiable)
+  expect_length(r$discreteSymmetries, 1L)
+  s <- r$discreteSymmetries[[1]]
+  expect_s3_class(s$map, "eqnvec")
+  expect_identical(unclass(s$map[c("k01", "k12")]), c(k01 = "k12", k12 = "k01"))
+  expect_identical(s$level, "exact")
+  expect_setequal(s$changes, c("x1", "k01", "k12"))
+  expect_identical(r$info$discrete$fundamentalDomain, "k01 < k12")
+  expect_identical(nrow(r$info$discrete$counts), 2L)
+  expect_true(r$info$discrete$countFinal)
+  red <- symmetryReduction(r)
+  expect_length(red$discrete$symmetries, 1L)
+  expect_identical(red$discrete$fundamentalDomain, "k01 < k12")
+  expect_output(print(r), "fundamental domain: k01 < k12")
+  # a model with a scaling is reduced first, the maps in the reduced coordinates
+  g <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
+  r2 <- discreteSymmetries(symmetryDetection(g, eqnvec(y = "p"), reconstruct = TRUE), points = 2)
+  expect_false(r2$identifiable)
+  expect_s3_class(r2$info$discrete$reduced$trafo, "eqnvec")
+  expect_setequal(r2$discreteSymmetries[[1]]$changes, c("m", "dm", "dp"))
+})

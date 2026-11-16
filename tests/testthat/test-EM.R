@@ -410,7 +410,7 @@ test_that("forward over reverse gives the volume gradient and the mode shift of 
   expect_identical(fit$derivMode, "forward-reverse")
   design <- .emDesign(m$obj, randomEffects(m$p))
   H <- .reportedReverse(design, design$objfn + .normalPrior(design), c(fit$argument, .etaVector(fit)), NULL,
-                        names(fit$argument), lapply(fit$etaCov, `/`, 2))
+                        names(fit$argument), lapply(fit$etaCov, `/`, 2))$hessian
   pars <- fit$argument
   exact <- numDeriv::jacobian(function(v) numDeriv::grad(function(u) .linMarginal(setNames(u, names(pars)), m), v),
                               unname(pars))
@@ -680,7 +680,7 @@ test_that("sparse FOCEI equals the dense fit, for one grouping and for crossed g
   expect_true(sp$converged)
   expect_equal(sp$value, dense$value, tolerance = 1e-8)
   expect_equal(sp$argument, dense$argument, tolerance = 1e-4)
-  expect_equal(as.matrix(sp$hessian)[names(dense$argument), names(dense$argument)], dense$hessian,
+  expect_equal(.fullHessian(sp)[names(dense$argument), names(dense$argument)], dense$hessian,
                tolerance = 1e-4)
   expect_equal(sp$etaModes, dense$etaModes, tolerance = 1e-4)
   expect_equal(summary(sp)$population, summary(dense)$population, tolerance = 1e-4)
@@ -699,7 +699,7 @@ test_that("sparse FOCEI equals the dense fit, for one grouping and for crossed g
   expect_identical(dense$derivMode, "forward-reverse")
   expect_equal(sp$value, dense$value, tolerance = 1e-8)
   expect_equal(sp$argument, dense$argument, tolerance = 1e-4)
-  expect_equal(as.matrix(sp$hessian)[names(dense$argument), names(dense$argument)], dense$hessian,
+  expect_equal(.fullHessian(sp)[names(dense$argument), names(dense$argument)], dense$hessian,
                tolerance = 1e-4)
   ff <- em(m$obj, re, c(a = 0.5), verbose = FALSE, control = c(tight, list(derivMode = "forward-forward")))
   expect_equal(dense$value, ff$value, tolerance = 1e-8)

@@ -41,7 +41,7 @@ head(kok)
 }
 \seealso{
 The example project
-\href{https://dmodverse.github.io/dMod2/articles/kokMSB2020.html}{IFN-α sensitization (Kok 2020)}
+\href{https://dmodverse.github.io/dMod2/articles/kokMSB2020.html}{IFN-alpha sensitization (Kok 2020)}
 builds the model.
 }
 \keyword{data}

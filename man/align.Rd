@@ -82,8 +82,10 @@ normalization of the values per block of experiments (see
 hyperparameters of normal random terms by default by restricted
 likelihood. Every experiment, a combination of
 the columns of the scaling formulas, or with random terms every group, is
-a separate condition, so the Hessian is sparse over them; \code{\link[=trust]{trust()}} and
-\code{\link[=em]{em()}} take the sparse path as \code{sparse = "auto"} decides.
+split into conditions of at most 16 values of the first biological symbol,
+so the Hessian is sparse over them; \code{\link[=trust]{trust()}} and \code{\link[=em]{em()}} take the sparse
+path as \code{sparse = "auto"} decides. The normalization enters the sparse
+Hessian as a low-rank part (see \code{\link[=objlist]{objlist()}}).
 }
 \details{
 The objective of an alignment is exact to rounding, so the fits stop

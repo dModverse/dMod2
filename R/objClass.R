@@ -119,6 +119,7 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   out$gradient <- gradient
   if (.isSparse(out$hessian)) {
     out$hessian <- .sparseOver(out$hessian, pnames)
+    out$lowrank <- .lowrankOver(out$lowrank, pnames)
     return(out)
   }
   # A skipped Hessian stays NULL; only realign one that was actually built.
@@ -1359,6 +1360,8 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
         if (!is.null(H2)) addMatrix(H, H2) else H
       })
   }
+  lr <- .lowrankBind(e1$lowrank, e2$lowrank)
+  if (!is.null(lr)) out12$lowrank <- lr
 
   # Numeric attributes are summed, an absent one counting as zero. The chi2 contributions are kept
   # apart from that: they are pooled by the `attrName` they belong to, not by the attribute they
@@ -1629,6 +1632,9 @@ res <- function(data, out, err = NULL) {
 #' @param gradient Named numeric vector, or `NULL`.
 #' @param hessian Matrix with row and column names those of `gradient`, or
 #'   `NULL`.
+#' @details Asked for `hessian = "sparse"`, an objective may return part of
+#'   its Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
+#'   rows and a vector `d`: the Hessian is then `hessian + U diag(d) U'`.
 #' @return An object of class `objlist`.
 #' @seealso [as.objlist()]
 #' @export

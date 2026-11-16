@@ -41,6 +41,105 @@
 
 .isSparse <- function(H) inherits(H, "sparseMatrix")
 
+# The low-rank part `lr` of a Hessian, list(U, d), with the rows of U over `pnames`: missing ones
+# are zero, others are dropped. NULL for none.
+.lowrankOver <- function(lr, pnames) {
+  if (is.null(lr) || !length(lr$d)) return(NULL)
+  U <- matrix(0, length(pnames), length(lr$d), dimnames = list(pnames, NULL))
+  hit <- intersect(rownames(lr$U), pnames)
+  U[hit, ] <- lr$U[hit, , drop = FALSE]
+  list(U = U, d = lr$d)
+}
+
+# The low-rank parts of two Hessians as one, over the union of their rows.
+.lowrankBind <- function(l1, l2) {
+  if (is.null(l1) || !length(l1$d)) return(.lowrankOver(l2, rownames(l2$U)))
+  if (is.null(l2) || !length(l2$d)) return(.lowrankOver(l1, rownames(l1$U)))
+  rn <- .union(rownames(l1$U), rownames(l2$U))
+  a <- .lowrankOver(l1, rn)
+  b <- .lowrankOver(l2, rn)
+  list(U = cbind(a$U, b$U), d = c(a$d, b$d))
+}
+
+# Two low-rank parts over the same rows as one.
+.lowrankJoin <- function(l1, l2) {
+  if (is.null(l1) || !length(l1$d)) return(if (length(l2$d)) l2)
+  if (is.null(l2) || !length(l2$d)) return(l1)
+  list(U = cbind(l1$U, l2$U), d = c(l1$d, l2$d))
+}
+
+# H x plus the low-rank part U diag(d) U' x, U over the rows of H.
+.lowrankApply <- function(H, lr, x) {
+  y <- as.numeric(H %*% x)
+  if (is.null(lr) || !length(lr$d)) return(y)
+  y + drop(lr$U %*% (lr$d * crossprod(lr$U, x)))
+}
+
+# A sparse H plus its low-rank part U diag(d) U' as one sparse matrix, dense where U is.
+.lowrankDense <- function(H, lr) {
+  if (is.null(lr) || !length(lr$d)) return(H)
+  H + Matrix::Matrix(lr$U %*% (lr$d * t(lr$U)), sparse = TRUE)
+}
+
+# The Hessian of an objlist over `pnames` as `hessian`, sparse, and `lowrank` over `pnames`, where the
+# low-rank part has no rows outside `keep`; else that part is added to `hessian`. An operation
+# on the rows outside `keep`, such as a Schur complement over them, then leaves `lowrank` as it is.
+.hessianParts <- function(out, pnames, keep = pnames) {
+  H <- .sparseOver(out$hessian, pnames)
+  lr <- .lowrankOver(out$lowrank, pnames)
+  if (is.null(lr)) return(list(hessian = H, lowrank = NULL))
+  out <- setdiff(pnames, keep)
+  if (length(out) && any(lr$U[out, ] != 0)) return(list(hessian = .lowrankDense(H, lr), lowrank = NULL))
+  list(hessian = H, lowrank = .lowrankOver(lr, keep))
+}
+
+# A factor P'LDL'P of the sparse symmetric H (D = I by Cholesky, LDL' where H is indefinite) for
+# B = H + U diag(d) U' by Woodbury, with Y = L^-1 P U, Kinv and log det B; NULL where B is not
+# positive definite: it has neg(H) + pos(K) - pos(d) negative eigenvalues, K = diag(1/d) + Y'D^-1 Y.
+.lowrankCholesky <- function(H, lr = NULL) {
+  Hs <- Matrix::forceSymmetric(H)
+  ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Hs, perm = TRUE, LDL = FALSE)), error = function(e) NULL)
+  Dinv <- NULL
+  if (!is.null(ch) && !.cholSingular(ch)) logdet <- 2 * sum(log(Matrix::diag(methods::as(ch, "Matrix"))))
+  else {
+    if (is.null(lr) || !any(lr$d > 0)) return(NULL)
+    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Hs, perm = TRUE, LDL = TRUE, super = FALSE)),
+                   error = function(e) NULL)
+    if (is.null(ch)) return(NULL)
+    D <- Matrix::diag(Matrix::expand1(ch, "D"))
+    if (!all(is.finite(D)) || !all(abs(D) > 1e-14 * max(abs(D)))) return(NULL)
+    Dinv <- 1 / D
+    logdet <- sum(log(abs(D)))
+  }
+  negH <- sum(Dinv < 0)
+  f <- list(ch = ch, Dinv = Dinv, logdet = logdet)
+  if (is.null(lr) || !length(lr$d)) return(if (!negH) f)
+  Y <- as.matrix(.lowrankZ(f, lr$U))
+  K <- diag(1 / lr$d, length(lr$d)) + crossprod(Y, .lowrankD(f, Y))
+  ev <- eigen((K + t(K)) / 2, symmetric = TRUE, only.values = TRUE)$values
+  if (!all(is.finite(ev)) || min(abs(ev)) <= 1e-14 * max(abs(ev)) || negH + sum(ev > 0) != sum(lr$d > 0))
+    return(NULL)
+  c(f, list(Y = Y, Kinv = solve(K), logdet = logdet + sum(log(abs(lr$d))) + sum(log(abs(ev)))))
+}
+
+# z = L^-1 P X of a factor from .lowrankCholesky(), sparse for a sparse X; D^-1 z; and the
+# quadratic forms of B^-1 between the columns of X from z: z' D^-1 z - W' Kinv W, W = Y' D^-1 z,
+# the diagonal or the matrix.
+.lowrankZ <- function(f, X) Matrix::solve(f$ch, Matrix::solve(f$ch, X, system = "P"), system = "L")
+.lowrankD <- function(f, Z) if (is.null(f$Dinv)) Z else f$Dinv * Z
+.lowrankQuadratic <- function(f, Z, diagonal = TRUE) {
+  DZ <- .lowrankD(f, Z)
+  W <- if (!is.null(f$Y)) as.matrix(crossprod(f$Y, DZ))
+  if (diagonal) {
+    q <- Matrix::colSums(Z * DZ)
+    if (!is.null(W)) q <- q - colSums(W * (f$Kinv %*% W))
+    return(as.numeric(q))
+  }
+  Q <- as.matrix(Matrix::crossprod(Z, DZ))
+  if (!is.null(W)) Q <- Q - crossprod(W, f$Kinv %*% W)
+  (Q + t(Q)) / 2
+}
+
 # A parameter-local term restricted to the inner parameters `inner` and the outer
 # columns of the chain `dP` (and `dP2`) they depend on; without `dP` the chain is the
 # identity on them. `outer` names the columns of the unrestricted result.
@@ -102,87 +201,20 @@
   if (m == 0 || !is.finite(m)) m else m * sqrt(sum((x / m)^2))
 }
 
-# Trust-region step: minimizes g'p + p'Bp/2 subject to |p| <= radius with
-# sparse Cholesky factors of B + lambda I (More and Sorensen 1983), B = H plus
-# the low-rank part U diag(d) U' of `lowrank`, solved by Woodbury.
-.sparseTrustStep <- function(H, g, radius, lambda0 = 0, lowrank = NULL) {
-  n <- length(g)
-  I <- Matrix::Diagonal(n)
-  U <- lowrank$U
-  d <- lowrank$d
-  solveB <- function(f, b) {
-    x <- as.numeric(Matrix::solve(f$ch, b))
-    if (is.null(f$W)) x else x - drop(f$W %*% solve(f$K, crossprod(f$W, b)))
-  }
-  # NULL where B + lambda I is not positive definite: with H + lambda I positive definite and the
-  # factor not numerically singular, B + lambda I has as many negative eigenvalues as
-  # diag(1/d) + U'(H + lambda I)^-1 U has positive ones beyond d; a solve that fails, a step p or a
-  # curvature q = u' (B + lambda I)^-1 u along u = p / |p| that is not finite, or a negative
-  # curvature, counts as not positive definite
-  fac <- function(lambda) {
-    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Matrix::forceSymmetric(H + lambda * I),
-                                    perm = TRUE, LDL = FALSE)), error = function(e) NULL)
-    if (is.null(ch) || .cholSingular(ch)) return(NULL)
-    f <- list(ch = ch)
-    if (length(d)) {
-      W <- as.matrix(Matrix::solve(ch, U))
-      K <- diag(1 / d, length(d)) + crossprod(U, W)
-      if (!all(is.finite(K))) return(NULL)
-      ev <- eigen(K, symmetric = TRUE, only.values = TRUE)$values
-      if (any(ev == 0) || sum(ev > 0) != sum(d > 0)) return(NULL)
-      f <- c(f, list(W = W, K = K))
-    }
-    p <- tryCatch(-solveB(f, g), error = function(e) NULL)
-    if (is.null(p) || !all(is.finite(p))) return(NULL)
-    np <- .norm2(p)
-    q <- if (np > 0) tryCatch(sum((p / np) * solveB(f, p / np)), error = function(e) NA) else 0
-    if (!is.finite(q) || q < 0) return(NULL)
-    c(f, list(p = p, np = np, q = q))
-  }
-  # the limit of the step for lambda to infinity
-  steepest <- function() {
-    ng <- .norm2(g)
-    list(p = if (ng > 0) -radius * (g / ng) else 0 * g, lambda = Inf, boundary = TRUE)
-  }
-  scale <- max(1, max(abs(Matrix::diag(H))))
-  lambda <- lambda0
-  f <- fac(lambda)
-  while (!length(f)) {
-    lambda <- if (lambda <= 0) 1e-10 * scale else 4 * lambda
-    if (!is.finite(lambda)) return(steepest())
-    f <- fac(lambda)
-  }
-  p <- f$p
-  np <- f$np
-  if ((lambda == 0 && np <= radius) || np == 0) return(list(p = p, lambda = lambda, boundary = FALSE))
-  for (it in 1:50) {
-    if (abs(np - radius) <= 1e-3 * radius) break
-    # Newton on 1/|p(lambda)| = 1/radius, with |p|^2 / p'(B + lambda I)^-1 p = 1 / q
-    lnew <- lambda + (np / radius - 1) / f$q
-    if (lnew <= 0) lnew <- lambda / 10
-    f2 <- fac(lnew)
-    while (!length(f2) && is.finite(lnew)) { lnew <- 2 * lnew + 1e-10 * scale; f2 <- fac(lnew) }
-    if (!length(f2)) return(steepest())
-    lambda <- lnew; f <- f2
-    p <- f$p; np <- f$np
-    if (np < radius && lambda < 1e-12 * scale) break
-  }
-  list(p = p, lambda = lambda, boundary = TRUE)
-}
-
-# The diagonal of the inverse of half a sparse Hessian over `which`, by one Cholesky factor
-# solved in blocks of columns; a singular one through vcov().
-.sparseVarianceDiagonal <- function(H, which, block = 256L) {
+# The diagonal of the inverse of half a sparse Hessian plus its low-rank part over `which`, by one
+# Cholesky factor solved in blocks of columns; a singular one through vcov().
+.sparseVarianceDiagonal <- function(H, which, block = 256L, lowrank = NULL) {
   which <- intersect(which, colnames(H))
-  Hw <- Matrix::forceSymmetric(0.5 * H[which, which, drop = FALSE])
-  ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Hw, perm = TRUE, LDL = FALSE)), error = function(e) NULL)
-  if (is.null(ch) || .cholSingular(ch)) return(diag(.vcovSparse(H, NULL, which)))
+  lr <- .lowrankOver(lowrank, which)
+  if (!is.null(lr)) lr$d <- lr$d / 2
+  f <- .lowrankCholesky(0.5 * H[which, which, drop = FALSE], lr)
+  if (is.null(f)) return(diag(.vcovSparse(H, NULL, which, lowrank)))
   n <- length(which)
   out <- numeric(n)
   for (start in seq(1L, n, by = block)) {
     j <- start:min(n, start + block - 1L)
     E <- Matrix::sparseMatrix(i = j, j = seq_along(j), x = 1, dims = c(n, length(j)))
-    out[j] <- as.matrix(Matrix::solve(ch, E))[cbind(j, seq_along(j))]
+    out[j] <- .lowrankQuadratic(f, .lowrankZ(f, E))
   }
   setNames(out, which)
 }
@@ -194,12 +226,26 @@
   sparse
 }
 
-# The thresholds of trust(sparse = "auto"), from getOption("dMod2.sparseAuto").
+# The settings of sparse = "auto", from getOption("dMod2.sparseAuto"): below `parameters` free
+# parameters the dense path, above it the cheaper one by .sparseCost(); a `fill` given there
+# replaces the cost by the rule fill of the sparse Hessian <= `fill`.
 .sparseThresholds <- function()
-  utils::modifyList(list(parameters = 500, fill = 0.05), as.list(getOption("dMod2.sparseAuto")))
+  utils::modifyList(list(parameters = 100, fill = NULL), as.list(getOption("dMod2.sparseAuto")))
+
+# The flops of a trust-region step on a sparse Hessian H plus a low-rank part of m columns against
+# the dense one: about eight factorizations of H + lambda I, each with m + 2 solves, and the
+# Woodbury blocks, against the eigendecomposition of the dense model, 4 P^3.
+.sparseCost <- function(H, m) {
+  P <- nrow(H)
+  T <- methods::as(H, "TsparseMatrix")
+  up <- T@i <= T@j
+  U <- Matrix::sparseMatrix(i = T@i[up] + 1L, j = T@j[up] + 1L, x = 1, dims = c(P, P))
+  f <- sparse_factor_cost(U@p, U@i, P)
+  c(sparse = 8 * (f[["flops"]] + 4 * f[["lnz"]] * (m + 2) + 2 * m^2 * P), dense = 4 * P^3)
+}
 
 # Whether the objective takes the sparse path: at least `parameters` free parameters and a
-# sparse Hessian at `parinit` that fills at most `fill`; `first` is that evaluation.
+# sparse Hessian at `parinit` whose steps cost less than dense ones; `first` is that evaluation.
 .sparseChoice <- function(objfun, parinit, dots) {
   th <- .sparseThresholds()
   P <- length(parinit)
@@ -207,8 +253,10 @@
   out <- tryCatch(do.call(objfun, c(list(parinit, deriv = TRUE, hessian = "sparse"), dots)),
                   error = function(e) NULL)
   if (is.null(out) || !is.finite(out$value) || !.isSparse(out$hessian)) return(list(sparse = FALSE))
-  fill <- Matrix::nnzero(.sparseOver(out$hessian, names(parinit))) / P^2
-  if (fill > th$fill) return(list(sparse = FALSE))
+  H <- .sparseOver(out$hessian, names(parinit))
+  cheaper <- if (!is.null(th$fill)) Matrix::nnzero(H) / P^2 <= th$fill
+             else { cost <- .sparseCost(H, length(out$lowrank$d)); cost[["sparse"]] < cost[["dense"]] }
+  if (!cheaper) return(list(sparse = FALSE))
   list(sparse = TRUE, first = out)
 }
 
@@ -220,54 +268,4 @@
     !is.null(out) && !is.null(out$hessian) && !.isSparse(out$hessian)
   }, TRUE)
   which(dense)
-}
-
-# Trust-region minimization with sparse Hessians. objfun(pars, deriv, hessian = "sparse", ...)
-# returns value, gradient and a sparse Hessian; `first` is the objfun evaluation at `parinit`.
-.trustSparse <- function(objfun, parinit, rinit, rmax, iterlim, fterm, mterm, dots, printIter = FALSE,
-                         first = NULL) {
-  pnames <- names(parinit)
-  failure <- "the value is not finite"
-  prepare <- function(out) {
-    if (is.null(out) || !is.finite(out$value)) return(NULL)
-    if (!.isSparse(out$hessian)) {
-      dense <- .denseTerms(objfun, setNames(x, pnames), dots)
-      stop("trust(sparse = TRUE): the objective returns a dense Hessian",
-           if (length(dense) && inherits(objfun, "objfn"))
-             paste0(", from term ", paste(dense, collapse = ", "), " of the sum"),
-           "; use sparse = FALSE.", call. = FALSE)
-    }
-    out$gradient <- out$gradient[pnames]
-    out$hessian <- .sparseOver(out$hessian, pnames)
-    out
-  }
-  call <- function(x) {
-    out <- tryCatch(do.call(objfun, c(list(setNames(x, pnames), deriv = TRUE, hessian = "sparse"), dots)),
-                    error = function(e) { failure <<- conditionMessage(e); NULL })
-    prepare(out)
-  }
-  x <- as.numeric(parinit)
-  f <- if (!is.null(first)) prepare(first) else call(x)
-  if (is.null(f)) stop("trust(sparse = TRUE): the objective fails at `parinit`: ", failure, call. = FALSE)
-  r <- rinit
-  converged <- FALSE
-  it <- 0L
-  while (it < iterlim) {
-    it <- it + 1L
-    g <- as.numeric(f$gradient)
-    st <- .sparseTrustStep(f$hessian, g, r)
-    pred <- -(sum(g * st$p) + 0.5 * sum(st$p * as.numeric(f$hessian %*% st$p)))
-    if (pred <= mterm) { converged <- TRUE; break }
-    fn <- call(x + st$p)
-    rho <- if (is.null(fn)) -Inf else (f$value - fn$value) / pred
-    if (printIter) cat(sprintf("%4d  value %.8g  radius %.3g  rho %.3g\n", it, f$value, r, rho))
-    if (rho < 0.25) r <- r / 4 else if (rho > 0.75 && st$boundary) r <- min(2 * r, rmax)
-    if (rho > 0) {
-      done <- abs(f$value - fn$value) <= fterm
-      x <- x + st$p; f <- fn
-      if (done) { converged <- TRUE; break }
-    }
-  }
-  list(value = f$value, gradient = setNames(f$gradient, pnames), hessian = f$hessian,
-       argument = setNames(x, pnames), converged = converged, iterations = it)
 }

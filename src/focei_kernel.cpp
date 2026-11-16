@@ -25,6 +25,8 @@
 
 #include "residual_kernel.h"
 #include "trust_subproblem.h"
+#include "trust_model.h"
+#include <functional>
 #include "trust_driver.h"
 
 using namespace Rcpp;
@@ -931,20 +933,23 @@ static List add_correction(Function& correction_cb, const CharacterVector& outer
            as<List>(corr["eta_shift"]) : List();
 }
 
-// Moves the modes in `eta` (N x K) to first order along the step: eta += S_i step.
-// Only a subject whose move stays within `radius`, the region the inner search starts with; one that
-// would move farther, as where H_ee is near singular, keeps the previous modes.
+// Moves the modes in `eta` (N x K) to first order along the step, eta += S_i step, the columns of
+// S_i at the outer positions in its attribute "idx" where it has one; a subject whose move exceeds
+// `radius`, the region the inner search starts with, keeps its modes.
 static void shift_modes(NumericMatrix& eta, const List& shift, const std::vector<double>& step, double radius) {
   const int N = eta.nrow(), K = eta.ncol(), n = step.size();
   if (shift.size() != N) return;
   std::vector<double> d(K);
   for (int i = 0; i < N; ++i) {
+    if (Rf_isNull(shift[i])) continue;
     NumericMatrix S = as<NumericMatrix>(shift[i]);
-    if (S.nrow() != K || S.ncol() != n) continue;
+    SEXP idx = Rf_getAttrib(S, Rf_install("idx"));
+    const bool local = !Rf_isNull(idx);
+    if (S.nrow() != K || (!local && S.ncol() != n) || (local && Rf_length(idx) != S.ncol())) continue;
     double norm2 = 0.0;
     for (int k = 0; k < K; ++k) {
       d[k] = 0.0;
-      for (int j = 0; j < n; ++j) d[k] += S(k, j) * step[j];
+      for (int j = 0; j < S.ncol(); ++j) d[k] += S(k, j) * step[local ? INTEGER(idx)[j] - 1 : j];
       norm2 += d[k] * d[k];
     }
     if (std::isfinite(norm2) && std::sqrt(norm2) <= radius) for (int k = 0; k < K; ++k) eta(i, k) += d[k];
@@ -1114,6 +1119,149 @@ List focei_outer_objfn(Function model_cb,
 }
 
 
+// The two halves of an outer evaluation: `trial` the value at theta from the modes started at
+// `warm`, `complete` the gradient, the Hessian of the model and the mode shifts at an accepted
+// trial; a failure of either is a rejected trial.
+template <class Model>
+struct OuterEval {
+  std::function<double(NumericVector&, NumericMatrix&, RObject&)> trial;
+  std::function<void(RObject&, std::vector<double>&, typename Model::Hess&, List&)> complete;
+  std::function<NumericMatrix(const RObject&)> modes;
+};
+
+// The outer trust region of FOCEI on a curvature model of trust_model.h, one loop for dense and
+// sparse: Moré-Sorensen steps accepted by the ratio of actual to predicted reduction, until the model
+// gains less than mtol in the region rmax or five rejected trials leave the value flat within ftol.
+template <class Model>
+List focei_outer_loop(OuterEval<Model>& ev, NumericVector init, CharacterVector outer_names,
+                      List outer_ctrl, double inner_rinit, int N, int K) {
+  const int n_outer = init.size();
+  double rinit   = outer_ctrl.containsElementNamed("rinit") ? as<double>(outer_ctrl["rinit"]) : 1.0;
+  double rmax    = outer_ctrl.containsElementNamed("rmax") ? as<double>(outer_ctrl["rmax"]) : 10.0;
+  int    iterlim = outer_ctrl.containsElementNamed("iterlim") ? as<int>(outer_ctrl["iterlim"]) : 100;
+  double ftol    = ctrl_tol(outer_ctrl, "ftol", "fterm", 1e-6);
+  double mtol    = ctrl_tol(outer_ctrl, "mtol", "mterm", 1e-6);
+
+  NumericVector theta(clone(init));
+  theta.attr("names") = outer_names;
+  NumericMatrix eta_warm(N, K);
+  Model model(n_outer);
+  const std::vector<double> ones(n_outer, 1.0), zeros(n_outer, 0.0);
+
+  RObject keep;
+  double f_curr = ev.trial(theta, eta_warm, keep);
+  std::vector<double> g_curr;
+  typename Model::Hess H_curr;
+  List shift_curr;
+  ev.complete(keep, g_curr, H_curr, shift_curr);
+  // a copy: shift_modes() moves the warm start in place, the modes of the evaluation stay
+  eta_warm = clone(ev.modes(keep));
+  model.build(H_curr, ones.data(), 1.0, zeros.data());
+
+  double r = rinit;
+  bool   converged = false;
+  int    iter = 0, n_stall = 0;
+  NumericVector theta_try(n_outer);
+  theta_try.attr("names") = outer_names;
+  std::vector<double> p_step(n_outer), p_max(n_outer);
+  std::vector<double> trace_value, trace_radius, trace_rho;
+  std::vector<int>    trace_accept;
+  trace_value .push_back(f_curr);
+  trace_radius.push_back(r);
+  trace_rho   .push_back(0.0);
+  trace_accept.push_back(1);
+
+  for (iter = 1; iter <= iterlim; ++iter) {
+    R_CheckUserInterrupt();
+    bool is_newton = false, is_hard = false, is_easy = false, newton_max = false;
+    double predicted_red = 0.0;
+    model.solve(g_curr.data(), r, p_step.data(), &is_newton, &is_hard, &is_easy, &predicted_red);
+    // what the model can gain at all, in the largest region the fit allows: a region that rejections
+    // shrank makes the step's own prediction small without the fit being near the optimum
+    double reachable = predicted_red;
+    if (r < rmax) model.solve(g_curr.data(), rmax, p_max.data(), &newton_max, &is_hard, &is_easy, &reachable);
+
+    for (int j = 0; j < n_outer; ++j) theta_try[j] = theta[j] + p_step[j];
+
+    NumericMatrix eta_warm_saved(clone(eta_warm));
+    shift_modes(eta_warm, shift_curr, p_step, inner_rinit);
+    RObject T;
+    double f_try = std::numeric_limits<double>::infinity();
+    bool eval_ok = true;
+    try {
+      f_try = ev.trial(theta_try, eta_warm, T);
+    } catch (std::exception&) { eval_ok = false; }
+
+    double actual_red = f_curr - f_try;
+    double rho = (predicted_red > 0.0 && std::isfinite(f_try))
+                   ? actual_red / predicted_red
+                   : -std::numeric_limits<double>::infinity();
+
+    bool is_terminate = std::isfinite(f_try) && std::fabs(reachable) < mtol &&
+                        (std::fabs(actual_red) < ftol || std::fabs(predicted_red) < mtol);
+    bool accept;
+    if (is_terminate) {
+      accept = (f_try < f_curr);
+    } else if (rho < 0.25) {
+      accept = false;
+      r = shrunk_radius(r, p_step.data(), n_outer);
+    } else {
+      accept = true;
+      if (rho > 0.75 && !is_newton) r = std::min(2.0 * r, rmax);
+    }
+
+    // the derivatives of an accepted trial that the loop goes on from; a failure rejects it
+    std::vector<double> g_try;
+    typename Model::Hess H_try;
+    List shift_try;
+    if (accept && eval_ok) {
+      try {
+        ev.complete(T, g_try, H_try, shift_try);
+      } catch (std::exception&) { accept = false; r = r * 0.25; }
+    }
+
+    if (accept && eval_ok) {
+      for (int j = 0; j < n_outer; ++j) theta[j] = theta_try[j];
+      f_curr = f_try;
+      g_curr = std::move(g_try);
+      H_curr = std::move(H_try);
+      shift_curr = shift_try;
+      eta_warm = clone(ev.modes(T));
+      keep = T;
+      model.build(H_curr, ones.data(), 1.0, zeros.data());
+    } else {
+      eta_warm = eta_warm_saved;
+    }
+
+    trace_value .push_back(f_curr);
+    trace_radius.push_back(r);
+    trace_rho   .push_back(rho);
+    trace_accept.push_back(accept ? 1 : 0);
+
+    if (is_terminate) { converged = true; break; }
+    // as trust(): consecutive rejected trials that leave the objective flat within ftol, the noise
+    // of the evaluation, end the fit with nothing left to resolve
+    if (accept || !eval_ok || std::fabs(actual_red) >= ftol) n_stall = 0;
+    else if (++n_stall >= dmod::trust_driver::kStallLimit) { converged = true; break; }
+  }
+  // a loop that reaches iterlim leaves iter one past it
+  iter = std::min(iter, iterlim);
+
+  List trace = List::create(
+      Rcpp::Named("value")  = NumericVector(trace_value.begin(), trace_value.end()),
+      Rcpp::Named("radius") = NumericVector(trace_radius.begin(), trace_radius.end()),
+      Rcpp::Named("rho")    = NumericVector(trace_rho.begin(), trace_rho.end()),
+      Rcpp::Named("accept") = IntegerVector(trace_accept.begin(), trace_accept.end()));
+  return List::create(
+      Rcpp::Named("argument")   = theta,
+      Rcpp::Named("value")      = f_curr,
+      Rcpp::Named("keep")       = keep,
+      Rcpp::Named("iterations") = iter,
+      Rcpp::Named("converged")  = converged,
+      Rcpp::Named("trace")      = trace);
+}
+
+
 // Outer trust over focei_outer_objfn. Omega_inv and log|Omega| are rebuilt each
 // outer iteration from the Cholesky parameters in the outer vector.
 // [[Rcpp::export]]
@@ -1192,173 +1340,81 @@ List focei_run(Function model_cb,
   const double inner_rinit = inner_ctrl.containsElementNamed("rinit") ? as<double>(inner_ctrl["rinit"]) : 1.0;
   List outer_ctrl = control.containsElementNamed("outer") ?
                       as<List>(control["outer"]) : List();
-  double rinit   = outer_ctrl.containsElementNamed("rinit") ?
-                     as<double>(outer_ctrl["rinit"]) : 1.0;
-  double rmax    = outer_ctrl.containsElementNamed("rmax") ?
-                     as<double>(outer_ctrl["rmax"]) : 10.0;
-  int    iterlim = outer_ctrl.containsElementNamed("iterlim") ?
-                     as<int>(outer_ctrl["iterlim"]) : 100;
-  double ftol    = ctrl_tol(outer_ctrl, "ftol", "fterm", 1e-6);
-  double mtol    = ctrl_tol(outer_ctrl, "mtol", "mterm", 1e-6);
 
-  NumericVector theta(clone(init));
-  theta.attr("names") = outer_names;
-  NumericMatrix eta_warm(N, K);
-
-  auto eval_outer = [&](NumericVector& th, bool correct) -> List {
+  auto eval_outer = [&](NumericVector& th, NumericMatrix& warm, bool correct) -> List {
     auto OL = build_Omega_inv_and_logdet(th);
     return focei_outer_objfn(
-        model_cb, err_cb, joint_cb, th, eta_warm,
+        model_cb, err_cb, joint_cb, th, warm,
         subject_meta, OL.first, OL.second, fixed, inner_ctrl,
         correction_mode, correction_cb, predict_cb, correct);
   };
   const bool corrected = correction_mode != "none" && correction_cb.isNotNull();
-
-  List out_curr = eval_outer(theta, true);
-  // the evaluation of the point the loop stands on, with the volume correction
-  List out_keep = out_curr;
-  double       f_curr = as<double>(out_curr["value"]);
-  NumericVector g_curr = as<NumericVector>(out_curr["gradient"]);
-  NumericMatrix H_curr = as<NumericMatrix>(out_curr["hessian"]);
-  // a copy: shift_modes() moves the warm start in place, the modes of the evaluation stay
-  eta_warm = clone(as<NumericMatrix>(out_curr["eta_modes"]));
-  List shift_curr = as<List>(out_curr["eta_shift"]);
-
-  double r = rinit;
-  bool   converged = false;
-  int    iter = 0, n_stall = 0;
-  NumericVector theta_try(n_outer);
-  theta_try.attr("names") = outer_names;
-  std::vector<double> p_step(n_outer);
-  std::vector<double> trace_value, trace_radius, trace_rho;
-  std::vector<int>    trace_accept;
-  trace_value .push_back(f_curr);
-  trace_radius.push_back(r);
-  trace_rho   .push_back(0.0);
-  trace_accept.push_back(1);
-
-  for (iter = 1; iter <= iterlim; ++iter) {
-    std::vector<double> H_buf(n_outer * n_outer);
-    for (int c = 0; c < n_outer; ++c)
-      for (int r0 = 0; r0 < n_outer; ++r0)
-        H_buf[r0 + c * n_outer] = H_curr(r0, c);
-    std::vector<double> vals(n_outer), vecs(n_outer * n_outer);
-    eigen_sym(H_buf.data(), n_outer, vals.data(), vecs.data());
-
-    std::vector<double> g_vec(g_curr.begin(), g_curr.end());
-    bool   is_newton    = false;
-    double predicted_red = 0.0;
-    trust_subproblem(n_outer, g_vec.data(), vals.data(), vecs.data(),
-                     r, p_step.data(), &predicted_red, &is_newton);
-    // what the model can gain at all, in the largest region the fit allows: a region that rejections
-    // shrank makes the step's own prediction small without the fit being near the optimum
-    double reachable = predicted_red;
-    if (r < rmax) {
-      std::vector<double> p_max(n_outer);
-      bool newton_max = false;
-      trust_subproblem(n_outer, g_vec.data(), vals.data(), vecs.data(), rmax, p_max.data(), &reachable,
-                       &newton_max);
+  // the trial point by the inner search with the outer gradient and Schur Hessian; at an accepted
+  // one the volume correction
+  OuterEval<dmod::trust_model::DenseModel> ev;
+  ev.trial = [&](NumericVector& th, NumericMatrix& warm, RObject& T) {
+    List out = eval_outer(th, warm, false);
+    T = out;
+    return as<double>(out["value"]);
+  };
+  ev.complete = [&](RObject& T, std::vector<double>& g, dmod::trust_model::DenseModel::Hess& H, List& shift) {
+    List out(T);
+    NumericVector gt = clone(as<NumericVector>(out["gradient"]));
+    NumericMatrix Ht = clone(as<NumericMatrix>(out["hessian"]));
+    if (corrected) {
+      Function cb(correction_cb);
+      shift = add_correction(cb, outer_names, as<NumericVector>(out["pars_full"]),
+                             as<NumericMatrix>(out["H_full"]), as<List>(out["H_inv"]), gt, Ht);
     }
+    out["gradient"] = gt;
+    out["hessian"] = Ht;
+    g.assign(gt.begin(), gt.end());
+    H.H.assign(Ht.begin(), Ht.end());
+    T = out;
+  };
+  ev.modes = [](const RObject& T) { return NumericMatrix(as<List>(T)["eta_modes"]); };
+  List res = focei_outer_loop(ev, init, outer_names, outer_ctrl, inner_rinit, N, K);
 
-    for (int j = 0; j < n_outer; ++j) theta_try[j] = theta[j] + p_step[j];
-
-    NumericMatrix eta_warm_saved(clone(eta_warm));
-    shift_modes(eta_warm, shift_curr, p_step, inner_rinit);
-    List out_try;
-    double f_try = std::numeric_limits<double>::infinity();
-    bool eval_ok = true;
-    try {
-      out_try = eval_outer(theta_try, false);
-      f_try = as<double>(out_try["value"]);
-    } catch (std::exception&) { eval_ok = false; }
-
-    double actual_red = f_curr - f_try;
-    double rho = (predicted_red > 0.0 && std::isfinite(f_try))
-                   ? actual_red / predicted_red
-                   : -std::numeric_limits<double>::infinity();
-
-    bool is_terminate = std::isfinite(f_try) && std::fabs(reachable) < mtol &&
-                        (std::fabs(actual_red) < ftol || std::fabs(predicted_red) < mtol);
-    bool accept;
-    if (is_terminate) {
-      accept = (f_try < f_curr);
-    } else if (rho < 0.25) {
-      accept = false;
-      r = shrunk_radius(r, p_step.data(), n_outer);
-    } else {
-      accept = true;
-      if (rho > 0.75 && !is_newton) r = std::min(2.0 * r, rmax);
-    }
-
-    // the volume derivatives of an accepted trial that the loop goes on from;
-    // a failure rejects the trial
-    NumericVector g_try;
-    NumericMatrix H_try;
-    List shift_try;
-    if (accept && eval_ok) {
-      g_try = clone(as<NumericVector>(out_try["gradient"]));
-      H_try = clone(as<NumericMatrix>(out_try["hessian"]));
-      if (corrected) {
-        try {
-          Function cb(correction_cb);
-          shift_try = add_correction(cb, outer_names, as<NumericVector>(out_try["pars_full"]),
-                                     as<NumericMatrix>(out_try["H_full"]), as<List>(out_try["H_inv"]),
-                                     g_try, H_try);
-        } catch (std::exception&) { accept = false; r = r * 0.25; }
-      }
-    }
-
-    if (accept && eval_ok) {
-      for (int j = 0; j < n_outer; ++j) theta[j] = theta_try[j];
-      f_curr = f_try;
-      g_curr = g_try;
-      H_curr = H_try;
-      shift_curr = shift_try;
-      eta_warm = clone(as<NumericMatrix>(out_try["eta_modes"]));
-      out_keep = out_try;
-      out_keep["gradient"] = g_try;
-      out_keep["hessian"] = H_try;
-    } else {
-      eta_warm = eta_warm_saved;
-    }
-
-    trace_value .push_back(f_curr);
-    trace_radius.push_back(r);
-    trace_rho   .push_back(rho);
-    trace_accept.push_back(accept ? 1 : 0);
-
-    if (is_terminate) { converged = true; break; }
-    // as trust(): consecutive rejected trials that leave the objective flat within ftol, the noise
-    // of the evaluation, end the fit with nothing left to resolve
-    if (accept || !eval_ok || std::fabs(actual_red) >= ftol) n_stall = 0;
-    else if (++n_stall >= dmod::trust_driver::kStallLimit) { converged = true; break; }
-  }
-  // a loop that reaches iterlim leaves iter one past it
-  iter = std::min(iter, iterlim);
-
-  List out_final = out_keep;
-  NumericMatrix eta_modes_f = as<NumericMatrix>(out_final["eta_modes"]);
-  List          H_GN_list_f = as<List>(out_final["H_GN"]);
-  List          H_inv_list_f = as<List>(out_final["H_inv"]);
-  NumericVector log_det_H_f = as<NumericVector>(out_final["log_det_H"]);
-
-  List trace = List::create(
-      Rcpp::Named("value")  = NumericVector(trace_value.begin(), trace_value.end()),
-      Rcpp::Named("radius") = NumericVector(trace_radius.begin(), trace_radius.end()),
-      Rcpp::Named("rho")    = NumericVector(trace_rho.begin(), trace_rho.end()),
-      Rcpp::Named("accept") = IntegerVector(trace_accept.begin(), trace_accept.end()));
-
+  List out_final = as<List>(res["keep"]);
   return List::create(
-      Rcpp::Named("argument")   = theta,
+      Rcpp::Named("argument")   = res["argument"],
       Rcpp::Named("value")      = as<double>(out_final["value"]),
       Rcpp::Named("gradient")   = as<NumericVector>(out_final["gradient"]),
       Rcpp::Named("hessian")    = as<NumericMatrix>(out_final["hessian"]),
-      Rcpp::Named("etaModes")   = eta_modes_f,
-      Rcpp::Named("H_GN")       = H_GN_list_f,
-      Rcpp::Named("H_inv")      = H_inv_list_f,
-      Rcpp::Named("log_det_H")  = log_det_H_f,
+      Rcpp::Named("etaModes")   = as<NumericMatrix>(out_final["eta_modes"]),
+      Rcpp::Named("H_GN")       = as<List>(out_final["H_GN"]),
+      Rcpp::Named("H_inv")      = as<List>(out_final["H_inv"]),
+      Rcpp::Named("log_det_H")  = as<NumericVector>(out_final["log_det_H"]),
       Rcpp::Named("sum_logdetH")= as<double>(out_final["sum_logdetH"]),
-      Rcpp::Named("iterations") = iter,
-      Rcpp::Named("converged")  = converged,
-      Rcpp::Named("trace")      = trace);
+      Rcpp::Named("iterations") = res["iterations"],
+      Rcpp::Named("converged")  = res["converged"],
+      Rcpp::Named("trace")      = res["trace"]);
+}
+
+// FOCEI on the sparse model by focei_outer_loop(), trial and derivatives from R: `trial(theta, warm)`
+// a list of `value` and `eta_modes`, `complete(trial)` one of `gradient`, `kernel`, `hessian`,
+// `lowrank` and `shift`, the mode shifts with their outer columns in "idx".
+// [[Rcpp::export]]
+List focei_run_sparse(Function trial, Function complete, NumericVector init, int N, int K,
+                      List outer_ctrl, double inner_rinit) {
+  CharacterVector outer_names = init.names();
+  const int n_outer = init.size();
+  OuterEval<dmod::trust_model::SparseModel> ev;
+  ev.trial = [&](NumericVector& th, NumericMatrix& warm, RObject& T) {
+    List out = trial(th, warm);
+    T = out;
+    return as<double>(out["value"]);
+  };
+  ev.complete = [&](RObject& T, std::vector<double>& g, dmod::trust_model::SparseModel::Hess& H, List& shift) {
+    List out = complete(T);
+    NumericVector gt = out["gradient"];
+    if (gt.size() != n_outer) throw std::runtime_error("focei_run_sparse: the gradient has the wrong length");
+    if (!dmod::trust_model::SparseModel::read(out, n_outer, H))
+      throw std::runtime_error("focei_run_sparse: no sparse Hessian");
+    g.assign(gt.begin(), gt.end());
+    shift = out.containsElementNamed("shift") ? List(out["shift"]) : List();
+    T = out;
+  };
+  ev.modes = [](const RObject& T) { return NumericMatrix(as<List>(T)["eta_modes"]); };
+  return focei_outer_loop(ev, init, outer_names, outer_ctrl, inner_rinit, N, K);
 }

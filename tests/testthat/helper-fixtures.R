@@ -189,3 +189,10 @@ fx_decay_data_bloq <- function(pars  = c(A = 1.0, k = 0.5),
     condition = condition, lloq = lloq, seed = seed)
   as.datalist(df, splitBy = "condition")
 }
+
+# The Hessian of a fit or objlist as one dense matrix: the sparse `hessian` plus its `lowrank` part.
+.fullHessian <- function(x) {
+  H <- x$hessian
+  lr <- dMod2:::.lowrankOver(x$lowrank, rownames(H))
+  as.matrix(if (is.null(lr)) H else H + lr$U %*% (lr$d * t(lr$U)))
+}

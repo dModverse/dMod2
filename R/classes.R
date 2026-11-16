@@ -1042,7 +1042,8 @@ match.fnargs <- function(arglist, choices) {
 
   if (inherits(x2, "objlist")) {
     # An absent gradient or Hessian stays absent.
-    out <- lapply(unclass(x2), function(x) if (is.null(x)) NULL else x1 * x)
+    out <- lapply(unclass(x2), function(x) if (is.null(x) || is.list(x)) x else x1 * x)
+    if (!is.null(x2$lowrank)) out$lowrank$d <- x1 * x2$lowrank$d
     numericAttrs <- names(Filter(is.numeric, attributes(x2)))
     attributes(out) <- attributes(x2)
     for (n in numericAttrs) attr(out, n) <- x1 * attr(x2, n)

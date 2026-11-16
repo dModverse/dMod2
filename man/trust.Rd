@@ -220,18 +220,21 @@ the number of the evaluation (column \code{Iteration}), objective value
 and parameters. Default \code{NULL}, no file.}
 
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
-\code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"} and
-the sparse Gauss-Newton Hessian it returns (a \code{Matrix}) is factorized by sparse
-Cholesky. Minimization without phases and bounds only; of the other
-settings only
-\code{rinit}, \code{rmax}, \code{iterlim}, \code{tolControl$ftol},
-\code{tolControl$mtol} and \code{printIter} apply. \code{"auto"} takes
-this path for a Gauss-Newton minimization without phases, bounds, exact
-Hessian, trace or multiple shooting when \code{parinit} has at least
-\code{parameters} entries and the sparse Hessian at \code{parinit} fills
-at most \code{fill} of the matrix, both from
-\code{getOption("dMod2.sparseAuto")}, a list that defaults to
-\code{parameters = 500} and \code{fill = 0.05}.}
+\code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"}, and
+the subproblem of every step is solved on sparse Cholesky factors of the
+Hessian it returns (a \code{Matrix}), a low-rank part \code{lowrank} (see
+\code{\link[=objlist]{objlist()}}) added by Woodbury, where the dense path takes the
+eigendecomposition: the same steps to rounding, with every setting of
+\code{trust()}; the Hessian comes from the objective,
+\code{hessianMethod} \code{"gn"} or \code{"exact"}, and
+\code{boundary = "reflective"}. \code{"auto"} takes the sparse path where
+that holds, outside multiple shooting, when \code{parinit} has at least
+\code{parameters} entries and a step on the sparse Hessian at
+\code{parinit} costs fewer flops than the dense one, by the symbolic
+factorization; \code{parameters} (default 100) comes from
+\code{getOption("dMod2.sparseAuto")}, where a \code{fill} replaces the
+cost by the rule that the sparse Hessian fills at most \code{fill} of the
+matrix.}
 
 \item{...}{Further named arguments passed to \code{objfun}.}
 
@@ -306,9 +309,9 @@ actual to predicted reduction), \code{valpath}, \code{valtry},
 \code{gradient}, \code{hessian}, \code{iterations}, \code{converged},
 \code{atBound} and \code{stopReason}, plus the trace.
 
-The sparse path, see \code{sparse}, returns only \code{argument},
-\code{value}, \code{gradient}, \code{hessian} (a sparse \code{Matrix}),
-\code{iterations} and \code{converged}.
+On the sparse path, see \code{sparse}, \code{hessian} is a sparse
+\code{Matrix}, and \code{lowrank} where the objective returns one: the
+Hessian is then \code{hessian} plus that part.
 
 \code{trustL1} returns a list without class with \code{argument},
 \code{value}, \code{gradient}, \code{hessian}, \code{iterations},

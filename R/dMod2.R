@@ -32,9 +32,11 @@
 #'   \item{`dMod2.compile.cmdlimit`}{Longest command line in characters that
 #'     [compile()] passes to the compiler and archiver. Default 96000, 8000 on
 #'     Windows.}
-#'   \item{`dMod2.sparseAuto`}{Thresholds of `sparse = "auto"` in [trust()] and
-#'     [em()], a list of `parameters` and `fill`, see [trust()]. Default
-#'     `list(parameters = 500, fill = 0.05)`.}
+#'   \item{`dMod2.sparseAuto`}{Settings of `sparse = "auto"` in [trust()] and
+#'     [em()], a list of `parameters`, the fewest parameters of the sparse
+#'     path, and optionally `fill`, which replaces the comparison of the cost
+#'     of a step by an upper bound of the fill of the sparse Hessian, see
+#'     [trust()]. Default `list(parameters = 100)`.}
 #' }
 #'
 #' @section Environment variables:

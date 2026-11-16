@@ -522,12 +522,17 @@ print.alignmentmodel <- function(x, ...) {
   block <- .connectedBlocks(bio, key(cols))
   X <- m$design[[s]]$X
   relative <- setdiff(sort(unique(block)), unique(block[m$absolute]))
-  A <- matrix(0, 0, ncol(X), dimnames = list(NULL, colnames(X)))
-  if (length(relative)) A <- do.call(rbind, lapply(relative, function(b) {
-    rows <- which(block == b)
-    Matrix::colMeans(X[rows[!duplicated(bio[rows])], , drop = FALSE])
-  }))
-  list(symbol = s, block = block, A = A)
+  A <- C <- matrix(0, 0, ncol(X), dimnames = list(NULL, colnames(X)))
+  if (length(relative)) {
+    first <- lapply(relative, function(b) {
+      rows <- which(block == b)
+      rows[!duplicated(bio[rows])]
+    })
+    A <- do.call(rbind, lapply(first, function(r) Matrix::colMeans(X[r, , drop = FALSE])))
+    C <- do.call(rbind, lapply(first, function(r) as.numeric(X[r[1], ])))
+    colnames(C) <- colnames(X)
+  }
+  list(symbol = s, block = block, A = A, C = C)
 }
 
 ## Connected components of the bipartite graph of values and experiments, the component of every
@@ -545,9 +550,11 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 ## The normalization as a term of the objective: per block the residual 1000 times the mean of the
-## predictors.
+## predictors; asked for hessian = "sparse", its Hessian w a a' is w c c' over the predictor c of
+## one value of the block plus the low-rank part w (a a' - c c').
 .alignmentNormalization <- function(m) {
   A <- Matrix::Matrix(m$normalization$A, sparse = TRUE)
+  C <- Matrix::Matrix(m$normalization$C %||% .alignmentNormalizationDesign(m)$C, sparse = TRUE)
   pn <- colnames(A)
   fn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL, conditions = NULL,
                  env = NULL, cores = 1L) {
@@ -560,6 +567,15 @@ print.alignmentmodel <- function(x, ...) {
     gradient[free] <- 2 * as.numeric(Matrix::crossprod(J, r))
     cv <- .resolveCurvature(deriv, deriv2, hessian, "forward")
     H <- NULL
+    if (cv$sparse) {
+      Jc <- 1e3 * C[, free, drop = FALSE]
+      split <- which(Matrix::rowSums(abs(J - Jc)) > 0)
+      out <- objlist(value = sum(r^2), gradient = gradient, hessian = .sparseOver(2 * Matrix::crossprod(Jc), names(p)))
+      if (length(split))
+        out$lowrank <- list(U = t(as.matrix(rbind(J[split, , drop = FALSE], Jc[split, , drop = FALSE]))),
+                            d = rep(c(2, -2), each = length(split)))
+      return(out)
+    }
     if (cv$hessian) {
       Hf <- 2 * Matrix::crossprod(J)
       if (cv$sparse) H <- .sparseOver(Hf, names(p))
@@ -951,7 +967,8 @@ print.alignmentmodel <- function(x, ...) {
 
 ## The condition of every reading: the experiment of the reading, the combination of the columns of the fixed
 ## parts of the scaling formulas, within the connected component of the reading of the groups of the random
-## terms, so the Hessian is sparse over them and every condition depends on few parameters.
+## terms, in parts of few biological values, so the Hessian is sparse over them and every condition
+## depends on few parameters.
 ## The name joins the parts that are set and not repeated, "absolute" for a reading without
 ## any, where these names tell the conditions apart.
 .alignmentConditions <- function(m) {
@@ -970,7 +987,30 @@ print.alignmentmodel <- function(x, ...) {
   }
   short[!nzchar(short)] <- "absolute"
   distinct <- all(lengths(lapply(split(full, short), unique)) == 1L)
-  .effectName(if (distinct) short else full)
+  .alignmentChunks(m, .effectName(if (distinct) short else full))
+}
+
+## The conditions `cond` split into parts of at most `size` values of the first biological
+## symbol each: the derivatives of a condition are dense over its parameters, so the memory of an
+## evaluation grows with the readings times the square of the parameters per condition.
+.alignmentChunks <- function(m, cond, size = 16L) {
+  s <- m$symbols$symbol[m$symbols$role == "biological"][1]
+  cols <- .alignmentColumns(m, s)
+  if (!length(cols)) return(cond)
+  bio <- do.call(paste, c(lapply(m$data[cols], as.character), sep = "\r"))
+  part <- integer(length(cond))
+  for (rows in split(seq_along(cond), factor(cond, unique(cond)))) {
+    v <- match(bio[rows], unique(bio[rows]))
+    part[rows] <- (v - 1L) %/% size + 1L
+  }
+  many <- cond %in% unique(cond[part > 1L])
+  if (!any(many)) return(cond)
+  out <- ifelse(many, paste0(cond, "_part", part), cond)
+  # distinct parts keep distinct names
+  key <- paste(cond, part, sep = "\r")
+  first <- !duplicated(key)
+  named <- setNames(make.unique(out[first], sep = "_"), key[first])
+  unname(named[key])
 }
 
 ## The connected component of every reading in the groups of the random terms, named by the
@@ -1074,8 +1114,10 @@ print.alignmentmodel <- function(x, ...) {
 #'   hyperparameters of normal random terms by default by restricted
 #'   likelihood. Every experiment, a combination of
 #'   the columns of the scaling formulas, or with random terms every group, is
-#'   a separate condition, so the Hessian is sparse over them; [trust()] and
-#'   [em()] take the sparse path as `sparse = "auto"` decides.
+#'   split into conditions of at most 16 values of the first biological symbol,
+#'   so the Hessian is sparse over them; [trust()] and [em()] take the sparse
+#'   path as `sparse = "auto"` decides. The normalization enters the sparse
+#'   Hessian as a low-rank part (see [objlist()]).
 #'
 #' @param model An `alignmentmodel`.
 #' @param fits Number of fits from perturbed starts.
@@ -1231,19 +1273,27 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   if (is.null(H) && !is.null(best$information)) H <- 2 * best$information
   # without random terms the exact Hessian: the one of the fit leaves out the second derivatives
   # of prediction and sigma, and can be indefinite at a minimum with large residuals
-  if (is.null(re)) H <- obj(pars, deriv2 = TRUE, hessian = if (is.null(H) || .isSparse(H)) "sparse")$hessian
+  lowrank <- NULL
+  if (is.null(re)) {
+    exact <- obj(pars, deriv2 = TRUE, hessian = if (is.null(H) || .isSparse(H)) "sparse")
+    H <- exact$hessian
+    lowrank <- exact$lowrank
+  } else lowrank <- best$lowrank
   allPars <- pars
   on <- intersect(names(best$argument), rownames(H))
   # where the reported Hessian of a fit with random terms is not positive definite, the
   # Gauss-Newton Schur complement over the random effects
   seSource <- "Hessian"
-  if (!is.null(re) && !is.null(H) && !.positiveDefinite(H[on, on, drop = FALSE])) {
-    H <- .alignmentGaussNewton(m, obj, re, best)
+  if (!is.null(re) && !is.null(H) && !.positiveDefinite(H[on, on, drop = FALSE], .lowrankOver(lowrank, on))) {
+    # a singular eta block, as at a fit that does not identify the values, leaves no standard errors
+    gn <- tryCatch(.alignmentGaussNewton(m, obj, re, best), error = function(e) NULL)
+    H <- gn$hessian
+    lowrank <- gn$lowrank
     seSource <- "Gauss-Newton"
   }
   # with REML the standard errors of the mean parameters at the estimated error parameters
   # (Lindstrom and Bates 1990): the inverse of their block of the information
-  variance <- if (!is.null(H)) .alignmentVariance(H, if (reml) intersect(on, mean) else on)
+  variance <- if (!is.null(H)) .alignmentVariance(H, if (reml) intersect(on, mean) else on, lowrank)
   aligned <- .alignmentValues(m, allPars, variance)
   scaled <- .alignmentScaled(m, allPars)
   if (any(m$censored)) aligned$lloq <- .alignmentLimits(m, aligned, scaled)
@@ -1265,12 +1315,13 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   unique(unlist(lapply(m$design[s], function(d) colnames(d$X)), use.names = FALSE))
 }
 
-## Whether a symmetric Hessian, dense or sparse, is positive definite.
-.positiveDefinite <- function(H) {
+## Whether a symmetric Hessian, dense or sparse plus its low-rank part `lowrank`, is positive definite.
+.positiveDefinite <- function(H, lowrank = NULL) {
   if (.isSparse(H)) {
-    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Matrix::forceSymmetric(H), perm = TRUE, LDL = FALSE)),
-                   error = function(e) NULL)
-    return(!is.null(ch) && !.cholSingular(ch))
+    if (!is.null(.lowrankCholesky(H, lowrank))) return(TRUE)
+    # with H positive definite the factor decides by the inertia; else the sum is factorized as one
+    if (is.null(lowrank) || !is.null(.lowrankCholesky(H))) return(FALSE)
+    return(!is.null(.lowrankCholesky(.lowrankDense(H, lowrank))))
   }
   H <- as.matrix(H)
   !is.null(tryCatch(chol((H + t(H)) / 2), error = function(e) NULL))
@@ -1278,7 +1329,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
 
 ## The Gauss-Newton Schur complement over the random effects at the modes of a fit: of the
 ## expected information of the readings and the normal random effects plus the Hessian of the
-## normalization and the prior, positive semidefinite by construction.
+## normalization and the prior, positive semidefinite by construction; `hessian` and `lowrank`.
 .alignmentGaussNewton <- function(m, obj, re, fit) {
   design <- .emDesign(obj, re)
   eta <- .etaVector(fit)
@@ -1288,9 +1339,10 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   pars <- c(setNames(as.numeric(fit$argument), on), eta, fit$fixed)
   extra <- .alignmentNormalization(m)
   if (!is.null(m$prior)) extra <- extra + m$prior
-  H <- .alignmentFisher(m, pars, free) + .normalFisher(design, pars, free) +
-    .sparseOver(extra(pars = pars[free], fixed = fit$fixed, deriv = TRUE, hessian = "sparse")$hessian, free)
-  Matrix::forceSymmetric(H[on, on] - Matrix::crossprod(H[e, on], Matrix::solve(H[e, e], H[e, on])))
+  ex <- .hessianParts(extra(pars = pars[free], fixed = fit$fixed, deriv = TRUE, hessian = "sparse"), free, on)
+  H <- .alignmentFisher(m, pars, free) + .normalFisher(design, pars, free) + ex$hessian
+  list(hessian = Matrix::forceSymmetric(H[on, on] - Matrix::crossprod(H[e, on], Matrix::solve(H[e, e], H[e, on]))),
+       lowrank = ex$lowrank)
 }
 
 ## The expected information of the readings in -2 log L over the parameters `free` at `pars`, from
@@ -1612,15 +1664,17 @@ plotResiduals.alignment <- function(parframe, ...) {
 
 
 ## The variances x' V x of linear combinations of the estimates, the rows x of a matrix with
-## parameter columns, V the inverse of half the Hessian of -2 log L: by a sparse Cholesky solve
-## for a sparse Hessian, else by eigendecomposition. Inf along the null space of a singular one.
-.alignmentVariance <- function(H, free) {
+## parameter columns, V the inverse of half the Hessian of -2 log L, the sparse H plus its low-rank
+## part `lowrank`: by a sparse Cholesky solve and Woodbury for a sparse Hessian, else by
+## eigendecomposition. Inf along the null space of a singular one.
+.alignmentVariance <- function(H, free, lowrank = NULL) {
   if (is.null(H) || !length(free)) return(NULL)
   H <- H[free, free, drop = FALSE] / 2
+  lr <- .lowrankOver(lowrank, free)
+  if (!is.null(lr)) lr$d <- lr$d / 2
   if (.isSparse(H)) {
-    ch <- tryCatch(suppressWarnings(Matrix::Cholesky(Matrix::forceSymmetric(H), perm = TRUE, LDL = FALSE)),
-                   error = function(e) NULL)
-    if (!is.null(ch) && !.cholSingular(ch))
+    f <- .lowrankCholesky(H, lr)
+    if (!is.null(f))
       return(function(X) {
         ok <- intersect(colnames(X), free)
         T <- methods::as(methods::as(Matrix::Matrix(X[, ok, drop = FALSE], sparse = TRUE), "generalMatrix"),
@@ -1630,13 +1684,12 @@ plotResiduals.alignment <- function(parframe, ...) {
         v <- numeric(nrow(X))
         for (start in seq(1L, nrow(X), by = 512L)) {
           j <- start:min(nrow(X), start + 511L)
-          Ej <- E[, j, drop = FALSE]
-          v[j] <- Matrix::colSums(Ej * Matrix::solve(ch, Ej))
+          v[j] <- .lowrankQuadratic(f, .lowrankZ(f, E[, j, drop = FALSE]))
         }
         pmax(v, 0)
       })
     if (length(free) > 5000L) return(NULL)
-    H <- as.matrix(H)
+    H <- as.matrix(.lowrankDense(H, lr))
   }
   e <- eigen((H + t(H)) / 2, symmetric = TRUE)
   null <- e$values < 1e-10 * max(e$values)

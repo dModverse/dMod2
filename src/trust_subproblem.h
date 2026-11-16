@@ -41,6 +41,7 @@
 #include <stdexcept>
 #include <limits>
 #include <algorithm>
+#include <type_traits>
 
 #ifndef FCONE
 #define FCONE
@@ -299,18 +300,36 @@ inline void affine_scaling(int K, const double* theta, const double* g,
   }
 }
 
-// m(shat) = ghat^T shat + 1/2 shat^T Bhat shat. Bhat is column-major K x K.
-inline double model_value(int K, const double* ghat, const double* Bhat,
-                          const double* shat) {
-  double gs = 0.0, sBs = 0.0;
-  for (int i = 0; i < K; ++i) {
-    gs += ghat[i] * shat[i];
-    double row = 0.0;
-    for (int j = 0; j < K; ++j)
-      row += Bhat[i + (std::size_t) j * K] * shat[j];
-    sBs += shat[i] * row;
+// An operator type for the templates below; a pointer is a dense Bhat and takes the overloads.
+template <class Op>
+using if_op = typename std::enable_if<!std::is_pointer<Op>::value, int>::type;
+
+struct DenseOp {
+  int K;
+  const double* B;
+  // summed in a fixed order: a threaded BLAS reduction would make the steps differ between runs
+  void apply(const double* x, double* y) const {
+    std::fill(y, y + K, 0.0);
+    for (int j = 0; j < K; ++j) {
+      const double xj = x[j];
+      const double* col = B + (std::size_t) j * K;
+      for (int i = 0; i < K; ++i) y[i] += col[i] * xj;
+    }
   }
+};
+
+// m(shat) = ghat^T shat + 1/2 shat^T Bhat shat, Bhat through `op.apply`.
+template <class Op, if_op<Op> = 0>
+inline double model_value(int K, const double* ghat, const Op& op, const double* shat) {
+  std::vector<double> Bs(K);
+  op.apply(shat, Bs.data());
+  double gs = 0.0, sBs = 0.0;
+  for (int i = 0; i < K; ++i) { gs += ghat[i] * shat[i]; sBs += shat[i] * Bs[i]; }
   return gs + 0.5 * sBs;
+}
+
+inline double model_value(int K, const double* ghat, const double* Bhat, const double* shat) {
+  return model_value(K, ghat, DenseOp{K, Bhat}, shat);
 }
 
 // Largest alpha >= 0 with lb <= base + alpha * dir <= ub, +Inf if nothing
@@ -355,19 +374,17 @@ inline double tr_fraction(int K, const double* shat0, const double* d, double r)
 }
 
 // argmin over t in [0, tmax] of m(shat0 + t * d).
-inline double line_min(int K, const double* ghat, const double* Bhat,
+template <class Op, if_op<Op> = 0>
+inline double line_min(int K, const double* ghat, const Op& op,
                        const double* shat0, const double* d, double tmax) {
   if (!(tmax > 0.0)) return 0.0;
+  std::vector<double> Bd(K), Bs(K);
+  op.apply(d, Bd.data());
+  op.apply(shat0, Bs.data());
   double a = 0.0, b = 0.0;   // a = d^T Bhat d,  b = (ghat + Bhat shat0)^T d
   for (int i = 0; i < K; ++i) {
-    double Bd = 0.0, Bs = 0.0;
-    for (int j = 0; j < K; ++j) {
-      const double Bij = Bhat[i + (std::size_t) j * K];
-      Bd += Bij * d[j];
-      Bs += Bij * shat0[j];
-    }
-    a += d[i] * Bd;
-    b += (ghat[i] + Bs) * d[i];
+    a += d[i] * Bd[i];
+    b += (ghat[i] + Bs[i]) * d[i];
   }
   if (a > 0.0) {
     const double t = -b / a;
@@ -379,10 +396,11 @@ inline double line_min(int K, const double* ghat, const double* Bhat,
 // Best in-box step among the truncated trust-region step `shat`, the reflection of it
 // and the scaled steepest-descent step, scored by `model_value`; `sqrt_absv` is
 // diag(D). `theta_frac` in (0, 1] of the distance to a face keeps it interior.
+template <class Op, if_op<Op> = 0>
 inline void stepback(int K, const double* theta,
                      const double* lb, const double* ub,
                      const double* sqrt_absv,
-                     const double* ghat, const double* Bhat,
+                     const double* ghat, const Op& Bhat,
                      const double* shat, double r, double theta_frac,
                      double* shat_out, double* s_out, double* m_out,
                      const char** label) {
@@ -448,6 +466,14 @@ inline void stepback(int K, const double* theta,
     to_par(cand_shat.data(), cand_s.data());
     consider("gradient");
   }
+}
+
+inline void stepback(int K, const double* theta, const double* lb, const double* ub,
+                     const double* sqrt_absv, const double* ghat, const double* Bhat,
+                     const double* shat, double r, double theta_frac,
+                     double* shat_out, double* s_out, double* m_out, const char** label) {
+  stepback(K, theta, lb, ub, sqrt_absv, ghat, DenseOp{K, Bhat}, shat, r, theta_frac,
+           shat_out, s_out, m_out, label);
 }
 
 }}  // namespace dmod::trust_internal

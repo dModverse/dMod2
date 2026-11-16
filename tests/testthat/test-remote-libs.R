@@ -491,7 +491,8 @@ test_that("a failing task returns the error, a running job keeps the name, and t
   expect_error(distributedComputing(1, input = character(0), jobname = "jt"),
                "the job 'jt' submitted from .* still runs 1 tasks")
   job$terminate()
-  for (i in 1:50) if (dMod2:::.taskStatus(attr(job, "manifest")) != "running") break else
+  # on a loaded runner the task may take seconds to stop
+  for (i in 1:300) if (dMod2:::.taskStatus(attr(job, "manifest")) != "running") break else
     Sys.sleep(0.1)
   expect_identical(dMod2:::.taskStatus(attr(job, "manifest")), "failed")
   expect_warning(utils::capture.output(finished <- job$check()), "1 of 1 tasks failed")

@@ -13,6 +13,7 @@ symmetryDetection(
   gaugePreference = FALSE,
   forcings = NULL,
   unknownInputs = NULL,
+  knownInputs = NULL,
   events = NULL,
   conditions = NULL,
   regimes = NULL,
@@ -26,6 +27,7 @@ symmetryDetection(
   control = reconstControl(),
   scalingsOnly = FALSE,
   symEngine = c("modular", "symbolic"),
+  discrete = FALSE,
   verbose = FALSE
 )
 }
@@ -61,6 +63,10 @@ to fix (\code{*} as wildcard). The gauge is returned as \verb{$gauge}.}
 form: symbols in \code{f} and \code{g} without an equation. A direction may change them along with the
 parameters; an exact one lists that change as \code{inputChange}. A character cell of
 \code{conditions} renames an unknown input in that condition.}
+
+\item{knownInputs}{Character vector of known functions of time of no assumed form:
+symbols in \code{f} and \code{g} without an equation whose values and time derivatives are
+known.}
 
 \item{events}{An \link{eventlist} with event times as numbers or expressions in the
 parameters, in chronological order. Root events are not supported. An event
@@ -109,6 +115,9 @@ kernel; \code{identifiable}, \code{rank} and \code{dim} are \code{NA}. Defaults 
 \item{symEngine}{\code{"modular"} (default, finite fields) or \code{"symbolic"} (sympy, small
 models without \code{equilibrate} and later events).}
 
+\item{discrete}{\code{FALSE} (default), \code{TRUE} or a list of arguments of
+\code{\link[=discreteSymmetries]{discreteSymmetries()}}: also search the discrete symmetries.}
+
 \item{verbose}{Logical. Print the result. Defaults to \code{FALSE}.}
 }
 \value{
@@ -148,6 +157,7 @@ routes), \code{branches} (resting states with several roots modulo a prime, of
 which the first is taken), \code{conditions}, \code{segments}, \code{coordinates},
 \code{settings}, \code{elapsed} and \code{verification}.}
 \item{\code{gauge}}{the coordinates fixed under \code{gaugePreference}.}
+\item{\code{discreteSymmetries}}{with \code{discrete}, see \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}
 \item{\code{call}}{the matched call.}
 }
 \code{print()} shows the verdict and the generators, \code{summary()} also the

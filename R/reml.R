@@ -453,14 +453,26 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
                             x = unlist(lapply(trip, `[[`, "x")), dims = c(length(V), length(V)),
                             dimnames = list(V, V))
   others <- Filter(function(t) is.null(attr(t, "l2spec", exact = TRUE)), .objTerms(design$objfn))
-  if (length(others))
-    G <- G + .sparseOver(Reduce(`+`, others)(pars = full, fixed = fixed, deriv = TRUE, hessian = "sparse")$hessian, V)
+  lr <- NULL
+  if (length(others)) {
+    oc <- Reduce(`+`, others)(pars = full, fixed = fixed, deriv = TRUE, hessian = "sparse")
+    G <- G + .sparseOver(oc$hessian, V)
+    lr <- .lowrankOver(oc$lowrank, V)
+  }
   G <- Matrix::forceSymmetric(G)
-  ch <- tryCatch(suppressWarnings(Matrix::Cholesky(G, perm = TRUE, LDL = FALSE)), error = function(e) NULL)
-  if (is.null(ch) || .cholSingular(ch)) return(list(value = Inf))
-  D <- lapply(units, function(u) as.matrix(G[u$eta, u$eta, drop = FALSE]))
-  value <- 2 * sum(log(Matrix::diag(methods::as(ch, "Matrix")))) -
-    sum(vapply(D, function(d) as.numeric(determinant(d)$modulus), 0)) - length(mean) * log(4 * pi)
+  # G is the sparse part plus the low-rank one; a sparse part that is singular alone is factorized with it
+  f <- .lowrankCholesky(G, lr)
+  if (is.null(f) && !is.null(lr)) {
+    G <- Matrix::forceSymmetric(.lowrankDense(G, lr))
+    lr <- NULL
+    f <- .lowrankCholesky(G)
+  }
+  if (is.null(f)) return(list(value = Inf))
+  D <- lapply(units, function(u) {
+    Ge <- as.matrix(G[u$eta, u$eta, drop = FALSE])
+    if (is.null(lr)) Ge else Ge + lr$U[u$eta, , drop = FALSE] %*% (lr$d * t(lr$U[u$eta, , drop = FALSE]))
+  })
+  value <- f$logdet - sum(vapply(D, function(d) as.numeric(determinant(d)$modulus), 0)) - length(mean) * log(4 * pi)
   if (!deriv) return(list(value = value))
   # q_r and the eta blocks of G^-1 from L^-1 P on the rows and the unit vectors of the etas
   n <- vapply(rows, function(rw) length(rw$w), 0L)
@@ -470,8 +482,8 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
     x = unlist(lapply(rows, function(rw) as.vector(rw$a))), dims = c(length(V), sum(n)))
   E <- Matrix::sparseMatrix(i = idx(V[-seq_along(mean)]), j = seq_along(V[-seq_along(mean)]), x = 1,
                             dims = c(length(V), length(V) - length(mean)))
-  X <- Matrix::solve(ch, Matrix::solve(ch, cbind(rhs, E), system = "P"), system = "L")
-  q <- Matrix::colSums(X[, seq_len(sum(n)), drop = FALSE]^2)
+  X <- .lowrankZ(f, cbind(rhs, E))
+  q <- .lowrankQuadratic(f, X[, seq_len(sum(n)), drop = FALSE])
   Xe <- X[, sum(n) + seq_len(ncol(E)), drop = FALSE]
   grad <- setNames(numeric(length(theta)), theta)
   off <- 0L
@@ -495,7 +507,7 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
     cps <- intersect(names(units[[k]]$dP), theta)
     if (!length(cps)) next
     cols <- match(units[[k]]$eta, V[-seq_along(mean)])
-    Ginv <- as.matrix(Matrix::crossprod(Xe[, cols, drop = FALSE])) - solve(D[[k]])
+    Ginv <- .lowrankQuadratic(f, Xe[, cols, drop = FALSE], diagonal = FALSE) - solve(D[[k]])
     for (cp in cps) grad[cp] <- grad[cp] + sum(Ginv * units[[k]]$dP[[cp]])
   }
   list(value = value, gradient = grad)

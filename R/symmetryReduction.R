@@ -82,6 +82,11 @@
 #'       the positive orthant.}
 #'     \item{`alternatives`}{the other charts, each with `trafo`, `removed`,
 #'       `remaining`, `rational` and `pins`.}
+#'     \item{`discrete`}{with discrete symmetries in `object` (see
+#'       [discreteSymmetries()]): the `symmetries` that can map a point of the domain
+#'       into it, the `fundamentalDomain`, inequalities that keep one point of each of
+#'       their orbits, and the `coordinates` they are stated in, the reduced model's for
+#'       a model with directions.}
 #'     \item{`coordinates`, `fixed`, `settings`, `call`}{provenance.}
 #'   }
 #'   `print()` shows the verdict, the trafo, the new parameters and the sections,
@@ -120,7 +125,13 @@ symmetryReduction <- function(object, fixed = NULL, positive = NULL, dPoly = 3L,
                work_cap = as.integer(workCap))
   if (is.null(fixed)) args$fixed <- NULL
   if (is.null(positive)) args$positive <- NULL
-  .symRedFromPy(.symCall("reduce_json", .symRaw(object), args), match.call())
+  red <- .symRedFromPy(.symCall("reduce_json", .symRaw(object), args), match.call())
+  d <- object$info$discrete
+  if (!is.null(object$discreteSymmetries) || !is.null(d))
+    red$discrete <- list(symmetries = Filter(function(s) !isFALSE(s$preservesDomain), object$discreteSymmetries),
+                         fundamentalDomain = d$fundamentalDomain,
+                         coordinates = d$reduced$coordinates %||% object$info$coordinates)
+  red
 }
 
 # the result of symident as a symmetryreduction object, the raw result attached
@@ -174,6 +185,7 @@ symmetryReduction <- function(object, fixed = NULL, positive = NULL, dPoly = 3L,
 #' @export
 print.symmetryreduction <- function(x, width = getOption("width"), ...) {
   .symReport("reduction_lines", x, width = as.integer(width), detail_call = .detailCall)
+  if (!is.null(x$discrete)) .printDiscrete(x$discrete$symmetries, x$discrete$fundamentalDomain)
   invisible(x)
 }
 

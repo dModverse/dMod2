@@ -177,7 +177,7 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   sp <- em(obj, randomEffects(mods$p), init, control = ctl, verbose = FALSE, sparse = TRUE)
   expect_equal(sp$value, at$value, tolerance = 1e-10)
   expect_equal(sp$gradient, at$gradient, tolerance = 1e-8)
-  expect_equal(as.matrix(sp$hessian)[names(init), names(init)], at$hessian[names(init), names(init)],
+  expect_equal(.fullHessian(sp)[names(init), names(init)], at$hessian[names(init), names(init)],
                tolerance = 1e-8)
   ctl$trustControl$iterlim <- 100
   fd <- em(obj, randomEffects(mods$p), init, control = ctl, verbose = FALSE, sparse = FALSE)

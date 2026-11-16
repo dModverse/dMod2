@@ -87,7 +87,7 @@ Each evaluation, in C++:
   with second-order sensitivities, plus SR1 from the last three accepted gradients.
 - **Stop.** Model gain below `trustControl$mtol` in the region `rmax`, or five rejected trials flat
   within `ftol`.
-- **Sparsity.** `sparse = TRUE`: sparse outer Hessians, Schur complement and volume term of a group local to the parameters of the group.
+- **Sparsity.** `sparse = TRUE`: the same outer loop on sparse outer Hessians, Schur complement and volume term of a group local to the parameters of the group, or, where the $n_g$ entries of $\psi$ a group couples satisfy $n_g^2 > k\, n_\psi$ with $n_\psi$ the number of entries of $\psi$, as a low-rank part of rank $k$: $k = K$ for the Schur complement, $k = 2K + K^2$ for the volume term.
 
 ### Volume term
 

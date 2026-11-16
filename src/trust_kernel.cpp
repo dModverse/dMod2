@@ -16,6 +16,7 @@
 #include "trust_subproblem.h"
 #include "trust_driver.h"
 #include "trust_qn.h"
+#include "trust_model.h"
 #include <vector>
 #include <deque>
 #include <cmath>
@@ -133,6 +134,9 @@ inline int hessian_source_slot(bool qn_active, int qn_kind, int method) {
 }
 
 // ---- Coleman-Li interior trust-region-reflective --------------------------
+// One kernel for both curvature models of trust_model.h: the dense one and the sparse one with
+// its low-rank part take the same steps; quasi-Newton phases update a dense Hessian.
+template <class Model>
 List trust_reflective(Function objfun, NumericVector parinit,
                       double rinit, double rmax,
                       Nullable<NumericVector> parscale,
@@ -200,10 +204,11 @@ List trust_reflective(Function objfun, NumericVector parinit,
   NumericVector grad0 = as<NumericVector>(out_init["gradient"]);
 
   std::vector<double> grad_full(grad0.begin(), grad0.end());
-  std::vector<double> H_full((std::size_t) K * K, 0.0);
+  typename Model::Hess H_full;
+  Model model(K);
   bool seeded = false;
   if (seed_gn) {
-    seeded = read_hessian(out_init, K, H_full);
+    seeded = Model::read(out_init, K, H_full);
     // gn reads a Hessian at every iterate, so an objective that declines one
     // cannot drive it at all; a quasi-Newton start only loses the seed.
     if (!seeded && !qn_start)
@@ -213,17 +218,13 @@ List trust_reflective(Function objfun, NumericVector parinit,
       Rf_warning("objfun returned no Hessian at parinit; seeding the "
                  "quasi-Newton approximation with the identity instead");
   }
-  if (!seeded) {
-    const double sgn0 = minimize ? 1.0 : -1.0;
-    for (int i = 0; i < K; ++i) H_full[i + (std::size_t) i * K] = sgn0;
-  }
+  if (!seeded) Model::identity(K, minimize ? 1.0 : -1.0, H_full);
 
   int neval = 1;
   report(neval, val, x_named, /*head=*/true);
 
   Blather trace;
-  std::vector<double> absv(K), jv(K), sqrtv(K), g_z(K), ghat(K);
-  std::vector<double> Bhat((std::size_t) K * K), eigvals(K), eigvecs((std::size_t) K * K);
+  std::vector<double> absv(K), jv(K), sqrtv(K), g_z(K), ghat(K), wscale(K), cdiag(K);
   std::vector<double> shat(K), shat_step(K), s_step(K), z_try(K);
   std::vector<unsigned char> at_bound(K, 0);
 
@@ -240,7 +241,8 @@ List trust_reflective(Function objfun, NumericVector parinit,
   // Acceptance may take an increase, so the last iterate need not be the best
   // one visited. Snapshots are taken where all of these agree on one iterate.
   double best_f = kInf, best_val = val;
-  std::vector<double> best_z = z, best_grad = grad_full, best_H = H_full;
+  std::vector<double> best_z = z, best_grad = grad_full;
+  typename Model::Hess best_H = H_full;
   std::vector<unsigned char> best_at_bound = at_bound;
 
   // Hessian source: gn passes the objective's J^T J through, bfgs and sr1
@@ -356,7 +358,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       };
       List out_now;
       if (eval_objfun(objfun, x_now, out_now, level, cur)) {
-        if (level >= CV_GN) read_hessian(out_now, K, H_full);
+        if (level >= CV_GN) Model::read(out_now, K, H_full);
         if (refresh && !split) take(out_now);
         neval++;
         eval_src[hessian_source_slot(qn_active, qn_kind, method)]++;
@@ -381,15 +383,12 @@ List trust_reflective(Function objfun, NumericVector parinit,
       if (opt_measure <= gtol) { converged = true; stop_reason = "gradient"; break; }
 
       const double sgn = minimize ? 1.0 : -1.0;
-      for (int i = 0; i < K; ++i) ghat[i] = sqrtv[i] * g_z[i];
-      for (int j = 0; j < K; ++j)
-        for (int i = 0; i < K; ++i)
-          Bhat[i + (std::size_t) j * K] =
-              sqrtv[i] * sqrtv[j] * sgn * H_full[i + (std::size_t) j * K] / (ps[i] * ps[j]);
-      for (int i = 0; i < K; ++i)
-        Bhat[i + (std::size_t) i * K] += std::fabs(g_z[i]) * jv[i];
-
-      eigen_sym_local(Bhat.data(), K, eigvals.data(), eigvecs.data());
+      for (int i = 0; i < K; ++i) {
+        ghat[i] = sqrtv[i] * g_z[i];
+        wscale[i] = sqrtv[i] / ps[i];
+        cdiag[i] = std::fabs(g_z[i]) * jv[i];
+      }
+      model.build(H_full, wscale.data(), sgn, cdiag.data());
     }
 
     if (blather_on) {
@@ -399,9 +398,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     }
 
     bool is_newton = false, is_hard = false, is_easy = false;
-    double pred_unused = 0.0;
-    trust_sub(K, ghat.data(), eigvals.data(), eigvecs.data(), r,
-              shat.data(), &pred_unused, &is_newton, &is_hard, &is_easy);
+    model.solve(ghat.data(), r, shat.data(), &is_newton, &is_hard, &is_easy);
 
     // Let the iterate approach a face as the optimality measure falls, but
     // never reach it: |v| = 0 would freeze that coordinate for good.
@@ -411,7 +408,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
     const char* sb_label = "full";
     double m_value = 0.0;
     stepback(K, z.data(), lbz.data(), ubz.data(), sqrtv.data(),
-             ghat.data(), Bhat.data(), shat.data(), r, theta_frac,
+             ghat.data(), model, shat.data(), r, theta_frac,
              shat_step.data(), s_step.data(), &m_value, &sb_label);
 
     double stepnorm = 0.0;
@@ -444,13 +441,13 @@ List trust_reflective(Function objfun, NumericVector parinit,
                                want_h ? want_level : CV_GRADIENT, cur);
     double val_try = kInf;
     NumericVector grad_try;
-    std::vector<double> Htry;
+    typename Model::Hess Htry;
     if (eval_ok) {
       val_try  = as<double>(out_try["value"]);
       grad_try = as<NumericVector>(out_try["gradient"]);
       // A gn iteration without a Hessian has no model to build, so the point
       // counts as a failed evaluation rather than as a silent fallback.
-      if (want_h && !read_hessian(out_try, K, Htry)) eval_ok = false;
+      if (want_h && !Model::read(out_try, K, Htry)) eval_ok = false;
       if (!std::isfinite(val_try)) eval_ok = false;
     }
     neval++;
@@ -506,10 +503,10 @@ List trust_reflective(Function objfun, NumericVector parinit,
       const double q_new = nonmonotone * zh_Q + 1.0;
       zh_C = (nonmonotone * zh_Q * zh_C + ftry_used) / q_new;
       zh_Q = q_new;
-      if (!qn_active) H_full = Htry;
+      if (!qn_active) H_full = std::move(Htry);
     }
 
-    if (qn_pair) {
+    if constexpr (Model::dense) if (qn_pair) {
       const bool keep = (qn_kind == HM_SR1) ||
                         qn_pair_informative(K, s_qn, y_qn, qp->cautious);
       if (!keep) {
@@ -522,9 +519,9 @@ List trust_reflective(Function objfun, NumericVector parinit,
           qn_S.push_back(s_qn);
           qn_Y.push_back(y_qn);
           if ((int) qn_S.size() > qp->memory) { qn_S.pop_front(); qn_Y.pop_front(); }
-          qn_assemble(qn_kind, K, H_full, qn_gamma, qn_S, qn_Y, qn_sgn);
+          qn_assemble(qn_kind, K, H_full.H, qn_gamma, qn_S, qn_Y, qn_sgn);
         } else {
-          qn_update(qn_kind, K, H_full, s_qn, y_qn, qn_sgn);
+          qn_update(qn_kind, K, H_full.H, s_qn, y_qn, qn_sgn);
         }
         if (!accept) qn_dirty = true;
       }
@@ -592,8 +589,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       if (qn_active) {
         qn_kind = (method == HM_SR1) ? HM_SR1 : HM_BFGS;
         if (qp->init == HI_IDENTITY) {
-          std::fill(H_full.begin(), H_full.end(), 0.0);
-          for (int i = 0; i < K; ++i) H_full[i + (std::size_t) i * K] = qn_sgn;
+          Model::identity(K, qn_sgn, H_full);
           qn_dirty = true;
         }
         if (qp->init == HI_EXACT)                 pending_level = CV_EXACT;
@@ -638,10 +634,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
   for (int i = 0; i < K; ++i) arg_out[i] = best_z[i] / ps[i];
   arg_out.names()  = parnames;
   grad_out.names() = parnames;
-  NumericMatrix Hess_out(K, K);
-  for (int j = 0; j < K; ++j)
-    for (int i = 0; i < K; ++i) Hess_out(i, j) = best_H[i + (std::size_t) j * K];
-  Hess_out.attr("dimnames") = List::create(parnames, parnames);
+  SEXP Hess_out = Model::hessian(best_H, K, parnames);
   LogicalVector at_bound_out(K);
   for (int i = 0; i < K; ++i) at_bound_out[i] = (best_at_bound[i] != 0);
   at_bound_out.names() = parnames;
@@ -671,6 +664,7 @@ List trust_reflective(Function objfun, NumericVector parinit,
       Named("atBound")    = at_bound_out,
       Named("stopReason") = stop_reason);
 
+  if (!Rf_isNull(Model::lowrank(best_H))) result["lowrank"] = Model::lowrank(best_H);
   if (blather_on) trace.attach(result, n_iter, K, parnames, minimize);
   return result;
 }
@@ -945,6 +939,7 @@ List trust_impl(Function objfun,
                 LogicalVector phaseRejected,
                 int    switches = 0,
                 double nonmonotone = 0.0,
+                bool   sparse    = false,
                 bool   minimize  = true,
                 bool   blather   = false,
                 Nullable<NumericVector>  parupper  = R_NilValue,
@@ -1003,7 +998,13 @@ List trust_impl(Function objfun,
   if (!(nonmonotone >= 0.0 && nonmonotone < 1.0))
     stop("trust: nonmonotone must be in [0, 1)");
 
+  if (sparse)
+    for (const Phase& ph : phases)
+      if (ph.method != HM_GN && ph.method != HM_EXACT)
+        stop("trust(sparse = TRUE): the Hessian comes from the objective, \"gn\" or \"exact\"; "
+             "quasi-Newton phases are dense");
   if (boundary == "clip") {
+    if (sparse) stop("trust(sparse = TRUE) takes boundary = \"reflective\"");
     if (P != 1 || phases[0].method != HM_GN || switches > 0)
       stop("trust: boundary = \"clip\" takes a single \"gn\" phase; other "
            "Hessian sources and phases require boundary = \"reflective\"");
@@ -1014,8 +1015,54 @@ List trust_impl(Function objfun,
   if (boundary != "reflective")
     stop("trust: boundary must be one of \"reflective\", \"clip\"");
 
-  return trust_reflective(objfun, parinit, rinit, rmax, parscale, iterlim,
+  if (sparse)
+    return trust_reflective<dmod::trust_model::SparseModel>(objfun, parinit, rinit, rmax, parscale, iterlim,
                           ftol, mtol, gtol, xtol, rmin, thetamax,
                           phases, switches, nonmonotone, minimize, blather,
                           parupper, parlower, printIter, traceFile);
+  return trust_reflective<dmod::trust_model::DenseModel>(objfun, parinit, rinit, rmax, parscale, iterlim,
+                          ftol, mtol, gtol, xtol, rmin, thetamax,
+                          phases, switches, nonmonotone, minimize, blather,
+                          parupper, parlower, printIter, traceFile);
+}
+
+
+// The cost of the factor of a sparse symmetric pattern, the upper triangle in compressed columns:
+// flops of one numeric factorization and the entries of L, from the symbolic analysis alone.
+// [[Rcpp::export]]
+NumericVector sparse_factor_cost(IntegerVector p, IntegerVector i, int n) {
+  dmod::trust_model::SparseModel::Hess h;
+  h.p.assign(p.begin(), p.end());
+  h.i.assign(i.begin(), i.end());
+  dmod::trust_model::SparseModel model(n);
+  model.pattern(h);
+  return NumericVector::create(Named("flops") = model.c.fl, Named("lnz") = model.c.lnz);
+}
+
+
+// One subproblem step of the curvature models on H + U diag(d) U', `kernel` as the R side passes it
+// (see trust_model.h) and `H` the same matrix dense: the step, its kind and the predicted reduction.
+// [[Rcpp::export]]
+List trust_model_step(List kernel, NumericMatrix H, NumericVector g, double r, bool sparse) {
+  const int K = g.size();
+  const std::vector<double> ones(K, 1.0), zeros(K, 0.0);
+  std::vector<double> s(K);
+  bool newton = false, hard = false, easy = false;
+  double pred = 0.0;
+  List out = List::create(Named("kernel") = kernel, Named("hessian") = H);
+  if (sparse) {
+    dmod::trust_model::SparseModel model(K);
+    dmod::trust_model::SparseModel::Hess h;
+    if (!dmod::trust_model::SparseModel::read(out, K, h)) stop("trust_model_step: no kernel");
+    model.build(h, ones.data(), 1.0, zeros.data());
+    model.solve(g.begin(), r, s.data(), &newton, &hard, &easy, &pred);
+  } else {
+    dmod::trust_model::DenseModel model(K);
+    dmod::trust_model::DenseModel::Hess h;
+    if (!dmod::trust_model::DenseModel::read(out, K, h)) stop("trust_model_step: no dense Hessian");
+    model.build(h, ones.data(), 1.0, zeros.data());
+    model.solve(g.begin(), r, s.data(), &newton, &hard, &easy, &pred);
+  }
+  return List::create(Named("p") = NumericVector(s.begin(), s.end()), Named("newton") = newton,
+                      Named("hard") = hard, Named("easy") = easy, Named("pred") = pred);
 }

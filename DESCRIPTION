@@ -1,8 +1,8 @@
 Package: dMod2
 Type: Package
 Title: Parameter Estimation in Dynamical Models
-Version: 0.15.8
-Date: 2026-11-15
+Version: 0.15.9
+Date: 2026-11-16
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
@@ -73,6 +73,7 @@ SystemRequirements: C++17 compiler; Python (>= 3.9) with SymPy, NumPy and
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 LinkingTo: 
+    Matrix,
     Rcpp
 Config/roxygen2/version: 8.1.1
 Config/testthat/edition: 3

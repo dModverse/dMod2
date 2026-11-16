@@ -245,6 +245,7 @@ reference:
   contents:
   - symmetryDetection
   - symmetryReduction
+  - discreteSymmetries
   - reconstControl
 
 - title: Likelihood and prior

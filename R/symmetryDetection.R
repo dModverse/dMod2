@@ -36,6 +36,9 @@
 #'   form: symbols in `f` and `g` without an equation. A direction may change them along with the
 #'   parameters; an exact one lists that change as `inputChange`. A character cell of
 #'   `conditions` renames an unknown input in that condition.
+#' @param knownInputs Character vector of known functions of time of no assumed form:
+#'   symbols in `f` and `g` without an equation whose values and time derivatives are
+#'   known.
 #' @param events An [eventlist] with event times as numbers or expressions in the
 #'   parameters, in chronological order. Root events are not supported. An event
 #'   value named like a column of `conditions` is read from it.
@@ -70,6 +73,8 @@
 #'   kernel; `identifiable`, `rank` and `dim` are `NA`. Defaults to `FALSE`.
 #' @param symEngine `"modular"` (default, finite fields) or `"symbolic"` (sympy, small
 #'   models without `equilibrate` and later events).
+#' @param discrete `FALSE` (default), `TRUE` or a list of arguments of
+#'   [discreteSymmetries()]: also search the discrete symmetries.
 #' @param verbose Logical. Print the result. Defaults to `FALSE`.
 #'
 #' @return An object of class `symmetrydetection`:
@@ -108,6 +113,7 @@
 #'       which the first is taken), `conditions`, `segments`, `coordinates`,
 #'       `settings`, `elapsed` and `verification`.}
 #'     \item{`gauge`}{the coordinates fixed under `gaugePreference`.}
+#'     \item{`discreteSymmetries`}{with `discrete`, see [discreteSymmetries()].}
 #'     \item{`call`}{the matched call.}
 #'   }
 #'   `print()` shows the verdict and the generators, `summary()` also the
@@ -137,12 +143,12 @@
 #' @export
 symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               fixed = NULL, gaugePreference = FALSE, forcings = NULL,
-                              unknownInputs = NULL, events = NULL, conditions = NULL,
+                              unknownInputs = NULL, knownInputs = NULL, events = NULL, conditions = NULL,
                               regimes = NULL, equilibrate = FALSE, reduceCQ = FALSE, freeInitial = NULL,
                               reconstruct = FALSE,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
-                              symEngine = c("modular", "symbolic"), verbose = FALSE) {
+                              symEngine = c("modular", "symbolic"), discrete = FALSE, verbose = FALSE) {
   symEngine <- match.arg(symEngine)
   if (missing(f) || is.null(f))
     stop("symmetryDetection: give the right-hand sides `f` ",
@@ -152,7 +158,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
          "(eqnvec, named character vector or a list of those).", call. = FALSE)
   spec <- .symSpec(f, g, trafo, conditions, events)
   syms <- list(parameters = parameters, fixed = fixed, forcings = forcings,
-               unknown_inputs = unknownInputs, free_initial = freeInitial)
+               unknown_inputs = unknownInputs, known_inputs = knownInputs, free_initial = freeInitial)
   for (k in names(syms))
     if (!is.null(syms[[k]])) spec[[k]] <- as.list(as.character(syms[[k]]))
   if (!is.null(regimes)) spec$regimes <- .symRegimes(regimes)
@@ -169,8 +175,88 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
   spec$control <- setNames(lapply(unclass(control), function(x)
     if (is.numeric(x) && is.infinite(x)) "Inf" else x), .symControlSnake(names(control)))
   res <- .symFromPy(.symCall("detect_json", spec), match.call())
+  if (!isFALSE(discrete))
+    res <- do.call(discreteSymmetries, c(list(res, cores = cores), if (is.list(discrete)) discrete))
   if (isTRUE(verbose)) print(res)
   invisible(res)
+}
+
+#' Discrete Symmetries
+#'
+#' Searches the discrete symmetries of a [symmetryDetection()] result: other points
+#' of the domain with the output of a given one. The Taylor coefficients of the
+#' observables up to `order` are equated with their values at a point; msolve counts
+#' the solutions over the algebraic closure modulo a prime, and over the reals and in
+#' the declared domain at `points` random rational points, where the number in the domain
+#' may differ between regions. Where the other points are rational functions
+#' \eqn{\sigma} of the coordinates, \eqn{\sigma} is reconstructed, checked on the output
+#' at random points (`"checked"`) and, where every state has a free initial value,
+#' proven by a map of the states (`"exact"`). A model with directions is reduced by
+#' [symmetryReduction()] first and the reduced model is analyzed.
+#'
+#' @param object A `symmetrydetection` result from [symmetryDetection()] of a model
+#'   with one condition and no events, switches or unknown inputs, detected without
+#'   `equilibrate` and `reduceCQ`.
+#' @param order Highest Taylor coefficient; `NULL` (default) twice the number of
+#'   coordinates.
+#' @param points Number of random points of the count in the domain, or a list of
+#'   points, each a named list of the coordinates. Defaults to 5.
+#' @param timeout Seconds one call of msolve may take. Defaults to 600.
+#' @param budget Seconds the reconstruction of the maps may take; past it, the counts
+#'   are reported without closed forms. Defaults to 300.
+#' @param cores Threads of msolve. Defaults to 1.
+#'
+#' @return `object` with `discreteSymmetries`, per \eqn{\sigma} the `map` of the
+#'   coordinates it changes (an [eqnvec]), `changes`, `level`, `preservesDomain`
+#'   (`TRUE`, `FALSE`, or `NULL` with the `domainConditions` under which
+#'   \eqn{\sigma(\theta)} lies in the domain) and `fixedSet`, the factors on which
+#'   \eqn{\sigma} fixes \eqn{\theta}; and `info$discrete` with `order`, `count` (the
+#'   solutions over the algebraic closure at a random point modulo a prime), `counts`
+#'   per point (`complex`, `real`, `inDomain`, `undecided`), `closedForms`, `countFinal`
+#'   (every solution is the image of a proven \eqn{\sigma}), `fundamentalDomain`
+#'   (inequalities that keep one point of each orbit), `limits` and, for a model with
+#'   directions, `reduced`.
+#'
+#' @details The search needs msolve; see [symmetryDetection()] for its path.
+#' @references Godfrey, K. (1983). Compartmental Models and Their Application.
+#'   Academic Press, London.
+#' @seealso [symmetryDetection()], [symmetryReduction()]
+#' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident.install") && !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))
+#' # two compartments, an input u into the first, the second observed
+#' f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
+#' res <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
+#' res
+#' res$discreteSymmetries[[1]]$map
+#' res$info$discrete$fundamentalDomain
+#' @export
+discreteSymmetries <- function(object, order = NULL, points = 5L, timeout = 600, budget = 300, cores = 1) {
+  if (!inherits(object, "symmetrydetection"))
+    stop("discreteSymmetries(): `object` must be a symmetrydetection result.", call. = FALSE)
+  api <- .symident("api")
+  rj <- .symident("rjson")
+  raw <- reticulate::import("json", convert = FALSE)$loads(.symRaw(object))
+  spec <- jsonlite::fromJSON(.symRaw(object), simplifyVector = FALSE)$spec
+  model <- api$Model(odes = spec$f, observables = spec$g, reactions = spec$reactions, totals = spec$totals,
+                     trafo = spec$trafo, conditions = spec$conditions, events = spec$events,
+                     inputs = spec$forcings %||% list(), unknown_inputs = spec$unknown_inputs %||% list(),
+                     known_inputs = spec$known_inputs %||% list(), fixed = spec$fixed %||% list(),
+                     parameters = spec$parameters %||% list(), regimes = spec$regimes)
+  res <- api$Symmetries(raw, model)
+  env <- Sys.getenv()
+  env <- as.character(jsonlite::toJSON(as.list(env[grepl("^SYMIDENT_", names(env)) & nzchar(env)]),
+                                       auto_unbox = TRUE))
+  # the search fills the result it runs on
+  search <- function() with(rj$`_context`(env), res$discrete(
+    order = if (!is.null(order)) as.integer(order), timeout = timeout, budget = budget, cores = as.integer(cores),
+    points = if (is.list(points)) points else as.integer(points)))
+  tryCatch(search(), symident.sym.msolve.MsolveMissingError = function(e) {
+    if (!.offerMsolve())
+      stop("discreteSymmetries() needs msolve: confirm the msolve installation in an interactive session, ",
+           "or set SYMIDENT_MSOLVE to an msolve executable.", call. = FALSE)
+    search()
+  })
+  json <- rj$`_dumps`(raw)
+  .symFromPy(structure(jsonlite::fromJSON(json, simplifyVector = FALSE), json = json), object$call)
 }
 
 #' Settings of the Observability Engine
@@ -270,7 +356,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.13.5"
+.symidentMin <- "0.14.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -315,7 +401,8 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 .symCamelFields <- function(x, data = c("generator", "complete_generator", "weights",
                                         "display", "factor", "pins", "new_parameters",
                                         "solved_domain", "trafo", "totals",
-                                        "state_components", "input_change", "jets")) {
+                                        "state_components", "input_change", "jets", "map",
+                                        "point")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
   for (i in seq_along(x))
@@ -520,6 +607,22 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
     info$settings$positive <- chr(info$settings$positive)
   res$info <- info
   if (!is.null(res$gauge)) res$gauge <- chr(res$gauge)
+  res$discreteSymmetries <- lapply(res$discreteSymmetries, function(s) {
+    s$map <- vec(s$map)
+    for (k in c("changes", "fixedSet", "domainConditions")) if (!is.null(s[[k]])) s[[k]] <- chr(s[[k]])
+    s
+  })
+  if (!is.null(res$info$discrete)) {
+    d <- res$info$discrete
+    for (k in c("fundamentalDomain", "limits")) d[k] <- list(chr(d[[k]]))
+    if (!is.null(d$reduced))
+      d$reduced <- list(trafo = vec(d$reduced$trafo), fixed = chr(d$reduced$fixed),
+                        coordinates = chr(d$reduced$coordinates))
+    if (length(d$counts))
+      d$counts <- do.call(rbind, lapply(d$counts, function(r)
+        as.data.frame(lapply(r[c("complex", "real", "inDomain", "undecided")], function(v) if (is.null(v)) NA else v))))
+    res$info$discrete <- d
+  }
   for (k in c("rank", "dim")) res[[k]] <- if (is.null(res[[k]])) NA_integer_ else as.integer(res[[k]])
   if (is.null(res$identifiable)) res$identifiable <- NA
   res$call <- call
@@ -529,7 +632,28 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 #' @export
 print.symmetrydetection <- function(x, verbose = FALSE, width = getOption("width"), ...) {
   .symReport("result_lines", x, verbose = isTRUE(verbose), width = as.integer(width))
+  .printDiscrete(x$discreteSymmetries, x$info$discrete$fundamentalDomain, x$info$discrete)
   invisible(x)
+}
+
+# the discrete symmetries of a result or a reduction: per map the coordinates it changes, its
+# level and whether it keeps the domain, then the fundamental domain
+.printDiscrete <- function(sym, domain, info = NULL) {
+  if (is.null(sym) && is.null(info)) return(invisible())
+  cat(sprintf("\nDiscrete symmetries: %d%s\n", length(sym),
+              if (!is.null(info$count)) sprintf(", %d solution%s over the algebraic closure", info$count,
+                                                if (info$count == 1L) "" else "s") else ""))
+  for (s in sym) {
+    keeps <- if (isTRUE(s$preservesDomain)) "keeps the domain"
+             else if (isFALSE(s$preservesDomain)) "leaves the domain"
+             else paste("in the domain where", paste(s$domainConditions, collapse = ", "))
+    cat(sprintf("  %s [%s, %s]\n", paste(names(s$map), s$map, sep = " -> ", collapse = ", "), s$level, keeps))
+  }
+  if (length(domain)) cat("  fundamental domain:", paste(domain, collapse = ", "), "\n")
+  if (length(info$reduced$trafo))
+    cat("  on the model reduced by", paste(names(info$reduced$trafo), info$reduced$trafo, sep = " = ",
+                                         collapse = ", "), "\n")
+  invisible()
 }
 
 #' @export

@@ -455,17 +455,16 @@
   list(Hee = Hee, HeA = HeA)
 }
 
-## Gradient and Gauss-Newton Hessian of the volume term sum_u log|H_u(theta, eta_u*(theta))|, the
-## mode shift d eta*/d theta = -H_ee^-1 H_eA from the exact joint blocks of the rows (`etaShift`
-## per unit); the Hessian leaves out third-order sensitivities and d2 eta*/d theta2. With
-## hessian = "sparse" the Hessian is a sparse Matrix and the shift of a unit has the unit columns A only.
+## Gradient and Hessian of the volume term sum_u log|H_u(theta, eta_u*(theta))| without third-order
+## sensitivities and d2 eta*/d theta2, and the mode shift -H_ee^-1 H_eA per unit (`etaShift`); with
+## hessian = "sparse" the row terms local to their condition and a wide unit of rank 2K + K^2 as `lowrank`.
 .foceiVolume <- function(design, full, fixed, outer, H_inv_list, hessian = FALSE, cores = 1L) {
   sparse <- identical(hessian, "sparse")
   hessian <- sparse || isTRUE(hessian)
   Q <- length(outer)
   grad <- setNames(numeric(Q), outer)
-  hess <- if (hessian && !sparse) matrix(0, Q, Q, dimnames = list(outer, outer))
   blocks <- list()
+  lowU <- list(); lowD <- list()
   units <- .volumeUnits(design, full, fixed)
   etaShift <- vector("list", length(units))
   cholIn <- intersect(outer, .hyperNames(design))
@@ -481,45 +480,39 @@
     frames <- .volumeFrameList(design, conds, preds, fixed, cores)
   }
 
-  # the rows of every unit in the outer parameters it depends on, directly, through the error
-  # model or the prior, and the row loss of all of them in one call
-  rows <- lapply(units, function(u) {
-    fr <- frames[u$conditions]
-    A <- unique(c(intersect(outer, unique(unlist(lapply(fr, .frameParameters)))), cholIn))
-    list(A = A, rw = .stackRows(Map(function(cn, f) .volumeRows(design, cn, f, u$eta, A, hessian),
-                                    u$conditions, fr)))
-  })
-  stacked <- function(nm) unlist(lapply(rows, function(r) r$rw[[nm]]))
-  loss <- .rowLossDerivs(stacked("p"), stacked("s"), stacked("y"), stacked("cens"), design$df)
-  unitOf <- rep(seq_along(rows), vapply(rows, function(r) length(r$rw$p), 0L))
-
   for (i in seq_along(units)) {
     u <- units[[i]]
     eta <- u$eta
     Kn <- length(eta)
-    dOinv <- u$dP
-    d2Oinv <- u$d2P
-    A <- rows[[i]]$A
+    Hinv <- H_inv_list[[i]][eta, eta, drop = FALSE]
+    # the rows of every condition of the unit in the outer parameters of the condition
+    parts <- lapply(u$conditions, function(cn) {
+      Ac <- intersect(outer, .frameParameters(frames[[cn]]))
+      rw <- .volumeRows(design, cn, frames[[cn]], eta, Ac, hessian)
+      rw$A <- Ac
+      rw$loss <- .rowLossDerivs(rw$p, rw$s, rw$y, rw$cens, design$df)
+      rw
+    })
+    A <- unique(c(unlist(lapply(parts, `[[`, "A"), use.names = FALSE), cholIn))
     Qa <- length(A)
-    rw <- rows[[i]]$rw
-    tn <- length(rw$p)
-    a <- rw$a; b <- rw$b
 
-    # the row loss and the derivatives in (p, s)
-    lr <- loss[unitOf == i, , , drop = FALSE]
-    l_ <- function(i, j) lr[, i + 1L, j + 1L]
-    Lpp <- l_(2, 0); Lps <- l_(1, 1); Lss <- l_(0, 2)
-
-    # d eta*/d theta from the exact joint blocks at the modes
-    jb <- .jointBlocks(rw, lr, u, full, A, cholIn)
-    if (!all(is.finite(jb$HeA)) || !all(is.finite(jb$Hee)))
+    # the exact joint blocks H_ee and H_eA, and d eta*/d theta
+    Hee <- u$P
+    HeA <- matrix(0, Kn, Qa, dimnames = list(eta, A))
+    for (rw in parts) {
+      jb <- .jointBlocks(rw, rw$loss, u, full, rw$A, character(0))
+      Hee <- Hee + jb$Hee - u$P
+      HeA[, rw$A] <- HeA[, rw$A] + jb$HeA
+    }
+    for (cp in intersect(cholIn, names(u$dP))) HeA[, cp] <- HeA[, cp] + u$dP[[cp]] %*% full[eta]
+    if (!all(is.finite(HeA)) || !all(is.finite(Hee)))
       stop("FOCEI: the second derivatives of the model are not finite at these parameters.", call. = FALSE)
-    thj <- colSums(abs(jb$HeA)) > 0
+    thj <- colSums(abs(HeA)) > 0
     Em <- matrix(0, Kn, Qa, dimnames = list(eta, A))
     if (any(thj)) {
-      eg <- eigen(jb$Hee, symmetric = TRUE)
+      eg <- eigen(Hee, symmetric = TRUE)
       lam <- pmax(eg$values, 1e-10 * abs(sum(eg$values)) / Kn)
-      Em[, thj] <- -(eg$vectors %*% (t(eg$vectors) / lam)) %*% jb$HeA[, thj, drop = FALSE]
+      Em[, thj] <- -(eg$vectors %*% (t(eg$vectors) / lam)) %*% HeA[, thj, drop = FALSE]
     }
     if (sparse) etaShift[[i]] <- Em
     else {
@@ -527,91 +520,162 @@
       etaShift[[i]][, A] <- Em
     }
 
-    # total first derivatives of p, s and of a, b
-    Dp <- rw$pA + a %*% Em; Ds <- rw$sA + b %*% Em
-    Da <- rw$Wp; Db <- rw$Ws
-    for (l in seq_len(Kn)) {
-      Da <- Da + array(outer(matrix(rw$Vp[, , l], tn, Kn), Em[l, ]), c(tn, Kn, Qa))
-      Db <- Db + array(outer(matrix(rw$Vs[, , l], tn, Kn), Em[l, ]), c(tn, Kn, Qa))
+    # per condition the local terms, their couplings N to the shift and the K x K terms Q
+    gE <- numeric(Kn)
+    N <- matrix(0, Qa, Kn, dimnames = list(A, NULL))
+    Qm <- matrix(0, Kn, Kn)
+    D <- matrix(0, Kn^2, Qa, dimnames = list(NULL, A))
+    Gam <- matrix(0, Kn^2, Kn)
+    for (rw in parts) {
+      t <- .volumeTerms(rw, Hinv, Kn, hessian)
+      Ac <- rw$A
+      grad[Ac] <- grad[Ac] + t$g
+      gE <- gE + t$gE
+      if (!hessian) next
+      if (length(Ac)) blocks[[length(blocks) + 1L]] <- structure(t$local, dimnames = list(Ac, Ac))
+      N[Ac, ] <- N[Ac, ] + t$N
+      Qm <- Qm + t$Q
+      D[, Ac] <- D[, Ac] + t$D
+      Gam <- Gam + t$Gam
     }
-
-    DLpp <- l_(3, 0) * Dp + l_(2, 1) * Ds
-    DLps <- l_(2, 1) * Dp + l_(1, 2) * Ds
-    DLss <- l_(1, 2) * Dp + l_(0, 3) * Ds
-
-    Hinv <- H_inv_list[[i]][eta, eta, drop = FALSE]
-    aH <- a %*% Hinv; bH <- b %*% Hinv
-    qaa <- rowSums(aH * a); qab <- rowSums(aH * b); qbb <- rowSums(bH * b)
-    HDa <- array(0, c(tn, Kn, Qa)); HDb <- HDa
-    for (al in seq_len(Qa)) {
-      HDa[, , al] <- matrix(Da[, , al], tn, Kn) %*% Hinv
-      HDb[, , al] <- matrix(Db[, , al], tn, Kn) %*% Hinv
-    }
-    # s_xy[r, alpha] = Dx_alpha' H^-1 y
-    s_aa <- s_ab <- s_ba <- s_bb <- matrix(0, tn, Qa)
-    for (al in seq_len(Qa)) {
-      s_aa[, al] <- rowSums(matrix(HDa[, , al], tn, Kn) * a)
-      s_ab[, al] <- rowSums(matrix(HDa[, , al], tn, Kn) * b)
-      s_ba[, al] <- rowSums(matrix(HDb[, , al], tn, Kn) * a)
-      s_bb[, al] <- rowSums(matrix(HDb[, , al], tn, Kn) * b)
-    }
-
-    gr <- colSums(2 * (Lpp * s_aa + Lps * (s_ab + s_ba) + Lss * s_bb) +
-                  qaa * DLpp + 2 * qab * DLps + qbb * DLss)
-    for (cp in intersect(cholIn, names(dOinv))) gr[match(cp, A)] <- gr[match(cp, A)] + sum(Hinv * dOinv[[cp]])
-    grad[A] <- grad[A] + gr
+    grad[A] <- grad[A] + drop(crossprod(Em, gE))
+    for (cp in intersect(cholIn, names(u$dP))) grad[cp] <- grad[cp] + sum(Hinv * u$dP[[cp]])
     if (!hessian) next
 
-    # D_a H, K x K per outer parameter
-    V <- Lpp * a + Lps * b; Wv <- Lps * a + Lss * b
-    DH <- array(0, c(Kn, Kn, Qa))
-    for (al in seq_len(Qa)) {
-      M <- crossprod(matrix(Da[, , al], tn, Kn), V) + crossprod(matrix(Db[, , al], tn, Kn), Wv)
-      DH[, , al] <- M + t(M) + crossprod(a, DLpp[, al] * a) + crossprod(a, DLps[, al] * b) +
-        crossprod(b, DLps[, al] * a) + crossprod(b, DLss[, al] * b)
+    # dH by every parameter, scaled by H^-1/2 on both sides
+    for (cp in intersect(cholIn, names(u$dP))) D[, cp] <- D[, cp] + as.vector(u$dP[[cp]])
+    D <- D + Gam %*% Em
+    eh <- eigen((Hinv + t(Hinv)) / 2, symmetric = TRUE)
+    Sh <- eh$vectors %*% (sqrt(pmax(eh$values, 0)) * t(eh$vectors))
+    W <- kronecker(Sh, Sh) %*% D
+    # N Em + Em' N' + Em' Q Em = [N, Em'] B [N, Em']' with B = [0, I; I, Q]
+    B <- rbind(cbind(matrix(0, Kn, Kn), diag(Kn)), cbind(diag(Kn), (Qm + t(Qm)) / 2))
+    eb <- eigen(B, symmetric = TRUE)
+    U1 <- cbind(N, t(Em)) %*% eb$vectors
+    U <- cbind(U1, t(W))
+    d <- c(eb$values, rep(-1, nrow(W)))
+    own <- intersect(cholIn, names(u$dP))
+    if (length(own)) {
+      C2 <- matrix(0, length(own), length(own), dimnames = list(own, own))
+      for (al in own) for (be in own) C2[al, be] <- sum(Hinv * u$d2P(al, be))
+      blocks[[length(blocks) + 1L]] <- C2
     }
-    for (cp in intersect(cholIn, names(dOinv))) DH[, , match(cp, A)] <- DH[, , match(cp, A)] + dOinv[[cp]]
-    P <- array(0, c(Kn, Kn, Qa))
-    for (al in seq_len(Qa)) P[, , al] <- Hinv %*% DH[, , al]
-    Pm <- matrix(P, Kn * Kn)
-    Pt <- matrix(aperm(P, c(2, 1, 3)), Kn * Kn)
-    own <- intersect(cholIn, names(dOinv))
-
-    # tr(H^-1 D_ab H) in Gauss-Newton form
-    DaM <- matrix(Da, tn * Kn, Qa); DbM <- matrix(Db, tn * Kn, Qa)
-    HDaM <- matrix(HDa, tn * Kn, Qa); HDbM <- matrix(HDb, tn * Kn, Qa)
-    T1 <- crossprod(DaM, Lpp * HDaM) + crossprod(DaM, Lps * HDbM) +
-      crossprod(DbM, Lps * HDaM) + crossprod(DbM, Lss * HDbM)
-    X <- crossprod(s_aa, DLpp) + crossprod(s_ab + s_ba, DLps) + crossprod(s_bb, DLss)
-    cpp <- qaa * l_(4, 0) + 2 * qab * l_(3, 1) + qbb * l_(2, 2)
-    cps <- qaa * l_(3, 1) + 2 * qab * l_(2, 2) + qbb * l_(1, 3)
-    css <- qaa * l_(2, 2) + 2 * qab * l_(1, 3) + qbb * l_(0, 4)
-    T3 <- crossprod(Dp, cpp * Dp) + crossprod(Dp, cps * Ds) + crossprod(Ds, cps * Dp) + crossprod(Ds, css * Ds)
-    # the third derivatives of the row loss times the second total derivatives of p and s
-    c1 <- qaa * l_(3, 0) + 2 * qab * l_(2, 1) + qbb * l_(1, 2)
-    c2 <- qaa * l_(2, 1) + 2 * qab * l_(1, 2) + qbb * l_(0, 3)
-    T4 <- matrix(0, Qa, Qa)
-    for (z in list(list(c1, rw$pAA, rw$Wp, rw$Vp), list(c2, rw$sAA, rw$Ws, rw$Vs))) {
-      cz <- z[[1]]
-      Mw <- matrix(colSums(cz * matrix(z[[3]], tn)), Kn, Qa)
-      MV <- matrix(colSums(cz * matrix(z[[4]], tn)), Kn, Kn)
-      T4 <- T4 + matrix(colSums(cz * matrix(z[[2]], tn)), Qa, Qa) +
-        crossprod(Mw, Em) + crossprod(Em, Mw) + crossprod(Em, MV %*% Em)
+    # a unit over few parameters as one dense block, else the parts of rank 2K + K^2 apart
+    if (!sparse || Qa^2 <= length(d) * Q) {
+      blocks[[length(blocks) + 1L]] <- structure(U %*% (d * t(U)), dimnames = list(A, A))
+    } else {
+      rownames(U) <- A
+      lowU[[length(lowU) + 1L]] <- U
+      lowD[[length(lowD) + 1L]] <- d
     }
-    vol <- 2 * T1 + 2 * (X + t(X)) + T3 + T4
-    for (al in own) for (be in own)
-      vol[match(al, A), match(be, A)] <- vol[match(al, A), match(be, A)] + sum(Hinv * d2Oinv(al, be))
-
-    # - tr(H^-1 D_a H H^-1 D_b H)
-    block <- vol - crossprod(Pt, Pm)
-    if (sparse) blocks[[length(blocks) + 1L]] <- structure(block, dimnames = list(A, A))
-    else hess[A, A] <- hess[A, A] + block
   }
-  if (sparse) hess <- .sparseFromBlocks(blocks, outer)
   fx <- intersect(names(fixed), outer)
   grad[fx] <- 0
-  if (hessian && length(fx)) hess[fx, ] <- hess[, fx] <- 0
-  list(gradient = grad, hessian = hess, etaShift = etaShift)
+  if (!hessian) return(list(gradient = grad, hessian = NULL, etaShift = etaShift))
+  hess <- .sparseFromBlocks(blocks, outer)
+  lowrank <- if (length(lowU)) .lowrankOver(Reduce(.lowrankBind, Map(function(U, d) list(U = U, d = d), lowU, lowD)), outer)
+  if (length(fx)) {
+    hess[fx, ] <- hess[, fx] <- 0
+    if (!is.null(lowrank)) lowrank$U[fx, ] <- 0
+  }
+  if (!sparse) {
+    hess <- as.matrix(.lowrankDense(hess, lowrank))
+    lowrank <- NULL
+  }
+  list(gradient = grad, hessian = hess, lowrank = lowrank, etaShift = etaShift)
+}
+
+## The volume terms of the rows `rw` of one condition over its parameters rw$A, F = (Da, Db) = S + C Em
+## and Y = (Dp, Ds) = T + c Em: the gradient `g` and its coefficient `gE` on Em; with `hessian` the
+## local block, the couplings `N` and `Q` to Em, and dH as `D` and `Gam` (on Em).
+.volumeTerms <- function(rw, Hinv, Kn, hessian) {
+  n <- length(rw$p)
+  Ac <- rw$A
+  q <- length(Ac)
+  l_ <- function(i, j) rw$loss[, i + 1L, j + 1L]
+  Lpp <- l_(2, 0); Lps <- l_(1, 1); Lss <- l_(0, 2)
+  a <- matrix(rw$a, n, Kn); b <- matrix(rw$b, n, Kn)
+  Ha <- a %*% Hinv; Hb <- b %*% Hinv
+  qaa <- rowSums(Ha * a); qab <- rowSums(Ha * b); qbb <- rowSums(Hb * b)
+  c1 <- qaa * l_(3, 0) + 2 * qab * l_(2, 1) + qbb * l_(1, 2)
+  c2 <- qaa * l_(2, 1) + 2 * qab * l_(1, 2) + qbb * l_(0, 3)
+  # arrays [row, component, column]
+  S <- array(0, c(n, 2L * Kn, q))
+  S[, seq_len(Kn), ] <- rw$Wp; S[, Kn + seq_len(Kn), ] <- rw$Ws
+  C <- array(0, c(n, 2L * Kn, Kn))
+  C[, seq_len(Kn), ] <- rw$Vp; C[, Kn + seq_len(Kn), ] <- rw$Vs
+  Tm <- array(0, c(n, 2L, q)); Tm[, 1, ] <- rw$pA; Tm[, 2, ] <- rw$sA
+  cm <- array(0, c(n, 2L, Kn)); cm[, 1, ] <- a; cm[, 2, ] <- b
+  g <- cbind(2 * (Lpp * Ha + Lps * Hb), 2 * (Lps * Ha + Lss * Hb))
+  h <- cbind(c1, c2)
+  # sum over rows and components of X[r, i, ]' w[r, i] and of X[r, i, ]' w[r, i, j] Y[r, j, ]
+  vecSum <- function(X, w) {
+    out <- numeric(dim(X)[3])
+    for (k in seq_len(dim(X)[2])) out <- out + drop(crossprod(matrix(X[, k, ], n), w[, k]))
+    out
+  }
+  out <- list(g = vecSum(S, g) + vecSum(Tm, h), gE = vecSum(C, g) + vecSum(cm, h))
+  if (!hessian) return(out)
+  rp <- function(X, w, Y) {
+    out <- matrix(0, dim(X)[3], dim(Y)[3])
+    for (k in seq_len(dim(X)[2])) for (l in seq_len(dim(Y)[2])) {
+      wk <- w[, k, l]
+      if (all(wk == 0)) next
+      out <- out + crossprod(matrix(X[, k, ], n), wk * matrix(Y[, l, ], n))
+    }
+    out
+  }
+  m2 <- 2L * Kn
+  G <- array(0, c(n, m2, m2))
+  for (k in seq_len(Kn)) for (l in seq_len(Kn)) {
+    G[, k, l] <- Lpp * Hinv[k, l]; G[, k, Kn + l] <- Lps * Hinv[k, l]
+    G[, Kn + k, l] <- Lps * Hinv[k, l]; G[, Kn + k, Kn + l] <- Lss * Hinv[k, l]
+  }
+  # M = Gv L3: Gv = [Ha, Hb, 0; 0, Ha, Hb] (2K x 3), L3 = [l30, l21; l21, l12; l12, l03]
+  L3 <- array(c(l_(3, 0), l_(2, 1), l_(1, 2), l_(2, 1), l_(1, 2), l_(0, 3)), c(n, 3L, 2L))
+  M <- array(0, c(n, m2, 2L))
+  for (j in 1:2) {
+    M[, seq_len(Kn), j] <- Ha * L3[, 1, j] + Hb * L3[, 2, j]
+    M[, Kn + seq_len(Kn), j] <- Ha * L3[, 2, j] + Hb * L3[, 3, j]
+  }
+  tM <- aperm(M, c(1, 3, 2))
+  cpp <- qaa * l_(4, 0) + 2 * qab * l_(3, 1) + qbb * l_(2, 2)
+  cps <- qaa * l_(3, 1) + 2 * qab * l_(2, 2) + qbb * l_(1, 3)
+  css <- qaa * l_(2, 2) + 2 * qab * l_(1, 3) + qbb * l_(0, 4)
+  Z <- array(c(cpp, cps, cps, css), c(n, 2L, 2L))
+  X2 <- rp(S, M, Tm)
+  sumRows <- function(w, X, d) matrix(colSums(w * matrix(X, n)), d[1], d[2])
+  out$local <- 2 * rp(S, G, S) + 2 * (X2 + t(X2)) + rp(Tm, Z, Tm) +
+    sumRows(c1, rw$pAA, c(q, q)) + sumRows(c2, rw$sAA, c(q, q))
+  out$N <- 2 * rp(S, G, C) + 2 * (rp(S, M, cm) + rp(Tm, tM, C)) + rp(Tm, Z, cm) +
+    t(sumRows(c1, rw$Wp, c(Kn, q)) + sumRows(c2, rw$Ws, c(Kn, q)))
+  Q2 <- rp(C, M, cm)
+  out$Q <- 2 * rp(C, G, C) + 2 * (Q2 + t(Q2)) + rp(cm, Z, cm) +
+    sumRows(c1, rw$Vp, c(Kn, Kn)) + sumRows(c2, rw$Vs, c(Kn, Kn))
+  # vec dH: vec(x V' + V x') + vec(y Wv' + Wv y') over F = (x, y), and the loss terms over Y
+  V <- Lpp * a + Lps * b; Wv <- Lps * a + Lss * b
+  psi <- function(X, Vm) {
+    out <- matrix(0, Kn^2, dim(X)[3])
+    for (k in seq_len(Kn)) for (l in seq_len(Kn)) {
+      kl <- k + (l - 1L) * Kn
+      out[kl, ] <- drop(crossprod(Vm[, l], matrix(X[, k, ], n))) + drop(crossprod(Vm[, k], matrix(X[, l, ], n)))
+    }
+    out
+  }
+  phi <- function(Pm, Sm) {
+    DLpp <- l_(3, 0) * Pm + l_(2, 1) * Sm
+    DLps <- l_(2, 1) * Pm + l_(1, 2) * Sm
+    DLss <- l_(1, 2) * Pm + l_(0, 3) * Sm
+    out <- matrix(0, Kn^2, ncol(Pm))
+    for (k in seq_len(Kn)) for (l in seq_len(Kn))
+      out[k + (l - 1L) * Kn, ] <- colSums(DLpp * (a[, k] * a[, l]) + DLps * (a[, k] * b[, l] + b[, k] * a[, l]) +
+                                            DLss * (b[, k] * b[, l]))
+    out
+  }
+  half <- function(X, part) X[, if (part == 1L) seq_len(Kn) else Kn + seq_len(Kn), , drop = FALSE]
+  out$D <- psi(half(S, 1L), V) + psi(half(S, 2L), Wv) + phi(matrix(rw$pA, n, q), matrix(rw$sA, n, q))
+  out$Gam <- psi(half(C, 1L), V) + psi(half(C, 2L), Wv) + phi(a, b)
+  out
 }
 
 
@@ -663,7 +727,7 @@
   full <- c(fit$argument, setNames(as.vector(etaModes), as.vector(E)))
   exact <- mode == "forward-forward" || (mode == "forward-reverse" && .jointDeriv2(joint, full, fixed))
   if (mode == "forward-reverse" && !exact)
-    hessian <- .reportedReverse(design, joint, full, fixed, outer, fit$H_inv, cores)
+    hessian <- .reportedReverse(design, joint, full, fixed, outer, fit$H_inv, cores)$hessian
   if (exact) {
     # exact Schur complement of the joint Hessian at the modes plus the volume Hessian
     jh <- joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE)$hessian
@@ -759,7 +823,7 @@
     last <<- list(theta = theta, gradient = gradient)
   }
   factors <- function() {
-    U <- matrix(0, length(outer), 0); d <- numeric(0)
+    U <- matrix(0, length(outer), 0, dimnames = list(outer, NULL)); d <- numeric(0)
     for (k in seq_len(ncol(S))) {
       s <- S[, k]
       r <- M[, k] - drop(U %*% (d * crossprod(U, s)))
@@ -781,30 +845,64 @@
   !inherits(tryCatch(joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE), error = function(e) e), "error")
 
 ## The Hessian a FOCEI fit by forward over reverse reports without second-order sensitivities: the
-## exact Schur complement of the joint Hessian up to 500 outer parameters, the Gauss-Newton one
-## above, plus the volume curvature from dH/dtheta (`.volumeReverse(curvature = TRUE)`); `sparse`
-## a sparse Matrix.
+## exact Schur complement up to 500 outer parameters, the Gauss-Newton one above, plus the volume
+## curvature from dH/dtheta; a list of `hessian` (sparse with `sparse`) and `lowrank` over `outer`.
 .reportedReverse <- function(design, joint, full, fixed, outer, H_inv, cores = 1L, sparse = FALSE) {
   vol <- .volumeReverse(design, full, fixed, outer, H_inv, cores = cores, local = sparse, curvature = TRUE)$hessian
   if (length(outer) <= 500L) {
     S <- .schurReverse(design, full, fixed, outer, cores)
-    return(if (sparse) Matrix::Matrix(S, sparse = TRUE) + vol else S + vol)
+    return(list(hessian = if (sparse) Matrix::Matrix(S, sparse = TRUE) + vol else S + vol))
   }
   units <- .volumeUnits(design, full, fixed)
-  H <- joint(pars = full, fixed = fixed, deriv = TRUE, hessian = if (sparse) "sparse")$hessian
+  jt <- joint(pars = full, fixed = fixed, deriv = TRUE, hessian = if (sparse) "sparse")
+  if (sparse) {
+    parts <- .hessianParts(jt, rownames(jt$hessian), outer)
+    sc <- .schurParts(parts$hessian, outer, lapply(units, `[[`, "eta"),
+                      lapply(seq_along(units), function(i) H_inv[[i]][units[[i]]$eta, units[[i]]$eta, drop = FALSE]),
+                      parts$lowrank)
+    return(list(hessian = sc$hessian + vol, lowrank = sc$lowrank))
+  }
+  H <- jt$hessian
   S <- H[outer, outer, drop = FALSE]
   for (i in seq_along(units)) {
     e <- units[[i]]$eta
     Hoe <- H[outer, e, drop = FALSE]
     S <- S - Hoe %*% H_inv[[i]][e, e, drop = FALSE] %*% Matrix::t(Hoe)
   }
-  S + vol
+  list(hessian = S + vol)
 }
 
 
-## Whether FOCEI takes the sparse outer path: `sparse` TRUE, or "auto" with at least the
-## parameters of getOption("dMod2.sparseAuto") and an outer Hessian, the joint Gauss-Newton
-## Hessian with the couplings of the Schur complements, that fills at most `fill`.
+## The Schur complement H_oo - sum_g H_og H_g^-1 H_go over the etas `groups[[g]]`, Hinv[[g]] = H_g^-1,
+## plus the low-rank part `lowrank` of H, as `hessian` and `lowrank`; a group whose n_g coupled outer
+## parameters have n_g^2 > K_g P as the part (H_og R_g') diag(-1) (H_og R_g')', R_g' R_g = H_g^-1.
+.schurParts <- function(H, outer, groups, Hinv, lowrank = NULL) {
+  P <- length(outer)
+  fold <- logical(length(groups))
+  U <- vector("list", length(groups))
+  for (g in seq_along(groups)) {
+    Hoe <- H[outer, groups[[g]], drop = FALSE]
+    n <- sum(Matrix::rowSums(abs(Hoe)) > 0)
+    R <- if (n^2 > length(groups[[g]]) * P)
+      tryCatch(chol((as.matrix(Hinv[[g]]) + t(as.matrix(Hinv[[g]]))) / 2), error = function(e) NULL)
+    if (is.null(R)) { fold[g] <- TRUE; next }
+    U[[g]] <- as.matrix(Hoe %*% t(R))
+  }
+  S <- H[outer, outer, drop = FALSE]
+  if (any(fold)) {
+    e <- unlist(groups[fold], use.names = FALSE)
+    Hoe <- H[outer, e, drop = FALSE]
+    S <- S - Hoe %*% Matrix::bdiag(lapply(Hinv[fold], function(h) unname(as.matrix(h)))) %*% Matrix::t(Hoe)
+  }
+  U <- do.call(cbind, U[!fold])
+  if (!is.null(U)) rownames(U) <- outer
+  list(hessian = Matrix::forceSymmetric(methods::as(S, "CsparseMatrix")),
+       lowrank = .lowrankJoin(.lowrankOver(lowrank, outer), if (!is.null(U)) list(U = U, d = rep(-1, ncol(U)))))
+}
+
+## Whether FOCEI takes the sparse outer path: `sparse` TRUE, or "auto" with at least the parameters
+## of getOption("dMod2.sparseAuto") and a step on the outer Hessian of .schurParts() that costs less
+## than a dense one (.sparseCost()).
 .foceiSparseChoice <- function(design, joint, start, fixed, sparse = "auto") {
   if (!identical(sparse, "auto")) return(isTRUE(sparse))
   th <- .sparseThresholds()
@@ -814,17 +912,20 @@
   full <- c(start, setNames(numeric(length(etas)), etas))
   jt <- tryCatch(joint(pars = full, fixed = fixed, deriv = TRUE, hessian = "sparse"), error = function(e) NULL)
   if (is.null(jt) || !.isSparse(jt$hessian)) return(FALSE)
-  H <- .sparseOver(jt$hessian, c(outer, etas)) != 0
-  B <- H[outer, etas, drop = FALSE]
-  pattern <- H[outer, outer, drop = FALSE] | (B %*% Matrix::t(B)) != 0
-  Matrix::nnzero(pattern) / length(outer)^2 <= th$fill
+  H <- .hessianParts(jt, c(outer, etas), outer)$hessian != 0
+  E <- design$etaNames[, design$normal$stems, drop = FALSE]
+  P <- length(outer)
+  wide <- vapply(seq_len(nrow(E)), function(g) sum(Matrix::rowSums(H[outer, E[g, ], drop = FALSE]) > 0)^2 > ncol(E) * P, TRUE)
+  B <- H[outer, intersect(as.vector(t(E[!wide, , drop = FALSE])), etas), drop = FALSE]
+  pattern <- methods::as(H[outer, outer, drop = FALSE] | (B %*% Matrix::t(B)) != 0, "CsparseMatrix")
+  if (!is.null(th$fill)) return(Matrix::nnzero(pattern) / P^2 <= th$fill)
+  cost <- .sparseCost(pattern, sum(wide) * ncol(E) + length(jt$lowrank$d))
+  cost[["sparse"]] < cost[["dense"]]
 }
 
-## FOCEI of one grouping with the outer trust region on sparse Hessians: the modes by the inner
-## trust of the kernel, the outer Hessian the sparse joint Gauss-Newton Hessian minus the Schur
-## complement of every group plus the volume Hessian, each local to the parameters of the group.
-## The joint objective of a trial point comes with derivatives, so the value comes from the same
-## solve as on the dense path; the volume term is evaluated where a step is accepted.
+## FOCEI of one grouping on sparse Hessians by the outer loop of the dense path (focei_run_sparse()):
+## the joint Gauss-Newton Hessian minus the Schur complements plus the volume Hessian, local to the
+## groups or low-rank, with the SR1 correction.
 .fitFoceiSparse <- function(design, joint, start, fixed = NULL, control = list()) {
   ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control$innerControl %||% list())
@@ -861,11 +962,16 @@
     jt <- if (deriv2) joint(pars = ev$full, fixed = fixed, deriv = TRUE, deriv2 = TRUE, hessian = "sparse",
                             conditions = meta$conditions)
           else ev$joint
-    H <- .sparseOver(jt$hessian, c(outer, etas))
+    # a low-rank part on the outer parameters passes the Schur complement over the etas as it is
+    parts <- .hessianParts(jt, c(outer, etas), outer)
+    H <- parts$hessian
     Hoe <- H[outer, byGroup, drop = FALSE]
-    inv <- if (deriv2) Matrix::solve(H[byGroup, byGroup], Matrix::t(Hoe))
-           else Matrix::bdiag(lapply(ev$inner$H_inv, unname)) %*% Matrix::t(Hoe)
-    ev$hessian <- Matrix::forceSymmetric(H[outer, outer] - Hoe %*% inv)
+    groups <- lapply(seq_len(N), function(g) E[g, ])
+    Hinv <- if (deriv2) lapply(groups, function(e) solve(as.matrix(H[e, e, drop = FALSE])))
+            else ev$inner$H_inv
+    sc <- .schurParts(H, outer, groups, Hinv, parts$lowrank)
+    ev$hessian <- sc$hessian
+    ev$lowrank <- sc$lowrank
     # the gradient at the exact modes to first order: the eta gradient the inner trust leaves
     # enters through the coupling
     left <- Matrix::bdiag(lapply(ev$inner$H_inv, unname)) %*% jt$gradient[byGroup]
@@ -882,77 +988,51 @@
     vol <- .foceiVolume(design, ev$full, fixed, outer, ev$inner$H_inv, hessian = "sparse", cores = cores)
     ev$gradient <- ev$gradient + vol$gradient[outer]
     ev$hessian <- Matrix::forceSymmetric(ev$hessian + vol$hessian)
+    ev$lowrank <- .lowrankJoin(ev$lowrank, vol$lowrank)
     ev$shift <- vol$etaShift
     ev
   }
-  # the modes of `ev` moved to first order along `step`, for a group whose predicted move stays within
-  # the region the inner search starts with, as in the dense kernel
-  shifted <- function(ev, step) {
-    w <- ev$inner$eta_modes
-    for (i in seq_along(ev$shift)) {
-      S <- ev$shift[[i]]
-      if (!length(S)) next
-      d <- drop(S %*% step[colnames(S)])
-      if (is.finite(sum(d^2)) && sqrt(sum(d^2)) <= ic$rinit) w[i, ] <- w[i, ] + d
-    }
-    w
-  }
-
-  # the SR1 correction of the outer model from the full outer gradients of the accepted points
+  # the loop of the dense path on the sparse model: the trial value, and at an accepted trial
+  # the derivatives with the SR1 correction of the outer model as part of the low-rank part and
+  # the mode shifts over the outer positions of their columns
   learn <- .outerSecant(outer)
-  cur <- derivativesAt(modesAt(start, matrix(0, N, K)))
-  if (correction) learn$add(cur$theta, cur$gradient, function(x) cur$hessian %*% x)
-  r <- oc$rinit
-  converged <- FALSE
-  it <- stall <- 0L
-  stopReason <- "iterlim"
-  trace <- list(value = cur$value, radius = r, rho = 0, accept = 1L)
-  while (it < oc$iterlim) {
-    it <- it + 1L
-    lr <- if (correction) learn$factors()
-    st <- .sparseTrustStep(cur$hessian, cur$gradient, r, lowrank = lr)
-    step <- setNames(st$p, outer)
-    Bp <- as.numeric(cur$hessian %*% st$p)
-    if (length(lr$d)) Bp <- Bp + drop(lr$U %*% (lr$d * crossprod(lr$U, st$p)))
-    pred <- -(sum(cur$gradient * st$p) + 0.5 * sum(st$p * Bp))
-    trial <- tryCatch(modesAt(cur$theta + step, shifted(cur, step)), error = function(e) NULL)
-    ft <- if (is.null(trial)) Inf else trial$value
-    rho <- if (pred > 0 && is.finite(ft)) (cur$value - ft) / pred else -Inf
-    # what the model can gain at all, in the largest region the fit allows, as in the dense kernel
-    reach <- if (r < oc$rmax) {
-      sm <- .sparseTrustStep(cur$hessian, cur$gradient, oc$rmax, lowrank = lr)
-      Bm <- as.numeric(cur$hessian %*% sm$p)
-      if (length(lr$d)) Bm <- Bm + drop(lr$U %*% (lr$d * crossprod(lr$U, sm$p)))
-      -(sum(cur$gradient * sm$p) + 0.5 * sum(sm$p * Bm))
-    } else pred
-    done <- is.finite(ft) && abs(reach) < oc$mtol && (abs(cur$value - ft) < oc$ftol || abs(pred) < oc$mtol)
-    ok <- if (done) ft < cur$value else rho >= 0.25
-    if (!done && rho < 0.25) r <- min(r, sqrt(sum(st$p^2))) / 4
-    else if (!done && rho > 0.75 && st$boundary) r <- min(2 * r, oc$rmax)
-    if (ok) {
-      nxt <- tryCatch(derivativesAt(trial), error = function(e) NULL)
-      if (is.null(nxt)) r <- r / 4 else cur <- nxt
-      if (!is.null(nxt) && correction) learn$add(cur$theta, cur$gradient, function(x) cur$hessian %*% x)
-    }
-    for (f in names(trace)) trace[[f]] <- c(trace[[f]], switch(f, value = cur$value, radius = r, rho = rho,
-                                                               accept = as.integer(ok)))
-    # as trust(): five consecutive rejected trials that leave the objective flat within ftol, the noise
-    # of the evaluation, end the fit with nothing left to resolve
-    stall <- if (ok || !is.finite(ft) || abs(cur$value - ft) >= oc$ftol) 0L else stall + 1L
-    if (done || stall >= 5L) { converged <- TRUE; stopReason <- if (done) "model" else "stall"; break }
+  trial <- function(theta, warm) {
+    ev <- modesAt(setNames(as.numeric(theta), outer), warm)
+    ev$eta_modes <- ev$inner$eta_modes
+    ev
   }
+  complete <- function(ev) {
+    ev <- derivativesAt(ev)
+    ev$gradient <- as.numeric(ev$gradient[outer])
+    lr <- .lowrankOver(ev$lowrank, outer)
+    if (correction) {
+      learn$add(ev$theta, setNames(ev$gradient, outer), function(x) .lowrankApply(ev$hessian, lr, x))
+      lr <- .lowrankJoin(lr, learn$factors())
+    }
+    ev$kernel <- .kernelHessian(list(hessian = ev$hessian, lowrank = lr), outer)$kernel
+    ev$shift <- lapply(ev$shift, function(S)
+      if (length(S)) structure(matrix(as.numeric(S), nrow(S)), idx = match(colnames(S), outer)))
+    ev
+  }
+  res <- focei_run_sparse(trial, complete, setNames(as.numeric(start), outer), N, K, oc, ic$rinit)
+  cur <- res$keep
+  converged <- res$converged
+  it <- res$iterations
+  trace <- res$trace
   # the exact Schur complement of the joint Hessian at the modes plus the volume Hessian; by
   # forward over reverse with the volume curvature from dH/dtheta where there is no deriv2
   exact <- mode == "forward-forward" || (mode == "forward-reverse" && .jointDeriv2(joint, cur$full, fixed))
   final <- if (exact) derivativesAt(cur, deriv2 = TRUE) else cur
-  if (mode == "forward-reverse" && !exact)
-    final$hessian <- .reportedReverse(design, joint, cur$full, fixed, outer, cur$inner$H_inv, cores, sparse = TRUE)
+  if (mode == "forward-reverse" && !exact) {
+    rh <- .reportedReverse(design, joint, cur$full, fixed, outer, cur$inner$H_inv, cores, sparse = TRUE)
+    final$hessian <- rh$hessian
+    final$lowrank <- rh$lowrank
+  }
   etaModes <- cur$inner$eta_modes
   dimnames(etaModes) <- list(design$groups, lay$stems)
-  list(argument = cur$theta, value = cur$value, gradient = cur$gradient, hessian = final$hessian,
-       etaModes = etaModes, etaCov = setNames(lapply(cur$inner$H_inv, function(H) 2 * H), design$groups),
-       converged = converged, iterations = it, stopReason = stopReason, trace = trace, derivMode = mode,
-       hessianExact = exact)
+  list(argument = cur$theta, value = cur$value, gradient = setNames(cur$gradient, outer), hessian = final$hessian,
+       lowrank = final$lowrank, etaModes = etaModes, etaCov = setNames(lapply(cur$inner$H_inv, function(H) 2 * H), design$groups),
+       converged = converged, iterations = it, trace = trace, derivMode = mode, hessianExact = exact)
 }
 
 
@@ -1014,6 +1094,11 @@
     theta <- theta[outer]
     full <- c(theta, modes(theta))
     gn <- joint(pars = full, fixed = fixed, deriv = TRUE, hessian = curvature)
+    # sparse: a low-rank part on the outer parameters passes the Schur complements as it is
+    sparseH <- function(h) if (sparse) .hessianParts(h, rownames(h$hessian), outer) else list(hessian = h$hessian)
+    parts <- sparseH(gn)
+    gn$hessian <- parts$hessian
+    lowrank <- parts$lowrank
     block <- function(u) as.matrix(gn$hessian[u$eta, u$eta, drop = FALSE])
     Hinv <- lapply(units, function(u) .scaledSolve(block(u)))
     logdet <- sum(vapply(units, function(u) as.numeric(determinant(block(u) / 2)$modulus), 0))
@@ -1024,11 +1109,16 @@
         Matrix::crossprod(h[ee, outer, drop = FALSE], Matrix::solve(h[ee, ee, drop = FALSE], h[ee, outer, drop = FALSE]))
     }
     if (mode == "forward-forward") {
-      jh <- joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE, hessian = curvature)$hessian
+      jp <- sparseH(joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE, hessian = curvature))
+      jh <- jp$hessian
+      lowrank <- jp$lowrank
       vol <- .foceiVolume(design, full, fixed, outer, Hinv, hessian = if (!volumeHessian) FALSE else curvature %||% TRUE,
                           cores = cores)
       H <- schur(jh)
-      if (volumeHessian) H <- H + vol$hessian[outer, outer]
+      if (volumeHessian) {
+        H <- H + vol$hessian[outer, outer]
+        lowrank <- .lowrankJoin(.lowrankOver(lowrank, outer), .lowrankOver(vol$lowrank, outer))
+      }
       volGradient <- vol$gradient[outer]
     } else {
       # forward over reverse: the exact volume gradient on the Gauss-Newton Schur model, whose
@@ -1038,18 +1128,23 @@
       volGradient <- if (mode == "none") 0 else vol$gradient[outer]
       H <- schur(gn$hessian)
       if (mode != "none") {
-        learn$add(theta, gn$gradient[outer] + volGradient, function(x) H %*% x)
+        learn$add(theta, gn$gradient[outer] + volGradient, function(x) .lowrankApply(H, lowrank, x))
         if (!sparse) H <- H + learn$dense()
       }
       if (volumeHessian && mode != "none") {
-        H <- if (.jointDeriv2(joint, full, fixed))
-          schur(joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE, hessian = curvature)$hessian) +
-            .foceiVolume(design, full, fixed, outer, Hinv, hessian = curvature %||% TRUE, cores = cores)$hessian[outer, outer]
-        else .reportedReverse(design, joint, full, fixed, outer, Hinv, cores, sparse = sparse)
+        rh <- if (.jointDeriv2(joint, full, fixed)) {
+          jp <- sparseH(joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE, hessian = curvature))
+          vh <- .foceiVolume(design, full, fixed, outer, Hinv, hessian = curvature %||% TRUE, cores = cores)
+          list(hessian = schur(jp$hessian) + vh$hessian[outer, outer],
+               lowrank = .lowrankJoin(.lowrankOver(jp$lowrank, outer), .lowrankOver(vh$lowrank, outer)))
+        } else .reportedReverse(design, joint, full, fixed, outer, Hinv, cores, sparse = sparse)
+        H <- rh$hessian
+        lowrank <- rh$lowrank
       }
     }
     if (sparse) H <- Matrix::forceSymmetric(Matrix::Matrix(H, sparse = TRUE))
     out <- objlist(value = gn$value + logdet, gradient = gn$gradient[outer] + volGradient, hessian = H)
+    out$lowrank <- .lowrankOver(lowrank, outer)
     attr(out, "Hinv") <- Hinv
     out
   }
@@ -1066,7 +1161,7 @@
     list(V)
   }), recursive = FALSE)
   list(argument = fit$argument[outer], value = final$value, gradient = final$gradient,
-       hessian = final$hessian, etas = warm, etaCovUnits = cov, units = units,
+       hessian = final$hessian, lowrank = final$lowrank, etas = warm, etaCovUnits = cov, units = units,
        converged = isTRUE(fit$converged), iterations = fit$iterations, stopReason = fit$stopReason,
        derivMode = mode,
        hessianExact = mode == "forward-forward" || .jointDeriv2(joint, c(fit$argument[outer], warm), fixed))

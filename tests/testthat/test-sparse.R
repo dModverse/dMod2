@@ -156,12 +156,16 @@ test_that("trust(sparse = \"auto\") takes the sparse path above the thresholds, 
   expect_s4_class(auto$hessian, "sparseMatrix")
   expect_equal(calls, n)
   expect_equal(auto$value, dense$value, tolerance = 1e-8)
-  # a fill above the threshold, bounds or another Hessian keep the dense path
+  # a fill above the threshold or a quasi-Newton Hessian keep the dense path; bounds take the
+  # same steps on both
   withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 0.01)), {
     expect_true(is.matrix(trust(obj, f$pars, rinit = 1, rmax = 10)$hessian))
   })
   withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)), {
-    expect_true(is.matrix(trust(obj, f$pars, parupper = c(C1_a0 = 10))$hessian))
+    bounded <- trust(obj, f$pars, parupper = c(C1_a0 = 10))
+    expect_s4_class(bounded$hessian, "sparseMatrix")
+    expect_equal(bounded$argument, trust(obj, f$pars, parupper = c(C1_a0 = 10), sparse = FALSE)$argument,
+                 tolerance = 1e-10)
     expect_true(is.matrix(trust(obj, f$pars, hessianMethod = "bfgs")$hessian))
     pr <- profile(obj, dense$argument, "C1_a2", limits = c(-1, 1))
     expect_equal(pr$value, suppressWarnings(profile(obj, dense$argument, "C1_a2", limits = c(-1, 1),
@@ -215,50 +219,76 @@ test_that("a sum of objectives holds the terms, not the frame it is built in", {
   expect_lt(size, length(serialize(f$obj, NULL)) + length(serialize(prior, NULL)) + 1e5)
 })
 
-test_that("the sparse trust step with a low-rank part solves the subproblem of the indefinite sum", {
+# One step of both curvature models of trust() on H plus the low-rank part `lr`.
+.modelSteps <- function(H, g, r, lr = NULL) {
+  nm <- paste0("p", seq_along(g))
+  H <- Matrix::Matrix(as.matrix(H), sparse = TRUE, dimnames = list(nm, nm))
+  if (!is.null(lr)) rownames(lr$U) <- nm
+  k <- dMod2:::.kernelHessian(list(hessian = H, lowrank = lr), nm)$kernel
+  full <- as.matrix(H) + if (is.null(lr)) 0 else lr$U %*% (lr$d * t(lr$U))
+  list(sparse = dMod2:::trust_model_step(k, full, g, r, TRUE), dense = dMod2:::trust_model_step(k, full, g, r, FALSE),
+       B = full)
+}
+
+test_that("both models solve the subproblem of an indefinite sum with a low-rank part, Newton without it", {
   H <- Matrix::Diagonal(x = c(1, 2, 3, 4))
-  U <- cbind(c(1, 1, 0, 0), c(0, 0.5, 1, 0))
-  d <- c(-2, 0.5)
-  B <- as.matrix(H) + U %*% (d * t(U))
-  expect_lt(min(eigen(B, symmetric = TRUE)$values), 0)
+  lr <- list(U = cbind(c(1, 1, 0, 0), c(0, 0.5, 1, 0)), d = c(-2, 0.5))
   g <- c(1, -1, 0.5, 2)
-  st <- dMod2:::.sparseTrustStep(H, g, 0.7, lowrank = list(U = U, d = d))
-  expect_true(st$boundary)
-  expect_equal(sqrt(sum(st$p^2)), 0.7, tolerance = 1e-3)
-  expect_gt(min(eigen(B + st$lambda * diag(4), symmetric = TRUE)$values), 0)
-  expect_equal(drop((B + st$lambda * diag(4)) %*% st$p), -g, tolerance = 1e-10)
-  # without the low-rank part the step is that of H alone
-  plain <- dMod2:::.sparseTrustStep(H, g, 10)
-  expect_equal(plain$p, -g / c(1, 2, 3, 4), tolerance = 1e-12)
+  st <- .modelSteps(H, g, 0.7, lr)
+  expect_lt(min(eigen(st$B, symmetric = TRUE)$values), 0)
+  expect_equal(sqrt(sum(st$sparse$p^2)), 0.7, tolerance = 1e-10)
+  expect_equal(st$sparse$p, st$dense$p, tolerance = 1e-9)
+  expect_equal(st$sparse$pred, st$dense$pred, tolerance = 1e-9)
+  plain <- .modelSteps(H, g, 10)
+  expect_true(plain$sparse$newton && plain$dense$newton)
+  expect_equal(plain$sparse$p, -g / c(1, 2, 3, 4), tolerance = 1e-12)
 })
 
-test_that("the sparse trust step on a Hessian with a flat direction ends on the boundary", {
+test_that("both models step to the boundary along a flat direction, zero at a zero gradient, and take tiny gradients", {
   H <- Matrix::Diagonal(x = c(1, 1e-200))
-  st <- dMod2:::.sparseTrustStep(H, c(1, 1), 1)
-  expect_true(st$boundary)
-  expect_gt(st$lambda, 0)
-  expect_equal(sqrt(sum(st$p^2)), 1, tolerance = 1e-3)
-  expect_equal(drop(as.matrix(H + st$lambda * Matrix::Diagonal(2)) %*% st$p), c(-1, -1), tolerance = 1e-10)
-  # at a vanishing gradient the step is zero
-  expect_equal(dMod2:::.sparseTrustStep(H, c(0, 0), 1)$p, c(0, 0))
-  # gradients whose squares underflow: a step of the radius, the norm taken without underflow
-  H2 <- Matrix::Diagonal(x = c(1, 2))
+  st <- .modelSteps(H, c(1, 1), 1)
+  expect_equal(sqrt(sum(st$sparse$p^2)), 1, tolerance = 1e-10)
+  expect_equal(st$sparse$p, st$dense$p, tolerance = 1e-9)
+  expect_equal(.modelSteps(H, c(0, 0), 1)$sparse$p, c(0, 0))
   for (g in list(c(1e-160, 1e-160), c(1e-170, 1e-170))) {
-    tiny <- dMod2:::.sparseTrustStep(H2, g, 1e-170)
-    expect_true(tiny$boundary)
-    expect_equal(dMod2:::.norm2(tiny$p) / 1e-170, 1, tolerance = 1e-3)
+    tiny <- .modelSteps(Matrix::Diagonal(x = c(1, 2)), g, 1e-170)
+    expect_equal(dMod2:::.norm2(tiny$sparse$p) / 1e-170, 1, tolerance = 1e-10)
   }
-  # a dense Hessian takes the same step
-  dense <- dMod2:::.sparseTrustStep(Matrix::forceSymmetric(Matrix::Matrix(as.matrix(H), sparse = FALSE, doDiag = FALSE)), c(1, 1), 1)
-  expect_equal(dense$p, st$p, tolerance = 1e-10)
 })
 
-test_that("the sparse trust step takes a low-rank part whose weights differ by many orders", {
+test_that("the sparse model takes a low-rank part whose weights differ by many orders", {
   setTimeLimit(elapsed = 10, transient = TRUE)
   on.exit(setTimeLimit(elapsed = Inf))
-  H <- Matrix::Diagonal(x = c(1, 2, 3))
-  lr <- list(U = cbind(c(1, 0, 0), c(0, 1, 0)), d = c(1, -1e-13))
-  st <- dMod2:::.sparseTrustStep(H, c(1, 1, 1), 10, lowrank = lr)
-  expect_false(st$boundary)
-  expect_equal(st$p, -1 / c(2, 2 - 1e-13, 3), tolerance = 1e-12)
+  st <- .modelSteps(Matrix::Diagonal(x = c(1, 2, 3)), c(1, 1, 1), 10, list(U = cbind(c(1, 0, 0), c(0, 1, 0)), d = c(1, -1e-13)))
+  expect_true(st$sparse$newton)
+  expect_equal(st$sparse$p, -1 / c(2, 2 - 1e-13, 3), tolerance = 1e-12)
+})
+
+test_that("the sparse and the dense model take the same steps, indefinite and with a low-rank part", {
+  # an objective indefinite away from its minimum, with a sparse Hessian and a dense part of rank one
+  n <- 30
+  f <- function(x, deriv = TRUE, hessian = TRUE, deriv2 = FALSE, ...) {
+    a <- x[-n]; b <- x[-1]; r <- b - a^2
+    v <- sum(r^2) + sum((1 - a)^2) + 0.1 * sum(x^4) - sum(x^2) + 50 * (sum(x) - 3)^2
+    g <- numeric(n)
+    g[-n] <- g[-n] - 4 * a * r - 2 * (1 - a); g[-1] <- g[-1] + 2 * r
+    g <- setNames(g + 0.4 * x^3 - 2 * x + 100 * (sum(x) - 3), names(x))
+    d <- numeric(n); d[-n] <- d[-n] + 12 * a^2 - 4 * b + 2; d[-1] <- d[-1] + 2; d <- d + 1.2 * x^2 - 2
+    S <- Matrix::sparseMatrix(i = c(seq_len(n), seq_len(n - 1), seq_len(n - 1) + 1),
+                              j = c(seq_len(n), seq_len(n - 1) + 1, seq_len(n - 1)),
+                              x = c(d, -4 * a, -4 * a), dims = c(n, n), dimnames = list(names(x), names(x)))
+    if (!identical(hessian, "sparse")) return(objlist(v, g, as.matrix(S) + 100))
+    out <- objlist(v, g, S)
+    out$lowrank <- list(U = matrix(1, n, 1, dimnames = list(names(x), NULL)), d = 100)
+    out
+  }
+  x0 <- setNames(seq(-1, 1, length.out = n), paste0("x", seq_len(n)))
+  for (bounds in list(NULL, list(lower = setNames(rep(-0.5, n), names(x0)), upper = setNames(rep(0.8, n), names(x0))))) {
+    run <- function(sparse) suppressWarnings(trust(f, x0, rinit = 1, rmax = 10, sparse = sparse, blather = TRUE,
+                                                   parlower = bounds$lower, parupper = bounds$upper))
+    d <- run(FALSE); s <- run(TRUE)
+    expect_identical(s$steptype, d$steptype)
+    expect_equal(s$valpath, d$valpath, tolerance = 1e-10)
+    expect_equal(s$argument, d$argument, tolerance = 1e-10)
+  }
 })
