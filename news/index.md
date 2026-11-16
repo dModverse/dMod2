@@ -1,5 +1,9 @@
 # Changelog
 
+## dMod2 0.15.11
+
+- A test of `terminate()` waits up to 30 s for the task to stop.
+
 ## dMod2 0.15.10
 
 - The example of
