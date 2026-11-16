@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -337,13 +337,17 @@ phase.</p>
 <div class="section level3">
 <h3 id="sparse-hessians">Sparse Hessians<a class="anchor" aria-label="anchor" href="#sparse-hessians"></a>
 </h3>
-<p><code>sparse = TRUE</code> solves the subproblem with a sparse
-Gauss-Newton Hessian by sparse Cholesky factors, for many parameters
-that each act on few conditions. The default <code>"auto"</code> selects
-it for a plain Gauss-Newton run with at least 500 parameters and at most
-5 % fill;
+<p><code>sparse = TRUE</code> solves the subproblem on sparse Cholesky
+factors of the Hessian, for many parameters that each act on few
+conditions; a part of the Hessian that couples many parameters at once,
+such as the normalization of an alignment, comes as a low-rank part. The
+steps, phases, bounds and stops are those of the dense path, so both
+reach the same fit. The default <code>"auto"</code> selects the sparse
+path from 100 parameters on where a step on the sparse Hessian costs
+fewer flops than one on the dense Hessian;
 <code>options(dMod2.sparseAuto = list(parameters = , fill = ))</code>
-changes the thresholds.</p>
+moves the lower bound or replaces the cost by an upper bound of the
+fill.</p>
 </div>
 <div class="section level3">
 <h3 id="arguments-and-result">Arguments and result<a class="anchor" aria-label="anchor" href="#arguments-and-result"></a>

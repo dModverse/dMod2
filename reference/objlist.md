@@ -34,6 +34,12 @@ objlist(value, gradient, hessian)
 
 An object of class `objlist`.
 
+## Details
+
+Asked for `hessian = "sparse"`, an objective may return part of its
+Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
+rows and a vector `d`: the Hessian is then `hessian + U diag(d) U'`.
+
 ## See also
 
 [`as.objlist()`](https://dmodverse.github.io/dMod2/reference/as.objlist.md)

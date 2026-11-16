@@ -101,12 +101,16 @@ phase of `phases` sweeps backwards where it can, while a run without
 
 ### Sparse Hessians
 
-`sparse = TRUE` solves the subproblem with a sparse Gauss-Newton Hessian
-by sparse Cholesky factors, for many parameters that each act on few
-conditions. The default `"auto"` selects it for a plain Gauss-Newton run
-with at least 500 parameters and at most 5 % fill;
-`options(dMod2.sparseAuto = list(parameters = , fill = ))` changes the
-thresholds.
+`sparse = TRUE` solves the subproblem on sparse Cholesky factors of the
+Hessian, for many parameters that each act on few conditions; a part of
+the Hessian that couples many parameters at once, such as the
+normalization of an alignment, comes as a low-rank part. The steps,
+phases, bounds and stops are those of the dense path, so both reach the
+same fit. The default `"auto"` selects the sparse path from 100
+parameters on where a step on the sparse Hessian costs fewer flops than
+one on the dense Hessian;
+`options(dMod2.sparseAuto = list(parameters = , fill = ))` moves the
+lower bound or replaces the cost by an upper bound of the fill.
 
 ### Arguments and result
 

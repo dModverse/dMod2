@@ -12,16 +12,20 @@ alignmentModel()) in the objective; the error parameters and the
 hyperparameters of normal random terms by default by restricted
 likelihood. Every experiment, a combination of
 the columns of the scaling formulas, or with random terms every group, is
-a separate condition, so the Hessian is sparse over them; trust() and
-em() take the sparse path as sparse = "auto" decides.'><meta property="og:description" content='Estimates the parameters of an alignmentModel() by maximum
+split into conditions of at most 16 values of the first biological symbol,
+so the Hessian is sparse over them; trust() and em() take the sparse
+path as sparse = "auto" decides. The normalization enters the sparse
+Hessian as a low-rank part (see objlist()).'><meta property="og:description" content='Estimates the parameters of an alignmentModel() by maximum
 likelihood, the marginal one with random terms (em()), with the
 normalization of the values per block of experiments (see
 alignmentModel()) in the objective; the error parameters and the
 hyperparameters of normal random terms by default by restricted
 likelihood. Every experiment, a combination of
 the columns of the scaling formulas, or with random terms every group, is
-a separate condition, so the Hessian is sparse over them; trust() and
-em() take the sparse path as sparse = "auto" decides.'></head><body>
+split into conditions of at most 16 values of the first biological symbol,
+so the Hessian is sparse over them; trust() and em() take the sparse
+path as sparse = "auto" decides. The normalization enters the sparse
+Hessian as a low-rank part (see objlist()).'></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -29,7 +33,7 @@ em() take the sparse path as sparse = "auto" decides.'></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -110,8 +114,10 @@ normalization of the values per block of experiments (see
 hyperparameters of normal random terms by default by restricted
 likelihood. Every experiment, a combination of
 the columns of the scaling formulas, or with random terms every group, is
-a separate condition, so the Hessian is sparse over them; <code><a href="trust.html">trust()</a></code> and
-<code><a href="em.html">em()</a></code> take the sparse path as <code>sparse = "auto"</code> decides.</p>
+split into conditions of at most 16 values of the first biological symbol,
+so the Hessian is sparse over them; <code><a href="trust.html">trust()</a></code> and <code><a href="em.html">em()</a></code> take the sparse
+path as <code>sparse = "auto"</code> decides. The normalization enters the sparse
+Hessian as a low-rank part (see <code><a href="objlist.html">objlist()</a></code>).</p>
     </div>
 
     <div class="section level2">

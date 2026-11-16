@@ -31,7 +31,7 @@ the model time."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -128,6 +128,7 @@ the model time.</p>
 <span>  gaugePreference <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  forcings <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  unknownInputs <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  knownInputs <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  events <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  conditions <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  regimes <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -141,6 +142,7 @@ the model time.</p>
 <span>  control <span class="op">=</span> <span class="fu"><a href="reconstControl.html">reconstControl</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  scalingsOnly <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  symEngine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"modular"</span>, <span class="st">"symbolic"</span><span class="op">)</span>,</span>
+<span>  discrete <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -195,6 +197,12 @@ to fix (<code>*</code> as wildcard). The gauge is returned as <code>$gauge</code
 form: symbols in <code>f</code> and <code>g</code> without an equation. A direction may change them along with the
 parameters; an exact one lists that change as <code>inputChange</code>. A character cell of
 <code>conditions</code> renames an unknown input in that condition.</p></dd>
+
+
+<dt id="arg-knowninputs">knownInputs<a class="anchor" aria-label="anchor" href="#arg-knowninputs"></a></dt>
+<dd><p>Character vector of known functions of time of no assumed form:
+symbols in <code>f</code> and <code>g</code> without an equation whose values and time derivatives are
+known.</p></dd>
 
 
 <dt id="arg-events">events<a class="anchor" aria-label="anchor" href="#arg-events"></a></dt>
@@ -270,6 +278,11 @@ kernel; <code>identifiable</code>, <code>rank</code> and <code>dim</code> are <c
 models without <code>equilibrate</code> and later events).</p></dd>
 
 
+<dt id="arg-discrete">discrete<a class="anchor" aria-label="anchor" href="#arg-discrete"></a></dt>
+<dd><p><code>FALSE</code> (default), <code>TRUE</code> or a list of arguments of
+<code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>: also search the discrete symmetries.</p></dd>
+
+
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
 <dd><p>Logical. Print the result. Defaults to <code>FALSE</code>.</p></dd>
 
@@ -320,6 +333,9 @@ which the first is taken), <code>conditions</code>, <code>segments</code>, <code
 <dt><code>gauge</code></dt>
 <dd><p>the coordinates fixed under <code>gaugePreference</code>.</p></dd>
 
+<dt><code>discreteSymmetries</code></dt>
+<dd><p>with <code>discrete</code>, see <code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>.</p></dd>
+
 <dt><code>call</code></dt>
 <dd><p>the matched call.</p></dd>
 
@@ -364,6 +380,8 @@ symident documentation at <a href="https://dmodverse.github.io/symident/" class=
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> exact = proven over Q.</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Discrete symmetries: 0</span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">res</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> ------------------------------------------------------------</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> detect  |  observability   engine: modular (GF(p) + CRT)</span>

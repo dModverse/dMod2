@@ -9,10 +9,13 @@ normalization of the values per block of experiments (see
 in the objective; the error parameters and the hyperparameters of normal
 random terms by default by restricted likelihood. Every experiment, a
 combination of the columns of the scaling formulas, or with random terms
-every group, is a separate condition, so the Hessian is sparse over
-them; [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
-and [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) take the
-sparse path as `sparse = "auto"` decides.
+every group, is split into conditions of at most 16 values of the first
+biological symbol, so the Hessian is sparse over them;
+[`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) and
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) take the
+sparse path as `sparse = "auto"` decides. The normalization enters the
+sparse Hessian as a low-rank part (see
+[`objlist()`](https://dmodverse.github.io/dMod2/reference/objlist.md)).
 
 ## Usage
 

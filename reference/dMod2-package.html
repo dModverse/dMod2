@@ -21,7 +21,7 @@ parameter uncertainty is assessed by profile likelihoods."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -131,9 +131,11 @@ in R. Default <code>"C++"</code>.</p></dd>
 Windows.</p></dd>
 
 <dt><code>dMod2.sparseAuto</code></dt>
-<dd><p>Thresholds of <code>sparse = "auto"</code> in <code><a href="trust.html">trust()</a></code> and
-<code><a href="em.html">em()</a></code>, a list of <code>parameters</code> and <code>fill</code>, see <code><a href="trust.html">trust()</a></code>. Default
-<code>list(parameters = 500, fill = 0.05)</code>.</p></dd>
+<dd><p>Settings of <code>sparse = "auto"</code> in <code><a href="trust.html">trust()</a></code> and
+<code><a href="em.html">em()</a></code>, a list of <code>parameters</code>, the fewest parameters of the sparse
+path, and optionally <code>fill</code>, which replaces the comparison of the cost
+of a step by an upper bound of the fill of the sparse Hessian, see
+<code><a href="trust.html">trust()</a></code>. Default <code>list(parameters = 100)</code>.</p></dd>
 
 
 </dl></div>

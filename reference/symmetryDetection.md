@@ -28,6 +28,7 @@ symmetryDetection(
   gaugePreference = FALSE,
   forcings = NULL,
   unknownInputs = NULL,
+  knownInputs = NULL,
   events = NULL,
   conditions = NULL,
   regimes = NULL,
@@ -41,6 +42,7 @@ symmetryDetection(
   control = reconstControl(),
   scalingsOnly = FALSE,
   symEngine = c("modular", "symbolic"),
+  discrete = FALSE,
   verbose = FALSE
 )
 ```
@@ -104,6 +106,12 @@ symmetryDetection(
   them along with the parameters; an exact one lists that change as
   `inputChange`. A character cell of `conditions` renames an unknown
   input in that condition.
+
+- knownInputs:
+
+  Character vector of known functions of time of no assumed form:
+  symbols in `f` and `g` without an equation whose values and time
+  derivatives are known.
 
 - events:
 
@@ -187,6 +195,12 @@ symmetryDetection(
   `"modular"` (default, finite fields) or `"symbolic"` (sympy, small
   models without `equilibrate` and later events).
 
+- discrete:
+
+  `FALSE` (default), `TRUE` or a list of arguments of
+  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md):
+  also search the discrete symmetries.
+
 - verbose:
 
   Logical. Print the result. Defaults to `FALSE`.
@@ -244,6 +258,11 @@ An object of class `symmetrydetection`:
 
   the coordinates fixed under `gaugePreference`.
 
+- `discreteSymmetries`:
+
+  with `discrete`, see
+  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md).
+
 - `call`:
 
   the matched call.
@@ -293,6 +312,8 @@ res
 #> 
 #> exact = proven over Q.
 #> 
+#> 
+#> Discrete symmetries: 0
 summary(res)
 #> ------------------------------------------------------------
 #> detect  |  observability   engine: modular (GF(p) + CRT)

@@ -18,7 +18,7 @@ minimizes the quadratic model of the objective inside a ball,
 
 The ratio of actual to predicted decrease decides on the step and the
 radius \\r\\. Subproblem, radius, bounds and termination are the same
-for every source of \\H\\; the [sparse path](#sparse-hessians) differs.
+for every source of \\H\\ and on the [sparse path](#sparse-hessians).
 
 ### Trust-region subproblem
 
@@ -211,11 +211,22 @@ with the Gauss-Newton Hessian, as in Fides
 
 ### Sparse Hessians
 
-The sparse path solves (3) by Newton’s method on sparse Cholesky factors
-of \\H + \nu I\\ instead of the eigendecomposition. It accepts every
-step with \\\rho_k \> 0\\, shrinks the radius to \\r_k/4\\ below
-\\\rho_k = 1/4\\ and stops on the predicted or the actual decrease,
-without a gradient test.
+A sparse Hessian \\H = S + U D U^\top\\, \\S\\ sparse and \\U\\ of few
+columns \\m\\ with the diagonal \\D\\, takes the same steps without the
+eigendecomposition. The root of (3) is found by Newton’s method on
+\\1/\lVert s(\nu) \rVert\\, safeguarded by a bracket of \\\nu\\, to a
+relative \\10^{-12}\\: every iterate factorizes \\S + \nu I\\ by sparse
+Cholesky, with the ordering of one symbolic analysis per pattern, and
+adds \\U D U^\top\\ by the Woodbury identity through \\K = D^{-1} +
+U^\top (S + \nu I)^{-1} U\\. \\H + \nu I\\ is positive definite where
+\\S + \nu I\\ has \\p\\ negative eigenvalues, \\K\\ has \\q\\ positive
+ones and \\p + q\\ equals the number of positive entries of \\D\\; an
+indefinite \\S + \nu I\\ is factorized as \\L \Delta L^\top\\ for \\p\\.
+In the hard case the eigenvector of \\\lambda\_{\min}\\ comes from
+inverse iteration on the factor at \\\nu\\ next to \\-\lambda\_{\min}\\.
+`sparse = "auto"` compares the flops of a step, about eight
+factorizations with \\m + 2\\ solves each from the symbolic analysis,
+with the \\4 n\_\theta^3\\ of the eigendecomposition.
 
 ## L1 penalties
 

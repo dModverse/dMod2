@@ -188,6 +188,15 @@ An object of class `symmetryreduction`:
   the other charts, each with `trafo`, `removed`, `remaining`,
   `rational` and `pins`.
 
+- `discrete`:
+
+  with discrete symmetries in `object` (see
+  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)):
+  the `symmetries` that can map a point of the domain into it, the
+  `fundamentalDomain`, inequalities that keep one point of each of their
+  orbits, and the `coordinates` they are stated in, the reduced model's
+  for a model with directions.
+
 - `coordinates`, `fixed`, `settings`, `call`:
 
   provenance.
@@ -229,6 +238,8 @@ red
 #> Sections:
 #>   {X₁}  ktl = 1
 #>   summary(x, detailed = TRUE) explains each section.
+#> 
+#> Discrete symmetries: 0
 red$trafo
 #> Idx Inner <- Outer
 #>   1    dm <- dm

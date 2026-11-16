@@ -23,7 +23,7 @@ non-identifiable direction contributes nothing."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -168,17 +168,17 @@ the number of data points minus the summed leverage.</p>
 <span class="r-in"><span><span class="va">old</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>dMod2.outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="addReaction.html">addReaction</a></span><span class="op">(</span><span class="fu"><a href="eqnlist.html">eqnlist</a></span><span class="op">(</span><span class="op">)</span>, from <span class="op">=</span> <span class="st">"A"</span>, to <span class="op">=</span> <span class="st">""</span>, rate <span class="op">=</span> <span class="st">"k*A"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="Xs.html">Xs</a></span><span class="op">(</span><span class="fu"><a href="odemodel.html">odemodel</a></span><span class="op">(</span><span class="va">f</span>, modelname <span class="op">=</span> <span class="st">"reml_x"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting existing file: /tmp/Rtmp2N4Zxw/reml_x.cpp</span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting existing file: /tmp/Rtmp2N4Zxw/reml_x_s.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting existing file: /tmp/RtmptyY1gm/reml_x.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting existing file: /tmp/RtmptyY1gm/reml_x_s.cpp</span>
 <span class="r-in"><span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"A"</span><span class="op">)</span>, f <span class="op">=</span> <span class="va">x</span>, attachInput <span class="op">=</span> <span class="cn">FALSE</span>, modelname <span class="op">=</span> <span class="st">"reml_g"</span>,</span></span>
 <span class="r-in"><span>       compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/Rtmp2N4Zxw/reml_g.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmptyY1gm/reml_g.cpp</span>
 <span class="r-in"><span><span class="va">e</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"sigma_y"</span><span class="op">)</span>, f <span class="op">=</span> <span class="va">g</span>, attachInput <span class="op">=</span> <span class="cn">FALSE</span>, condition <span class="op">=</span> <span class="st">"C1"</span>,</span></span>
 <span class="r-in"><span>       modelname <span class="op">=</span> <span class="st">"reml_e"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/Rtmp2N4Zxw/reml_e_C1.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmptyY1gm/reml_e_C1.cpp</span>
 <span class="r-in"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="P.html">P</a></span><span class="op">(</span><span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>A <span class="op">=</span> <span class="st">"exp(logA)"</span>, k <span class="op">=</span> <span class="st">"exp(logk)"</span>, sigma_y <span class="op">=</span> <span class="st">"sigma_y"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>       condition <span class="op">=</span> <span class="st">"C1"</span>, modelname <span class="op">=</span> <span class="st">"reml_p"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/Rtmp2N4Zxw/reml_p_C1.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmptyY1gm/reml_p_C1.cpp</span>
 <span class="r-in"><span><span class="fu"><a href="compile.html">compile</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">g</span>, <span class="va">e</span>, <span class="va">p</span>, output <span class="op">=</span> <span class="st">"reml_example"</span>, cores <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
 <span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>A shared library named 'reml_example' is already loaded; overwriting it is not portable. Using 'reml_example_2' instead.</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> using C++ compiler: g++</span>

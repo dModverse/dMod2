@@ -54,7 +54,7 @@ Values as fitted for the Huh7.5 core model of the publication.
 
 ## See also
 
-The example project [IFN-α sensitization (Kok
+The example project [IFN-alpha sensitization (Kok
 2020)](https://dmodverse.github.io/dMod2/articles/kokMSB2020.html)
 builds the model.
 

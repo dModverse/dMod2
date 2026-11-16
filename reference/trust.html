@@ -19,7 +19,7 @@ Hessian."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -395,18 +395,21 @@ and parameters. Default <code>NULL</code>, no file.</p></dd>
 
 <dt id="arg-sparse">sparse<a class="anchor" aria-label="anchor" href="#arg-sparse"></a></dt>
 <dd><p><code>"auto"</code> (default), <code>TRUE</code> or <code>FALSE</code>. With
-<code>TRUE</code>, <code>objfun</code> is called with <code>hessian = "sparse"</code> and
-the sparse Gauss-Newton Hessian it returns (a <code>Matrix</code>) is factorized by sparse
-Cholesky. Minimization without phases and bounds only; of the other
-settings only
-<code>rinit</code>, <code>rmax</code>, <code>iterlim</code>, <code>tolControl$ftol</code>,
-<code>tolControl$mtol</code> and <code>printIter</code> apply. <code>"auto"</code> takes
-this path for a Gauss-Newton minimization without phases, bounds, exact
-Hessian, trace or multiple shooting when <code>parinit</code> has at least
-<code>parameters</code> entries and the sparse Hessian at <code>parinit</code> fills
-at most <code>fill</code> of the matrix, both from
-<code>getOption("dMod2.sparseAuto")</code>, a list that defaults to
-<code>parameters = 500</code> and <code>fill = 0.05</code>.</p></dd>
+<code>TRUE</code>, <code>objfun</code> is called with <code>hessian = "sparse"</code>, and
+the subproblem of every step is solved on sparse Cholesky factors of the
+Hessian it returns (a <code>Matrix</code>), a low-rank part <code>lowrank</code> (see
+<code><a href="objlist.html">objlist()</a></code>) added by Woodbury, where the dense path takes the
+eigendecomposition: the same steps to rounding, with every setting of
+<code>trust()</code>; the Hessian comes from the objective,
+<code>hessianMethod</code> <code>"gn"</code> or <code>"exact"</code>, and
+<code>boundary = "reflective"</code>. <code>"auto"</code> takes the sparse path where
+that holds, outside multiple shooting, when <code>parinit</code> has at least
+<code>parameters</code> entries and a step on the sparse Hessian at
+<code>parinit</code> costs fewer flops than the dense one, by the symbolic
+factorization; <code>parameters</code> (default 100) comes from
+<code>getOption("dMod2.sparseAuto")</code>, where a <code>fill</code> replaces the
+cost by the rule that the sparse Hessian fills at most <code>fill</code> of the
+matrix.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -519,9 +522,9 @@ actual to predicted reduction), <code>valpath</code>, <code>valtry</code>,
 <p><code>boundary = "clip"</code> returns only <code>argument</code>, <code>value</code>,
 <code>gradient</code>, <code>hessian</code>, <code>iterations</code>, <code>converged</code>,
 <code>atBound</code> and <code>stopReason</code>, plus the trace.</p>
-<p>The sparse path, see <code>sparse</code>, returns only <code>argument</code>,
-<code>value</code>, <code>gradient</code>, <code>hessian</code> (a sparse <code>Matrix</code>),
-<code>iterations</code> and <code>converged</code>.</p>
+<p>On the sparse path, see <code>sparse</code>, <code>hessian</code> is a sparse
+<code>Matrix</code>, and <code>lowrank</code> where the objective returns one: the
+Hessian is then <code>hessian</code> plus that part.</p>
 <p><code>trustL1</code> returns a list without class with <code>argument</code>,
 <code>value</code>, <code>gradient</code>, <code>hessian</code>, <code>iterations</code>,
 <code>converged</code>, <code>atBound</code> and <code>stopReason</code>, plus the trace

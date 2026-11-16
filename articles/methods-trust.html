@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -136,8 +136,7 @@ inside a ball,</p>
   \lVert s \rVert \le r . \tag{1}\]</span></p>
 <p>The ratio of actual to predicted decrease decides on the step and the
 radius <span class="math inline">\(r\)</span>. Subproblem, radius,
-bounds and termination are the same for every source of <span class="math inline">\(H\)</span>; the <a href="#sparse-hessians">sparse
-path</a> differs.</p>
+bounds and termination are the same for every source of <span class="math inline">\(H\)</span> and on the <a href="#sparse-hessians">sparse path</a>.</p>
 <div class="section level3">
 <h3 id="trust-region-subproblem">Trust-region subproblem<a class="anchor" aria-label="anchor" href="#trust-region-subproblem"></a>
 </h3>
@@ -330,11 +329,22 @@ Hessian, as in Fides <span class="citation"><a href="#ref-froehlich2022fides">[1
 <div class="section level3">
 <h3 id="sparse-hessians">Sparse Hessians<a class="anchor" aria-label="anchor" href="#sparse-hessians"></a>
 </h3>
-<p>The sparse path solves (3) by Newton’s method on sparse Cholesky
-factors of <span class="math inline">\(H + \nu I\)</span> instead of the
-eigendecomposition. It accepts every step with <span class="math inline">\(\rho_k &gt; 0\)</span>, shrinks the radius to
-<span class="math inline">\(r_k/4\)</span> below <span class="math inline">\(\rho_k = 1/4\)</span> and stops on the predicted
-or the actual decrease, without a gradient test.</p>
+<p>A sparse Hessian <span class="math inline">\(H = S + U D
+U^\top\)</span>, <span class="math inline">\(S\)</span> sparse and <span class="math inline">\(U\)</span> of few columns <span class="math inline">\(m\)</span> with the diagonal <span class="math inline">\(D\)</span>, takes the same steps without the
+eigendecomposition. The root of (3) is found by Newton’s method on <span class="math inline">\(1/\lVert s(\nu) \rVert\)</span>, safeguarded by a
+bracket of <span class="math inline">\(\nu\)</span>, to a relative <span class="math inline">\(10^{-12}\)</span>: every iterate factorizes <span class="math inline">\(S + \nu I\)</span> by sparse Cholesky, with the
+ordering of one symbolic analysis per pattern, and adds <span class="math inline">\(U D U^\top\)</span> by the Woodbury identity
+through <span class="math inline">\(K = D^{-1} + U^\top (S + \nu I)^{-1}
+U\)</span>. <span class="math inline">\(H + \nu I\)</span> is positive
+definite where <span class="math inline">\(S + \nu I\)</span> has <span class="math inline">\(p\)</span> negative eigenvalues, <span class="math inline">\(K\)</span> has <span class="math inline">\(q\)</span> positive ones and <span class="math inline">\(p + q\)</span> equals the number of positive
+entries of <span class="math inline">\(D\)</span>; an indefinite <span class="math inline">\(S + \nu I\)</span> is factorized as <span class="math inline">\(L \Delta L^\top\)</span> for <span class="math inline">\(p\)</span>. In the hard case the eigenvector of
+<span class="math inline">\(\lambda_{\min}\)</span> comes from inverse
+iteration on the factor at <span class="math inline">\(\nu\)</span> next
+to <span class="math inline">\(-\lambda_{\min}\)</span>.
+<code>sparse = "auto"</code> compares the flops of a step, about eight
+factorizations with <span class="math inline">\(m + 2\)</span> solves
+each from the symbolic analysis, with the <span class="math inline">\(4
+n_\theta^3\)</span> of the eigendecomposition.</p>
 </div>
 </div>
 <div class="section level2">

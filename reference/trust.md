@@ -312,16 +312,20 @@ trustL1(
 - sparse:
 
   `"auto"` (default), `TRUE` or `FALSE`. With `TRUE`, `objfun` is called
-  with `hessian = "sparse"` and the sparse Gauss-Newton Hessian it
-  returns (a `Matrix`) is factorized by sparse Cholesky. Minimization
-  without phases and bounds only; of the other settings only `rinit`,
-  `rmax`, `iterlim`, `tolControl$ftol`, `tolControl$mtol` and
-  `printIter` apply. `"auto"` takes this path for a Gauss-Newton
-  minimization without phases, bounds, exact Hessian, trace or multiple
-  shooting when `parinit` has at least `parameters` entries and the
-  sparse Hessian at `parinit` fills at most `fill` of the matrix, both
-  from `getOption("dMod2.sparseAuto")`, a list that defaults to
-  `parameters = 500` and `fill = 0.05`.
+  with `hessian = "sparse"`, and the subproblem of every step is solved
+  on sparse Cholesky factors of the Hessian it returns (a `Matrix`), a
+  low-rank part `lowrank` (see
+  [`objlist()`](https://dmodverse.github.io/dMod2/reference/objlist.md))
+  added by Woodbury, where the dense path takes the eigendecomposition:
+  the same steps to rounding, with every setting of `trust()`; the
+  Hessian comes from the objective, `hessianMethod` `"gn"` or `"exact"`,
+  and `boundary = "reflective"`. `"auto"` takes the sparse path where
+  that holds, outside multiple shooting, when `parinit` has at least
+  `parameters` entries and a step on the sparse Hessian at `parinit`
+  costs fewer flops than the dense one, by the symbolic factorization;
+  `parameters` (default 100) comes from `getOption("dMod2.sparseAuto")`,
+  where a `fill` replaces the cost by the rule that the sparse Hessian
+  fills at most `fill` of the matrix.
 
 - ...:
 
@@ -442,8 +446,9 @@ and the per-iteration vectors `steptype`, `stepback`, `accept`, `r`
 `hessian`, `iterations`, `converged`, `atBound` and `stopReason`, plus
 the trace.
 
-The sparse path, see `sparse`, returns only `argument`, `value`,
-`gradient`, `hessian` (a sparse `Matrix`), `iterations` and `converged`.
+On the sparse path, see `sparse`, `hessian` is a sparse `Matrix`, and
+`lowrank` where the objective returns one: the Hessian is then `hessian`
+plus that part.
 
 `trustL1` returns a list without class with `argument`, `value`,
 `gradient`, `hessian`, `iterations`, `converged`, `atBound` and

@@ -236,9 +236,46 @@ fits the remaining 63 parameters, [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md)
 checks which the data determine.
 
+## Discrete symmetries
+
+A locally identifiable model can still give the output of a parameter
+value at other, isolated values: a discrete symmetry.
+`symmetryDetection(discrete = TRUE)`, or
+[`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
+on a result, counts these values in the domain and reconstructs the maps
+between them where they are rational functions of the coordinates; the
+search needs msolve and a model with one condition and no events. In the
+two-compartment model of Godfrey [\[2\]](#ref-godfrey1983compartmental),
+with the amounts \\x_1\\ and \\x_2\\, an input \\u\\ into the first
+compartment and the second observed,
+
+``` r
+
+f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
+compartments <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
+compartments
+```
+
+``` text
+#> Result:  structurally locally identifiable (rank 5 / 5)
+#>
+#> Discrete symmetries: 1, 2 solutions over the algebraic closure
+#>   k01 -> k12, x1 -> (k01*x2 - k12*x2 + k21*x1)/k21, k12 -> k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 > 0]
+#>   fundamental domain: k01 < k12
+```
+
+the map exchanges the elimination rate \\k\_{01}\\ and the return rate
+\\k\_{12}\\ and moves the initial value of \\x_1\\, so the model is
+locally but not globally identifiable. `exact` means proven by a map of
+the states. The fundamental domain \\k\_{01} \< k\_{12}\\ keeps one of
+the two points; a fit restricted to it has a unique optimum. A model
+with directions is reduced first, and the maps are stated in the
+coordinates of the reduced model.
+
 Reference:
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md),
-[`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
+[`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md),
+[`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
 
 [← 1. Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.md) \|
@@ -255,3 +292,8 @@ as a tool to quantify the impact of drug-induced liver injury
 compounds,” *npj Systems Biology and Applications*, vol. 4, p. 23, 2018,
 doi:
 [10.1038/s41540-018-0058-z](https://doi.org/10.1038/s41540-018-0058-z).
+
+\[2\]
+
+K. Godfrey, *Compartmental models and their application*. London:
+Academic Press, 1983.

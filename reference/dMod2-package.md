@@ -45,12 +45,14 @@ likelihoods.
 
 - `dMod2.sparseAuto`:
 
-  Thresholds of `sparse = "auto"` in
+  Settings of `sparse = "auto"` in
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) and
   [`em()`](https://dmodverse.github.io/dMod2/reference/em.md), a list of
-  `parameters` and `fill`, see
+  `parameters`, the fewest parameters of the sparse path, and optionally
+  `fill`, which replaces the comparison of the cost of a step by an
+  upper bound of the fill of the sparse Hessian, see
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md).
-  Default `list(parameters = 500, fill = 0.05)`.
+  Default `list(parameters = 100)`.
 
 ## Environment variables
 

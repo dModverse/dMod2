@@ -21,7 +21,7 @@ computation runs in the Python package symident."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -266,6 +266,13 @@ the positive orthant.</p></dd>
 <dd><p>the other charts, each with <code>trafo</code>, <code>removed</code>,
 <code>remaining</code>, <code>rational</code> and <code>pins</code>.</p></dd>
 
+<dt><code>discrete</code></dt>
+<dd><p>with discrete symmetries in <code>object</code> (see
+<code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>): the <code>symmetries</code> that can map a point of the domain
+into it, the <code>fundamentalDomain</code>, inequalities that keep one point of each of
+their orbits, and the <code>coordinates</code> they are stated in, the reduced model's for
+a model with directions.</p></dd>
+
 <dt><code>coordinates</code>, <code>fixed</code>, <code>settings</code>, <code>call</code></dt>
 <dd><p>provenance.</p></dd>
 
@@ -301,6 +308,8 @@ estimated on a linear scale; a chart valid only for positive values of the <code
 <span class="r-out co"><span class="r-pr">#&gt;</span> Sections:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   {X₁}  ktl = 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   summary(x, detailed = TRUE) explains each section.</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Discrete symmetries: 0</span>
 <span class="r-in"><span><span class="va">red</span><span class="op">$</span><span class="va">trafo</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Idx Inner &lt;- Outer</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   1    dm &lt;- dm</span>

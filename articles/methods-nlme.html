@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -262,9 +262,11 @@ from the last three accepted gradients.</li>
 <code>trustControl$mtol</code> in the region <code>rmax</code>, or five
 rejected trials flat within <code>ftol</code>.</li>
 <li>
-<strong>Sparsity.</strong> <code>sparse = TRUE</code>: sparse outer
-Hessians, Schur complement and volume term of a group local to the
-parameters of the group.</li>
+<strong>Sparsity.</strong> <code>sparse = TRUE</code>: the same
+outer loop on sparse outer Hessians, Schur complement and volume term of
+a group local to the parameters of the group, or, where the <span class="math inline">\(n_g\)</span> entries of <span class="math inline">\(\psi\)</span> a group couples satisfy <span class="math inline">\(n_g^2 &gt; k\, n_\psi\)</span> with <span class="math inline">\(n_\psi\)</span> the number of entries of <span class="math inline">\(\psi\)</span>, as a low-rank part of rank <span class="math inline">\(k\)</span>: <span class="math inline">\(k =
+K\)</span> for the Schur complement, <span class="math inline">\(k = 2K
++ K^2\)</span> for the volume term.</li>
 </ul>
 </div>
 <div class="section level3">

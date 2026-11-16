@@ -27,7 +27,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -346,8 +346,38 @@ translation it drives, A20 in units of the A20 imaging scale. The
 reduction fixes other coordinates, a different choice of units. <a href="guide-optimization.html">Optimization</a> fits the remaining 63
 parameters, <a href="guide-profiles.html">Profile likelihood</a> checks
 which the data determine.</p>
+</div>
+<div class="section level2">
+<h2 id="discrete-symmetries">Discrete symmetries<a class="anchor" aria-label="anchor" href="#discrete-symmetries"></a>
+</h2>
+<p>A locally identifiable model can still give the output of a parameter
+value at other, isolated values: a discrete symmetry.
+<code>symmetryDetection(discrete = TRUE)</code>, or
+<code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code> on a result, counts these values in
+the domain and reconstructs the maps between them where they are
+rational functions of the coordinates; the search needs msolve and a
+model with one condition and no events. In the two-compartment model of
+Godfrey <span class="citation"><a href="#ref-godfrey1983compartmental">[2]</a></span>, with the amounts
+<span class="math inline">\(x_1\)</span> and <span class="math inline">\(x_2\)</span>, an input <span class="math inline">\(u\)</span> into the first compartment and the
+second observed,</p>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>x1 <span class="op">=</span> <span class="st">"-(k21 + k01)*x1 + k12*x2 + u"</span>, x2 <span class="op">=</span> <span class="st">"k21*x1 - k12*x2"</span><span class="op">)</span></span>
+<span><span class="va">compartments</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">f</span>, <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"x2"</span><span class="op">)</span>, knownInputs <span class="op">=</span> <span class="st">"u"</span>, discrete <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">compartments</span></span></code></pre></div>
+<pre class="text"><code><span><span class="co">#&gt; Result:  structurally locally identifiable (rank 5 / 5)</span></span>
+<span><span class="co">#&gt;</span></span>
+<span><span class="co">#&gt; Discrete symmetries: 1, 2 solutions over the algebraic closure</span></span>
+<span><span class="co">#&gt;   k01 -&gt; k12, x1 -&gt; (k01*x2 - k12*x2 + k21*x1)/k21, k12 -&gt; k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 &gt; 0]</span></span>
+<span><span class="co">#&gt;   fundamental domain: k01 &lt; k12</span></span></code></pre>
+<p>the map exchanges the elimination rate <span class="math inline">\(k_{01}\)</span> and the return rate <span class="math inline">\(k_{12}\)</span> and moves the initial value of
+<span class="math inline">\(x_1\)</span>, so the model is locally but
+not globally identifiable. <code>exact</code> means proven by a map of
+the states. The fundamental domain <span class="math inline">\(k_{01}
+&lt; k_{12}\)</span> keeps one of the two points; a fit restricted to it
+has a unique optimum. A model with directions is reduced first, and the
+maps are stated in the coordinates of the reduced model.</p>
 <p>Reference: <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>,
-<code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code></p>
+<code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code>, <code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code></p>
 <p><a href="guide-model.html">← 1. Setting up models</a> | <a href="guide-sensitivities.html">3. Sensitivities →</a></p>
 </div>
 <div class="section level2 unnumbered">
@@ -363,6 +393,12 @@ Oppelt <em>et al.</em>, <span>“Model-based identification of
 transduction as a tool to quantify the impact of drug-induced liver
 injury compounds,”</span> <em>npj Systems Biology and Applications</em>,
 vol. 4, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
+</div>
+<div id="ref-godfrey1983compartmental" class="csl-entry">
+<div class="csl-left-margin">[2] </div>
+<div class="csl-right-inline">K.
+Godfrey, <em>Compartmental models and their application</em>. London:
+Academic Press, 1983.</div>
 </div>
 </div>
 </div>

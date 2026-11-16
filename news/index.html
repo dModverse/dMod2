@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.8</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.9</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -85,6 +85,23 @@
       <small>Source: <a href="https://github.com/dModverse/dMod2/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.15.9" id="dmod2-0159">dMod2 0.15.9<a class="anchor" aria-label="anchor" href="#dmod2-0159"></a></h2>
+<ul><li>
+<code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code> and <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> need symident 0.14.0. An added, multiplied or replaced dose on a state under a free exponent or a Hill term moves the power of the state with it, at the start and later, also under <code>equilibrate</code>; an initial value such as <code>B*V + D</code> of such a state is accepted. An event value with <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp()</a></code>, <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">log()</a></code>, a non-integer power, <code><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin()</a></code>, <code><a href="https://rdrr.io/r/base/Trig.html" class="external-link">cos()</a></code> or <code><a href="https://rdrr.io/r/base/Trig.html" class="external-link">tan()</a></code> of a state reads the state at the event, where symident 0.13.5 read the initial value.</li>
+<li>
+<code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code>, or <code>symmetryDetection(discrete = TRUE)</code>, searches the discrete symmetries of a detection result, other points of the domain with the same output, and reconstructs the maps between them with the fundamental domain; <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> holds them in <code>$discrete</code>. <code>symmetryDetection(knownInputs = )</code> declares known functions of time.</li>
+<li>
+<code><a href="../reference/trust.html">trust()</a></code> runs one optimizer on dense and sparse Hessians: the sparse path solves the subproblem of the same steps on sparse Cholesky factors and takes every setting of <code><a href="../reference/trust.html">trust()</a></code> for a Hessian of the objective (<code>"gn"</code>, <code>"exact"</code>), bounds and phases included. <code>sparse = "auto"</code> takes it above 100 parameters where a step costs fewer flops than a dense one, by the symbolic factorization; <code>options(dMod2.sparseAuto = list(fill = ))</code> keeps the rule by fill.</li>
+<li>
+<code>hessian = "sparse"</code> may return part of a Hessian as a low-rank part <code>lowrank</code> (see <code><a href="../reference/objlist.html">objlist()</a></code>), which <code><a href="../reference/trust.html">trust()</a></code>, <code><a href="https://rdrr.io/r/stats/profile.html" class="external-link">profile()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, the restricted likelihood of <code><a href="../reference/align.html">align()</a></code> and the results of <code><a href="../reference/em.html">em()</a></code> add by Woodbury.</li>
+<li>
+<code><a href="../reference/align.html">align()</a></code> keeps the Hessian of large alignments sparse. The normalization of the values per block enters it as a sparse part plus a low-rank one, and an experiment is split into conditions of at most 16 biological values, so the derivatives per condition stay small.</li>
+<li>
+<code><a href="../reference/em.html">em()</a></code> and <code><a href="../reference/align.html">align()</a></code> with random effects keep the Hessian sparse where a group couples many parameters, as a random scale per gel does: the Schur complement over the random effects of such a group and the curvature of its volume term enter as low-rank parts. FOCEI runs one outer optimizer on dense and sparse Hessians, which reach the same fit.</li>
+<li>
+<code><a href="../reference/align.html">align()</a></code> with random effects gives standard errors <code>NA</code> instead of an error where the Gauss-Newton information of the random effects is singular.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.15.8" id="dmod2-0158">dMod2 0.15.8<a class="anchor" aria-label="anchor" href="#dmod2-0158"></a></h2>
 <ul><li>
