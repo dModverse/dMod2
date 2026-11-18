@@ -13,11 +13,13 @@ objframe(
 )
 }
 \arguments{
-\item{mydata}{data.table produced by \link{res}}
+\item{mydata}{Data frame with columns \code{time}, \code{name}, \code{value}, \code{prediction},
+\code{sigma}, \code{residual}, \code{weighted.residual}, \code{bloq} and \code{weighted.0}; further
+columns are dropped.}
 
-\item{deriv}{numeric matrix of first-order derivatives of residuals (Jacobian)}
+\item{deriv}{numeric matrix \verb{[n_residuals, p]} of first-order derivatives of the residuals}
 
-\item{deriv.err}{numeric matrix of first-order derivatives of the error model}
+\item{deriv.err}{numeric matrix \verb{[n_residuals, p]} of first-order derivatives of the error model}
 
 \item{deriv2}{numeric 3D array \verb{[n_residuals, p, p]} of second-order derivatives
 of residuals with respect to parameters. Optional.}
@@ -32,6 +34,6 @@ When \code{deriv2}/\code{deriv2.err} are supplied, the corresponding 3D arrays a
 attached as \code{"deriv2"} / \code{"deriv2.err"}.
 }
 \description{
-An objective frame stores residuals and their derivatives with respect to parameters.
-It is typically created by \link{res} and used internally in objective functions.
+An objective frame stores residuals and their derivatives with respect to parameters,
+as \code{\link[=res]{res()}} returns them.
 }

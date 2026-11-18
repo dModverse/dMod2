@@ -22,21 +22,18 @@ named like a compartment whose volume is the compartment symbol is the size
 of that compartment; entries named like other compartments or like species
 are not written. Default \code{NULL}: no \verb{<parameter>} is written.}
 
-\item{inits}{Named numeric \emph{or} character vector of initial values keyed
-by state name. Numeric entries (or character entries that parse as
-numeric) are written as \code{initialConcentration}, \code{initialAmount} for
-states listed in \code{eqnlist$amountStates}; non-numeric character
-entries are emitted as \verb{<initialAssignment>} formulas and let the SBML
-simulator resolve the expression against \code{parameters} at sim time.
-Missing states default to 0. Default \code{NULL}.}
+\item{inits}{Named numeric or character vector of initial values keyed
+by state name. Numbers, also as character, are written as
+\code{initialConcentration}, or \code{initialAmount} for the states in
+\code{eqnlist$amountStates}; other expressions as \verb{<initialAssignment>}
+formulas. Missing states default to 0. Default \code{NULL}.}
 
 \item{filepath}{Path of the SBML file to write.}
 
 \item{modelID}{SBML model identifier. Defaults to \code{"dMod_export"}.}
 
 \item{events}{Object of class \link{eventlist} to emit as \verb{<listOfEvents>}, or
-\code{NULL}. Rows sharing a trigger become one \verb{<event>}, since SBML applies an
-event's assignments together. A compartment an event assigns to is written
+\code{NULL}. Rows sharing a trigger become one \verb{<event>}. A compartment an event assigns to is written
 as non-constant. Default \code{NULL}.}
 }
 \value{

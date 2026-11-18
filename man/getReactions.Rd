@@ -10,8 +10,10 @@ getReactions(eqnlist)
 \item{eqnlist}{object of class \link{eqnlist}}
 }
 \value{
-\code{data.frame} with educts, products, rate and description. The first
-column is a check if the reactions comply with reaction kinetics.
+\code{data.frame} with columns \code{Check}, \code{Educt}, \verb{->}, \code{Product}, \code{Rate}
+and \code{Description}, one row per reaction; \code{Check} is \code{"!"} where the rate
+does not contain all educts of the reaction. \code{NULL} for an empty equation
+list.
 }
 \description{
 Generate a Table of Reactions from an Equation List

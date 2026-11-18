@@ -78,6 +78,23 @@ inline void eigen_sym_local(const double* A, int K, double* vals, double* vecs) 
   if (info != 0) throw std::runtime_error("dsyevr failed");
 }
 
+// 1/2 g' B^+ g over the eigenvalues of B above the noise floor of trust_sub (vecs column-major): the
+// decrease the full Newton step on the positive part of B predicts.
+inline double newton_decrease_eigen(int K, const double* g, const double* vals, const double* vecs) {
+  double vmax = 0.0;
+  for (int j = 0; j < K; ++j) vmax = std::max(vmax, std::fabs(vals[j]));
+  const double cut = 8.0 * K * std::numeric_limits<double>::epsilon() * vmax;
+  double d = 0.0;
+  for (int j = 0; j < K; ++j) {
+    if (!(vals[j] > cut)) continue;
+    const double* q = vecs + (std::size_t) j * K;
+    double t = 0.0;
+    for (int i = 0; i < K; ++i) t += q[i] * g[i];
+    d += t * t / vals[j];
+  }
+  return 0.5 * d;
+}
+
 // Moré-Sorensen trust-region subproblem.
 // Minimize g^T p + 1/2 p^T H p subject to ||p|| <= r, where H is given
 // implicitly by the eigendecomposition (vals ascending, vecs column-major).
@@ -309,7 +326,7 @@ struct DenseOp {
   const double* B;
   // summed in a fixed order: a threaded BLAS reduction would make the steps differ between runs
   void apply(const double* x, double* y) const {
-    std::fill(y, y + K, 0.0);
+    for (int i = 0; i < K; ++i) y[i] = 0.0;
     for (int j = 0; j < K; ++j) {
       const double xj = x[j];
       const double* col = B + (std::size_t) j * K;

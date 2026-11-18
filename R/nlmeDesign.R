@@ -38,7 +38,7 @@
                df = spec$df %||% Inf, bloq = spec$optBLOQ %||% "M3", fixedEffects = random$fixed,
                randomEffects = random, chain = .objectiveChain(obj, spec))
   inGroup <- unique(unlist(lapply(subs, function(sd) unlist(sd$conditions))))
-  free <- setdiff(names(data), inGroup)
+  free <- .setdiff(names(data), inGroup)
   if (length(subs) == 1L) {
     design <- structure(c(base, subs[[1]], list(freeConditions = free)), class = "emdesign")
     design$reach <- .etaReach(design)
@@ -119,9 +119,9 @@
       for (pin in names(dep)) edge(layer, rep(pin, length(dep[[pin]])), layer + 1L, dep[[pin]])
       outs <- c(env$dependent, env$zero_states)
       hold(layer + 1L, outs)
-      through <- setdiff(namesAt(layer), outs)
+      through <- .setdiff(namesAt(layer), outs)
       edge(layer, through, layer + 1L, through)
-      zout <- c(env$zero_states, intersect(through, zin))
+      zout <- c(env$zero_states, .intersect(through, zin))
     } else if (!is.null(eq)) {
       for (o in names(eq)) {
         d <- .zeroDepends(eq[[o]], zin)
@@ -130,9 +130,9 @@
         hold(layer + 1L, o)
       }
       if (isTRUE(env$controls$attachInput)) {
-        through <- setdiff(namesAt(layer), names(eq))
+        through <- .setdiff(namesAt(layer), names(eq))
         edge(layer, through, layer + 1L, through)
-        zout <- c(zout, intersect(through, zin))
+        zout <- c(zout, .intersect(through, zin))
       }
     } else return(every)
     zeroAt[[as.character(layer + 1L)]] <- zout
@@ -153,16 +153,16 @@
     }, TRUE)
     unique(v[!keep])
   }
-  zeroState <- intersect(names(ode), zeroPar)
+  zeroState <- .intersect(names(ode), zeroPar)
   repeat {
-    zs <- c(setdiff(zeroPar, names(ode)), zeroState)
+    zs <- c(.setdiff(zeroPar, names(ode)), zeroState)
     stay <- zeroState[vapply(zeroState, function(st) .zeroDepends(ode[[st]], zs)$zero, TRUE)]
-    stay <- setdiff(stay, moves(zs))
+    stay <- .setdiff(stay, moves(zs))
     if (setequal(stay, zeroState)) break
     zeroState <- stay
   }
-  zs <- c(setdiff(zeroPar, names(ode)), zeroState)
-  for (st in setdiff(names(ode), zeroState)) {
+  zs <- c(.setdiff(zeroPar, names(ode)), zeroState)
+  for (st in .setdiff(names(ode), zeroState)) {
     sy <- .zeroDepends(ode[[st]], zs)$symbols
     edge(inner, sy, inner, rep(st, length(sy)))
   }
@@ -171,7 +171,7 @@
     for (r in seq_len(nrow(events))) {
       st <- as.character(events$var[r])
       if (st %in% zeroState) next
-      sy <- unique(unlist(lapply(setdiff(names(events), c("var", "method")), function(col)
+      sy <- unique(unlist(lapply(.setdiff(names(events), c("var", "method")), function(col)
         .zeroDepends(as.character(events[[col]][r]), zs)$symbols)))
       edge(inner, sy, inner, rep(st, length(sy)))
     }
@@ -187,15 +187,15 @@
     for (o in names(obs)) {
       d <- .zeroDepends(obs[[o]], unique(c(zeroTop, zs)))
       if (d$zero) zout <- c(zout, o)
-      lower <- intersect(d$symbols, below)
+      lower <- .intersect(d$symbols, below)
       edge(top, lower, top + 1L, rep(o, length(lower)))
-      edge(inner, setdiff(d$symbols, lower), top + 1L, rep(o, length(setdiff(d$symbols, lower))))
+      edge(inner, .setdiff(d$symbols, lower), top + 1L, rep(o, length(.setdiff(d$symbols, lower))))
       hold(top + 1L, o)
     }
     if (isTRUE(environment(leaf$kernel)$controls$attachInput)) {
-      through <- setdiff(below, names(obs))
+      through <- .setdiff(below, names(obs))
       edge(top, through, top + 1L, through)
-      zout <- c(zout, intersect(through, zeroTop))
+      zout <- c(zout, .intersect(through, zeroTop))
     }
     zeroTop <- zout
     top <- top + 1L
@@ -215,9 +215,9 @@
       below <- namesAt(base)
       for (o in names(eq)) {
         sy <- .zeroDepends(eq[[o]], unique(c(zeroTop, zs)))$symbols
-        lower <- intersect(sy, below)
+        lower <- .intersect(sy, below)
         edge(base, lower, base + 1L, rep(o, length(lower)))
-        edge(inner, setdiff(sy, lower), base + 1L, rep(o, length(setdiff(sy, lower))))
+        edge(inner, .setdiff(sy, lower), base + 1L, rep(o, length(.setdiff(sy, lower))))
       }
       base <- base + 1L
     }
@@ -236,19 +236,19 @@
   rows <- env$all_exprs
   syms <- lapply(rows, function(r) .zeroDepends(r, zeros)$symbols)
   cons <- !(names(rows) %in% dep)
-  inputs <- setdiff(unique(unlist(syms)), dep)
-  inputs <- intersect(inputs, env$parms_all)
+  inputs <- .setdiff(unique(unlist(syms)), dep)
+  inputs <- .intersect(inputs, env$parms_all)
   setNames(lapply(inputs, function(pin) {
     moved <- character(0)
     repeat {
       hit <- vapply(syms, function(s) pin %in% s || any(moved %in% s), TRUE)
-      add <- unique(c(names(rows)[hit & !cons], unlist(lapply(syms[hit & cons], intersect, dep))))
-      add <- intersect(add, dep)
+      add <- unique(c(names(rows)[hit & !cons], unlist(lapply(syms[hit & cons], .intersect, dep))))
+      add <- .intersect(add, dep)
       if (all(add %in% moved)) break
-      moved <- union(moved, add)
+      moved <- .union(moved, add)
     }
-    rest <- setdiff(dep, moved)
-    keep <- (!cons & names(rows) %in% rest) | (cons & vapply(syms, function(s) !any(intersect(s, dep) %in% moved), TRUE))
+    rest <- .setdiff(dep, moved)
+    keep <- (!cons & names(rows) %in% rest) | (cons & vapply(syms, function(s) !any(.intersect(s, dep) %in% moved), TRUE))
     if (length(rest) && .structuralRank(syms[keep], rest) < length(rest)) dep else moved
   }), inputs)
 }
@@ -256,7 +256,7 @@
 ## The size of a maximum matching between the rows, each the symbols it holds, and `cols`.
 .structuralRank <- function(rows, cols) {
   owner <- setNames(rep(NA_integer_, length(cols)), cols)
-  adj <- lapply(rows, intersect, cols)
+  adj <- lapply(rows, .intersect, cols)
   seen <- NULL
   augment <- function(r) {
     for (c in adj[[r]]) {
@@ -280,7 +280,7 @@
 .zeroDepends <- function(expr, zeros) {
   e <- .zeroOut(str2lang(as.character(expr)), zeros)
   list(zero = is.numeric(e) && length(e) == 1L && !is.na(e) && e == 0,
-       symbols = if (is.numeric(e)) character(0) else setdiff(all.vars(e), "time"))
+       symbols = if (is.numeric(e)) character(0) else .setdiff(all.vars(e), "time"))
 }
 
 ## An expression with the names in `zeros` set to 0: a product with a factor 0, a quotient with
@@ -324,7 +324,7 @@
 ## Cholesky layout of the normal ones.
 .groupingDesign <- function(random, data, grouping) {
   terms <- random$terms
-  conditions <- lapply(random$subjects[[grouping]], intersect, names(data))
+  conditions <- lapply(random$subjects[[grouping]], .intersect, names(data))
   conditions <- conditions[lengths(conditions) > 0L]
   groups <- names(conditions)
   own <- Filter(function(b) terms$group[b[1]] == grouping, random$blocks)
@@ -360,7 +360,7 @@
 ## The random effects `re` without the term of `stem`, whose etas the caller fixes at 0.
 .dropRandomTerm <- function(re, stem) {
   keep <- re$terms$stem != stem
-  etaNames <- lapply(re$etaNames, function(E) E[, setdiff(colnames(E), stem), drop = FALSE])
+  etaNames <- lapply(re$etaNames, function(E) E[, .setdiff(colnames(E), stem), drop = FALSE])
   .newRandomEffects(re$terms[keep, , drop = FALSE], re$etas[, keep, drop = FALSE], re$groups[keep], re$fixed,
                     re$fixedDesign, subjects = re$subjects[unique(re$terms$group[keep])],
                     etaNames = if (length(re$etaNames)) etaNames)
@@ -432,7 +432,7 @@
 ## hyperparameters; the error model sees the inner ones.
 .structuralNames <- function(design) {
   all <- attr(design$prdfn, "parameters")
-  setdiff(all, c(.allEtas(design), .hyperNames(design)))
+  .setdiff(all, c(.allEtas(design), .hyperNames(design)))
 }
 
 .hyperNames <- function(design)
@@ -444,13 +444,13 @@
 ## created at 0, the random-effect and slab standard deviations at `sd`, concentrations at 1,
 ## split probabilities at 1/2.
 .emStart <- function(design, init = NULL, fixed = NULL, sd = 0.3) {
-  structural <- setdiff(.structuralNames(design), names(fixed))
-  miss <- setdiff(structural, c(design$fixedEffects, names(init)))
+  structural <- .setdiff(.structuralNames(design), names(fixed))
+  miss <- .setdiff(structural, c(design$fixedEffects, names(init)))
   if (length(miss))
     stop("em: `init` needs values for ", paste(miss, collapse = ", "),
          "; the parameters the effect formulas created start at 0.", call. = FALSE)
   start <- setNames(rep(0, length(structural)), structural)
-  given <- intersect(names(init), structural)
+  given <- .intersect(names(init), structural)
   start[given] <- init[given]
   chol <- unlist(unname(lapply(.subDesigns(design), function(sub)
     setNames(ifelse(sub$normal$isDiag, log(sd), 0), sub$normal$cholPars))))
@@ -460,10 +460,10 @@
     setNames(initial[names(h)], h)
   })))
   hyper <- c(chol, sparse)
-  given <- intersect(names(init), names(hyper))
+  given <- .intersect(names(init), names(hyper))
   hyper[given] <- init[given]
-  hyper <- hyper[setdiff(names(hyper), names(fixed))]
-  unknown <- setdiff(names(init), c(structural, names(hyper), names(fixed)))
+  hyper <- hyper[.setdiff(names(hyper), names(fixed))]
+  unknown <- .setdiff(names(init), c(structural, names(hyper), names(fixed)))
   if (length(unknown))
     stop("em: `init` names parameters the fit does not have: ", paste(unknown, collapse = ", "),
          ".", call. = FALSE)
@@ -503,8 +503,8 @@
   stems <- colnames(phi)
   pars <- unlist(lapply(unname(ref), `[[`, "pars"))
   W <- solve(Omega)
-  free <- intersect(free, pars)
-  fixed <- setdiff(pars, free)
+  free <- .intersect(free, pars)
+  fixed <- .setdiff(pars, free)
   A <- matrix(0, length(free), length(free)); b <- numeric(length(free))
   for (g in rownames(phi)) {
     D <- matrix(0, length(stems), length(pars), dimnames = list(stems, pars))
@@ -525,7 +525,7 @@
   if (length(sd) == 1L && is.null(names(sd))) return(setNames(rep(sd, length(center)), names(center)))
   if (is.null(names(sd)) || any(names(sd) == ""))
     stop("msem: `sd` with several entries names the parameters it perturbs.", call. = FALSE)
-  unknown <- setdiff(names(sd), names(center))
+  unknown <- .setdiff(names(sd), names(center))
   if (length(unknown))
     stop("msem: `sd` names ", paste(unknown, collapse = ", "), ", which the fit does not estimate.", call. = FALSE)
   out <- setNames(numeric(length(center)), names(center))

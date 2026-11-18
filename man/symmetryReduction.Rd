@@ -2,7 +2,7 @@
 % Please edit documentation in R/symmetryReduction.R
 \name{symmetryReduction}
 \alias{symmetryReduction}
-\title{Remove Detected Symmetries by Reparametrization}
+\title{Remove Detected Symmetries by Reparameterization}
 \usage{
 symmetryReduction(
   object,
@@ -14,11 +14,12 @@ symmetryReduction(
   separable = TRUE,
   reportZeroCompatibility = FALSE,
   alternatives = FALSE,
-  timeout = Inf,
-  allowOpen = FALSE,
-  allowChecked = FALSE,
+  timeout = 600,
+  allowOpen = TRUE,
+  allowChecked = TRUE,
   check = TRUE,
   workCap = 4000L,
+  branch = NULL,
   ...
 )
 }
@@ -48,22 +49,29 @@ drive to 0. Defaults to \code{FALSE}.}
 \item{alternatives}{Logical. Also return the charts of the other valid pins
 in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
-\item{timeout}{Time limit in seconds for the section search of one block; a block not
-solved in time keeps the invariants (\code{"invariant_only"}). Unlike \code{workCap}, it depends
-on the load of the machine. Defaults to \code{Inf}.}
+\item{timeout}{Wall time in seconds for the section search of one block; a block not
+solved in time keeps the invariants (\code{"invariant_only"}) and is named in \code{limits}.
+\code{Inf} lets the search run to its end. Unlike \code{workCap}, it depends on the load of the
+machine. Defaults to 600.}
 
 \item{allowOpen}{Logical. Reduce the directions with a closed form and leave those
-of level \code{"open"} in place; otherwise such a direction is an error. A direction
-of level \code{"verified"} or \code{"checked"}, and a section claim left unproven, give a
-warning. Defaults to \code{FALSE}.}
+of level \code{"open"} in place with a warning; \code{FALSE} makes such a direction an error. A
+direction of level \code{"verified"}, and a section claim left unproven, give a warning.
+Defaults to \code{TRUE}.}
 
 \item{allowChecked}{Logical. Reduce also on a direction of level \code{"checked"}, which
 holds at random points but has no proof, and on a result whose saturation check
-failed; otherwise either is an error. Defaults to \code{FALSE}.}
+failed, with a warning; \code{FALSE} makes either an error. Defaults to \code{TRUE}.}
 
 \item{check}{Logical. Run the detection again on the model with the trafo applied
 and record in \code{checks$loop} whether exactly the remaining directions are left.
 Defaults to \code{TRUE}; large models may turn it off.}
+
+\item{branch}{With a discrete symmetry of \code{symmetryDetection(mode = "global")}: the side of
+its fixed set as an inequality, e.g. \code{"k01 > k12"}, whose chart becomes the trafo: free values
+in the positive orthant map one to one onto that side, chained with the section. Without it
+every branch is in \code{$alternatives}; \code{$discrete$branches} lists them with \code{injective}, \code{reach},
+\code{unproven} and the \code{boundary}. Defaults to \code{NULL}.}
 
 \item{workCap}{Number of candidate sections the search of one block may try;
 reaching it is an entry in \code{limits}. Defaults to 4000.}

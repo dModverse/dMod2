@@ -4,14 +4,7 @@
 \alias{constraintStability}
 \title{Stability of the steady state of Pimpl() as a constraint}
 \usage{
-constraintStability(
-  pSS,
-  p = NULL,
-  onset = NULL,
-  duration = NULL,
-  weight = 100,
-  attrName = "stability"
-)
+constraintStability(pSS, p = NULL, weight = 100, attrName = "stability")
 }
 \arguments{
 \item{pSS}{A parfn of \code{\link[=Pimpl]{Pimpl()}}, built with \code{deriv2 = TRUE}.}
@@ -19,14 +12,9 @@ constraintStability(
 \item{p}{The parfn whose output \code{pSS} reads, or \code{NULL} where \code{pSS} reads the
 parameters of the objective.}
 
-\item{onset}{\eqn{\lambda_0}, below \code{stabilityTol}. \code{NULL} (default) for
-\code{stabilityTol - 1 / duration}: the term begins where a perturbation of the
-steady state decays more slowly than the data last.}
-
-\item{duration}{The time the data span, for the default \code{onset}.}
-
 \item{weight}{\eqn{w}, the value of the term where the real part of an
-eigenvalue reaches \code{stabilityTol}, in units of \eqn{-2 \log L}. Default 100.}
+eigenvalue reaches the stability tolerance, in units of \eqn{-2 \log L}.
+Default 100.}
 
 \item{attrName}{Name of the attribute that holds the value of the term,
 default \code{"stability"}.}
@@ -39,13 +27,19 @@ the objective.
 A term of the objective that keeps the steady state of a
 \code{\link[=Pimpl]{Pimpl()}} stable. For every eigenvalue \eqn{\lambda} of the Jacobian of the
 right-hand side at the steady state, on the manifold of the conserved
-quantities, it adds \eqn{w\, r^2} with
-\eqn{r = \max(0, \mathrm{Re}\,\lambda - \lambda_0) / (\lambda_{tol} - \lambda_0)}:
-nothing while every real part lies below the onset \eqn{\lambda_0}, and the
-weight \eqn{w} for each eigenvalue, both of a complex pair, whose real part
-reaches \eqn{\lambda_{tol}}, the \code{stabilityTol} of \code{pSS}. Steady states
-that agree in all inputs count once. The gradient is exact, the Hessian
-Gauss-Newton.
+quantities, it adds the square of the residual
+\eqn{\sqrt{w}\, r^{3/2}} for \eqn{r \le 1} and
+\eqn{\sqrt{w}\, (1 + 3 (r - 1) / 2)} beyond, with
+\eqn{r = \max(0, \mathrm{Re}\,\lambda - \lambda_0) / (\lambda_{tol} - \lambda_0)}.
+With \eqn{s} the largest eigenvalue modulus there, \eqn{\lambda_{tol}} the
+\code{stabilityTol} and \eqn{m} the \code{stabilityMargin} of the \code{controlsPTC} of
+\code{pSS}, the ramp begins at \eqn{\lambda_0 = \lambda_{tol} - m s}. The term is
+zero on a steady state whose leading real part lies more than \eqn{m s}
+below \eqn{\lambda_{tol}}, reaches the weight \eqn{w} for each eigenvalue, both of
+a complex pair, whose real part reaches \eqn{\lambda_{tol}}, and grows
+quadratically beyond. Value, gradient and Gauss-Newton Hessian are
+continuous. Steady states that agree in the parameters, resting states and
+start values they read count once. The gradient is exact.
 }
 \details{
 The term is an assumption of the model, that the system rests where
@@ -53,9 +47,17 @@ the steady state is taken, not data: \code{\link[=profile]{profile()}} with \cod
 likelihood ratios read the data term without it. Parameters of \code{p} that the
 evaluation does not give, such as random effects, enter at 0.
 
-Where \code{pSS} requires a stable root, an evaluation beyond \code{stabilityTol}
-fails. With \code{Pimpl(controlsPTC = list(stability = FALSE))} it returns the
+Where \code{pSS} requires a stable root, an evaluation beyond the stability
+tolerance fails. With \code{Pimpl(controlsPTC = list(stability = FALSE))} it returns the
 unstable root there, and the term goes on rising.
+
+The attribute \code{"eigenvalues"} of the result lists the eigenvalues above the
+onset, one row each: the conditions of the steady state, real and imaginary
+part, the half-life or doubling time \eqn{\log 2 / |\mathrm{Re}\,\lambda|}, the
+onset, the contribution to the term, and the states with the largest
+entries of the right eigenvector, scaled to a largest entry of 1. The sum
+with other terms keeps the value only, so the attribute is read from a call
+of the term itself.
 }
 \examples{
 \donttest{
@@ -65,11 +67,14 @@ old <- setwd(tempdir())
 pSS <- Pimpl(f, deriv2 = TRUE, modelname = "brusselator_ss")
 p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = "brusselator_p")
 compile(pSS, p, output = "brusselator")
-stab <- constraintStability(pSS, p, onset = -0.5, weight = 10)
-# far from the Hopf point nothing, near it the term with gradient, beyond it the term on the
-# unstable steady state
-stab(c(la = 0, lb = log(0.5)))$value
-stab(c(la = 0, lb = log(1.8)))
+stab <- constraintStability(pSS, p, weight = 10)
+# nothing on a stable steady state away from the Hopf point, the ramp just below it, the weight
+# per eigenvalue at it, beyond it the term on the unstable steady state
+stab(c(la = 0, lb = log(1.99)))$value
+stab(c(la = 0, lb = log(2 - 1e-6)))$value
+out <- stab(c(la = 0, lb = log(2)))
+out$value
+attr(out, "eigenvalues")
 stab(c(la = 0, lb = log(2.5)))$value
 setwd(old)
 }

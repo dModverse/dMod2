@@ -27,6 +27,8 @@ symmetryDetection(
   control = reconstControl(),
   scalingsOnly = FALSE,
   symEngine = c("modular", "symbolic"),
+  mode = c("local", "global"),
+  globalOptions = NULL,
   discrete = FALSE,
   verbose = FALSE
 )
@@ -115,8 +117,18 @@ kernel; \code{identifiable}, \code{rank} and \code{dim} are \code{NA}. Defaults 
 \item{symEngine}{\code{"modular"} (default, finite fields) or \code{"symbolic"} (sympy, small
 models without \code{equilibrate} and later events).}
 
+\item{mode}{\code{"local"} (default) analyzes local identifiability only. \code{"global"} analyzes it
+first, reduces the directions found and then counts the values of the coordinates with the
+output of a generic one and reconstructs the maps between them, as \code{\link[=discreteSymmetries]{discreteSymmetries()}}
+(needs msolve, implies \code{reconstruct = TRUE}). A model the global analysis does not handle
+gets the reason in \code{info$discrete$unsupported} and a warning. Needs symident 0.15.0.}
+
+\item{globalOptions}{A list of arguments of the global analysis: \code{order}, \code{points},
+\code{timeout} and \code{budget} as in \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}
+
 \item{discrete}{\code{FALSE} (default), \code{TRUE} or a list of arguments of
-\code{\link[=discreteSymmetries]{discreteSymmetries()}}: also search the discrete symmetries.}
+\code{\link[=discreteSymmetries]{discreteSymmetries()}}: also search the discrete symmetries; \code{mode = "global"} does the
+same through the detection.}
 
 \item{verbose}{Logical. Print the result. Defaults to \code{FALSE}.}
 }
@@ -130,7 +142,10 @@ coordinates.}
 \item{\code{symmetries}}{the directions, each a generator
 \eqn{X = \sum_i \xi_i \partial_{\theta_i}}: \code{generator} (\eqn{\xi} by
 coordinate), \code{weights} (a scaling's integer weights), \code{type} (\code{"scaling"} or
-\code{"general"}), \code{degree}, \code{support}, \code{explicit}, \code{level}, \code{stateComponents},
+\code{"general"}), \code{kind} (the orbit geometry: \code{"scaling"}, \eqn{\xi_i = w_i \theta_i}, a
+line in logarithmic coordinates; \code{"translation"}, constant \eqn{\xi}, a line in linear
+coordinates; \code{"curved"}, all others; \code{NULL} without closed form), \code{degree}, \code{support},
+\code{explicit}, \code{level}, \code{stateComponents},
 \code{reason}, \code{route}, \code{display}, \code{completeGenerator} and \code{factor}. \code{level} is
 \code{"exact"} for a direction proven over the rationals, \code{"verified"} for one
 checked at random points modulo a large prime with an error bound,

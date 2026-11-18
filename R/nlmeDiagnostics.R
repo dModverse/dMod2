@@ -30,7 +30,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
     errs <- if (!is.null(node)) {
       inner <- lapply(conds, function(cn) getParameters(preds[[cn]]))
       fixedInner <- lapply(inner, function(p) as.parvec(p[attr(p, "fixed")], deriv = FALSE, deriv2 = FALSE))
-      inner <- lapply(inner, function(p) as.parvec(p[setdiff(names(p), names(object$fixed))], deriv = FALSE,
+      inner <- lapply(inner, function(p) as.parvec(p[.setdiff(names(p), names(object$fixed))], deriv = FALSE,
                                                    deriv2 = FALSE))
       .evalNode(node, .bundle(conds = conds, out = unname(preds), pars = inner, fixed = fixedInner),
                 FALSE, FALSE, NULL, 1L)
@@ -67,7 +67,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   lloq <- .emObsLimits(design)
   pars <- c(object$argument, .etaVector(object))
   units <- lapply(.volumeUnits(design, c(pars, object$fixed), object$fixed), `[[`, "conditions")
-  units <- c(units, as.list(setdiff(names(design$data), unlist(units))))
+  units <- c(units, as.list(.setdiff(names(design$data), unlist(units))))
   out <- rep(NA_real_, length(y))
   for (u in units) {
     r <- which(pr$condition %in% u)
@@ -100,7 +100,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   cens <- which(y <= lloq)
   if (!length(cens)) return(y)
   K <- ncol(S)
-  obs <- setdiff(seq_along(y), cens)
+  obs <- .setdiff(seq_along(y), cens)
   scores <- stats::qnorm((t(apply(S, 1, rank)) - 0.5) / K)
   Q <- solve(stats::cor(t(scores)))
   w <- stats::qnorm((rowSums(S < y) + 0.5) / (K + 1))
@@ -156,9 +156,9 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
 #' of that fraction.
 #'
 #' @param x An `em` fit, see [em()].
-#' @param nsim Number of simulated data sets.
+#' @param nsim Number of simulated data sets. Default 200.
 #' @param bins Number of bins, at quantiles of the times of the readings, or
-#'   the breaks of the bins.
+#'   the breaks of the bins. Default 8.
 #' @param pc `TRUE`: prediction corrected (Bergstrand et al. 2011), every
 #'   reading and simulation times the median population prediction of the bin
 #'   over the population prediction of that reading. Without `logScale`, readings whose
@@ -168,7 +168,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
 #'   own one instead.
 #' @param strata Optional column of the condition grid of the data of the fit
 #'   ([datalist]), one panel per value.
-#' @param seed Seed of the random number generator.
+#' @param seed Seed of the random number generator. Default `NULL`.
 #' @param ... Ignored.
 #' @return A ggplot, with the BLQ panel a list of two ggplots where cowplot is
 #'   not available; attribute `vpc` holds the table of the percentiles and
@@ -276,7 +276,7 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   design <- fit$design
   grid <- if (is.data.frame(covariates)) covariates else {
     g <- attr(design$data, "condition.grid")
-    miss <- setdiff(covariates, names(g))
+    miss <- .setdiff(covariates, names(g))
     if (length(miss))
       stop("plotRandomEffects: ", paste(miss, collapse = ", "), " not in the condition grid of the data; ",
            "give `covariates` as a data.frame with one row per condition.", call. = FALSE)
@@ -284,7 +284,7 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   }
   if ("condition" %in% names(grid) && !all(rownames(grid) %in% names(design$data)))
     rownames(grid) <- grid$condition
-  cols <- setdiff(names(grid), "condition")
+  cols <- .setdiff(names(grid), "condition")
   random <- fit$random
   if (is.null(random)) stop("plotRandomEffects: the fit has no random effects.", call. = FALSE)
   subs <- .subDesigns(design)

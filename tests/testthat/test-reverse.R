@@ -292,6 +292,43 @@ test_that("optionsReverse refine adds the correction of the sweep to value and c
   }
 })
 
+test_that("a chi2 seed that reaches the states as the value seed does is not swept again", {
+  fx <- .rev_fx()
+  lo <- list(atol = 1e-6, rtol = 1e-4)
+  th <- fx$pars + 0.5
+  cases <- list(
+    fixed = list(p = fx$p, e = NULL, sigma = 0.1, pars = th, S = 1L),
+    error = list(p = fx$pe, e = fx$e, sigma = NULL, S = 2L,
+                 pars = c(th, logsdrel = log(0.08), logsdabs = log(0.02))))
+  seen <- integer()
+  run <- .chainSolveRun
+  local_mocked_bindings(.chainSolveRun = function(plan, args, cores, back = FALSE) {
+    if (back) seen <<- c(seen, vapply(args, function(a) dim(a$cotangent)[3L], 1L))
+    run(plan, args, cores, back)
+  })
+  solve <- cppDE::solveODE
+  local_mocked_bindings(solveODE = function(...) {
+    ct <- list(...)$cotangent
+    if (!is.null(ct)) seen <<- c(seen, dim(ct)[3L])
+    solve(...)
+  }, .package = "cppDE")
+  for (nm in names(cases)) {
+    cs <- cases[[nm]]
+    dat <- .rev_data(fx, fx$g * fx$x * cs$p, cs$pars, sigma = cs$sigma)
+    o <- normL2(dat, fx$g * Xs(fx$m, options = lo, optionsReverse = list(refine = TRUE)) * cs$p, cs$e)
+    seen <- integer()
+    r <- o(cs$pars, deriv = TRUE, sweep = "reverse")
+    expect_identical(seen, cs$S, info = nm)
+    seen <- integer()
+    rR <- withr::with_options(list(dMod2.evaluation = "R"), o(cs$pars, deriv = TRUE, sweep = "reverse"))
+    expect_identical(seen, cs$S, info = nm)
+    corr <- attr(r, "correction")
+    expect_equal(corr[["value"]] == corr[["chi2"]], cs$S == 1L, info = nm)
+    expect_equal(attr(rR, "correction"), corr, tolerance = 1e-10, info = nm)
+    expect_equal(rR$gradient[names(r$gradient)], r$gradient, tolerance = 1e-8, info = nm)
+  }
+})
+
 test_that("the gap to the forward mode is the discretization, not the adjoint", {
   fx <- .rev_fx()
   prd <- fx$g * fx$x * fx$p

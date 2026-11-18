@@ -70,8 +70,8 @@ plot.em <- function(x, ...) {
 #'   [residuals()][residuals.em].
 #' @param parframe An `em` fit, see [em()].
 #' @param type Any of `"IWRES"`, `"CWRES"` and `"NPDE"`, by default all three.
-#' @param nsim,seed With `"NPDE"`: the number of simulated data sets and the
-#'   seed of the random number generator.
+#' @param nsim,seed With `"NPDE"`: the number of simulated data sets, default
+#'   1000, and the seed of the random number generator, default `NULL`.
 #' @param ... Ignored.
 #' @return A ggplot.
 #' @example inst/examples/plotResiduals.em.R

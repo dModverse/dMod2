@@ -73,8 +73,16 @@
 #'   kernel; `identifiable`, `rank` and `dim` are `NA`. Defaults to `FALSE`.
 #' @param symEngine `"modular"` (default, finite fields) or `"symbolic"` (sympy, small
 #'   models without `equilibrate` and later events).
+#' @param mode `"local"` (default) analyzes local identifiability only. `"global"` analyzes it
+#'   first, reduces the directions found and then counts the values of the coordinates with the
+#'   output of a generic one and reconstructs the maps between them, as [discreteSymmetries()]
+#'   (needs msolve, implies `reconstruct = TRUE`). A model the global analysis does not handle
+#'   gets the reason in `info$discrete$unsupported` and a warning. Needs symident 0.15.0.
+#' @param globalOptions A list of arguments of the global analysis: `order`, `points`,
+#'   `timeout` and `budget` as in [discreteSymmetries()].
 #' @param discrete `FALSE` (default), `TRUE` or a list of arguments of
-#'   [discreteSymmetries()]: also search the discrete symmetries.
+#'   [discreteSymmetries()]: also search the discrete symmetries; `mode = "global"` does the
+#'   same through the detection.
 #' @param verbose Logical. Print the result. Defaults to `FALSE`.
 #'
 #' @return An object of class `symmetrydetection`:
@@ -86,7 +94,10 @@
 #'     \item{`symmetries`}{the directions, each a generator
 #'       \eqn{X = \sum_i \xi_i \partial_{\theta_i}}: `generator` (\eqn{\xi} by
 #'       coordinate), `weights` (a scaling's integer weights), `type` (`"scaling"` or
-#'       `"general"`), `degree`, `support`, `explicit`, `level`, `stateComponents`,
+#'       `"general"`), `kind` (the orbit geometry: `"scaling"`, \eqn{\xi_i = w_i \theta_i}, a
+#'       line in logarithmic coordinates; `"translation"`, constant \eqn{\xi}, a line in linear
+#'       coordinates; `"curved"`, all others; `NULL` without closed form), `degree`, `support`,
+#'       `explicit`, `level`, `stateComponents`,
 #'       `reason`, `route`, `display`, `completeGenerator` and `factor`. `level` is
 #'       `"exact"` for a direction proven over the rationals, `"verified"` for one
 #'       checked at random points modulo a large prime with an error bound,
@@ -148,8 +159,10 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               reconstruct = FALSE,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
-                              symEngine = c("modular", "symbolic"), discrete = FALSE, verbose = FALSE) {
+                              symEngine = c("modular", "symbolic"), mode = c("local", "global"),
+                              globalOptions = NULL, discrete = FALSE, verbose = FALSE) {
   symEngine <- match.arg(symEngine)
+  mode <- match.arg(mode)
   if (missing(f) || is.null(f))
     stop("symmetryDetection: give the right-hand sides `f` ",
          "(eqnlist, eqnvec or named character vector).", call. = FALSE)
@@ -174,6 +187,10 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
   spec$cores <- as.integer(max(1L, cores))
   spec$control <- setNames(lapply(unclass(control), function(x)
     if (is.numeric(x) && is.infinite(x)) "Inf" else x), .symControlSnake(names(control)))
+  if (mode == "global") {
+    spec$mode <- "global"
+    if (length(globalOptions)) spec$global_options <- globalOptions
+  }
   res <- .symFromPy(.symCall("detect_json", spec), match.call())
   if (!isFALSE(discrete))
     res <- do.call(discreteSymmetries, c(list(res, cores = cores), if (is.list(discrete)) discrete))
@@ -217,7 +234,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #'   (inequalities that keep one point of each orbit), `limits` and, for a model with
 #'   directions, `reduced`.
 #'
-#' @details The search needs msolve; see [symmetryDetection()] for its path.
+#' @details The search needs msolve; [symmetryDetection()] says where it is searched.
 #' @references Godfrey, K. (1983). Compartmental Models and Their Application.
 #'   Academic Press, London.
 #' @seealso [symmetryDetection()], [symmetryReduction()]
@@ -356,7 +373,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.14.0"
+.symidentMin <- "0.15.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -636,7 +653,7 @@ print.symmetrydetection <- function(x, verbose = FALSE, width = getOption("width
   invisible(x)
 }
 
-# the discrete symmetries of a result or a reduction: per map the coordinates it changes, its
+# the discrete symmetries of a result or a reduction: per map the coordinates it changes, the
 # level and whether it keeps the domain, then the fundamental domain
 .printDiscrete <- function(sym, domain, info = NULL) {
   if (is.null(sym) && is.null(info)) return(invisible())

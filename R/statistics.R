@@ -119,6 +119,7 @@
 #' @example inst/examples/profiles.R
 #' @importFrom stats profile
 #' @rdname profile
+#' @aliases profile
 #' @export
 profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
                           limits = c(lower = -Inf, upper = Inf),
@@ -235,7 +236,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
 
   # Solutions of M x = rhs, a low-rank part `lr` of M by Woodbury where the sparse M is regular; a
   # singular M, the low-rank part added, takes the pseudoinverse without the singular values below
-  # reg, decided for a sparse M by the pivots of its LU.
+  # reg, decided for a sparse M by the pivots of the LU of M.
   solveM <- function(M, rhs, lr = NULL) {
     if (sparse) {
       lu <- Matrix::lu(M, errSing = FALSE)
@@ -685,7 +686,7 @@ vcov.objlist <- function(object, fixed = NULL, which = NULL, ...) {
 
 }
 
-# The covariance block of `which` from a sparse Hessian plus its low-rank part: one sparse
+# The covariance block of `which` from a sparse Hessian plus the low-rank part: one sparse
 # Cholesky factor, solved for the free columns of `which`, the low-rank part by Woodbury.
 .vcovSparse <- function(H, fixed, which, lowrank = NULL) {
   V <- matrix(0, length(which), length(which), dimnames = list(which, which))

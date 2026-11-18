@@ -84,8 +84,16 @@
 
 ## .matchNum ---------------------------------------------
 
-# Match with numeric tolerance 
+# Match with numeric tolerance; on a strictly increasing `y` by bisection, ties to the lower index
 .matchNum <- function(x, y, tol = 1e-8) {
+  n <- length(y)
+  if (length(x) && n && !anyNA(x) && !anyNA(y) && !is.unsorted(y, strictly = TRUE)) {
+    lo <- pmax(findInterval(x, y), 1L)
+    hi <- pmin(lo + 1L, n)
+    k <- ifelse(abs(y[hi] - x) < abs(y[lo] - x), hi, lo)
+    k[abs(y[k] - x) > tol] <- NA_integer_
+    return(k)
+  }
   sapply(x, function(xi) {
     d <- abs(y - xi)
     if (min(d) > tol) return(NA_integer_)

@@ -426,18 +426,15 @@ importSbml <- function(modelpath, keep = NULL) {
 #'   named like a compartment whose volume is the compartment symbol is the size
 #'   of that compartment; entries named like other compartments or like species
 #'   are not written. Default `NULL`: no `<parameter>` is written.
-#' @param inits Named numeric *or* character vector of initial values keyed
-#'   by state name. Numeric entries (or character entries that parse as
-#'   numeric) are written as `initialConcentration`, `initialAmount` for
-#'   states listed in `eqnlist$amountStates`; non-numeric character
-#'   entries are emitted as `<initialAssignment>` formulas and let the SBML
-#'   simulator resolve the expression against `parameters` at sim time.
-#'   Missing states default to 0. Default `NULL`.
+#' @param inits Named numeric or character vector of initial values keyed
+#'   by state name. Numbers, also as character, are written as
+#'   `initialConcentration`, or `initialAmount` for the states in
+#'   `eqnlist$amountStates`; other expressions as `<initialAssignment>`
+#'   formulas. Missing states default to 0. Default `NULL`.
 #' @param filepath Path of the SBML file to write.
 #' @param modelID SBML model identifier. Defaults to `"dMod_export"`.
 #' @param events Object of class [eventlist] to emit as `<listOfEvents>`, or
-#'   `NULL`. Rows sharing a trigger become one `<event>`, since SBML applies an
-#'   event's assignments together. A compartment an event assigns to is written
+#'   `NULL`. Rows sharing a trigger become one `<event>`. A compartment an event assigns to is written
 #'   as non-constant. Default `NULL`.
 #' @return `filepath`, invisibly.
 #' @seealso [importSbml()], [exportPEtab()]

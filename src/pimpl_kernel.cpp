@@ -328,12 +328,13 @@ bool derivatives(const State& s, const std::vector<double>& pv, int order, Root&
   return true;
 }
 
-// The eigenvalues `re` + i `im` of J = df/dx at the root x on ker C, and for each one whose real
-// part exceeds `onset` (1-based in `active`) the gradient of that real part in the parameters,
-// Re w^H (J_p + J_x D) u / (w^H u), u and w the right and left eigenvectors of the eigenvalue in J and D = dx/dp.
+// The eigenvalues `re` + i `im` of J = df/dx on ker C, the scale max |lambda| with gradient; for each
+// real part above `onset` - `rel` * scale (`active`, 1-based) the gradient Re w^H (J_p + J_x D) u / (w^H u),
+// D = dx/dp, and |u| scaled to a largest entry of 1 (`vectors`).
 bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<double>& x, double onset,
-              std::vector<double>& re, std::vector<double>& im, std::vector<int>& active,
-              std::vector<double>& grad, std::string& error) {
+              double rel, std::vector<double>& re, std::vector<double>& im, std::vector<int>& active,
+              std::vector<double>& grad, double& scale, std::vector<double>& scaleGrad,
+              std::vector<double>& vectors, std::string& error) {
   using cd = std::complex<double>;
   const int n = s.nDep, np = s.nPar, m = s.nEq, k = s.k, nd = n + np, q = n - k;
   if (s.ad2 == nullptr) {
@@ -424,21 +425,16 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
     return false;
   }
   auto H = [&](int i, int j, int l) { return d2y[i + (std::size_t) m * (j + (std::size_t) nd * l)]; };
-  active.clear();
-  grad.clear();
-  for (int t = 0; t < q; ++t) {
-    if (!(re[t] > onset)) continue;
-    // the same eigenvalue of J, whose vectors the derivative takes
+  // the gradient in the parameters of eigenvalue t of A, complex, and the moduli of the right
+  // eigenvector; false where the eigenvalue has no match in J
+  auto derivative = [&](int t, std::vector<cd>& g, std::vector<double>& umod) {
     int c = 0;
     double best = std::numeric_limits<double>::infinity();
     for (int e = 0; e < n; ++e) {
       const double dist = std::hypot(wrJ[e] - re[t], wiJ[e] - im[t]);
       if (dist < best) { best = dist; c = e; }
     }
-    if (best > 1e-6 * (1.0 + std::hypot(re[t], im[t]))) {
-      error = "an eigenvalue on ker C has no match in the Jacobian";
-      return false;
-    }
+    if (best > 1e-6 * (1.0 + std::hypot(re[t], im[t]))) return false;
     std::vector<cd> u(n), w(n);
     for (int i = 0; i < n; ++i) {
       if (wiJ[c] == 0.0) {
@@ -452,6 +448,10 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
         w[i] = cd(vlJ[i + (std::size_t) n * (c - 1)], -vlJ[i + (std::size_t) n * c]);
       }
     }
+    double umax = 0.0;
+    for (int i = 0; i < n; ++i) umax = std::max(umax, std::abs(u[i]));
+    umod.assign(n, 0.0);
+    for (int i = 0; i < n; ++i) umod[i] = umax > 0.0 ? std::abs(u[i]) / umax : 0.0;
     cd den = 0.0;
     for (int i = 0; i < n; ++i) den += std::conj(w[i]) * u[i];
     // Q_l = w^H (dJ/dz_l) u for every variable and parameter z_l
@@ -463,12 +463,42 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
         for (int i = 0; i < n; ++i) v += std::conj(w[i]) * H(i, j, l);
         Q[l] += v * u[j];
       }
-    active.push_back(t + 1);
+    g.assign(np, 0.0);
     for (int a = 0; a < np; ++a) {
-      cd g = Q[n + a];
-      for (int l = 0; l < n; ++l) g += Q[l] * r.D[l + (std::size_t) n * a];
-      grad.push_back(std::real(g / den));
+      cd v = Q[n + a];
+      for (int l = 0; l < n; ++l) v += Q[l] * r.D[l + (std::size_t) n * a];
+      g[a] = v / den;
     }
+    return true;
+  };
+  std::vector<cd> g;
+  std::vector<double> umod;
+  // the scale: the largest modulus, d|lambda| = Re(conj(lambda) dlambda) / |lambda|
+  scale = 0.0;
+  scaleGrad.assign(np, 0.0);
+  int lead = -1;
+  for (int t = 0; t < q; ++t)
+    if (std::hypot(re[t], im[t]) > scale) { scale = std::hypot(re[t], im[t]); lead = t; }
+  if (lead >= 0) {
+    if (!derivative(lead, g, umod)) {
+      error = "an eigenvalue on ker C has no match in the Jacobian";
+      return false;
+    }
+    for (int a = 0; a < np; ++a) scaleGrad[a] = std::real(std::conj(cd(re[lead], im[lead])) * g[a]) / scale;
+  }
+  const double bound = onset - rel * scale;
+  active.clear();
+  grad.clear();
+  vectors.clear();
+  for (int t = 0; t < q; ++t) {
+    if (!(re[t] > bound)) continue;
+    if (!derivative(t, g, umod)) {
+      error = "an eigenvalue on ker C has no match in the Jacobian";
+      return false;
+    }
+    active.push_back(t + 1);
+    for (int a = 0; a < np; ++a) grad.push_back(std::real(g[a]));
+    vectors.insert(vectors.end(), umod.begin(), umod.end());
   }
   return true;
 }
@@ -826,23 +856,27 @@ List pimpl_root(SEXP xp, NumericVector pv, NumericVector guess, int order) {
                       Named("warnings") = wrap(warnings));
 }
 
-// The spectrum of the Jacobian at the root `x` of `pv` on ker C: list(re, im, active, grad), `grad`
-// the gradients in the parameters of the real parts of the eigenvalues `active` above `onset`.
+// The spectrum of the Jacobian at the root `x` of `pv` on ker C: list(re, im, active, grad, scale,
+// scaleGrad, vectors), `grad` the gradients in the parameters of the real parts of the eigenvalues
+// `active` above `onset` - `rel` * `scale`, `vectors` the moduli of their right eigenvectors.
 // [[Rcpp::export]]
-List pimpl_spectrum(SEXP xp, NumericVector pv, NumericVector x, double onset) {
+List pimpl_spectrum(SEXP xp, NumericVector pv, NumericVector x, double onset, double rel) {
   State* s = need(xp);
-  std::vector<double> re, im, grad;
+  std::vector<double> re, im, grad, scaleGrad, vectors;
   std::vector<int> active;
+  double scale = 0.0;
   std::string error;
-  if (!dmod::pimpl::spectrum(*s, as<std::vector<double>>(pv), as<std::vector<double>>(x), onset, re, im, active,
-                             grad, error))
+  if (!dmod::pimpl::spectrum(*s, as<std::vector<double>>(pv), as<std::vector<double>>(x), onset, rel, re, im, active,
+                             grad, scale, scaleGrad, vectors, error))
     stop("Pimpl: " + error);
-  const int na = active.size(), np = s->nPar;
-  NumericMatrix G(na, np);
+  const int na = active.size(), np = s->nPar, n = s->nDep;
+  NumericMatrix G(na, np), V(n, na);
   for (int t = 0; t < na; ++t)
     for (int a = 0; a < np; ++a) G(t, a) = grad[(std::size_t) t * np + a];
+  std::copy(vectors.begin(), vectors.end(), V.begin());
   return List::create(Named("re") = wrap(re), Named("im") = wrap(im), Named("active") = wrap(active),
-                      Named("grad") = G);
+                      Named("grad") = G, Named("scale") = scale, Named("scaleGrad") = wrap(scaleGrad),
+                      Named("vectors") = V);
 }
 
 // Whether the native state behind `xp` still exists; not after the session it was built in.

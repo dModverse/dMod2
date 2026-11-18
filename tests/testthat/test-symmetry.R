@@ -221,10 +221,10 @@ test_that("the reduction takes the declared positive coordinates of the detectio
   expect_true(isTRUE(symmetryReduction(r, positive = TRUE)$assumptions$domain))
 })
 
-test_that("the reduction refuses open directions unless allowOpen", {
+test_that("the reduction warns for open directions and refuses them with allowOpen = FALSE", {
   r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), verbose = FALSE)
-  expect_error(symmetryReduction(r), "no closed form")
-  red <- symmetryReduction(r, allowOpen = TRUE)
+  expect_error(symmetryReduction(r, allowOpen = FALSE), "no closed form")
+  red <- suppressWarnings(symmetryReduction(r))
   expect_identical(red$removed, "X\u2081")
   expect_identical(red$remaining, "X\u2082")
 })

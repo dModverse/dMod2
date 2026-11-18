@@ -123,8 +123,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // chain_data
-SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local, int threads, std::string bloq_mode, double t_df, bool want_seed);
-RcppExport SEXP _dMod2_chain_data(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP build_hessianSEXP, SEXP localSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP t_dfSEXP, SEXP want_seedSEXP) {
+SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local, int threads, std::string bloq_mode, double t_df, bool want_seed, bool sparse);
+RcppExport SEXP _dMod2_chain_data(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP build_hessianSEXP, SEXP localSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP t_dfSEXP, SEXP want_seedSEXP, SEXP sparseSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -139,7 +139,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type bloq_mode(bloq_modeSEXP);
     Rcpp::traits::input_parameter< double >::type t_df(t_dfSEXP);
     Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
-    rcpp_result_gen = Rcpp::wrap(chain_data(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed));
+    Rcpp::traits::input_parameter< bool >::type sparse(sparseSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_data(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -426,8 +427,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // pimpl_spectrum
-List pimpl_spectrum(SEXP xp, NumericVector pv, NumericVector x, double onset);
-RcppExport SEXP _dMod2_pimpl_spectrum(SEXP xpSEXP, SEXP pvSEXP, SEXP xSEXP, SEXP onsetSEXP) {
+List pimpl_spectrum(SEXP xp, NumericVector pv, NumericVector x, double onset, double rel);
+RcppExport SEXP _dMod2_pimpl_spectrum(SEXP xpSEXP, SEXP pvSEXP, SEXP xSEXP, SEXP onsetSEXP, SEXP relSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -435,7 +436,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type pv(pvSEXP);
     Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
     Rcpp::traits::input_parameter< double >::type onset(onsetSEXP);
-    rcpp_result_gen = Rcpp::wrap(pimpl_spectrum(xp, pv, x, onset));
+    Rcpp::traits::input_parameter< double >::type rel(relSEXP);
+    rcpp_result_gen = Rcpp::wrap(pimpl_spectrum(xp, pv, x, onset, rel));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -670,6 +672,31 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// volume_terms
+List volume_terms(NumericVector loss, NumericVector a, NumericVector b, NumericVector Wp, NumericVector Ws, NumericVector Vp, NumericVector Vs, NumericVector pA, NumericVector sA, SEXP pAA, SEXP sAA, NumericMatrix Hinv, int n, int q, bool hessian);
+RcppExport SEXP _dMod2_volume_terms(SEXP lossSEXP, SEXP aSEXP, SEXP bSEXP, SEXP WpSEXP, SEXP WsSEXP, SEXP VpSEXP, SEXP VsSEXP, SEXP pASEXP, SEXP sASEXP, SEXP pAASEXP, SEXP sAASEXP, SEXP HinvSEXP, SEXP nSEXP, SEXP qSEXP, SEXP hessianSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type loss(lossSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type a(aSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type b(bSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Wp(WpSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Ws(WsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Vp(VpSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type Vs(VsSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type pA(pASEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type sA(sASEXP);
+    Rcpp::traits::input_parameter< SEXP >::type pAA(pAASEXP);
+    Rcpp::traits::input_parameter< SEXP >::type sAA(sAASEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Hinv(HinvSEXP);
+    Rcpp::traits::input_parameter< int >::type n(nSEXP);
+    Rcpp::traits::input_parameter< int >::type q(qSEXP);
+    Rcpp::traits::input_parameter< bool >::type hessian(hessianSEXP);
+    rcpp_result_gen = Rcpp::wrap(volume_terms(loss, a, b, Wp, Ws, Vp, Vs, pA, sA, pAA, sAA, Hinv, n, q, hessian));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_alignmentPredictors", (DL_FUNC) &_dMod2_alignmentPredictors, 4},
@@ -679,7 +706,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
     {"_dMod2_chain_params", (DL_FUNC) &_dMod2_chain_params, 6},
-    {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 11},
+    {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 12},
     {"_dMod2_chain_frames", (DL_FUNC) &_dMod2_chain_frames, 5},
     {"_dMod2_chain_rows", (DL_FUNC) &_dMod2_chain_rows, 4},
     {"_dMod2_chain_back", (DL_FUNC) &_dMod2_chain_back, 8},
@@ -698,7 +725,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_pimpl_controls", (DL_FUNC) &_dMod2_pimpl_controls, 3},
     {"_dMod2_pimpl_stats", (DL_FUNC) &_dMod2_pimpl_stats, 2},
     {"_dMod2_pimpl_root", (DL_FUNC) &_dMod2_pimpl_root, 4},
-    {"_dMod2_pimpl_spectrum", (DL_FUNC) &_dMod2_pimpl_spectrum, 4},
+    {"_dMod2_pimpl_spectrum", (DL_FUNC) &_dMod2_pimpl_spectrum, 5},
     {"_dMod2_pimpl_live", (DL_FUNC) &_dMod2_pimpl_live, 1},
     {"_dMod2_sparseGridGK", (DL_FUNC) &_dMod2_sparseGridGK, 2},
     {"_dMod2_graph_reach", (DL_FUNC) &_dMod2_graph_reach, 4},
@@ -712,6 +739,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_trust_step_impl", (DL_FUNC) &_dMod2_trust_step_impl, 8},
     {"_dMod2_qn_update_impl", (DL_FUNC) &_dMod2_qn_update_impl, 4},
     {"_dMod2_focei_units_lockstep", (DL_FUNC) &_dMod2_focei_units_lockstep, 4},
+    {"_dMod2_volume_terms", (DL_FUNC) &_dMod2_volume_terms, 15},
     {NULL, NULL, 0}
 };
 

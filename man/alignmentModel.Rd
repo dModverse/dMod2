@@ -66,7 +66,7 @@ scale. A sample with censored readings
 is censored at the mean of the sample readings with the limits in place of the
 censored ones. \code{NULL} (default): every reading is a sample.}
 
-\item{distribution}{\code{"normal"} or \code{"t"} (Student-t, \code{\link[=normT]{normT()}}).}
+\item{distribution}{\code{"normal"} (default) or \code{"t"} (Student-t, \code{\link[=normT]{normT()}}).}
 
 \item{df}{Degrees of freedom for \code{distribution = "t"}.}
 

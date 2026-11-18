@@ -383,6 +383,44 @@ test_that("the native chain gives the objective of the R path, error model and c
   expect_equal(a$hessian, b$hessian, tolerance = 1e-12)
 })
 
+test_that("hessian = \"sparse\" takes the native chain and gives the sparse Hessian of the R path", {
+  skip_if_no_compile()
+  ec <- .nl2_fx()$prop
+  pars <- c(A = 1.0, k = 0.5, srel = 0.1)
+  data <- fx_decay_data_bloq(pars = pars[c("A", "k")], sigma = 0.05, lloq = 0.1, times = seq(0, 10, by = 1))
+  data$C1$sigma[seq(1L, nrow(data$C1), by = 2L)] <- NA_real_
+  mc <- fx_decay_multicond_compiled()
+  dm <- fx_decay_data_multi(setNames(rep(list(c(A = 1, k = 0.5)), 4), mc$conditions))
+  calls <- 0L
+  chainEval <- .chainEval
+  local_mocked_bindings(.chainEval = function(...) {
+    calls <<- calls + 1L
+    chainEval(...)
+  })
+  cases <- list(list(normL2(data, ec$prd, errmodel = ec$e, optBLOQ = "M3"), pars),
+                list(normL2(dm, mc$prd), mc$outerpars),
+                list(normL2(dm, mc$prd), mc$outerpars[-1], fixed = mc$outerpars[1]),
+                list(normL2(dm, mc$prd), c(mc$outerpars, unused = 1)))
+  for (args in cases) {
+    obj <- args[[1]]
+    run <- function(chain, ...) withr::with_options(list(dMod2.evaluation = if (chain) "C++" else "R"),
+                                                    do.call(obj, c(args[-1], list(...))))
+    before <- calls
+    a <- run(TRUE, hessian = "sparse")
+    expect_equal(calls, before + 1L)
+    b <- run(FALSE, hessian = "sparse")
+    d <- run(TRUE)
+    expect_s4_class(a$hessian, "dgCMatrix")
+    expect_null(a$lowrank)
+    expect_equal(a$value, b$value, tolerance = 1e-12)
+    expect_equal(a$gradient, b$gradient, tolerance = 1e-12)
+    expect_equal(as.matrix(a$hessian), as.matrix(b$hessian), tolerance = 1e-12)
+    expect_equal(Matrix::nnzero(a$hessian), Matrix::nnzero(b$hessian))
+    expect_identical(as.matrix(a$hessian), d$hessian)
+    expect_identical(a$gradient, d$gradient)
+  }
+})
+
 test_that("normL2 BLOQ M4 + proportional errmodel: value and gradient match", {
   skip_if_no_compile()
   ec <- .nl2_fx()$prop

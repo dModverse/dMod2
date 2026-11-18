@@ -224,6 +224,31 @@ test_that("hand-built case-0001 fixture produces solution-matching llh", {
 
 
 
+test_that("a noise formula that reads a state keeps the objective in the native chain", {
+  petab_dir <- .petab_repo_dir()
+  if (!nzchar(petab_dir)) skip("PEtabTests/ not found: set DMOD_PETABTESTS to the repo directory")
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+  withr::local_dir(tempdir())
+  case <- file.path(tempdir(), "petab_noise_state")
+  dir.create(case, showWarnings = FALSE)
+  file.copy(list.files(file.path(petab_dir, "0001"), full.names = TRUE), case, overwrite = TRUE)
+  writeLines(c("observableId\tobservableFormula\tnoiseFormula", "obs_a\tA\t0.5 * (A + B)"),
+             file.path(case, "_observables.tsv"))
+  petab <- importPEtab(file.path(case, "_0001.yaml"), backend = "cppDE",
+                       modelname = "noise_state", cores = test_cores())
+  pars <- c(a0 = 1, b0 = 0, k1 = 0.8, k2 = 0.6)[names(petab$bestfit)]
+
+  native <- withr::with_options(list(dMod2.evaluation = "C++"), petab$obj(pars))
+  tree   <- withr::with_options(list(dMod2.evaluation = "R"), petab$obj(pars))
+  expect_lt(abs(native$value - (-2 * -0.8475016971318833)), 1e-3)
+  expect_equal(native$value, tree$value, tolerance = 1e-10)
+  expect_equal(native$gradient[names(pars)], tree$gradient[names(pars)], tolerance = 1e-8)
+  gLeaf <- dMod2:::.fnLeaves(petab$g, names(petab$dataList)[1])[[1]]
+  expect_false(is.null(attr(gLeaf$kernel, "chainObs")()))
+})
+
+
+
 test_that("exportSbml emits InitialAssignment for symbolic state initials", {
 
   withr::local_dir(tempdir())

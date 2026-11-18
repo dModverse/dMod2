@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{An \code{em} object, see \code{\link[=em]{em()}}.}
 
-\item{nsim}{Number of data sets.}
+\item{nsim}{Number of data sets. Default 1.}
 
 \item{seed}{Seed of the random number generator, as in \code{\link[stats:simulate]{stats::simulate()}}.}
 

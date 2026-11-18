@@ -257,13 +257,14 @@ detectFreeCores <- function(machine = NULL) {
     "CC=$(R CMD config CC);   CFLAGS=$(R CMD config CFLAGS)",
     "CXX=$(R CMD config CXX); CXXFLAGS=$(R CMD config CXXFLAGS)",
     "CPICFLAGS=$(R CMD config CPICFLAGS); CXXPICFLAGS=$(R CMD config CXXPICFLAGS)",
+    "CPPFLAGS=$(R CMD config CPPFLAGS)",
     ## R.home("include"), not R_HOME/include: Debian keeps the headers outside R_HOME
     "RINC=\"-I$(Rscript -e 'cat(R.home(\"include\"))')\"",
     "AR=$(R CMD config AR); RANLIB=$(R CMD config RANLIB)",
-    "export CC CXX CFLAGS CXXFLAGS CPICFLAGS CXXPICFLAGS RINC", "")
+    "export CC CXX CFLAGS CXXFLAGS CPICFLAGS CXXPICFLAGS CPPFLAGS RINC", "")
   pchBlock <- if (!is.null(pchInc)) c(
     "cat > dMod_pch.hpp <<'DMOD_PCH_EOF'", pchInc, "DMOD_PCH_EOF",
-    paste("$CXX $RINC $PKG_CPPFLAGS $PKG_CXXFLAGS $CXXPICFLAGS $CXXFLAGS",
+    paste("$CXX $RINC $PKG_CPPFLAGS $CPPFLAGS $PKG_CXXFLAGS $CXXPICFLAGS $CXXFLAGS",
           "-x c++-header dMod_pch.hpp -o dMod_pch.hpp.gch || true"),
     "PKG_CXXFLAGS=\"$PKG_CXXFLAGS -include dMod_pch.hpp\"", "")
 
@@ -302,9 +303,9 @@ detectFreeCores <- function(machine = NULL) {
     "  src=\"$1\"",
     "  case \"$src\" in",
     "    *.o)   : ;;                                   # link-only: already built",
-    "    *.cpp) $CXX $RINC $PKG_CPPFLAGS $PKG_CXXFLAGS $CXXPICFLAGS $CXXFLAGS \\",
+    "    *.cpp) $CXX $RINC $PKG_CPPFLAGS $CPPFLAGS $PKG_CXXFLAGS $CXXPICFLAGS $CXXFLAGS \\",
     "             -c \"$src\" -o \"${src%.*}.o\" ;;",
-    "    *)     $CC  $RINC $PKG_CPPFLAGS $PKG_CFLAGS  $CPICFLAGS   $CFLAGS \\",
+    "    *)     $CC  $RINC $PKG_CPPFLAGS $CPPFLAGS $PKG_CFLAGS  $CPICFLAGS   $CFLAGS \\",
     "             -c \"$src\" -o \"${src%.*}.o\" ;;",
     "  esac",
     "}",

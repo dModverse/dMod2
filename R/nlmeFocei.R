@@ -90,10 +90,10 @@
     if (anyNA(d$sigma))
       stop("em: the data of condition ", cn, " have no sigma; give an error model.", call. = FALSE)
     times <- as.numeric(frame[, "time"])
-    obs <- setdiff(colnames(frame), "time")
+    obs <- .setdiff(colnames(frame), "time")
     err <- matrix(NA_real_, length(times), length(obs) + 1L, dimnames = list(NULL, c("time", obs)))
     err[, "time"] <- times
-    for (o in intersect(obs, as.character(d$name))) {
+    for (o in .intersect(obs, as.character(d$name))) {
       rows <- d[as.character(d$name) == o, , drop = FALSE]
       i <- match(times, rows$time)
       err[, o] <- ifelse(is.na(i), stats::median(rows$sigma), rows$sigma[i])
@@ -157,7 +157,7 @@
   obs <- match(d$name, colnames(pred))
   if (anyNA(obs))
     stop("em: observables of condition ", cn, " missing in the prediction: ",
-         paste(setdiff(d$name, colnames(pred)), collapse = ", "), call. = FALSE)
+         paste(.setdiff(d$name, colnames(pred)), collapse = ", "), call. = FALSE)
   recorded <- !is.na(d$sigma)
   oe <- match(d$name, colnames(err))
   if (any(is.na(oe) & !recorded))
@@ -195,7 +195,7 @@
   meta <- lapply(groups, function(g) {
     blocks <- lapply(design$conditions[[g]], function(cn) .conditionBlock(design, cn, probe, fixed, frames[[cn]]))
     used <- unique(unlist(lapply(blocks, `[[`, "parameters")))
-    absent <- setdiff(E[g, ], used)
+    absent <- .setdiff(E[g, ], used)
     if (length(absent))
       stop("em: the random effects ", paste(absent, collapse = ", "), " of group ", g,
            " enter none of the conditions of that group.", call. = FALSE)
@@ -286,7 +286,7 @@
   if (is.null(design$errfn)) return(list(pred = pred, err = NULL))
   inner <- getParameters(pred)
   fixedInner <- as.parvec(inner[attr(inner, "fixed")], deriv = FALSE, deriv2 = FALSE)
-  inner <- as.parvec(inner[setdiff(names(inner), names(fixed))])
+  inner <- as.parvec(inner[.setdiff(names(inner), names(fixed))])
   err <- design$errfn(out = pred, pars = inner, fixed = fixedInner, deriv2 = deriv2, conditions = cn)[[cn]]
   list(pred = pred, err = err)
 }
@@ -303,7 +303,7 @@
     return(setNames(lapply(conds, function(cn) .volumeFrames(design, cn, preds[[cn]], fixed, deriv2)), conds))
   inner <- lapply(conds, function(cn) getParameters(preds[[cn]]))
   fixedInner <- lapply(inner, function(x) as.parvec(x[attr(x, "fixed")], deriv = FALSE, deriv2 = FALSE))
-  inner <- lapply(inner, function(x) as.parvec(x[setdiff(names(x), names(fixed))]))
+  inner <- lapply(inner, function(x) as.parvec(x[.setdiff(names(x), names(fixed))]))
   errs <- .evalNode(node, .bundle(conds = conds, out = unname(preds[conds]), pars = inner,
                                   fixed = fixedInner), TRUE, deriv2, NULL, cores)
   setNames(lapply(seq_along(conds), function(i) list(pred = preds[[conds[i]]], err = errs[[i]])), conds)
@@ -450,7 +450,7 @@
     matrix(colSums(l_(1, 0) * matrix(Wp, tn)) + colSums(l_(0, 1) * matrix(Ws, tn)), Kn, n)
   Hee <- cross(rw$a, rw$b, rw$a, rw$b) + curv(rw$Vp, rw$Vs, Kn) + u$P
   HeA <- cross(rw$a, rw$b, rw$pA, rw$sA) + curv(rw$Wp, rw$Ws, length(A))
-  for (cp in intersect(cholIn, names(u$dP))) HeA[, match(cp, A)] <- HeA[, match(cp, A)] + u$dP[[cp]] %*% full[u$eta]
+  for (cp in .intersect(cholIn, names(u$dP))) HeA[, match(cp, A)] <- HeA[, match(cp, A)] + u$dP[[cp]] %*% full[u$eta]
   dimnames(Hee) <- list(u$eta, u$eta); dimnames(HeA) <- list(u$eta, A)
   list(Hee = Hee, HeA = HeA)
 }
@@ -467,7 +467,7 @@
   lowU <- list(); lowD <- list()
   units <- .volumeUnits(design, full, fixed)
   etaShift <- vector("list", length(units))
-  cholIn <- intersect(outer, .hyperNames(design))
+  cholIn <- .intersect(outer, .hyperNames(design))
 
   conds <- unique(unlist(lapply(units, `[[`, "conditions"), use.names = FALSE))
   times <- lapply(conds, function(cn) .emGrid(design, cn))
@@ -487,7 +487,7 @@
     Hinv <- H_inv_list[[i]][eta, eta, drop = FALSE]
     # the rows of every condition of the unit in the outer parameters of the condition
     parts <- lapply(u$conditions, function(cn) {
-      Ac <- intersect(outer, .frameParameters(frames[[cn]]))
+      Ac <- .intersect(outer, .frameParameters(frames[[cn]]))
       rw <- .volumeRows(design, cn, frames[[cn]], eta, Ac, hessian)
       rw$A <- Ac
       rw$loss <- .rowLossDerivs(rw$p, rw$s, rw$y, rw$cens, design$df)
@@ -504,7 +504,7 @@
       Hee <- Hee + jb$Hee - u$P
       HeA[, rw$A] <- HeA[, rw$A] + jb$HeA
     }
-    for (cp in intersect(cholIn, names(u$dP))) HeA[, cp] <- HeA[, cp] + u$dP[[cp]] %*% full[eta]
+    for (cp in .intersect(cholIn, names(u$dP))) HeA[, cp] <- HeA[, cp] + u$dP[[cp]] %*% full[eta]
     if (!all(is.finite(HeA)) || !all(is.finite(Hee)))
       stop("FOCEI: the second derivatives of the model are not finite at these parameters.", call. = FALSE)
     thj <- colSums(abs(HeA)) > 0
@@ -527,7 +527,7 @@
     D <- matrix(0, Kn^2, Qa, dimnames = list(NULL, A))
     Gam <- matrix(0, Kn^2, Kn)
     for (rw in parts) {
-      t <- .volumeTerms(rw, Hinv, Kn, hessian)
+      t <- .volumeTerms(rw, Hinv, hessian)
       Ac <- rw$A
       grad[Ac] <- grad[Ac] + t$g
       gE <- gE + t$gE
@@ -539,11 +539,11 @@
       Gam <- Gam + t$Gam
     }
     grad[A] <- grad[A] + drop(crossprod(Em, gE))
-    for (cp in intersect(cholIn, names(u$dP))) grad[cp] <- grad[cp] + sum(Hinv * u$dP[[cp]])
+    for (cp in .intersect(cholIn, names(u$dP))) grad[cp] <- grad[cp] + sum(Hinv * u$dP[[cp]])
     if (!hessian) next
 
     # dH by every parameter, scaled by H^-1/2 on both sides
-    for (cp in intersect(cholIn, names(u$dP))) D[, cp] <- D[, cp] + as.vector(u$dP[[cp]])
+    for (cp in .intersect(cholIn, names(u$dP))) D[, cp] <- D[, cp] + as.vector(u$dP[[cp]])
     D <- D + Gam %*% Em
     eh <- eigen((Hinv + t(Hinv)) / 2, symmetric = TRUE)
     Sh <- eh$vectors %*% (sqrt(pmax(eh$values, 0)) * t(eh$vectors))
@@ -554,7 +554,7 @@
     U1 <- cbind(N, t(Em)) %*% eb$vectors
     U <- cbind(U1, t(W))
     d <- c(eb$values, rep(-1, nrow(W)))
-    own <- intersect(cholIn, names(u$dP))
+    own <- .intersect(cholIn, names(u$dP))
     if (length(own)) {
       C2 <- matrix(0, length(own), length(own), dimnames = list(own, own))
       for (al in own) for (be in own) C2[al, be] <- sum(Hinv * u$d2P(al, be))
@@ -569,7 +569,7 @@
       lowD[[length(lowD) + 1L]] <- d
     }
   }
-  fx <- intersect(names(fixed), outer)
+  fx <- .intersect(names(fixed), outer)
   grad[fx] <- 0
   if (!hessian) return(list(gradient = grad, hessian = NULL, etaShift = etaShift))
   hess <- .sparseFromBlocks(blocks, outer)
@@ -585,98 +585,12 @@
   list(gradient = grad, hessian = hess, lowrank = lowrank, etaShift = etaShift)
 }
 
-## The volume terms of the rows `rw` of one condition over its parameters rw$A, F = (Da, Db) = S + C Em
-## and Y = (Dp, Ds) = T + c Em: the gradient `g` and its coefficient `gE` on Em; with `hessian` the
+## The volume terms of the rows `rw` of one condition over the parameters rw$A of the condition, F = (Da, Db) = S + C Em
+## and Y = (Dp, Ds) = T + c Em: the gradient `g` and the coefficient `gE` of it on Em; with `hessian` the
 ## local block, the couplings `N` and `Q` to Em, and dH as `D` and `Gam` (on Em).
-.volumeTerms <- function(rw, Hinv, Kn, hessian) {
-  n <- length(rw$p)
-  Ac <- rw$A
-  q <- length(Ac)
-  l_ <- function(i, j) rw$loss[, i + 1L, j + 1L]
-  Lpp <- l_(2, 0); Lps <- l_(1, 1); Lss <- l_(0, 2)
-  a <- matrix(rw$a, n, Kn); b <- matrix(rw$b, n, Kn)
-  Ha <- a %*% Hinv; Hb <- b %*% Hinv
-  qaa <- rowSums(Ha * a); qab <- rowSums(Ha * b); qbb <- rowSums(Hb * b)
-  c1 <- qaa * l_(3, 0) + 2 * qab * l_(2, 1) + qbb * l_(1, 2)
-  c2 <- qaa * l_(2, 1) + 2 * qab * l_(1, 2) + qbb * l_(0, 3)
-  # arrays [row, component, column]
-  S <- array(0, c(n, 2L * Kn, q))
-  S[, seq_len(Kn), ] <- rw$Wp; S[, Kn + seq_len(Kn), ] <- rw$Ws
-  C <- array(0, c(n, 2L * Kn, Kn))
-  C[, seq_len(Kn), ] <- rw$Vp; C[, Kn + seq_len(Kn), ] <- rw$Vs
-  Tm <- array(0, c(n, 2L, q)); Tm[, 1, ] <- rw$pA; Tm[, 2, ] <- rw$sA
-  cm <- array(0, c(n, 2L, Kn)); cm[, 1, ] <- a; cm[, 2, ] <- b
-  g <- cbind(2 * (Lpp * Ha + Lps * Hb), 2 * (Lps * Ha + Lss * Hb))
-  h <- cbind(c1, c2)
-  # sum over rows and components of X[r, i, ]' w[r, i] and of X[r, i, ]' w[r, i, j] Y[r, j, ]
-  vecSum <- function(X, w) {
-    out <- numeric(dim(X)[3])
-    for (k in seq_len(dim(X)[2])) out <- out + drop(crossprod(matrix(X[, k, ], n), w[, k]))
-    out
-  }
-  out <- list(g = vecSum(S, g) + vecSum(Tm, h), gE = vecSum(C, g) + vecSum(cm, h))
-  if (!hessian) return(out)
-  rp <- function(X, w, Y) {
-    out <- matrix(0, dim(X)[3], dim(Y)[3])
-    for (k in seq_len(dim(X)[2])) for (l in seq_len(dim(Y)[2])) {
-      wk <- w[, k, l]
-      if (all(wk == 0)) next
-      out <- out + crossprod(matrix(X[, k, ], n), wk * matrix(Y[, l, ], n))
-    }
-    out
-  }
-  m2 <- 2L * Kn
-  G <- array(0, c(n, m2, m2))
-  for (k in seq_len(Kn)) for (l in seq_len(Kn)) {
-    G[, k, l] <- Lpp * Hinv[k, l]; G[, k, Kn + l] <- Lps * Hinv[k, l]
-    G[, Kn + k, l] <- Lps * Hinv[k, l]; G[, Kn + k, Kn + l] <- Lss * Hinv[k, l]
-  }
-  # M = Gv L3: Gv = [Ha, Hb, 0; 0, Ha, Hb] (2K x 3), L3 = [l30, l21; l21, l12; l12, l03]
-  L3 <- array(c(l_(3, 0), l_(2, 1), l_(1, 2), l_(2, 1), l_(1, 2), l_(0, 3)), c(n, 3L, 2L))
-  M <- array(0, c(n, m2, 2L))
-  for (j in 1:2) {
-    M[, seq_len(Kn), j] <- Ha * L3[, 1, j] + Hb * L3[, 2, j]
-    M[, Kn + seq_len(Kn), j] <- Ha * L3[, 2, j] + Hb * L3[, 3, j]
-  }
-  tM <- aperm(M, c(1, 3, 2))
-  cpp <- qaa * l_(4, 0) + 2 * qab * l_(3, 1) + qbb * l_(2, 2)
-  cps <- qaa * l_(3, 1) + 2 * qab * l_(2, 2) + qbb * l_(1, 3)
-  css <- qaa * l_(2, 2) + 2 * qab * l_(1, 3) + qbb * l_(0, 4)
-  Z <- array(c(cpp, cps, cps, css), c(n, 2L, 2L))
-  X2 <- rp(S, M, Tm)
-  sumRows <- function(w, X, d) matrix(colSums(w * matrix(X, n)), d[1], d[2])
-  out$local <- 2 * rp(S, G, S) + 2 * (X2 + t(X2)) + rp(Tm, Z, Tm) +
-    sumRows(c1, rw$pAA, c(q, q)) + sumRows(c2, rw$sAA, c(q, q))
-  out$N <- 2 * rp(S, G, C) + 2 * (rp(S, M, cm) + rp(Tm, tM, C)) + rp(Tm, Z, cm) +
-    t(sumRows(c1, rw$Wp, c(Kn, q)) + sumRows(c2, rw$Ws, c(Kn, q)))
-  Q2 <- rp(C, M, cm)
-  out$Q <- 2 * rp(C, G, C) + 2 * (Q2 + t(Q2)) + rp(cm, Z, cm) +
-    sumRows(c1, rw$Vp, c(Kn, Kn)) + sumRows(c2, rw$Vs, c(Kn, Kn))
-  # vec dH: vec(x V' + V x') + vec(y Wv' + Wv y') over F = (x, y), and the loss terms over Y
-  V <- Lpp * a + Lps * b; Wv <- Lps * a + Lss * b
-  psi <- function(X, Vm) {
-    out <- matrix(0, Kn^2, dim(X)[3])
-    for (k in seq_len(Kn)) for (l in seq_len(Kn)) {
-      kl <- k + (l - 1L) * Kn
-      out[kl, ] <- drop(crossprod(Vm[, l], matrix(X[, k, ], n))) + drop(crossprod(Vm[, k], matrix(X[, l, ], n)))
-    }
-    out
-  }
-  phi <- function(Pm, Sm) {
-    DLpp <- l_(3, 0) * Pm + l_(2, 1) * Sm
-    DLps <- l_(2, 1) * Pm + l_(1, 2) * Sm
-    DLss <- l_(1, 2) * Pm + l_(0, 3) * Sm
-    out <- matrix(0, Kn^2, ncol(Pm))
-    for (k in seq_len(Kn)) for (l in seq_len(Kn))
-      out[k + (l - 1L) * Kn, ] <- colSums(DLpp * (a[, k] * a[, l]) + DLps * (a[, k] * b[, l] + b[, k] * a[, l]) +
-                                            DLss * (b[, k] * b[, l]))
-    out
-  }
-  half <- function(X, part) X[, if (part == 1L) seq_len(Kn) else Kn + seq_len(Kn), , drop = FALSE]
-  out$D <- psi(half(S, 1L), V) + psi(half(S, 2L), Wv) + phi(matrix(rw$pA, n, q), matrix(rw$sA, n, q))
-  out$Gam <- psi(half(C, 1L), V) + psi(half(C, 2L), Wv) + phi(a, b)
-  out
-}
+.volumeTerms <- function(rw, Hinv, hessian)
+  volume_terms(rw$loss, rw$a, rw$b, rw$Wp, rw$Ws, rw$Vp, rw$Vs, rw$pA, rw$sA, rw$pAA, rw$sAA, Hinv,
+               length(rw$p), length(rw$A), hessian)
 
 
 ## FOCEI fit of the normal random effects of `design` with the joint objective `joint` (data
@@ -732,7 +646,7 @@
     # exact Schur complement of the joint Hessian at the modes plus the volume Hessian
     jh <- joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE)$hessian
     on <- rownames(hessian)
-    ee <- intersect(as.vector(E), rownames(jh))
+    ee <- .intersect(as.vector(E), rownames(jh))
     hessian <- jh[on, on, drop = FALSE] -
       crossprod(jh[ee, on, drop = FALSE], .scaledSolve(jh[ee, ee, drop = FALSE], jh[ee, on, drop = FALSE]))
     # the volume Hessian of the last correction where the fit ends on the correction point
@@ -772,7 +686,7 @@
     error = function(e) e), "error")
   forward <- function() !inherits(tryCatch(joint(pars = full, fixed = fixed, deriv = TRUE, deriv2 = TRUE),
                                            error = function(e) e), "error")
-  other <- setdiff(c("forward-reverse", "forward-forward"), want)
+  other <- .setdiff(c("forward-reverse", "forward-forward"), want)
   if (if (want == "forward-reverse") reverse() else forward()) return(want)
   if (if (want == "forward-reverse") forward() else reverse()) {
     .derivModeMessage(if (!is.null(control$derivMode))
@@ -916,7 +830,7 @@
   E <- design$etaNames[, design$normal$stems, drop = FALSE]
   P <- length(outer)
   wide <- vapply(seq_len(nrow(E)), function(g) sum(Matrix::rowSums(H[outer, E[g, ], drop = FALSE]) > 0)^2 > ncol(E) * P, TRUE)
-  B <- H[outer, intersect(as.vector(t(E[!wide, , drop = FALSE])), etas), drop = FALSE]
+  B <- H[outer, .intersect(as.vector(t(E[!wide, , drop = FALSE])), etas), drop = FALSE]
   pattern <- methods::as(H[outer, outer, drop = FALSE] | (B %*% Matrix::t(B)) != 0, "CsparseMatrix")
   if (!is.null(th$fill)) return(Matrix::nnzero(pattern) / P^2 <= th$fill)
   cost <- .sparseCost(pattern, sum(wide) * ncol(E) + length(jt$lowrank$d))
@@ -1104,7 +1018,7 @@
     logdet <- sum(vapply(units, function(u) as.numeric(determinant(block(u) / 2)$modulus), 0))
     cores <- getOption("dMod2.cores", 1L)
     schur <- function(h) {
-      ee <- intersect(etas, rownames(h))
+      ee <- .intersect(etas, rownames(h))
       h[outer, outer, drop = FALSE] -
         Matrix::crossprod(h[ee, outer, drop = FALSE], Matrix::solve(h[ee, ee, drop = FALSE], h[ee, outer, drop = FALSE]))
     }
@@ -1150,7 +1064,7 @@
   }
   oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200L, ftol = 1e-7, mtol = 1e-5), control$trustControl %||% list())
   args <- list(objfun = outerObjective, parinit = start, rinit = oc$rinit, rmax = oc$rmax, iterlim = oc$iterlim,
-               tolControl = oc[intersect(names(oc), c("ftol", "mtol", "gtol"))],
+               tolControl = oc[.intersect(names(oc), c("ftol", "mtol", "gtol"))],
                sparse = sparse)
   # iterlim 0 evaluates the marginal at the start, which is no failure to converge
   fit <- if (oc$iterlim > 0) do.call(trust, args) else .innerTrust(args)
@@ -1168,11 +1082,11 @@
 }
 
 ## A gradient restricted to `names`, 0 where absent.
-.named <- function(g, names) { out <- setNames(numeric(length(names)), names); h <- intersect(names, names(g)); out[h] <- g[h]; out }
+.named <- function(g, names) { out <- setNames(numeric(length(names)), names); h <- .intersect(names, names(g)); out[h] <- g[h]; out }
 
 .namedHessian <- function(H, names) {
   out <- matrix(0, length(names), length(names), dimnames = list(names, names))
-  h <- intersect(names, rownames(H))
+  h <- .intersect(names, rownames(H))
   if (length(h)) out[h, h] <- as.matrix(H[h, h, drop = FALSE])
   out
 }

@@ -1211,7 +1211,7 @@ readPEtabTables <- function(yamlPath) {
                                reactions = NULL,
                                modelname = "petab_trafo",
                                cores = 1L, outdir = .dmodOutdir(),
-                               derivMode = "forward") {
+                               derivMode = "forward", stability = TRUE) {
 
   # Inner side that the trafo must produce per condition.
   inner_targets <- unique(c(states, inner_pars, obs_inner))
@@ -1370,7 +1370,7 @@ readPEtabTables <- function(yamlPath) {
     #    sub-conditions with this preequilibration condition.
     eq_of[sub] <- peq
     if (is.null(eq_model[[peq]]) && length(peq_reactions$states))
-      eq_model[[peq]] <- Pimpl(peq_reactions, condition = NULL,
+      eq_model[[peq]] <- Pimpl(peq_reactions, condition = NULL, deriv2 = stability,
                                compile = FALSE, outdir = outdir,
                                modelname = paste(modelname,
                                                  sanitizeConditions(peq),
@@ -1383,6 +1383,7 @@ readPEtabTables <- function(yamlPath) {
   }
 
   parfns <- list()
+  steady <- list()
   if (length(plain_tr))
     parfns[[length(parfns) + 1L]] <-
       P(plain_tr, compile = FALSE, outdir = outdir, cores = cores,
@@ -1398,9 +1399,13 @@ readPEtabTables <- function(yamlPath) {
                 derivMode = derivMode)
     parfns[[length(parfns) + 1L]] <- if (is.null(eq_model[[k]])) p_post * p_pre
       else p_post * .fnWithConditions(eq_model[[k]], subs) * p_pre
+    if (!is.null(eq_model[[k]])) steady[[k]] <- list(pSS = eq_model[[k]], p = p_pre)
   }
 
-  Reduce(`+`, parfns)
+  # the steady states with the parfn that feeds each, for constraintStability()
+  out <- Reduce(`+`, parfns)
+  attr(out, "petabSteadyStates") <- steady
+  out
 }
 
 
@@ -1469,6 +1474,10 @@ readPEtabTables <- function(yamlPath) {
     else if (identical(trafo, "log10")) sprintf("log10(%s + %s)", formula, .PETAB_LOG_FLOOR)
     else formula
   }, obs, obs_trafo[names(obs)], SIMPLIFY = TRUE, USE.NAMES = TRUE)
+  # States the error model reads pass through as identity outputs, which keeps
+  # the observation function in the native chain.
+  keepStates <- .setdiff(keepStates, names(obs_eqn))
+  obs_eqn <- c(obs_eqn, setNames(keepStates, keepStates))
   # A PEtab model may declare no species at all; the observables are then
   # pure functions of parameters, so Y gets the symbols directly.
   stateless <- length(reactions$states) == 0L
@@ -1477,7 +1486,6 @@ readPEtabTables <- function(yamlPath) {
     parameters = if (stateless)
                    setdiff(unique(unlist(lapply(obs_eqn, getSymbols))), "time")
                  else NULL,
-    attachInput = length(keepStates) > 0L,
     compile    = FALSE,
     modelname  = modelname,
     outdir     = outdir,
@@ -1645,7 +1653,7 @@ readPEtabTables <- function(yamlPath) {
                                       options = NULL, optionsSens = NULL,
                                       sparse = NULL,
                                       deriv = TRUE, derivMode = "forward", cores = 1L,
-                                      outdir = .dmodOutdir()) {
+                                      outdir = .dmodOutdir(), stability = TRUE) {
 
   # `importSbml` renames ids that R cannot parse or C++ reserves; the PEtab
   # tables are renamed with the same map so they keep matching the model.
@@ -1814,7 +1822,10 @@ readPEtabTables <- function(yamlPath) {
           obs_inner     = obs_inner,
           reactions = sbml$reactions,
           modelname = paste0(modelname, "_trafo"),
-          cores = cores, outdir = outdir, derivMode = derivMode)
+          cores = cores, outdir = outdir, derivMode = derivMode,
+          stability = stability)
+  steady <- attr(p, "petabSteadyStates")
+  attr(p, "petabSteadyStates") <- NULL
 
   dataList <- as.datalist(meas_info$data, splitBy = "condition")
 
@@ -1833,6 +1844,7 @@ readPEtabTables <- function(yamlPath) {
     odemodel     = ode_pair$odemodel,
     x            = ode_pair$x,
     g            = g, e = e, p = p,
+    steady       = steady,
     dataList     = dataList,
     fixed        = fixed,
     obs_meta     = obs_meta,
@@ -1961,12 +1973,17 @@ readPEtabTables <- function(yamlPath) {
 #'   Default `NULL`, the backend's defaults.
 #' @param sparse `NULL` (default) lets the cppDE or Sundials backend choose a
 #'   sparse (KLU) or dense linear solver; `TRUE` or `FALSE` sets it.
+#' @param stability If `TRUE` (default), a problem with preequilibration gets a
+#'   [constraintStability()] term per steady state in `obj`, zero on a stable
+#'   one away from the stability boundary; the steady states are then built with second derivatives. `FALSE`
+#'   leaves the term out.
 #' @param outdir Directory of the generated sources and shared objects, one
 #'   source per condition. Default `getOption("dMod2.outdir")`, else the
 #'   working directory.
 #' @return A list of class `"petabproblem"` with components `dataList`,
 #'   `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite
-#'   `g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. With several
+#'   `g * x * p`), `obj`, `stability`, `bestfit`, `parlower` and `parupper`.
+#'   `stability` is the [constraintStability()] term in `obj`, or `NULL`. With several
 #'   models, `reactions`, `odemodel`, `g`, `x` and `p` are lists by model id.
 #'   `obj` has the PEtab fixed parameters set; `bestfit` is the PEtab
 #'   `nominalValue` of each estimated parameter on the PEtab `parameterScale`,
@@ -2000,11 +2017,12 @@ importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
                         deriv = TRUE, derivMode = "forward",
                         options = NULL, optionsSens = NULL,
-                        sparse = NULL, outdir = .dmodOutdir()) {
+                        sparse = NULL, stability = TRUE, outdir = .dmodOutdir()) {
 
   cores <- as.integer(cores)
   if (length(cores) != 1L || is.na(cores) || cores < 1L)
     stop("`cores` must be a single positive integer.")
+  stability <- isTRUE(stability)
 
   if (missing(backend))
     stop("Argument `backend` is required (one of \"deSolve\", \"cppDE\", ",
@@ -2109,7 +2127,8 @@ importPEtab <- function(yamlPath, backend,
       deriv            = deriv,
       derivMode        = derivMode,
       cores            = cores,
-      outdir           = outdir)
+      outdir           = outdir,
+      stability        = stability)
     pieces$modelID <- mid
     per_model[[mid]] <- pieces
   }
@@ -2203,6 +2222,13 @@ importPEtab <- function(yamlPath, backend,
   if (!is.null(param_meta$priors))
     raw_obj <- raw_obj + .petab_prior_objective(param_meta$priors)
 
+  # A preequilibration rests at a stable steady state: a constraintStability() term per steady
+  # state, not data.
+  steady <- unlist(lapply(per_model, `[[`, "steady"), recursive = FALSE, use.names = FALSE)
+  stab <- if (stability && length(steady))
+    Reduce(`+`, lapply(steady, function(s) constraintStability(s$pSS, s$p)))
+  if (!is.null(stab)) raw_obj <- raw_obj + stab
+
   # SBML defaults that turn out to be inner targets of `p` are set by the trafo,
   # not fixed parameters. They move to `sbml_only_pars`, so a re-export declares
   # them in the SBML but not in parameters.tsv.
@@ -2244,6 +2270,7 @@ importPEtab <- function(yamlPath, backend,
     e         = e,
     prd       = prd,
     obj       = obj,
+    stability = stab,
     bestfit   = bestfit,
     parlower  = param_meta$lower,
     parupper  = param_meta$upper
@@ -2713,9 +2740,9 @@ print.petabproblem <- function(x, ...) {
 #' @param observables Observable formulas keyed by observableId. Accepts a
 #'   named character vector, an [eqnvec], or an observation function produced
 #'   by [Y()] (formulas read from `attr(observables, "equations")`).
-#' @param p A `parfn` produced by [P()]. Required: the symbolic trafo is
-#'   the source of truth for parameters.tsv, conditions.tsv, and
-#'   `<initialAssignment>` formulas.
+#' @param p A `parfn` produced by [P()]. Required: parameters.tsv,
+#'   conditions.tsv and the `<initialAssignment>` formulas are read off the
+#'   symbolic trafo.
 #' @param pouter Named numeric vector of estimated outer parameters, on the
 #'   chosen `parameterScale`. Names become `parameterId`s in parameters.tsv.
 #' @param errors Noise formulas keyed by observableId. Accepts a named
@@ -2752,8 +2779,8 @@ print.petabproblem <- function(x, ...) {
 #' @param modelID SBML model identifier. Default `"dMod_export"`.
 #' @param dir Output directory, created if missing.
 #' @param formatVersion `"2.0.0"` (default) or `"1"`.
-#' @param overwrite Logical, whether existing files in `dir` are overwritten.
-#'   Default `FALSE`.
+#' @param overwrite Logical. If `FALSE` (default), existing files in `dir` are
+#'   an error.
 #' @return Path to the written YAML manifest, invisibly.
 #' @details An outer parameter named like a state (e.g. `"A <- exp(A)"`) cannot
 #'   share the species id in SBML. It is written as `init_<state>` and the

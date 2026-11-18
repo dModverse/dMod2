@@ -156,7 +156,7 @@
   lapply(seq_len(n), function(i) {
     ct <- if (i <= length(u)) u[[i]]$pars
     if (is.null(ct)) return(matrix(0, 0, S))
-    ct <- ct[intersect(rownames(ct), fw$names), , drop = FALSE]
+    ct <- ct[.intersect(rownames(ct), fw$names), , drop = FALSE]
     ct[rowSums(ct != 0) > 0, , drop = FALSE]
   })
 }
@@ -244,7 +244,7 @@
 .collect <- function(names, cts, col) {
   out <- setNames(numeric(length(names)), names)
   for (ct in cts) {
-    hit <- intersect(rownames(ct), names)
+    hit <- .intersect(rownames(ct), names)
     out[hit] <- out[hit] + ct[hit, col]
   }
   out
@@ -362,7 +362,7 @@
     fk <- .sweepSlice(design, full, fixed, fw, k, conds, B, cores)
     if (is.null(fk)) {
       one <- lapply(units, function(u) list(eta = if (length(u$eta) >= k) u$eta[k] else character(0),
-                                           conditions = intersect(u$conditions, conds)))
+                                           conditions = .intersect(u$conditions, conds)))
       fk <- .sweepForward(design, full, fixed, one, cores, conds = conds, blocks = B)
       if (sum(vapply(fk$rows, function(x) length(x$p), 0L)) != sum(sel))
         stop("the data rows of a forward pass along one direction differ from those of the full pass", call. = FALSE)
@@ -433,21 +433,21 @@
     out
   })
   sw <- .sweepUnits(design, full, fixed, units, Ms, cores = cores)
-  cholIn <- intersect(outer, .hyperNames(design))
+  cholIn <- .intersect(outer, .hyperNames(design))
   grad <- setNames(numeric(length(outer)), outer)
   etaShift <- blocks <- vector("list", length(units))
   for (u in seq_along(units)) {
     un <- units[[u]]
     eta <- un$eta; Ku <- length(eta)
     reach <- unique(c(sw[[u]]$reach, cholIn))
-    A <- intersect(outer, reach)
+    A <- .intersect(outer, reach)
     rowsH <- matrix(0, Ku, length(reach), dimnames = list(eta, reach))
     rowsH[, sw[[u]]$reach] <- sw[[u]]$rows
     # the trace gradients of every M of the unit as columns, with the prior's share
     nM <- length(Ms[[u]])
     TR <- matrix(0, length(reach), nM, dimnames = list(reach, NULL))
     TR[sw[[u]]$reach, ] <- do.call(cbind, sw[[u]]$traces)
-    own <- intersect(cholIn, names(un$dP))
+    own <- .intersect(cholIn, names(un$dP))
     if (length(own)) {
       Mv <- matrix(vapply(Ms[[u]], c, numeric(Ku * Ku)), Ku * Ku)
       TR[own, ] <- TR[own, , drop = FALSE] + t(crossprod(Mv, matrix(vapply(un$dP[own], c, numeric(Ku * Ku)), Ku * Ku)))
@@ -455,7 +455,7 @@
     trace <- TR[, 1L]
     # the normal prior: the precision in the eta block, the derivative in the Cholesky parameters
     rowsH[, eta] <- rowsH[, eta] + un$P
-    for (cp in intersect(cholIn, names(un$dP))) rowsH[, cp] <- rowsH[, cp] + un$dP[[cp]] %*% full[eta]
+    for (cp in .intersect(cholIn, names(un$dP))) rowsH[, cp] <- rowsH[, cp] + un$dP[[cp]] %*% full[eta]
     Hee <- rowsH[, eta, drop = FALSE]
     eg <- eigen((Hee + t(Hee)) / 2, symmetric = TRUE)
     lam <- pmax(eg$values, 1e-10 * abs(sum(eg$values)) / Ku)
@@ -474,7 +474,7 @@
       Hinv <- Ms[[u]][[1]]
       P <- array(Hinv %*% matrix(DH, Ku), dim(DH))
       V <- -crossprod(matrix(aperm(P, c(2, 1, 3)), Ku * Ku), matrix(P, Ku * Ku))
-      own2 <- intersect(cholIn, names(un$dP))
+      own2 <- .intersect(cholIn, names(un$dP))
       for (al in own2) for (be in own2)
         V[match(al, A), match(be, A)] <- V[match(al, A), match(be, A)] + sum(Hinv * un$d2P(al, be))
       # the rows and columns of the Cholesky parameters only: between structural parameters the
@@ -489,7 +489,7 @@
       etaShift[[u]][, A] <- Em
     }
   }
-  fx <- intersect(names(fixed), outer)
+  fx <- .intersect(names(fixed), outer)
   grad[fx] <- 0
   out <- list(gradient = grad, etaShift = etaShift)
   if (!curvature) return(out)
@@ -521,7 +521,7 @@
   prior <- Reduce(`+`, lapply(.subDesigns(design), function(sd)
     if (sd$normal$K) .normalPrior(sd)(pars = full, fixed = fixed, deriv = TRUE)))
   ph <- prior$hessian
-  po <- intersect(outer, rownames(ph))
+  po <- .intersect(outer, rownames(ph))
   Hoo[po, po] <- Hoo[po, po] + ph[po, po]
   unitOf <- integer(0)
   for (i in seq_along(units)) unitOf[units[[i]]$conditions] <- i
@@ -531,7 +531,7 @@
     cs <- which(unitOf[fw$conds] == u & !is.na(unitOf[fw$conds]))
     He <- t(vapply(seq_along(eta), function(k) .collect(c(eta, outer), rows[cs], 1L + k), numeric(length(eta) + Q)))
     dimnames(He) <- list(eta, c(eta, outer))
-    pe <- intersect(c(eta, outer), colnames(ph))
+    pe <- .intersect(c(eta, outer), colnames(ph))
     He[, pe] <- He[, pe] + ph[eta, pe, drop = FALSE]
     Hee <- He[, eta, drop = FALSE]
     S <- S - crossprod(He[, outer, drop = FALSE], .scaledSolve((Hee + t(Hee)) / 2, He[, outer, drop = FALSE]))

@@ -273,3 +273,24 @@ test_that("trustL1 takes the tolerances in tolControl and refuses them flat", {
   expect_true(fit$converged)
 })
 
+
+test_that("trustL1 stops for convergence only where the full Newton step predicts at most mtol", {
+  # a coordinate held at the kink and a flat free one, minimum 0 at (0, 9)
+  obj <- function(p, ...) {
+    h <- c(x = 1, y = 1e-3)
+    d <- p - c(x = 0, y = 9)
+    H <- diag(unname(h))
+    dimnames(H) <- list(names(p), names(p))
+    objlist(value = 0.5 * sum(h * d^2), gradient = h * d, hessian = H)
+  }
+  tol <- list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2)
+  grad <- trustL1(obj, c(x = 0, y = 0), mu = c(x = 0), lambda = 0.1, rinit = 1, rmax = 10,
+                  tolControl = tol)
+  expect_identical(grad$stopReason, "gradient")
+  expect_identical(unname(grad$argument[["x"]]), 0)
+  expect_lte(grad$value, 1e-4)
+  val <- trustL1(obj, c(x = 0, y = 0), mu = c(x = 0), lambda = 0.1, rinit = 0.05, rmax = 0.05,
+                 tolControl = modifyList(tol, list(ftol = 1e-3, gtol = 1e-6)))
+  expect_identical(val$stopReason, "fvalue")
+  expect_lte(val$value, 1e-4)
+})

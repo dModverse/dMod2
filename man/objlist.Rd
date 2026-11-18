@@ -25,7 +25,7 @@ along when two objective lists are added with \code{+}, see \link{sumobjlist}.
 }
 \details{
 Asked for \code{hessian = "sparse"}, an objective may return part of
-its Hessian in an entry \code{lowrank}, a list of a matrix \code{U} with parameter
+the Hessian in an entry \code{lowrank}, a list of a matrix \code{U} with parameter
 rows and a vector \code{d}: the Hessian is then \verb{hessian + U diag(d) U'}.
 }
 \examples{

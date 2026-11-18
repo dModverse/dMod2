@@ -946,6 +946,8 @@ match.fnargs <- function(arglist, choices) {
       arglist <- list(...)
       arglist <- arglist[match.fnargs(arglist, c("pars"))]
       pars <- arglist[[1]]
+      # NULL asks for all conditions, as in normL2()
+      if (is.null(conditions)) conditions <- conditions12
 
       # A term understands `sweep` only if it names it as a formal; one that
       # does not runs forward, and under an exact request still returns the

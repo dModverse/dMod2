@@ -26,8 +26,8 @@ prediction distribution errors from \code{nsim} simulated data sets,
 decorrelated per group, readings at or below their limit imputed as in
 Nguyen et al. 2012, drawn given the other readings of their group).}
 
-\item{nsim, seed}{With \code{"NPDE"}: number of simulated data sets and the seed
-of the random number generator.}
+\item{nsim, seed}{With \code{"NPDE"}: number of simulated data sets, default 1000,
+and the seed of the random number generator, default \code{NULL}.}
 
 \item{...}{Ignored.}
 }

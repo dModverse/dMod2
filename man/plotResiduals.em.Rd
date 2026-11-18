@@ -17,8 +17,8 @@
 
 \item{type}{Any of \code{"IWRES"}, \code{"CWRES"} and \code{"NPDE"}, by default all three.}
 
-\item{nsim, seed}{With \code{"NPDE"}: the number of simulated data sets and the
-seed of the random number generator.}
+\item{nsim, seed}{With \code{"NPDE"}: the number of simulated data sets, default
+1000, and the seed of the random number generator, default \code{NULL}.}
 
 \item{...}{Ignored.}
 }

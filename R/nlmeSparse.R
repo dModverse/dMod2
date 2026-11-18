@@ -92,19 +92,19 @@
   modes[!reach] <- 0
   given <- as.list(control$trustControl$tolControl)
   tol <- utils::modifyList(list(ftol = 1e-10, mtol = 1e-10),
-                           given[intersect(c("ftol", "mtol", "gtol"), names(given))])
+                           given[.intersect(c("ftol", "mtol", "gtol"), names(given))])
   phis <- setNames(rep(NA_real_, nrow(E)), rownames(E))
   for (i in seq_len(nrow(E))) {
     en <- E[i, reach[i, ]]
     if (!length(en)) next
     conds <- design$conditions[[i]]
-    sl <- slab[intersect(names(slab), en)]
+    sl <- slab[.intersect(names(slab), en)]
     # the value alone
     phi <- function(eta) {
       full <- c(theta, setNames(as.vector(modes), names))
       full[en] <- as.numeric(eta)
       v <- sum(vapply(.objEvalMany(objs[conds], rep(list(full[en]), length(conds)), deriv = FALSE,
-                                   fixed = full[setdiff(names(full), en)]), `[[`, 0, "value"))
+                                   fixed = full[.setdiff(names(full), en)]), `[[`, 0, "value"))
       if (!is.null(prior)) v <- v + prior(pars = full, deriv = FALSE)$value
       if (length(sl)) v <- v + sum(sl * full[names(sl)]^2) / 2
       v
@@ -119,13 +119,13 @@
       full <- c(theta, setNames(as.vector(modes), names))
       full[en] <- as.numeric(eta)
       out <- Reduce(`+`, .objEvalMany(objs[conds], rep(list(full[en]), length(conds)),
-                                      fixed = full[setdiff(names(full), en)]))
+                                      fixed = full[.setdiff(names(full), en)]))
       v <- out$value
       gr <- out$gradient[en]
       he <- out$hessian[en, en, drop = FALSE]
       if (!is.null(prior)) {
         pr <- prior(pars = full, deriv = TRUE)
-        nn <- intersect(en, names(pr$gradient))
+        nn <- .intersect(en, names(pr$gradient))
         v <- v + pr$value
         gr[nn] <- gr[nn] + pr$gradient[nn]
         he[nn, nn] <- he[nn, nn] + pr$hessian[nn, nn]
@@ -216,7 +216,7 @@
 .sparseFactors <- function(P, stems, lay) {
   r <- match(stems, lay$stem)
   slabs <- which(lay$dist[r] == "spikeSlab")
-  factors <- c(as.list(setdiff(seq_along(stems), slabs)), if (length(slabs)) list(slabs))
+  factors <- c(as.list(.setdiff(seq_along(stems), slabs)), if (length(slabs)) list(slabs))
   owner <- integer(length(stems))
   for (j in seq_along(factors)) owner[factors[[j]]] <- j
   within <- outer(owner, owner, `==`)
@@ -443,12 +443,12 @@
     if (!is.null(ct$Hi)) M2[iN, iN] <- ct$Hi
     list(ct$MHi[reach[i, ], reach[i, ], drop = FALSE], M2[reach[i, ], reach[i, ], drop = FALSE])
   }))
-  pick <- function(v, nm) { out <- setNames(numeric(length(nm)), nm); h <- intersect(nm, names(v)); out[h] <- v[h]; out }
+  pick <- function(v, nm) { out <- setNames(numeric(length(nm)), nm); h <- .intersect(nm, names(v)); out[h] <- v[h]; out }
   for (i in seq_len(G)) {
     en <- E[i, ]
     o <- at[[i]]
     hh <- o$hessian
-    an <- intersect(A, names(o$gradient))
+    an <- .intersect(A, names(o$gradient))
     cv <- curv[[i]]
     Mgi <- Meta <- numeric(K)
     Mgi[iL] <- delta[i, ]
@@ -459,7 +459,7 @@
     if (fr) {
       rowsAt <- function(cols) {
         out <- matrix(0, K, length(cols), dimnames = list(en, cols))
-        h <- intersect(cols, colnames(sw[[i]]$rows))
+        h <- .intersect(cols, colnames(sw[[i]]$rows))
         out[rownames(sw[[i]]$rows), h] <- sw[[i]]$rows[, h]
         out
       }
@@ -482,7 +482,7 @@
       # in H_NN also enters the Schur complement
       own[i, ] <- own[i, ] + dHA
       dEta[en] <- dEta[en] + dHE
-      ch <- intersect(A, nl$cholPars)
+      ch <- .intersect(A, nl$cholPars)
       MN <- Hi + MHi[iN, iN, drop = FALSE]
       own[i, ch] <- own[i, ch] + vapply(ch, function(cp) 2 * sum(MN * cd$dOinv[[match(cp, nl$cholPars)]]), 0)
     }
@@ -494,7 +494,7 @@
   }
   explicit <- colSums(own)
   if (!is.null(pr)) {
-    pa <- intersect(A, names(pr$gradient)); pe <- intersect(names, names(pr$gradient))
+    pa <- .intersect(A, names(pr$gradient)); pe <- .intersect(names, names(pr$gradient))
     explicit[pa] <- explicit[pa] + pr$gradient[pa]
     dEta[pe] <- dEta[pe] + pr$gradient[pe]
     Hex[pe, pe] <- Hex[pe, pe] + pr$hessian[pe, pe]
@@ -506,7 +506,7 @@
   freeGradient <- setNames(numeric(Q), A)
   freeHessian <- matrix(0, Q, Q, dimnames = list(A, A))
   for (o in free) {
-    an <- intersect(A, names(o$gradient))
+    an <- .intersect(A, names(o$gradient))
     freeGradient[an] <- freeGradient[an] + o$gradient[an]
     freeHessian[an, an] <- freeHessian[an, an] + o$hessian[an, an]
   }
@@ -573,7 +573,7 @@
 ## The gradient of the normal prior of every group, eta' Omega^-1 eta + log|Omega|, in the
 ## Cholesky parameters among `A`, a row per group.
 .priorGroups <- function(nl, E, full, fixed, cd, A) {
-  ch <- intersect(A, nl$cholPars)
+  ch <- .intersect(A, nl$cholPars)
   out <- matrix(0, nrow(E), length(A), dimnames = list(rownames(E), A))
   if (!length(ch)) return(out)
   all <- c(full, fixed)
@@ -609,14 +609,14 @@
   lay <- .sparseLayout(design)
   objs <- .conditionObjectives(design)
   prior <- if (design$normal$K) .normalPrior(design)
-  hypers <- intersect(.sparseHypers(lay), names(start))
-  off <- intersect(attr(.extraObjective(design), "parameters"), c(.sparseHypers(lay), as.vector(design$etaNames)))
+  hypers <- .intersect(.sparseHypers(lay), names(start))
+  off <- .intersect(attr(.extraObjective(design), "parameters"), c(.sparseHypers(lay), as.vector(design$etaNames)))
   if (length(off))
     stop("em: with spike-and-slab or Dirichlet-process random effects the terms beside the data ",
          "take the fixed effects only; ", paste(off, collapse = ", "), " are hyperparameters or random effects.",
          call. = FALSE)
   kind <- .hyperKind(lay)[hypers]
-  structural <- setdiff(names(start), hypers)
+  structural <- .setdiff(names(start), hypers)
   E <- design$etaNames
   reach <- .reachOf(design)
   blind <- Filter(function(h) {
@@ -635,7 +635,7 @@
   hyper <- start[hypers]
   par <- start[structural]
   lc <- control$sparseFit %||% list()
-  lc$derivMode <- .secondOrderMode(design, design$objfn, par, fixed, control[setdiff(names(control), "secondOrderCorrection")],
+  lc$derivMode <- .secondOrderMode(design, design$objfn, par, fixed, control[.setdiff(names(control), "secondOrderCorrection")],
                                    units = lapply(design$groups, function(g)
                                      list(eta = unname(E[g, reach[g, ]]), conditions = design$conditions[[g]])))
   maxOuter <- lc$maxOuter %||% 200L
@@ -644,7 +644,7 @@
   # the inner start at p: the last modes moved by their first-order shift along the parameters
   predicted <- function(p) {
     if (is.null(shift)) return(warm)
-    q <- intersect(colnames(shift), names(p))
+    q <- .intersect(colnames(shift), names(p))
     out <- warm
     at <- match(rownames(shift), as.vector(E))
     out[at] <- out[at] + drop(shift[, q, drop = FALSE] %*% (p[q] - warmAt[q]))

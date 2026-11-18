@@ -53,6 +53,28 @@ test_that("trust converges to the exact minimum of a quadratic in one outer step
   expect_lte(fit$iterations, 3L)
 })
 
+# A quadratic with minimum 0 at the origin and a flat second direction.
+.flat_objfn <- function(p, ...) {
+  h <- c(1, 1e-3)
+  list(value = 0.5 * sum(h * p^2), gradient = h * p, hessian = diag(h))
+}
+
+test_that("a gradient stop needs the full Newton step to predict at most mtol", {
+  fit <- trust(.flat_objfn, c(x = 0, y = 9), rinit = 1, rmax = 10,
+               tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2))
+  expect_true(fit$converged)
+  expect_identical(fit$stopReason, "gradient")
+  expect_lte(fit$value, 1e-4)
+})
+
+test_that("a value stop needs the full Newton step to predict at most mtol", {
+  fit <- trust(.flat_objfn, c(x = 0, y = 9), rinit = 0.05, rmax = 0.05,
+               tolControl = list(ftol = 1e-3, mtol = 1e-4, gtol = 1e-6))
+  expect_true(fit$converged)
+  expect_identical(fit$stopReason, "fvalue")
+  expect_lte(fit$value, 1e-4)
+})
+
 
 ## ---- Simulated-truth recovery ----------------------------------------
 

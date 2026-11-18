@@ -60,7 +60,7 @@
 #'
 #' `hessian = "sparse"` returns the Gauss-Newton Hessian of the forward sweep
 #' as a sparse `Matrix`, assembled from the blocks of the conditions; [trust()]
-#' factorizes it where the argument `sparse` takes the sparse path, and [vcov()]
+#' factorizes it where the argument `sparse` takes the sparse path, and [`vcov()`][vcov.objlist]
 #' solves it for the columns of `which`.
 #'
 #' With `deriv = FALSE` it returns the value alone.
@@ -105,13 +105,10 @@ NULL
 #'     of the solve and sweeps a failing step again in substeps, see
 #'     [cppDE::adjointControl()]. Default `FALSE`. The value and the `chi2`
 #'     attribute of the reverse objective of [normL2()] then include the
-#'     first-order change from the computed trajectory to the one the sweep
-#'     differentiates, so value and gradient belong to one function, which
-#'     need not be closer to the exact value; a call with `deriv = FALSE`
-#'     sweeps as well. The change is the attribute
-#'     `correction` of the result. Forward values, the sweeps of [em()] and
-#'     [msem()] (forward over reverse) and multiple shooting run without
-#'     refine; [em()] refuses a prediction with it.
+#'     first-order change to the trajectory the sweep differentiates, returned
+#'     as attribute `correction`, and a call with `deriv = FALSE` sweeps as
+#'     well. Forward values, the sweeps of [em()] and [msem()] and multiple
+#'     shooting run without refine; [em()] refuses a prediction with it.
 #'   * `gradtol`: under `refine`, the absolute tolerance on each step's share
 #'     of the gradient. Default `NULL`, no check on the gradient.
 #' @param fcontrol `deSolve` backend only. List with the interpolation
@@ -848,12 +845,14 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     if (seeds) {
       .requireReverse(has_reverse, has_reverse2, 1L)
       params <- c(unclass(pars), unclass(fixed))
-      res <- do.call(cppDE::solveODE, c(
+      ct <- .widenSeeds(w, dim_names$variable, controls$names)
+      m <- .seedMap(ct)
+      res <- .seedExpand(do.call(cppDE::solveODE, c(
         list(reversed, times, params, fixed = NULL,
              forcings = forcs,
-             cotangent = .widenSeeds(w, dim_names$variable, controls$names),
+             cotangent = .seedKeep(ct, m),
              store = if (has_store) storeGet(times, params),
-             adjoint = seedCtl()), solveOpts(FALSE)))
+             adjoint = seedCtl()), solveOpts(FALSE))), m)
       .requireAdjoint(res)
       return(.withCorrectionOf(.pickCotangent(.adjointSeeds(res), names(pars)), res))
     }
@@ -903,11 +902,13 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
     if (seeds) {
       .requireReverse(has_reverse, has_reverse2, 1L)
       o <- solveOpts(FALSE)
+      cts <- lapply(wList, .widenSeeds, states, controls$names)
+      maps <- lapply(cts, .seedMap)
       conds <- lapply(seq_len(n), function(i) {
         params <- c(unclass(parsList[[i]]), unclass(fixedList[[i]]))
         cd <- list(times = timesL[[i]], parms = params,
                    forcings = forcs,
-                   cotangent = .widenSeeds(wList[[i]], states, controls$names))
+                   cotangent = .seedKeep(cts[[i]], maps[[i]]))
         if (has_store) cd$store <- storeGet(timesL[[i]], params)
         cd$adjoint <- seedCtl()
         cd
@@ -920,6 +921,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
                          store = a$store, adjoint = a$adjoint), o)))
       else
         do.call(batch, c(list(reversed, conditions = conds, cores = cores), o))
+      res <- Map(.seedExpand, res, maps)
       return(lapply(seq_len(n), function(i) {
         .requireAdjoint(res[[i]], condOf(i))
         .withCorrectionOf(.pickCotangent(.adjointSeeds(res[[i]]), names(parsList[[i]])), res[[i]])

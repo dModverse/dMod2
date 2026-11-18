@@ -13,6 +13,7 @@
 #include <limits>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "pimpl_kernel.h"
@@ -590,6 +591,53 @@ SEXP frame(const double* t, const Ad& a, int T, int n, int nd, bool deriv2, cons
   return m;
 }
 
+// The sum of the Hessian blocks `hess` of the conditions over the `n` global parameters, as the
+// 0-based slots list(i, p, x) of a column-compressed matrix: each column summed in a work vector
+// in the order of the conditions, as the dense sum does, and zero sums left out.
+List sparseHessian(const List& conds, const std::vector<In>& in, const std::vector<std::vector<double>>& hess,
+                   int n) {
+  const int K = in.size();
+  std::vector<std::vector<int>> glob(K);
+  std::vector<std::vector<std::pair<int, int>>> touch(n);
+  for (int c = 0; c < K; ++c) {
+    List pc = conds[c];
+    IntegerVector dg = pc["dir_global"];
+    glob[c].assign(dg.begin(), dg.begin() + in[c].nd);
+    for (int b = 0; b < in[c].nd; ++b)
+      if (glob[c][b] >= 0) touch[glob[c][b]].emplace_back(c, b);
+  }
+  std::vector<double> w(n, 0.0);
+  std::vector<int> mark(n, -1), rows, ri;
+  std::vector<double> rx;
+  IntegerVector p(n + 1);
+  for (int j = 0; j < n; ++j) {
+    rows.clear();
+    for (const std::pair<int, int>& cb : touch[j]) {
+      const int c = cb.first, nd = in[c].nd;
+      const double* h = hess[c].data() + (std::size_t) nd * cb.second;
+      for (int a = 0; a < nd; ++a) {
+        const int r = glob[c][a];
+        if (r < 0) continue;
+        if (mark[r] != j) {
+          mark[r] = j;
+          w[r] = 0.0;
+          rows.push_back(r);
+        }
+        w[r] += h[a];
+      }
+    }
+    std::sort(rows.begin(), rows.end());
+    for (int r : rows) {
+      if (w[r] == 0.0) continue;
+      ri.push_back(r);
+      rx.push_back(w[r]);
+    }
+    p[j + 1] = (int) ri.size();
+  }
+  return List::create(Named("i") = IntegerVector(ri.begin(), ri.end()), Named("p") = p,
+                      Named("x") = NumericVector(rx.begin(), rx.end()));
+}
+
 }  // namespace
 
 
@@ -598,11 +646,12 @@ SEXP frame(const double* t, const Ad& a, int T, int n, int nd, bool deriv2, cons
 // local): over the `n_global` parameters of the plan, or per condition in the condition directions; with
 // `want_seed` also seed_pred and seed_sigma, the derivatives of the value in the prediction and
 // sigma of every data row, in the order of the conditions and of their data, and seed_chi2_pred,
-// seed_chi2_sigma those of chi2. NULL where a solve or
-// a function fails or a prediction at a data point is not finite.
+// seed_chi2_sigma those of chi2. With `sparse` the Hessian over the global parameters is
+// list(i, p, x), the 0-based slots of a column-compressed matrix without zero entries. NULL where
+// a solve or a function fails or a prediction at a data point is not finite.
 // [[Rcpp::export]]
 SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local,
-                int threads, std::string bloq_mode, double t_df, bool want_seed) {
+                int threads, std::string bloq_mode, double t_df, bool want_seed, bool sparse = false) {
   List conds = plan["cond"];
   const int K = conds.size();
   const int nGlobal = as<int>(plan["n_global"]);
@@ -752,7 +801,7 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
     return out;
   }
   std::vector<double> g(nGlobal, 0.0), H;
-  if (build_hessian) H.assign((std::size_t) nGlobal * nGlobal, 0.0);
+  if (build_hessian && !sparse) H.assign((std::size_t) nGlobal * nGlobal, 0.0);
   for (int c = 0; c < K; ++c) {
     List pc = conds[c];
     IntegerVector dg = pc["dir_global"];
@@ -761,7 +810,7 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
       const int ga = dg[a];
       if (ga < 0) continue;
       g[ga] += grad[c][a];
-      if (!build_hessian) continue;
+      if (!build_hessian || sparse) continue;
       for (int b = 0; b < nd; ++b) {
         const int gb = dg[b];
         if (gb >= 0) H[ga + (std::size_t) nGlobal * gb] += hess[c][a + (std::size_t) nd * b];
@@ -769,7 +818,8 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
     }
   }
   out["gradient"] = NumericVector(g.begin(), g.end());
-  if (build_hessian) {
+  if (build_hessian && sparse) out["hessian"] = sparseHessian(conds, in, hess, nGlobal);
+  else if (build_hessian) {
     NumericMatrix Hm(nGlobal, nGlobal);
     if (nGlobal > 0) std::memcpy(&Hm(0, 0), H.data(), sizeof(double) * H.size());
     out["hessian"] = Hm;

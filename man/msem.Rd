@@ -81,7 +81,7 @@ as in \code{\link[=mstrust]{mstrust()}}: fits in parallel and cores inside each 
 
 \item{sd}{Standard deviation of the perturbation of the starts: one
 number for every parameter, or a vector named by the parameters it
-perturbs, the others keeping their start.}
+perturbs, the others keeping their start. Default 0.5.}
 
 \item{verbose}{Logical. If \code{TRUE}, print the table of the starts; the fits
 print no progress. Default \code{FALSE}.}

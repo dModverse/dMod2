@@ -14,7 +14,7 @@
 \item{tol}{a value more than \code{tol} above the lowest value of the current step
 starts a new step, see \code{\link[=plotValues]{plotValues()}}. Default 1.}
 
-\item{...}{Not used. Select rows first with \code{\link[=subset]{subset()}}, as in
+\item{...}{Not used. Select rows first with \code{\link[=subset.parframe]{subset()}}, as in
 \code{unique(subset(x, converged))}.}
 }
 \value{

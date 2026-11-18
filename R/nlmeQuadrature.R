@@ -102,7 +102,7 @@
     p[E[groups[reqGroup[r]], ]] <- etas[[reqGroup[r]]][reqNode[r], ]
     p
   })
-  rest <- setdiff(names(base), active)
+  rest <- .setdiff(names(base), active)
   kr <- .nodeChain(design, reqCond, full, active, rest, grad, deriv2, cores) %||%
     .nodeR(design, reqCond, full, active, rest, grad, deriv2, cores)
   Q <- length(active)
@@ -116,7 +116,7 @@
       b <- reqNode[r]
       value[b] <- value[b] + loc$value
       if (!grad) next
-      nm <- intersect(active, names(loc$gradient))
+      nm <- .intersect(active, names(loc$gradient))
       gr[b, nm] <- gr[b, nm] + loc$gradient[nm]
       he[b, nm, nm] <- he[b, nm, nm] + loc$hessian[nm, nm]
     }
@@ -245,7 +245,7 @@
   # each group at the lowest level from `level` up, never below the previous one, whose next
   # level changes the group -2 log L by at most tol / G
   rebuild <- function(psi, level, tol = Inf, etaInit = state$modes) {
-    psi <- c(psi, fixed[setdiff(names(fixed), names(psi))])
+    psi <- c(psi, fixed[.setdiff(names(fixed), names(psi))])
     im <- .innerModes(design, psi, etaInit, fixed, meta, control$innerControl %||% list())
     state$modes <- im$modes
     state$H <- im$H
@@ -311,9 +311,9 @@
     psi[names(pars)] <- pars
     psi[names(fixed)] <- fixed
     active <- names(pars)
-    refPars <- intersect(active, shift$pars)
-    ch <- intersect(active, lay$cholPars)
-    dataActive <- setdiff(active, c(refPars, lay$cholPars))
+    refPars <- .intersect(active, shift$pars)
+    ch <- .intersect(active, lay$cholPars)
+    dataActive <- .setdiff(active, c(refPars, lay$cholPars))
     L <- .choleskyFactor(lay, psi)
     # the prediction sees phi at the rebuild point and the current other parameters
     base <- c(state$psi0, setNames(as.vector(state$modes), as.vector(E)))
@@ -349,12 +349,12 @@
     hs <- if (deriv) Reduce(`+`, lapply(per, `[[`, "hessian"))
     # the data of conditions without a group enter as they are
     if (length(design$freeConditions)) {
-      free <- design$objfn(pars = psi[intersect(names(psi), attr(design$objfn, "parameters"))],
+      free <- design$objfn(pars = psi[.intersect(names(psi), attr(design$objfn, "parameters"))],
                            fixed = fixed, deriv = deriv, deriv2 = deriv2,
                            conditions = design$freeConditions)
       v <- v + free$value
       if (deriv) {
-        nm <- intersect(active, names(free$gradient))
+        nm <- .intersect(active, names(free$gradient))
         gr[nm] <- gr[nm] + free$gradient[nm]
         hs[nm, nm] <- hs[nm, nm] + free$hessian[nm, nm]
       }
@@ -471,7 +471,7 @@
   lay <- design$normal
   qc <- control$quadrature %||% list()
   q <- .quadratureObjective(design, start, fixed, modifyList(control, qc))
-  structural <- setdiff(names(start), lay$cholPars)
+  structural <- .setdiff(names(start), lay$cholPars)
   psi <- start
   q$rebuild(psi, lay$K + 1L)
   exact <- length(structural) > 0L && .hasDeriv2(q, psi[structural], fixed)
@@ -492,7 +492,7 @@
     moments <- lapply(design$groups, function(g)
       tcrossprod(q$state$modes[g, ]) + 2 * chol2inv(chol(q$state$H[[g]])))
     upd <- .updateNormal(design, moments, fixed)
-    psi[intersect(names(psi), names(upd))] <- upd[intersect(names(psi), names(upd))]
+    psi[.intersect(names(psi), names(upd))] <- upd[.intersect(names(psi), names(upd))]
     dpsi <- max(abs(psi - before))
     # EM contracts linearly: the remaining distance is about dpsi rate / (1 - rate)
     rate <- min(dpsi / last, 0.999)

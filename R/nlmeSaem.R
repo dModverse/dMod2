@@ -248,10 +248,10 @@
   ref <- .muReference(groupedDesign)
   gls <- names(.muReference(design))
   refPars <- unlist(lapply(unname(ref), `[[`, "pars"))
-  free <- intersect(unlist(lapply(unname(ref[gls]), `[[`, "pars")), names(start))
-  structural <- setdiff(names(start), lay$cholPars)
-  trustPars <- setdiff(structural, free)
-  partial <- intersect(trustPars, refPars)
+  free <- .intersect(unlist(lapply(unname(ref[gls]), `[[`, "pars")), names(start))
+  structural <- .setdiff(names(start), lay$cholPars)
+  trustPars <- .setdiff(structural, free)
+  partial <- .intersect(trustPars, refPars)
   D <- lapply(design$groups, function(g) {
     m <- matrix(0, K, length(refPars), dimnames = list(lay$stems, refPars))
     for (e in ref) m[e$stem, e$pars] <- e$X[g, ]
@@ -281,10 +281,10 @@
   density <- .groupDensity(design, meta, fixed, cores)
   objPars <- attr(design$objfn, "parameters")
   dataTerm <- function(p, active, conditions) {
-    active <- intersect(active, objPars)
+    active <- .intersect(active, objPars)
     if (!length(active) || !length(conditions))
       return(list(value = 0, gradient = .named(NULL, trustPars), hessian = .namedHessian(NULL, trustPars)))
-    held <- setdiff(intersect(objPars, names(p)), active)
+    held <- .setdiff(.intersect(objPars, names(p)), active)
     out <- design$objfn(pars = p[active], fixed = c(fixed, p[held]), deriv = TRUE, conditions = conditions)
     list(value = out$value, gradient = .named(out$gradient, trustPars),
          hessian = .namedHessian(out$hessian, trustPars))
@@ -299,7 +299,7 @@
       return(objlist(value = out$value, gradient = out$gradient, hessian = out$hessian))
     }
     atPhi <- p; atPhi[partial] <- beta[partial]
-    inGroups <- dataTerm(atPhi, setdiff(trustPars, partial), grouped)
+    inGroups <- dataTerm(atPhi, .setdiff(trustPars, partial), grouped)
     outside <- dataTerm(p, trustPars, design$freeConditions)
     b <- beta; b[partial] <- theta[partial]
     r <- phi - shift(b)
@@ -324,7 +324,7 @@
       Ic[free, free] <- Reduce(`+`, lapply(D, function(m) crossprod(m[, free, drop = FALSE], W %*% m[, free, drop = FALSE])))
     sh <- shift(beta)
     S <- s2 - (crossprod(sh, s1) + crossprod(s1, sh) - crossprod(sh)) / G
-    chol <- intersect(lay$cholPars, names(start))
+    chol <- .intersect(lay$cholPars, names(start))
     Ic[chol, chol] <- G / 2 * .choleskyDerivatives(lay, L, S)$hcc[chol, chol]
     if (length(trustPars)) Ic[trustPars, trustPars] <- cm1Objective(full[trustPars])$hessian / 2
     Ic
@@ -370,7 +370,7 @@
     one <- if (!burnin) mStep(phi, crossprod(phi) / G, beta)
     beta <- upd$beta
     full[free] <- beta[free]
-    held <- intersect(names(upd$chol), names(start))
+    held <- .intersect(names(upd$chol), names(start))
     full[held] <- upd$chol[held]
     eta <- phi - shift(beta)
     # the other parameters: a trust step while annealing, then the step on the averaged quadratic
@@ -414,7 +414,7 @@
       # iterates after the first `window` of the averaging
       draw <- psi
       draw[free] <- one$beta[free]
-      held <- intersect(names(one$chol), names(start))
+      held <- .intersect(names(one$chol), names(start))
       draw[held] <- one$chol[held]
       if (length(trustPars)) draw[trustPars] <- one$trust
       targets <- rbind(targets, draw)
@@ -459,8 +459,8 @@
   E <- design$etaNames[, lay$stems, drop = FALSE]
   Dp <- design$etaNames[, sl$stem, drop = FALSE]
   G <- nrow(Dp); K <- ncol(E)
-  hypers <- intersect(.sparseHypers(sl), names(start))
-  outer <- start[setdiff(names(start), hypers)]
+  hypers <- .intersect(.sparseHypers(sl), names(start))
+  outer <- start[.setdiff(names(start), hypers)]
   meta <- .foceiMeta(design, c(outer, setNames(numeric(length(Dp)), as.vector(Dp))), fixed)
   .requireM3(design, meta, "SAEM")
   full <- setNames(numeric(length(meta$pars_full_names)), meta$pars_full_names)
@@ -469,7 +469,7 @@
   # phi = eta + D_g beta held while the mu-referenced fixed effects move, those by GLS where their
   # symbol enters no condition outside the groups; the other structural parameters by trust
   ref <- .muReference(design)
-  free <- intersect(unlist(lapply(unname(ref), `[[`, "pars")), names(outer))
+  free <- .intersect(unlist(lapply(unname(ref), `[[`, "pars")), names(outer))
   refPars <- unlist(lapply(unname(ref), `[[`, "pars"))
   D <- lapply(design$groups, function(g) {
     m <- matrix(0, K, length(refPars), dimnames = list(lay$stems, refPars))
@@ -478,7 +478,7 @@
   })
   shift <- function(beta) matrix(vapply(D, function(m) drop(m %*% beta[refPars]), numeric(K)), G, K,
                                  byrow = TRUE, dimnames = dimnames(E))
-  structural <- setdiff(names(outer), c(lay$cholPars, free))
+  structural <- .setdiff(names(outer), c(lay$cholPars, free))
   density <- .groupDensity(design, meta, fixed, cores)
   objPars <- attr(design$objfn, "parameters")
   cm1 <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 1, tolControl = list(ftol = 1e-6, mtol = 1e-6)),
@@ -487,8 +487,8 @@
   cm1Objective <- function(theta, ...) {
     p <- full; p[structural] <- theta
     p[as.vector(E)] <- as.vector(eta)
-    active <- intersect(structural, objPars)
-    held <- setdiff(intersect(objPars, names(p)), active)
+    active <- .intersect(structural, objPars)
+    held <- .setdiff(.intersect(objPars, names(p)), active)
     out <- design$objfn(pars = p[active], fixed = c(fixed, p[held]), deriv = TRUE)
     objlist(value = out$value, gradient = .named(out$gradient, structural),
             hessian = .namedHessian(out$hessian, structural))
@@ -552,7 +552,7 @@
         S <- s2 - (crossprod(sh, s1) + crossprod(s1, sh) - crossprod(sh)) / G
         if (burnin) diag(S) <- pmax(diag(S), 0.95 * diag(tcrossprod(L)))
         chol <- .updateNormal(design, list(S), fixed)
-        held <- intersect(names(chol), names(outer))
+        held <- .intersect(names(chol), names(outer))
         full[held] <- chol[held]
         if (!length(free)) break
         beta[free] <- .glsFixedEffects(ref, s1, tcrossprod(.choleskyFactor(lay, c(full, fixed))), beta, free)
@@ -629,7 +629,7 @@
     spike[, st] <- colMeans(do.call(rbind, lapply(keep, function(d) d[[st]]$z == 0L)))
   }
   r <- .sparseMarginal(design, objs, prior, c(full[names(outer)], fixed), .stemHypers(sl, c(hyper, fixed)),
-                       as.character(intersect(names(outer), names(start))), character(0), fixed, modes, grad = TRUE,
+                       as.character(.intersect(names(outer), names(start))), character(0), fixed, modes, grad = TRUE,
                        control = list(integral = "importance", particles = sc$particles %||% 500L, iterlim = 300L))
   modes[, lay$stems] <- r$modes[, lay$stems]
   list(argument = psi, value = r$value, valueSE = r$valueSE, gradient = NULL, hessian = NULL,

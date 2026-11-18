@@ -9,9 +9,10 @@
 \arguments{
 \item{object}{An \code{alignment} from \code{\link[=align]{align()}}.}
 
-\item{nsim}{Number of data sets.}
+\item{nsim}{Number of data sets. Default 1.}
 
-\item{seed}{Seed of the random number generator.}
+\item{seed}{Seed of the random number generator. Default \code{NULL}, the
+current state.}
 
 \item{...}{Ignored.}
 }

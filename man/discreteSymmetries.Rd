@@ -56,7 +56,7 @@ proven by a map of the states (\code{"exact"}). A model with directions is reduc
 \code{\link[=symmetryReduction]{symmetryReduction()}} first and the reduced model is analyzed.
 }
 \details{
-The search needs msolve; see \code{\link[=symmetryDetection]{symmetryDetection()}} for its path.
+The search needs msolve; \code{\link[=symmetryDetection]{symmetryDetection()}} says where it is searched.
 }
 \examples{
 \dontshow{if (requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident.install") && !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))) withAutoprint(\{ # examplesIf}

@@ -68,10 +68,15 @@ default \code{1e-2}.}
 \code{\link[=constraintStability]{constraintStability()}} term rises.}
 \item{\code{stabilityTol}}{With \code{stability}, a root counts as stable while
 the real part of the leading eigenvalue on the manifold of the conserved
-quantities is at most \code{stabilityTol}, in the units of the rates; default
-\code{0}. A small positive value admits a resting state that departs from
-rest more slowly than the experiment lasts, as near a Hopf
-bifurcation.}
+quantities is at most the larger of \code{1e-8} times the largest eigenvalue
+modulus there, the precision of the eigenvalues, and \code{stabilityTol}, an
+absolute value in the units of the rates; default \code{0}. A positive value
+admits a resting state that departs from rest more slowly than a time
+scale of interest, as near a Hopf bifurcation. \code{\link[=constraintStability]{constraintStability()}}
+reaches the weight at \code{stabilityTol}.}
+\item{\code{stabilityMargin}}{The width of the ramp of \code{\link[=constraintStability]{constraintStability()}}
+below \code{stabilityTol}, relative to the largest eigenvalue modulus on the
+manifold of the conserved quantities; default \code{1e-6}.}
 \item{\code{nStarts}}{Random starts after the deterministic ones, default
 \code{20}.}
 \item{\code{startRange}}{Range of a random start, drawn uniformly per
@@ -166,7 +171,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov.objlist]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.

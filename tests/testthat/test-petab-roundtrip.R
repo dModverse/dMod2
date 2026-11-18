@@ -46,6 +46,16 @@ test_that("states a preequilibration cannot move keep their initial values", {
   camp  <- c_inf + c_b * exp(-b * times) + (ks / kd - c_inf - c_b) * exp(-kd * times)
   expect_equal(unname(pred[, "obs_AC"]), rep(1, 3), tolerance = 1e-8)
   expect_equal(unname(pred[, "obs_cAMP"]), camp, tolerance = 1e-8)
+
+  # the preequilibration brings a stability term, zero at the stable steady state, not data
+  expect_s3_class(pp$stability, "objfn")
+  o <- pp$obj(pp$bestfit)
+  expect_equal(attr(o, "stability"), 0)
+  expect_equal(o$value, attr(o, "data"))
+  expect_equal(pp$stability(pp$bestfit, fixed = attr(pp, "petab_meta")$fixed)$value, 0)
+  off <- importPEtab(file.path(d, "problem.yaml"), backend = "deSolve", compile = FALSE,
+                     modelname = "petab_invariant_off", stability = FALSE)
+  expect_null(off$stability)
 })
 
 

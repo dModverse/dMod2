@@ -15,6 +15,7 @@ importPEtab(
   options = NULL,
   optionsSens = NULL,
   sparse = NULL,
+  stability = TRUE,
   outdir = .dmodOutdir()
 )
 }
@@ -48,6 +49,11 @@ Default \code{NULL}, the backend's defaults.}
 \item{sparse}{\code{NULL} (default) lets the cppDE or Sundials backend choose a
 sparse (KLU) or dense linear solver; \code{TRUE} or \code{FALSE} sets it.}
 
+\item{stability}{If \code{TRUE} (default), a problem with preequilibration gets a
+\code{\link[=constraintStability]{constraintStability()}} term per steady state in \code{obj}, zero on a stable
+one away from the stability boundary; the steady states are then built with second derivatives. \code{FALSE}
+leaves the term out.}
+
 \item{outdir}{Directory of the generated sources and shared objects, one
 source per condition. Default \code{getOption("dMod2.outdir")}, else the
 working directory.}
@@ -55,7 +61,8 @@ working directory.}
 \value{
 A list of class \code{"petabproblem"} with components \code{dataList},
 \code{reactions}, \code{odemodel}, \code{g}, \code{x}, \code{p}, \code{e}, \code{prd} (the composite
-\code{g * x * p}), \code{obj}, \code{bestfit}, \code{parlower} and \code{parupper}. With several
+\code{g * x * p}), \code{obj}, \code{stability}, \code{bestfit}, \code{parlower} and \code{parupper}.
+\code{stability} is the \code{\link[=constraintStability]{constraintStability()}} term in \code{obj}, or \code{NULL}. With several
 models, \code{reactions}, \code{odemodel}, \code{g}, \code{x} and \code{p} are lists by model id.
 \code{obj} has the PEtab fixed parameters set; \code{bestfit} is the PEtab
 \code{nominalValue} of each estimated parameter on the PEtab \code{parameterScale},

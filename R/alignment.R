@@ -70,7 +70,7 @@
 #'   scale. A sample with censored readings
 #'   is censored at the mean of the sample readings with the limits in place of the
 #'   censored ones. `NULL` (default): every reading is a sample.
-#' @param distribution `"normal"` or `"t"` (Student-t, [normT()]).
+#' @param distribution `"normal"` (default) or `"t"` (Student-t, [normT()]).
 #' @param df Degrees of freedom for `distribution = "t"`.
 #' @param prior Optional prior of parameters on their predictor scale, a
 #'   [constraintL2()] that [align()] adds to the objective. The log standard
@@ -550,7 +550,7 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 ## The normalization as a term of the objective: per block the residual 1000 times the mean of the
-## predictors; asked for hessian = "sparse", its Hessian w a a' is w c c' over the predictor c of
+## predictors; asked for hessian = "sparse", the Hessian w a a' is w c c' over the predictor c of
 ## one value of the block plus the low-rank part w (a a' - c c').
 .alignmentNormalization <- function(m) {
   A <- Matrix::Matrix(m$normalization$A, sparse = TRUE)
@@ -991,7 +991,7 @@ print.alignmentmodel <- function(x, ...) {
 }
 
 ## The conditions `cond` split into parts of at most `size` values of the first biological
-## symbol each: the derivatives of a condition are dense over its parameters, so the memory of an
+## symbol each: the derivatives of a condition are dense over the parameters of the condition, so the memory of an
 ## evaluation grows with the readings times the square of the parameters per condition.
 .alignmentChunks <- function(m, cond, size = 16L) {
   s <- m$symbols$symbol[m$symbols$role == "biological"][1]
@@ -1112,20 +1112,20 @@ print.alignmentmodel <- function(x, ...) {
 #'   normalization of the values per block of experiments (see
 #'   [alignmentModel()]) in the objective; the error parameters and the
 #'   hyperparameters of normal random terms by default by restricted
-#'   likelihood. Every experiment, a combination of
-#'   the columns of the scaling formulas, or with random terms every group, is
-#'   split into conditions of at most 16 values of the first biological symbol,
-#'   so the Hessian is sparse over them; [trust()] and [em()] take the sparse
-#'   path as `sparse = "auto"` decides. The normalization enters the sparse
-#'   Hessian as a low-rank part (see [objlist()]).
+#'   likelihood. The Hessian is sparse over the experiments, with the
+#'   normalization as a low-rank part (see [objlist()]); [trust()] and [em()]
+#'   take the sparse path as `sparse = "auto"` decides.
 #'
 #' @param model An `alignmentmodel`.
-#' @param fits Number of fits from perturbed starts.
+#' @param fits Number of fits from perturbed starts. Default 10.
 #' @param cores Number of fits run in parallel; every fit runs on one core.
-#' @param method With random terms: `"focei"` or `"quadrature"`, see [em()].
-#' @param sd Standard deviation of the start perturbation on the parameter scale.
+#'   Default 1.
+#' @param method With random terms: `"focei"` (default) or `"quadrature"`, see
+#'   [em()].
+#' @param sd Standard deviation of the start perturbation on the parameter
+#'   scale. Default 0.5.
 #' @param iterlim Iteration limit of the optimizer; with spike-and-slab or
-#'   Dirichlet-process terms the outer iterations of [em()].
+#'   Dirichlet-process terms the outer iterations of [em()]. Default 1000.
 #' @param init Optional named start of some parameters; the intercepts of the
 #'   biological symbols start where the symbol is the median reading, the other
 #'   intercepts where their symbol is 1, the other parameters at 0. The
@@ -1315,7 +1315,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
   unique(unlist(lapply(m$design[s], function(d) colnames(d$X)), use.names = FALSE))
 }
 
-## Whether a symmetric Hessian, dense or sparse plus its low-rank part `lowrank`, is positive definite.
+## Whether a symmetric Hessian, dense or sparse plus the low-rank part `lowrank`, is positive definite.
 .positiveDefinite <- function(H, lowrank = NULL) {
   if (.isSparse(H)) {
     if (!is.null(.lowrankCholesky(H, lowrank))) return(TRUE)
@@ -1664,7 +1664,7 @@ plotResiduals.alignment <- function(parframe, ...) {
 
 
 ## The variances x' V x of linear combinations of the estimates, the rows x of a matrix with
-## parameter columns, V the inverse of half the Hessian of -2 log L, the sparse H plus its low-rank
+## parameter columns, V the inverse of half the Hessian of -2 log L, the sparse H plus the low-rank
 ## part `lowrank`: by a sparse Cholesky solve and Woodbury for a sparse Hessian, else by
 ## eigendecomposition. Inf along the null space of a singular one.
 .alignmentVariance <- function(H, free, lowrank = NULL) {
@@ -1728,8 +1728,9 @@ anova.alignment <- function(object, ...) {
 #' Student-t) and censors at the lower limits.
 #'
 #' @param object An `alignment` from [align()].
-#' @param nsim Number of data sets.
-#' @param seed Seed of the random number generator.
+#' @param nsim Number of data sets. Default 1.
+#' @param seed Seed of the random number generator. Default `NULL`, the
+#'   current state.
 #' @param ... Ignored.
 #' @return A list of `nsim` data.frames, the data of the model with simulated
 #'   `value`.

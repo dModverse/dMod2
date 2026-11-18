@@ -2,6 +2,7 @@
 % Please edit documentation in R/statistics.R
 \name{profile.objfn}
 \alias{profile.objfn}
+\alias{profile}
 \alias{profile.function}
 \title{Profile Likelihood}
 \usage{

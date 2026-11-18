@@ -146,6 +146,13 @@ test_that("+.objfn evaluates every term on the term conditions", {
   expect_identical(r$value, 10)
   expect_identical(lapply(log$calls, `[[`, "conditions"), list(NULL))
 
+  log$calls <- NULL
+  # conditions = NULL asks for all conditions, as the default does
+  r <- o(c(a = 0), conditions = NULL)
+  expect_identical(r$value, 111)
+  expect_identical(lapply(log$calls, `[[`, "conditions"),
+                   list(c("C1", "C2"), NULL, "C3"))
+
   e0 <- new.env()
   log$calls <- NULL
   o(c(a = 0), env = e0)

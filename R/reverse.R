@@ -210,6 +210,34 @@
   W
 }
 
+# The distinct seed columns of a solver cotangent [T, states, S]: `keep`, the columns to sweep,
+# and `map`, per column the position among them of the column equal to it. NULL where all differ.
+.seedMap <- function(W) {
+  S <- dim(W)[3L]
+  if (length(dim(W)) != 3L || S < 2L) return(NULL)
+  first <- vapply(seq_len(S), function(s)
+    Position(function(k) identical(W[, , k], W[, , s]), seq_len(s)), 1L)
+  if (all(first == seq_len(S))) return(NULL)
+  keep <- which(first == seq_len(S))
+  list(keep = keep, map = match(first, keep))
+}
+
+# A solver cotangent on the columns `m$keep` of .seedMap().
+.seedKeep <- function(W, m) if (is.null(m)) W else W[, , m$keep, drop = FALSE]
+
+# The answer of a sweep over the columns `m$keep` of .seedMap() on every column again: the
+# cotangent and the correction of an equal column are those of the column it equals.
+.seedExpand <- function(res, m) {
+  if (is.null(m) || !is.list(res)) return(res)
+  u <- res$cotangent
+  if (length(u)) {
+    if (is.null(dim(u))) u <- matrix(u, ncol = 1L, dimnames = list(names(u), NULL))
+    res$cotangent <- u[, m$map, drop = FALSE]
+  }
+  if (length(res$correction)) res$correction <- res$correction[m$map]
+  res
+}
+
 # The solver's answer to a multi-seed sweep, one column per seed.
 .adjointSeeds <- function(res) {
   u <- res$cotangent

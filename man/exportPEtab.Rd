@@ -37,9 +37,9 @@ that \code{\link[=as.datalist]{as.datalist()}} accepts). Only used for the measu
 named character vector, an \link{eqnvec}, or an observation function produced
 by \code{\link[=Y]{Y()}} (formulas read from \code{attr(observables, "equations")}).}
 
-\item{p}{A \code{parfn} produced by \code{\link[=P]{P()}}. Required: the symbolic trafo is
-the source of truth for parameters.tsv, conditions.tsv, and
-\verb{<initialAssignment>} formulas.}
+\item{p}{A \code{parfn} produced by \code{\link[=P]{P()}}. Required: parameters.tsv,
+conditions.tsv and the \verb{<initialAssignment>} formulas are read off the
+symbolic trafo.}
 
 \item{pouter}{Named numeric vector of estimated outer parameters, on the
 chosen \code{parameterScale}. Names become \code{parameterId}s in parameters.tsv.}
@@ -89,8 +89,8 @@ a single value or one per observableId.}
 
 \item{dir}{Output directory, created if missing.}
 
-\item{overwrite}{Logical, whether existing files in \code{dir} are overwritten.
-Default \code{FALSE}.}
+\item{overwrite}{Logical. If \code{FALSE} (default), existing files in \code{dir} are
+an error.}
 }
 \value{
 Path to the written YAML manifest, invisibly.

@@ -62,6 +62,11 @@ struct DenseModel {
     if (pred) *pred = pr;
   }
 
+  // the decrease the full Newton step on the positive part of Bhat predicts
+  double newton_decrease(const double* g) const {
+    return dmod::trust_internal::newton_decrease_eigen(K, g, vals.data(), vecs.data());
+  }
+
   static SEXP hessian(const Hess& h, int K, const CharacterVector& names) {
     NumericMatrix M(K, K);
     std::copy(h.H.begin(), h.H.end(), M.begin());
@@ -207,7 +212,7 @@ struct SparseModel {
     const int* Ap = (const int*) A->p;
     const int* Ai = (const int*) A->i;
     const double* Ax = (const double*) A->x;
-    std::fill(y, y + K, 0.0);
+    for (int i = 0; i < K; ++i) y[i] = 0.0;
     for (int j = 0; j < K; ++j)
       for (int k = Ap[j]; k < Ap[j + 1]; ++k) {
         const int i = Ai[k];
@@ -347,6 +352,26 @@ struct SparseModel {
              double* pred = nullptr) {
     solveStep(g, r, s_out, newton, hard, easy);
     if (pred) *pred = -dmod::trust_internal::model_value(K, g, *this, s_out);
+  }
+
+  // The decrease the full Newton step on the positive part of Bhat predicts: from the factorization
+  // where Bhat is positive definite, from the dense eigendecomposition of Bhat otherwise.
+  double newton_decrease(const double* g) {
+    if (!factor(0.0)) {
+      std::vector<double> B((std::size_t) K * K), e(K, 0.0), vals(K), vecs((std::size_t) K * K);
+      for (int j = 0; j < K; ++j) {
+        e[j] = 1.0;
+        apply(e.data(), B.data() + (std::size_t) j * K);
+        e[j] = 0.0;
+      }
+      dmod::trust_internal::eigen_sym_local(B.data(), K, vals.data(), vecs.data());
+      return dmod::trust_internal::newton_decrease_eigen(K, g, vals.data(), vecs.data());
+    }
+    std::vector<double> s(g, g + K);
+    solveB(s.data());
+    double d = 0.0;
+    for (int i = 0; i < K; ++i) d += g[i] * s[i];
+    return 0.5 * d;
   }
 
   void solveStep(const double* g, double r, double* s_out, bool* newton, bool* hard, bool* easy) {

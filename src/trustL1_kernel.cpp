@@ -33,6 +33,7 @@ using namespace Rcpp;
 using dmod::trust_internal::affine_scaling;
 using dmod::trust_internal::eigen_sym_local;
 using dmod::trust_internal::model_value;
+using dmod::trust_internal::newton_decrease_eigen;
 using dmod::trust_internal::stepback;
 using dmod::trust_internal::trust_sub;
 using dmod::trust_driver::Blather;
@@ -440,99 +441,110 @@ void ref_seed(RefState& s, double val_obj, const double* grad, const double* H,
   s.f_used = kInf;
 }
 
+// The reduced subproblem at the current iterate: reduced space, scaling, optimality measure,
+// bound flags, the scaled model and the eigendecomposition of the model.
+void ref_build(RefState& s, const RefTune& t) {
+  const int K = s.K;
+  const double sgn = t.minimize ? 1.0 : -1.0;
+  s.f_used = t.minimize ? s.val : -s.val;
+
+  // Reduced space: drop the coordinates pinned at their L1 kink and the
+  // pinned fusion classes; a free class is one coordinate. Box bounds are
+  // handled by the scaling, not by dropping.
+  s.rc.clear();
+  for (int i = 0; i < K; ++i) {
+    if (s.fuse && s.fuse->block_of[i] >= 0) continue;
+    if (s.l1.pinned(i, s.theta[i], s.grad_obj[i])) continue;
+    RCoord c;
+    c.mem.push_back(i);
+    c.ps = s.ps[i];
+    c.pen = s.l1.grad(i, s.theta[i]);
+    s.rc.push_back(c);
+  }
+  if (s.fuse) s.fuse->classes(s.theta, s.grad_obj, s.ps, s.rc);
+  const int Kred = static_cast<int>(s.rc.size());
+
+  s.zr.assign(Kred, 0.0); s.lbr.assign(Kred, 0.0); s.ubr.assign(Kred, 0.0);
+  s.gr.assign(Kred, 0.0); s.Hr.assign((std::size_t) Kred * Kred, 0.0);
+  for (int ii = 0; ii < Kred; ++ii) {
+    const RCoord& c = s.rc[ii];
+    const int i0 = c.mem[0];
+    if (c.single) {
+      s.zr[ii] = s.z[i0]; s.lbr[ii] = s.lbz[i0]; s.ubr[ii] = s.ubz[i0];
+    } else {
+      double lo = -kInf, hi = kInf;
+      for (int i : c.mem) {
+        lo = std::max(lo, s.lbz[i] / s.ps[i]);
+        hi = std::min(hi, s.ubz[i] / s.ps[i]);
+      }
+      s.zr[ii] = c.ps * s.theta[i0]; s.lbr[ii] = c.ps * lo; s.ubr[ii] = c.ps * hi;
+    }
+    double g = 0.0;
+    for (int i : c.mem) g += s.grad_obj[i];
+    s.gr[ii] = sgn * (g + c.pen) / c.ps;
+    for (int jj = 0; jj < Kred; ++jj) {
+      const RCoord& d = s.rc[jj];
+      double h = 0.0;
+      for (int i : c.mem) for (int j : d.mem) h += s.H_full[i + (std::size_t) j * K];
+      s.Hr[ii + (std::size_t) jj * Kred] = sgn * h / (c.ps * d.ps);
+    }
+  }
+
+  s.absv.assign(Kred, 0.0); s.jv.assign(Kred, 0.0); s.sqrtv.assign(Kred, 0.0);
+  affine_scaling(Kred, s.zr.data(), s.gr.data(), s.lbr.data(), s.ubr.data(),
+                 s.absv.data(), s.jv.data());
+  for (int ii = 0; ii < Kred; ++ii) s.sqrtv[ii] = std::sqrt(s.absv[ii]);
+
+  // Pinned coordinates are stationary by the active-set test, so the
+  // optimality measure only has to cover the reduced space.
+  s.opt_measure = 0.0;
+  for (int ii = 0; ii < Kred; ++ii)
+    s.opt_measure = std::max(s.opt_measure, std::fabs(s.absv[ii] * s.gr[ii]));
+  // Set before the convergence break, which is exactly when it matters.
+  const double btol = std::max(t.gtol, 1e-10);
+  std::fill(s.at_bound.begin(), s.at_bound.end(), 0);
+  for (int ii = 0; ii < Kred; ++ii) {
+    const unsigned char ab = (s.jv[ii] > 0.0 &&
+                              std::fabs(s.absv[ii] * s.gr[ii]) <= btol &&
+                              std::fabs(s.gr[ii]) > btol) ? 1 : 0;
+    for (int i : s.rc[ii].mem) s.at_bound[i] = ab;
+  }
+
+  s.ghat.assign(Kred, 0.0);
+  s.Bhat.assign((std::size_t) Kred * Kred, 0.0);
+  for (int ii = 0; ii < Kred; ++ii) s.ghat[ii] = s.sqrtv[ii] * s.gr[ii];
+  for (int jj = 0; jj < Kred; ++jj)
+    for (int ii = 0; ii < Kred; ++ii)
+      s.Bhat[ii + (std::size_t) jj * Kred] =
+          s.sqrtv[ii] * s.sqrtv[jj] * s.Hr[ii + (std::size_t) jj * Kred];
+  for (int ii = 0; ii < Kred; ++ii)
+    s.Bhat[ii + (std::size_t) ii * Kred] += std::fabs(s.gr[ii]) * s.jv[ii];
+
+  s.eigvals.assign(Kred, 0.0);
+  s.eigvecs.assign((std::size_t) Kred * Kred, 0.0);
+  if (Kred > 0)
+    eigen_sym_local(s.Bhat.data(), Kred, s.eigvals.data(), s.eigvecs.data());
+}
+
+// A convergence stop also needs the full Newton step on the positive part of the reduced model
+// to predict at most mtol; mtol = 0 drops the condition.
+bool ref_newton_small(const RefState& s, const RefTune& t) {
+  if (t.mtol <= 0.0) return true;
+  const int Kred = static_cast<int>(s.rc.size());
+  return newton_decrease_eigen(Kred, s.ghat.data(), s.eigvals.data(), s.eigvecs.data()) <= t.mtol;
+}
+
 // Build the reduced subproblem and take a step. Returns false when the state
 // stopped before proposing anything (gradient convergence).
 bool ref_propose(RefState& s, const RefTune& t) {
   const int K = s.K;
-  const double sgn = t.minimize ? 1.0 : -1.0;
-  int Kred = 0;
-
   if (s.accept) {
-    s.f_used = t.minimize ? s.val : -s.val;
-
-    // Reduced space: drop the coordinates pinned at their L1 kink and the
-    // pinned fusion classes; a free class is one coordinate. Box bounds are
-    // handled by the scaling, not by dropping.
-    s.rc.clear();
-    for (int i = 0; i < K; ++i) {
-      if (s.fuse && s.fuse->block_of[i] >= 0) continue;
-      if (s.l1.pinned(i, s.theta[i], s.grad_obj[i])) continue;
-      RCoord c;
-      c.mem.push_back(i);
-      c.ps = s.ps[i];
-      c.pen = s.l1.grad(i, s.theta[i]);
-      s.rc.push_back(c);
-    }
-    if (s.fuse) s.fuse->classes(s.theta, s.grad_obj, s.ps, s.rc);
-    Kred = static_cast<int>(s.rc.size());
-
-    s.zr.assign(Kred, 0.0); s.lbr.assign(Kred, 0.0); s.ubr.assign(Kred, 0.0);
-    s.gr.assign(Kred, 0.0); s.Hr.assign((std::size_t) Kred * Kred, 0.0);
-    for (int ii = 0; ii < Kred; ++ii) {
-      const RCoord& c = s.rc[ii];
-      const int i0 = c.mem[0];
-      if (c.single) {
-        s.zr[ii] = s.z[i0]; s.lbr[ii] = s.lbz[i0]; s.ubr[ii] = s.ubz[i0];
-      } else {
-        double lo = -kInf, hi = kInf;
-        for (int i : c.mem) {
-          lo = std::max(lo, s.lbz[i] / s.ps[i]);
-          hi = std::min(hi, s.ubz[i] / s.ps[i]);
-        }
-        s.zr[ii] = c.ps * s.theta[i0]; s.lbr[ii] = c.ps * lo; s.ubr[ii] = c.ps * hi;
-      }
-      double g = 0.0;
-      for (int i : c.mem) g += s.grad_obj[i];
-      s.gr[ii] = sgn * (g + c.pen) / c.ps;
-      for (int jj = 0; jj < Kred; ++jj) {
-        const RCoord& d = s.rc[jj];
-        double h = 0.0;
-        for (int i : c.mem) for (int j : d.mem) h += s.H_full[i + (std::size_t) j * K];
-        s.Hr[ii + (std::size_t) jj * Kred] = sgn * h / (c.ps * d.ps);
-      }
-    }
-
-    s.absv.assign(Kred, 0.0); s.jv.assign(Kred, 0.0); s.sqrtv.assign(Kred, 0.0);
-    affine_scaling(Kred, s.zr.data(), s.gr.data(), s.lbr.data(), s.ubr.data(),
-                   s.absv.data(), s.jv.data());
-    for (int ii = 0; ii < Kred; ++ii) s.sqrtv[ii] = std::sqrt(s.absv[ii]);
-
-    // Pinned coordinates are stationary by the active-set test, so the
-    // optimality measure only has to cover the reduced space.
-    s.opt_measure = 0.0;
-    for (int ii = 0; ii < Kred; ++ii)
-      s.opt_measure = std::max(s.opt_measure, std::fabs(s.absv[ii] * s.gr[ii]));
-    // Set before the convergence break, which is exactly when it matters.
-    const double btol = std::max(t.gtol, 1e-10);
-    std::fill(s.at_bound.begin(), s.at_bound.end(), 0);
-    for (int ii = 0; ii < Kred; ++ii) {
-      const unsigned char ab = (s.jv[ii] > 0.0 &&
-                                std::fabs(s.absv[ii] * s.gr[ii]) <= btol &&
-                                std::fabs(s.gr[ii]) > btol) ? 1 : 0;
-      for (int i : s.rc[ii].mem) s.at_bound[i] = ab;
-    }
-
-    if (s.opt_measure <= t.gtol) {
+    ref_build(s, t);
+    if (s.opt_measure <= t.gtol && ref_newton_small(s, t)) {
       s.converged = true; s.stop_reason = "gradient"; s.done = true; return false;
     }
-
-    s.ghat.assign(Kred, 0.0);
-    s.Bhat.assign((std::size_t) Kred * Kred, 0.0);
-    for (int ii = 0; ii < Kred; ++ii) s.ghat[ii] = s.sqrtv[ii] * s.gr[ii];
-    for (int jj = 0; jj < Kred; ++jj)
-      for (int ii = 0; ii < Kred; ++ii)
-        s.Bhat[ii + (std::size_t) jj * Kred] =
-            s.sqrtv[ii] * s.sqrtv[jj] * s.Hr[ii + (std::size_t) jj * Kred];
-    for (int ii = 0; ii < Kred; ++ii)
-      s.Bhat[ii + (std::size_t) ii * Kred] += std::fabs(s.gr[ii]) * s.jv[ii];
-
-    s.eigvals.assign(Kred, 0.0);
-    s.eigvecs.assign((std::size_t) Kred * Kred, 0.0);
-    if (Kred > 0)
-      eigen_sym_local(s.Bhat.data(), Kred, s.eigvals.data(), s.eigvecs.data());
   }
-
-  Kred = static_cast<int>(s.rc.size());
+  const int Kred = static_cast<int>(s.rc.size());
 
   if (t.blather_on) {
     s.trace.argpath.insert(s.trace.argpath.end(), s.theta.begin(), s.theta.end());
@@ -649,9 +661,11 @@ bool ref_accept(RefState& s, const RefTune& t, bool eval_ok, double val_obj_try,
 
   if (s.bail) { s.done = true; return false; }
   if (s.accept && eval_ok) {
-    if (dval < t.ftol)                { s.converged = true; s.stop_reason = "fvalue";   s.done = true; return false; }
-    if (std::fabs(s.m_value) < t.mtol){ s.converged = true; s.stop_reason = "preddiff"; s.done = true; return false; }
-    if (t.xtol > 0.0 && s.stepnorm < t.xtol)
+    // "fvalue" and "preddiff" read the step taken and also need ref_newton_small() at the new iterate
+    const char* soft = (dval < t.ftol) ? "fvalue" : (std::fabs(s.m_value) < t.mtol) ? "preddiff" : nullptr;
+    if (soft) ref_build(s, t);
+    if (soft && ref_newton_small(s, t)) { s.converged = true; s.stop_reason = soft; s.done = true; return false; }
+    if (!soft && t.xtol > 0.0 && s.stepnorm < t.xtol)
                                       { s.converged = true; s.stop_reason = "step";     s.done = true; return false; }
   }
   if (s.r < t.rmin) { s.stop_reason = "radius"; s.done = true; return false; }

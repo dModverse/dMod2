@@ -92,11 +92,8 @@ print.randomeffects <- function(x, ...) {
 #' - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
 #'   from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
 #'   probability `prob`, independently. The spike-and-slab random effects of
-#'   a group are integrated jointly, exactly on the quadratic expansion of
-#'   the data where the group has no Dirichlet-process random effects the
-#'   data tie to them and the sum over their subsets stays within a budget;
-#'   else the expectation consistent (EC) approximation integrates each one
-#'   against a diagonal cavity.
+#'   a group are integrated jointly, see section Sparse random effects of
+#'   [em()].
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the
@@ -276,7 +273,7 @@ print.redist <- function(x, ...) {
 ## Columns of the branch table a formula reads; a missing one may be a substitution in disguise.
 .checkEffectColumns <- function(pf, tree) {
   vars <- unique(c(all.vars(pf$fixed), unlist(lapply(pf$random, function(r) c(all.vars(r$expr), r$vars)))))
-  miss <- setdiff(vars, names(tree))
+  miss <- .setdiff(vars, names(tree))
   if (!length(miss)) return(invisible())
   stop("insert: ", paste(miss, collapse = ", "), " in the effect formula of ", pf$symbol,
        " is not a column of the branch table. To substitute a symbol write \"", pf$symbol, " <- ",
@@ -320,7 +317,7 @@ print.redist <- function(x, ...) {
                                             z = Z[, k],
                                             groups = g)
   }
-  list(X = X, random = random, columns = intersect(all.vars(pf$fixed), names(tree)))
+  list(X = X, random = random, columns = .intersect(all.vars(pf$fixed), names(tree)))
 }
 
 ## Linear predictor of one formula for every row of `tree`, the fixed parameters it creates and
@@ -369,7 +366,7 @@ print.redist <- function(x, ...) {
       cn <- rownames(tr)[i]
       out[[cn]] <- replaceSymbols(pf$symbol, ep$expr[i], out[[cn]])
     }
-    fixedPars <- union(fixedPars, ep$fixed)
+    fixedPars <- .union(fixedPars, ep$fixed)
     fixedDesign[[pf$symbol]] <- ep$X
     for (r in ep$rows) {
       if (!is.null(terms) && r$stem %in% terms$stem)
@@ -397,7 +394,7 @@ print.redist <- function(x, ...) {
 
 ## Substituting a symbol that has an effect formula would rewrite the linear predictor of the symbol.
 .guardEffectSymbols <- function(lhs, re) {
-  hit <- intersect(lhs, .effectSymbolsOf(re))
+  hit <- .intersect(lhs, .effectSymbolsOf(re))
   if (length(hit))
     stop("insert/define: ", paste(hit, collapse = ", "), " has an effect formula; set the ",
          "scale of a parameter before adding effects to it.", call. = FALSE)

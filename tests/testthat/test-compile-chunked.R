@@ -116,6 +116,55 @@ test_that("compile() builds one shared object per source in parallel with per-so
 })
 
 
+test_that("a user Makevars reaches the object compile of an output", {
+
+  dir <- withr::local_tempdir()
+  inc <- file.path(dir, "inc")
+  dir.create(inc)
+  writeLines("#define MV_HEADER 3", file.path(inc, "mv_header.h"))
+  mv <- file.path(dir, "user.mk")
+  writeLines(paste0("CPPFLAGS += -I", normalizePath(inc, winslash = "/"), " -DMV_MACRO=4"), mv)
+  withr::local_envvar(R_MAKEVARS_USER = mv)
+
+  f <- file.path(dir, "mv_probe.c")
+  writeLines(c('#include "mv_header.h"',
+               "int mv_probe(void) { return MV_HEADER * MV_MACRO; }"), f)
+  obj <- structure(list(), compileInfo = list(list(srcfile = f, compileArgs = "",
+                                                   linkArgs = "")))
+  suppressMessages(compile(obj, output = "mv_probe_out", cores = 1))
+  expect_true(is.loaded("mv_probe"))
+
+})
+
+
+test_that("a source that fails to compile in parallel is an error naming it", {
+
+  dir <- withr::local_tempdir()
+  src <- function(name, body) {
+    f <- file.path(dir, paste0(name, ".c"))
+    writeLines(body, f)
+    structure(list(), compileInfo = list(list(srcfile = f, compileArgs = "",
+                                              linkArgs = "")))
+  }
+  good <- src("fail_good", "int fail_good(void) { return 1; }")
+  bad  <- src("fail_bad", "int fail_bad(void) { return fail_undeclared; }")
+
+  for (out in list(NULL, "fail_out")) {
+    warned <- FALSE
+    expect_error(
+      withCallingHandlers(
+        suppressMessages(compile(good, bad, output = out, cores = 2)),
+        warning = function(w) {
+          warned <<- TRUE
+          invokeRestart("muffleWarning")
+        }),
+      "fail_bad\\.c")
+    expect_false(warned)
+  }
+
+})
+
+
 test_that("compile() refuses more shared objects than R can load", {
 
   withr::local_dir(tempdir())

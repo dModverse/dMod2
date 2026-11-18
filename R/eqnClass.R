@@ -124,7 +124,6 @@ is.eqnlist <- function(x) {
 ## ---- Totals (CQ basis) management on eqnlist ------------------------------
 
 ## Append `_2`, `_3`, ... until `base` is unique against `taken`.
-#' @keywords internal
 .uniqueName <- function(base, taken) {
   if (!(base %in% taken)) return(base)
   i <- 2L
@@ -133,7 +132,6 @@ is.eqnlist <- function(x) {
 }
 
 ## Longest common substring across all strings (empty if none).
-#' @keywords internal
 .lcs <- function(strings) {
   if (!length(strings)) return("")
   if (length(strings) == 1L) return(strings[1L])
@@ -155,7 +153,6 @@ is.eqnlist <- function(x) {
 ## A single species, a state no reaction changes, names the total after the species;
 ## several give `totalXxx` from their longest common substring (>= 2 characters after trimming
 ## underscores), else `total_<index>`, unique against `used` and `parameters`.
-#' @keywords internal
 .smartTotalName <- function(species, used, parameters, index) {
   if (length(species) == 1L) return(.uniqueName(species, used))
   fallback <- .uniqueName(paste0("total_", index), c(used, parameters))
@@ -167,7 +164,6 @@ is.eqnlist <- function(x) {
 ## Linear coefficients of `expr` over `states` by 1-hot evaluation, the other symbols at
 ## `values`, checked for linearity at the all-twos point (value must equal 2 * sum(coefs)).
 ## NULL on unknown symbols or nonlinearity.
-#' @keywords internal
 .linearCoefs <- function(expr, states, values = list(), tol = 1e-8) {
   syms <- getSymbols(expr)
   if (length(setdiff(syms, c(states, names(values))))) return(NULL)
@@ -300,8 +296,10 @@ customTotals <- function(eqnlist, totals) {
 #' Generate a Table of Reactions from an Equation List
 #' 
 #' @param eqnlist object of class [eqnlist]
-#' @return `data.frame` with educts, products, rate and description. The first
-#' column is a check if the reactions comply with reaction kinetics.
+#' @return `data.frame` with columns `Check`, `Educt`, `->`, `Product`, `Rate`
+#' and `Description`, one row per reaction; `Check` is `"!"` where the rate
+#' does not contain all educts of the reaction. `NULL` for an empty equation
+#' list.
 #' 
 #' @example inst/examples/equations.R
 #' @export
@@ -889,7 +887,7 @@ subset.eqnlist <- function(x, ...) {
   
   # Translate subsetting on eqnlist entries
   # smatrix
-  # a state stays if a kept reaction changes it or its rate depends on it, as on a catalyst
+  # a state stays if a kept reaction changes it or the rate of such a reaction depends on it, as on a catalyst
   smatrix <- .submatrix(eqnlist$smatrix, rows = select)
   changed <- vapply(seq_len(ncol(smatrix)), function(i) !all(is.na(smatrix[, i])), logical(1))
   smatrix <- .submatrix(smatrix, cols = changed | colnames(smatrix) %in% getSymbols(eqnlist$rates[select]))

@@ -9,7 +9,7 @@
 \arguments{
 \item{object}{An \code{em} object, see \code{\link[=em]{em()}}.}
 
-\item{times}{Additional times of the prediction grid.}
+\item{times}{Additional times of the prediction grid. Default \code{NULL}, none.}
 
 \item{type}{\code{"all"} (default) both predictions, \code{"individual"} only IPRED
 with residuals, \code{"population"} only PRED with residuals.}

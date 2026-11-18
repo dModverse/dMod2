@@ -71,7 +71,8 @@ Quadrature, SAEM and Sparse random effects.}
 \item{cores}{Number of cores over the groups and conditions inside the
 fit; with 1 (default) no threads are started.}
 
-\item{verbose}{Logical; print the progress of the iterative methods.}
+\item{verbose}{Logical; print the progress of the iterative methods.
+Default \code{TRUE}.}
 
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}: the outer trust region
 of FOCEI over normal random effects on the sparse Gauss-Newton Hessian.

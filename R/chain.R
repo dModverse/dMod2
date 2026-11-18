@@ -27,7 +27,7 @@
     fn <- addr(if (deriv2) st$ad2_symbol else st$ad_symbol)
     v <- if (!is.null(vjp)) addr(paste0(st$modelname, vjp))
     if (is.null(fn) || (!is.null(vjp) && is.null(v))) return(NULL)
-    through <- if (isTRUE(environment(k)$controls$attachInput)) setdiff(prev, st$outnames) else character(0)
+    through <- if (isTRUE(environment(k)$controls$attachInput)) .setdiff(prev, st$outnames) else character(0)
     return(list(kind = 0L, fn = fn, vjp = v, inNames = st$parameters, fnout = st$outnames, through = through,
                 guessNames = character(0), state = NULL, order = 0L))
   }
@@ -35,11 +35,11 @@
   if (!is.function(impl)) return(NULL)
   im <- impl(cond)
   # a resting state absent from `prev` enters as 0 and leaves as 0
-  rest0 <- intersect(setdiff(im$parameters, prev), im$resting)
+  rest0 <- .intersect(.setdiff(im$parameters, prev), im$resting)
   if ((order >= 1L && !im$d1) || (order >= 2L && !im$d2) ||
-      anyNA(match(setdiff(im$parameters, rest0), prev))) return(NULL)
+      anyNA(match(.setdiff(im$parameters, rest0), prev))) return(NULL)
   list(kind = 1L, fn = NULL, vjp = NULL, inNames = im$parameters, fnout = c(im$dependent, im$zero, rest0),
-       through = setdiff(prev, c(im$dependent, im$zero)), guessNames = im$dependent, state = im$state,
+       through = .setdiff(prev, c(im$dependent, im$zero)), guessNames = im$dependent, state = im$state,
        order = as.integer(order))
 }
 
@@ -61,7 +61,7 @@
     st[[s]]$through <- st[[s]]$through[st[[s]]$through %in% need]
     need <- unique(c(st[[s]]$inNames, st[[s]]$guessNames, st[[s]]$through))
   }
-  o <- intersect(need, outer)
+  o <- .intersect(need, outer)
   prev <- o
   for (s in seq_along(st)) {
     d <- st[[s]]
@@ -245,13 +245,14 @@
 }
 
 ## The data term of `plan` at `values`, the outer values per condition or one vector for all, in
-## the order of the plan; NULL where the chain fails, for the R path to report it.
-.chainEval <- function(plan, values, deriv, deriv2, hessian, local, cores, bloq, df) {
+## the order of the plan, with `sparse` the Hessian as the slots of chain_data(); NULL where the
+## chain fails, for the R path to report it.
+.chainEval <- function(plan, values, deriv, deriv2, hessian, local, cores, bloq, df, sparse = FALSE) {
   pre <- .chainParams(plan, values, deriv, deriv2, cores)
   raw <- if (!is.null(pre)) .chainSolveRun(plan, pre$args, cores)
   if (is.null(raw)) return(NULL)
   chain_data(plan, pre, raw, deriv, deriv2, hessian, local, as.integer(cores), bloq, if (is.finite(df)) df else 0,
-             FALSE)
+             FALSE, sparse)
 }
 
 
@@ -292,7 +293,12 @@
   back <- if (!is.null(dat))
     chain_back(plan, pre, raw, cbind(dat$seed_pred, if (correct) dat$seed_chi2_pred),
                cbind(dat$seed_sigma, if (correct) dat$seed_chi2_sigma), S, cores, TRUE)
+  # a condition whose chi2 seed reaches the states as the value seed does sweeps one column
+  maps <- if (!is.null(back) && correct) lapply(back$args, function(a) .seedMap(a$cotangent))
+  for (k in seq_along(maps))
+    back$args[[k]]$cotangent <- .seedKeep(back$args[[k]]$cotangent, maps[[k]])
   rraw <- if (!is.null(back)) .chainSolveRun(plan, back$args, cores, back = TRUE)
+  if (is.list(rraw) && length(maps)) rraw <- Map(.seedExpand, rraw, maps)
   pull <- if (!is.null(rraw))
     chain_pull(plan, values, matrix(0, length(nm), 0), pre$roots, back, rraw, S, cores, TRUE)
   if (is.null(pull)) return(NULL)

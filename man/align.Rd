@@ -18,16 +18,19 @@ align(
 \arguments{
 \item{model}{An \code{alignmentmodel}.}
 
-\item{fits}{Number of fits from perturbed starts.}
+\item{fits}{Number of fits from perturbed starts. Default 10.}
 
-\item{cores}{Number of fits run in parallel; every fit runs on one core.}
+\item{cores}{Number of fits run in parallel; every fit runs on one core.
+Default 1.}
 
-\item{method}{With random terms: \code{"focei"} or \code{"quadrature"}, see \code{\link[=em]{em()}}.}
+\item{method}{With random terms: \code{"focei"} (default) or \code{"quadrature"}, see
+\code{\link[=em]{em()}}.}
 
-\item{sd}{Standard deviation of the start perturbation on the parameter scale.}
+\item{sd}{Standard deviation of the start perturbation on the parameter
+scale. Default 0.5.}
 
 \item{iterlim}{Iteration limit of the optimizer; with spike-and-slab or
-Dirichlet-process terms the outer iterations of \code{\link[=em]{em()}}.}
+Dirichlet-process terms the outer iterations of \code{\link[=em]{em()}}. Default 1000.}
 
 \item{init}{Optional named start of some parameters; the intercepts of the
 biological symbols start where the symbol is the median reading, the other
@@ -80,12 +83,9 @@ likelihood, the marginal one with random terms (\code{\link[=em]{em()}}), with t
 normalization of the values per block of experiments (see
 \code{\link[=alignmentModel]{alignmentModel()}}) in the objective; the error parameters and the
 hyperparameters of normal random terms by default by restricted
-likelihood. Every experiment, a combination of
-the columns of the scaling formulas, or with random terms every group, is
-split into conditions of at most 16 values of the first biological symbol,
-so the Hessian is sparse over them; \code{\link[=trust]{trust()}} and \code{\link[=em]{em()}} take the sparse
-path as \code{sparse = "auto"} decides. The normalization enters the sparse
-Hessian as a low-rank part (see \code{\link[=objlist]{objlist()}}).
+likelihood. The Hessian is sparse over the experiments, with the
+normalization as a low-rank part (see \code{\link[=objlist]{objlist()}}); \code{\link[=trust]{trust()}} and \code{\link[=em]{em()}}
+take the sparse path as \code{sparse = "auto"} decides.
 }
 \details{
 The objective of an alignment is exact to rounding, so the fits stop

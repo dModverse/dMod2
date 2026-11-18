@@ -1,14 +1,8 @@
 #' Package initialization
 #'
-#' Declares the Python dependencies the symbolic layer needs, the `simplify`
-#' path in `eqnClass.R` and `steadyStates()`.
-#' `reticulate::py_require()` does not start Python: it records the
-#' requirement so the first call into Python provisions an env that has the
-#' listed packages. The list includes `python-libsbml` for the SBML/PEtab layer.
-#' The declaration runs when reticulate loads, before Python can start, so a
-#' session without Python does not load reticulate and the Matrix it imports.
-#' symident is required on first use by `.symident()`, so a symident that
-#' cannot be resolved leaves Python for every other caller intact.
+#' Declares the Python packages of the SBML, PEtab and symbolic layers with
+#' `reticulate::py_require()` when reticulate loads, without starting Python.
+#' symident is required on first use by `.symident()`.
 #'
 #' @keywords internal
 #' @importFrom stats setNames predict density median dnorm

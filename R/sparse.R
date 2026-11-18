@@ -23,6 +23,12 @@
                                      dims = c(n, n), dimnames = list(pnames, pnames)))
 }
 
+# The sparse matrix over `pnames` from the 0-based slots list(i, p, x) of a column-compressed one.
+.sparseFromSlots <- function(s, pnames) {
+  n <- length(pnames)
+  methods::new("dgCMatrix", i = s$i, p = s$p, x = s$x, Dim = c(n, n), Dimnames = list(pnames, pnames))
+}
+
 # A Hessian, sparse or dense, as a sparse matrix over `pnames`; rows and
 # columns outside `pnames` are dropped, missing ones are zero.
 .sparseOver <- function(H, pnames) {
@@ -30,6 +36,8 @@
   if (is.null(H) || !length(H))
     return(Matrix::sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
                                 dims = c(n, n), dimnames = list(pnames, pnames)))
+  if (methods::is(H, "dgCMatrix") && identical(rownames(H), pnames) && identical(colnames(H), pnames))
+    return(H)
   # general storage: a symmetric one holds one triangle only
   T <- methods::as(methods::as(methods::as(H, "CsparseMatrix"), "generalMatrix"), "TsparseMatrix")
   i <- match(rownames(H), pnames)[T@i + 1L]
@@ -75,7 +83,7 @@
   y + drop(lr$U %*% (lr$d * crossprod(lr$U, x)))
 }
 
-# A sparse H plus its low-rank part U diag(d) U' as one sparse matrix, dense where U is.
+# A sparse H plus the low-rank part U diag(d) U' as one sparse matrix, dense where U is.
 .lowrankDense <- function(H, lr) {
   if (is.null(lr) || !length(lr$d)) return(H)
   H + Matrix::Matrix(lr$U %*% (lr$d * t(lr$U)), sparse = TRUE)
@@ -201,7 +209,7 @@
   if (m == 0 || !is.finite(m)) m else m * sqrt(sum((x / m)^2))
 }
 
-# The diagonal of the inverse of half a sparse Hessian plus its low-rank part over `which`, by one
+# The diagonal of the inverse of half a sparse Hessian plus the low-rank part over `which`, by one
 # Cholesky factor solved in blocks of columns; a singular one through vcov().
 .sparseVarianceDiagonal <- function(H, which, block = 256L, lowrank = NULL) {
   which <- intersect(which, colnames(H))
@@ -252,12 +260,17 @@
   if (P < th$parameters) return(list(sparse = FALSE))
   out <- tryCatch(do.call(objfun, c(list(parinit, deriv = TRUE, hessian = "sparse"), dots)),
                   error = function(e) NULL)
-  if (is.null(out) || !is.finite(out$value) || !.isSparse(out$hessian)) return(list(sparse = FALSE))
+  if (is.null(out) || !is.finite(out$value)) return(list(sparse = FALSE))
+  if (!.isSparse(out$hessian)) return(list(sparse = FALSE, first = out))
   H <- .sparseOver(out$hessian, names(parinit))
   cheaper <- if (!is.null(th$fill)) Matrix::nnzero(H) / P^2 <= th$fill
              else { cost <- .sparseCost(H, length(out$lowrank$d)); cost[["sparse"]] < cost[["dense"]] }
-  if (!cheaper) return(list(sparse = FALSE))
-  list(sparse = TRUE, first = out)
+  if (cheaper) return(list(sparse = TRUE, first = out))
+  # the dense path takes the same evaluation, with the Hessian over the names of the gradient
+  pn <- names(out$gradient) %||% names(parinit)
+  out$hessian <- as.matrix(.lowrankDense(.sparseOver(out$hessian, pn), .lowrankOver(out$lowrank, pn)))
+  out$lowrank <- NULL
+  list(sparse = FALSE, first = out)
 }
 
 # The terms of a sum that return a dense Hessian at `pars`, for the error of trust(sparse = TRUE).

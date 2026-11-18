@@ -760,7 +760,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 # Pimpl solver controls merged over their defaults. Unknown names are an error.
 .pimplPTC <- function(controlsPTC) {
   def <- list(reltol = 1e-10, abstol = 1e-14, flowTol = 1, maxit = NULL, dtInit = 1e-2,
-              positive = TRUE, stability = TRUE, stabilityTol = 0,
+              positive = TRUE, stability = TRUE, stabilityTol = 0, stabilityMargin = 1e-6,
               nStarts = 20L, startRange = c(-5, 5), startScale = NULL, seed = 1L)
   given <- as.list(controlsPTC)
   if (length(given) && (is.null(names(given)) || any(!nzchar(names(given)))))
@@ -777,6 +777,10 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
     stop("Pimpl: startRange must be c(lower, upper) with lower < upper.", call. = FALSE)
   if (ctrl$positive && ctrl$startScale == "linear" && ctrl$startRange[1] < 0)
     stop("Pimpl: a linear startRange below 0 needs positive = FALSE.", call. = FALSE)
+  if (!(is.numeric(ctrl$stabilityTol) && length(ctrl$stabilityTol) == 1L && ctrl$stabilityTol >= 0))
+    stop("Pimpl: stabilityTol is a number of at least 0.", call. = FALSE)
+  if (!(is.numeric(ctrl$stabilityMargin) && length(ctrl$stabilityMargin) == 1L && ctrl$stabilityMargin > 0))
+    stop("Pimpl: stabilityMargin is a positive number.", call. = FALSE)
   ctrl
 }
 
@@ -823,10 +827,15 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #'       [constraintStability()] term rises.}
 #'     \item{`stabilityTol`}{With `stability`, a root counts as stable while
 #'       the real part of the leading eigenvalue on the manifold of the conserved
-#'       quantities is at most `stabilityTol`, in the units of the rates; default
-#'       `0`. A small positive value admits a resting state that departs from
-#'       rest more slowly than the experiment lasts, as near a Hopf
-#'       bifurcation.}
+#'       quantities is at most the larger of `1e-8` times the largest eigenvalue
+#'       modulus there, the precision of the eigenvalues, and `stabilityTol`, an
+#'       absolute value in the units of the rates; default `0`. A positive value
+#'       admits a resting state that departs from rest more slowly than a time
+#'       scale of interest, as near a Hopf bifurcation. [constraintStability()]
+#'       reaches the weight at `stabilityTol`.}
+#'     \item{`stabilityMargin`}{The width of the ramp of [constraintStability()]
+#'       below `stabilityTol`, relative to the largest eigenvalue modulus on the
+#'       manifold of the conserved quantities; default `1e-6`.}
 #'     \item{`nStarts`}{Random starts after the deterministic ones, default
 #'       `20`.}
 #'     \item{`startRange`}{Range of a random start, drawn uniformly per
@@ -1039,18 +1048,21 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
     dependent = dependent, zero = zero_states, resting = resting, parameters = parms_all, d1 = emit_d1, d2 = emit_d2,
     state = nativeState())
   # the eigenvalues of the Jacobian at the steady state on the manifold of the conserved quantities,
-  # with the gradients in `parms_all` of the real parts above `onset` (constraintStability())
-  attr(p2p, "spectrum") <- function(pars, onset) {
+  # the rate scale with gradient, and the gradients in `parms_all` of the real parts above
+  # `onset - rel * scale` with the right eigenvectors (constraintStability())
+  attr(p2p, "spectrum") <- function(pars, onset, rel = 0) {
     root <- p2p(pars, deriv = FALSE)
     p <- unclass(pars)
     p[setdiff(resting, names(p))] <- 0
     pv <- setNames(as.numeric(p[parms_all]), parms_all)
     if (anyNA(pv)) stop("Pimpl: missing value(s) for ", paste(parms_all[is.na(pv)], collapse = ", "), call. = FALSE)
-    sp <- pimpl_spectrum(nativeState(), pv, as.numeric(root[dependent]), onset)
+    sp <- pimpl_spectrum(nativeState(), pv, as.numeric(root[dependent]), onset, rel)
     colnames(sp$grad) <- parms_all
+    names(sp$scaleGrad) <- parms_all
+    rownames(sp$vectors) <- dependent
     sp
   }
-  attr(p2p, "stabilityTol") <- function() .pimplPTC(ctl$controlsPTC)$stabilityTol
+  attr(p2p, "stabilityTol") <- function() unlist(.pimplPTC(ctl$controlsPTC)[c("stabilityMargin", "stabilityTol")])
   attr(p2p, "equations")   <- as.eqnvec(all_exprs)
   attr(p2p, "parameters")  <- parameters
   attr(p2p, "modelname")   <- modelname

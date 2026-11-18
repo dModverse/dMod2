@@ -35,11 +35,8 @@ per correlation block. The default.
 \item \code{spikeSlab()}: the deviation of a group is exactly 0 (spike) or drawn
 from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
 probability \code{prob}, independently. The spike-and-slab random effects of
-a group are integrated jointly, exactly on the quadratic expansion of
-the data where the group has no Dirichlet-process random effects the
-data tie to them and the sum over their subsets stays within a budget;
-else the expectation consistent (EC) approximation integrates each one
-against a diagonal cavity.
+a group are integrated jointly, see section Sparse random effects of
+\code{\link[=em]{em()}}.
 \item \code{dirichletProcess()}: per symbol, the deviations follow a Dirichlet
 process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 \code{concentration}, the fixed effect seated first at deviation 0: the

@@ -317,13 +317,14 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
   .meta_cache_rev <- new.env(parent = emptyenv())
   # the plans of the native chain (.chainContext())
   .chain <- .chainContext(list(prdfn = x, errfn = errmodel, data = data, timesD = timesD))
-  .chainObjective <- function(pars, fixed, conditions, deriv, deriv2, hessian, cores, parsList = NULL) {
+  .chainObjective <- function(pars, fixed, conditions, deriv, deriv2, hessian, cores, parsList = NULL,
+                              sparse = FALSE) {
     free <- if (is.null(parsList)) rep(list(names(pars)), length(conditions)) else lapply(parsList, names)
     plan <- .chainLookup(.chain, conditions, free, names(fixed), if (is.null(parsList)) names(pars), deriv, deriv2)
     if (is.null(plan)) return(NULL)
     values <- if (is.null(parsList)) list(c(unclass(pars), unclass(fixed)))
               else lapply(parsList, function(p) c(unclass(p), unclass(fixed)))
-    .chainEval(plan, values, deriv, deriv2, hessian, !is.null(parsList), cores, optBLOQ, df)
+    .chainEval(plan, values, deriv, deriv2, hessian, !is.null(parsList), cores, optBLOQ, df, sparse)
   }
 
   # Controls of the objective, changed later by controls<-. trust() lays out the
@@ -388,14 +389,14 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 
     # the native chain where the pieces of the chain allow it, the R path below otherwise; the predictions
     # are computed when the environment is asked for them
-    if (is.null(.prediction) && !sparse && !.local && .evalCpp() &&
+    if (is.null(.prediction) && !.local && .evalCpp() &&
         !exists("prediction", envir = env, inherits = FALSE)) {
-      res <- .chainObjective(pars, fixed, conditions, deriv, deriv2, build_hessian, cores)
+      res <- .chainObjective(pars, fixed, conditions, deriv, deriv2, build_hessian, cores, sparse = sparse)
       if (!is.null(res)) {
         pn <- names(pars)
-        out <- if (deriv)
-          objlist(value = res$value, gradient = setNames(res$gradient, pn),
-                  hessian = if (build_hessian) matrix(res$hessian, length(pn), dimnames = list(pn, pn)))
+        H <- if (build_hessian && sparse) .sparseFromSlots(res$hessian, pn)
+             else if (build_hessian) matrix(res$hessian, length(pn), dimnames = list(pn, pn))
+        out <- if (deriv) objlist(value = res$value, gradient = setNames(res$gradient, pn), hessian = H)
         else objlist(value = res$value, gradient = NULL, hessian = NULL)
         attr(out, attrName) <- out$value
         attr(out, "chi2") <- setNames(res$chi2, attrName)
@@ -1633,7 +1634,7 @@ res <- function(data, out, err = NULL) {
 #' @param hessian Matrix with row and column names those of `gradient`, or
 #'   `NULL`.
 #' @details Asked for `hessian = "sparse"`, an objective may return part of
-#'   its Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
+#'   the Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
 #'   rows and a vector `d`: the Hessian is then `hessian + U diag(d) U'`.
 #' @return An object of class `objlist`.
 #' @seealso [as.objlist()]
@@ -1656,12 +1657,14 @@ objlist <- function(value, gradient, hessian) {
 #' Objective Frame
 #'
 #' @description
-#' An objective frame stores residuals and their derivatives with respect to parameters.
-#' It is typically created by [res] and used internally in objective functions.
+#' An objective frame stores residuals and their derivatives with respect to parameters,
+#' as [res()] returns them.
 #'
-#' @param mydata data.table produced by [res]
-#' @param deriv numeric matrix of first-order derivatives of residuals (Jacobian)
-#' @param deriv.err numeric matrix of first-order derivatives of the error model
+#' @param mydata Data frame with columns `time`, `name`, `value`, `prediction`,
+#'   `sigma`, `residual`, `weighted.residual`, `bloq` and `weighted.0`; further
+#'   columns are dropped.
+#' @param deriv numeric matrix `[n_residuals, p]` of first-order derivatives of the residuals
+#' @param deriv.err numeric matrix `[n_residuals, p]` of first-order derivatives of the error model
 #' @param deriv2 numeric 3D array `[n_residuals, p, p]` of second-order derivatives
 #'   of residuals with respect to parameters. Optional.
 #' @param deriv2.err numeric 3D array `[n_residuals, p, p]` of second-order

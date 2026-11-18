@@ -329,6 +329,22 @@ List trust_reflective(Function objfun, NumericVector parinit,
     }
   };
 
+  // The scaled model (7) of the methods article at the current iterate.
+  auto build_model = [&]() {
+    const double sgn = minimize ? 1.0 : -1.0;
+    for (int i = 0; i < K; ++i) {
+      ghat[i] = sqrtv[i] * g_z[i];
+      wscale[i] = sqrtv[i] / ps[i];
+      cdiag[i] = std::fabs(g_z[i]) * jv[i];
+    }
+    model.build(H_full, wscale.data(), sgn, cdiag.data());
+  };
+  // A convergence stop also needs the full Newton step of the built model to predict at most
+  // mtol; mtol = 0 drops the condition.
+  auto newton_small = [&]() {
+    return mtol <= 0.0 || model.newton_decrease(ghat.data()) <= mtol;
+  };
+
   for (int iter = 1; iter <= iterlim; ++iter) {
     R_CheckUserInterrupt();
 
@@ -379,16 +395,10 @@ List trust_reflective(Function objfun, NumericVector parinit,
     if (accept || qn_dirty) {
       qn_dirty = false;
       refresh_current();
-
-      if (opt_measure <= gtol) { converged = true; stop_reason = "gradient"; break; }
-
-      const double sgn = minimize ? 1.0 : -1.0;
-      for (int i = 0; i < K; ++i) {
-        ghat[i] = sqrtv[i] * g_z[i];
-        wscale[i] = sqrtv[i] / ps[i];
-        cdiag[i] = std::fabs(g_z[i]) * jv[i];
+      build_model();
+      if (opt_measure <= gtol && newton_small()) {
+        converged = true; stop_reason = "gradient"; break;
       }
-      model.build(H_full, wscale.data(), sgn, cdiag.data());
     }
 
     if (blather_on) {
@@ -557,6 +567,14 @@ List trust_reflective(Function objfun, NumericVector parinit,
     // predicts more, the model is at the minimum.
     if (!accept && eval_ok && is_newton && std::fabs(m_value) < mtol) {
       soft_stop = "preddiff"; model_stop = true;
+    }
+    // "fvalue" and "preddiff" end the run only where the full Newton step predicts at most mtol;
+    // a quasi-Newton phase drops them further down.
+    const bool ends_run = model_stop && n_switch >= switches && !qn_active;
+    if (ends_run && std::strcmp(soft_stop, "step") != 0) {
+      refresh_current();
+      build_model();
+      if (!newton_small()) { soft_stop = nullptr; model_stop = false; }
     }
     if (soft_stop == nullptr && r >= rmin && n_stall >= kStallLimit)
       soft_stop = "stagnation";
@@ -1041,14 +1059,15 @@ NumericVector sparse_factor_cost(IntegerVector p, IntegerVector i, int n) {
 
 
 // One subproblem step of the curvature models on H + U diag(d) U', `kernel` as the R side passes it
-// (see trust_model.h) and `H` the same matrix dense: the step, its kind and the predicted reduction.
+// (see trust_model.h) and `H` the same matrix dense: the step, the step kind, the predicted
+// reduction and the reduction the full Newton step predicts.
 // [[Rcpp::export]]
 List trust_model_step(List kernel, NumericMatrix H, NumericVector g, double r, bool sparse) {
   const int K = g.size();
   const std::vector<double> ones(K, 1.0), zeros(K, 0.0);
   std::vector<double> s(K);
   bool newton = false, hard = false, easy = false;
-  double pred = 0.0;
+  double pred = 0.0, newton_dec = 0.0;
   List out = List::create(Named("kernel") = kernel, Named("hessian") = H);
   if (sparse) {
     dmod::trust_model::SparseModel model(K);
@@ -1056,13 +1075,16 @@ List trust_model_step(List kernel, NumericMatrix H, NumericVector g, double r, b
     if (!dmod::trust_model::SparseModel::read(out, K, h)) stop("trust_model_step: no kernel");
     model.build(h, ones.data(), 1.0, zeros.data());
     model.solve(g.begin(), r, s.data(), &newton, &hard, &easy, &pred);
+    newton_dec = model.newton_decrease(g.begin());
   } else {
     dmod::trust_model::DenseModel model(K);
     dmod::trust_model::DenseModel::Hess h;
     if (!dmod::trust_model::DenseModel::read(out, K, h)) stop("trust_model_step: no dense Hessian");
     model.build(h, ones.data(), 1.0, zeros.data());
     model.solve(g.begin(), r, s.data(), &newton, &hard, &easy, &pred);
+    newton_dec = model.newton_decrease(g.begin());
   }
   return List::create(Named("p") = NumericVector(s.begin(), s.end()), Named("newton") = newton,
-                      Named("hard") = hard, Named("easy") = easy, Named("pred") = pred);
+                      Named("hard") = hard, Named("easy") = easy, Named("pred") = pred,
+                      Named("newtonDecrease") = newton_dec);
 }

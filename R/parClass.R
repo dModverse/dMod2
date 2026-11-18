@@ -646,7 +646,7 @@ rbind.parframe <- function(..., deparse.level = 1) {
 #' @param incomparables not used. Argument exists for compatibility with S3 generic.
 #' @param tol a value more than `tol` above the lowest value of the current step
 #'   starts a new step, see [plotValues()]. Default 1.
-#' @param ... Not used. Select rows first with [subset()], as in
+#' @param ... Not used. Select rows first with [`subset()`][subset.parframe], as in
 #'   `unique(subset(x, converged))`.
 #' @return The rows of `x` with distinct values, sorted by value.
 #' @export

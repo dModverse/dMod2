@@ -81,6 +81,7 @@
 #' @param cores Number of cores over the groups and conditions inside the
 #'   fit; with 1 (default) no threads are started.
 #' @param verbose Logical; print the progress of the iterative methods.
+#'   Default `TRUE`.
 #' @param sparse `"auto"` (default), `TRUE` or `FALSE`: the outer trust region
 #'   of FOCEI over normal random effects on the sparse Gauss-Newton Hessian.
 #'   `"auto"` decides as [trust()] does.
@@ -217,7 +218,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
                 sparseFit = c("maxOuter", "trustControl"))
   for (k in names(known)) {
     x <- if (k == "control") control else control[[k]]
-    bad <- setdiff(names(x), known[[k]])
+    bad <- .setdiff(names(x), known[[k]])
     if (length(bad))
       stop("em: unknown ", if (k == "control") "entries of `control`: " else "entries of `control$sparseFit`: ",
            paste(bad, collapse = ", "), ".", call. = FALSE)
@@ -251,7 +252,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #'   as in [mstrust()]: fits in parallel and cores inside each fit.
 #' @param sd Standard deviation of the perturbation of the starts: one
 #'   number for every parameter, or a vector named by the parameters it
-#'   perturbs, the others keeping their start.
+#'   perturbs, the others keeping their start. Default 0.5.
 #' @param retry Logical. If `TRUE` (default), a fit that fails with an error,
 #'   for instance at a start where a steady state of [Pimpl()] has no stable
 #'   root, is repeated from a new perturbed start, up to `nTries` attempts.
@@ -399,17 +400,17 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     b <- Filter(function(b) identical(paste("omega", b$short, b$short, sep = "_"), h), design$blocks)
     if (length(b) != 1L) next
     etas <- as.vector(design$etaNames[, b[[1]]$stems])
-    fixed <- c(fixed, setNames(numeric(length(etas)), etas)[setdiff(etas, names(fixed))])
+    fixed <- c(fixed, setNames(numeric(length(etas)), etas)[.setdiff(etas, names(fixed))])
     random <- .dropRandomTerm(random, b[[1]]$stems)
   }
-  fixed <- c(fixed, init$fixed[setdiff(names(init$fixed), names(fixed))])
-  list(random = random, init = init$argument[setdiff(names(init$argument), names(fixed))], fixed = fixed,
+  fixed <- c(fixed, init$fixed[.setdiff(names(init$fixed), names(fixed))])
+  list(random = random, init = init$argument[.setdiff(names(init$argument), names(fixed))], fixed = fixed,
        modes = init$innerModes)
 }
 
 ## One fit of `design` from `start` by `method`, with `control`; -2 log L of the data at the
 ## start with the random effects at 0 must be finite.
-.emFit <- function(design, start, fixed, method, control, verbose) {
+.emFit <- function(design, start, fixed, method, control, verbose, boundary = TRUE) {
   etas <- .allEtas(design)
   v <- design$objfn(pars = c(start, setNames(numeric(length(etas)), etas)), fixed = fixed, deriv = FALSE)$value
   if (!is.finite(v))
@@ -418,6 +419,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   fit <- .emFitMethod(design, start, fixed, method, control, verbose)
   fit$control <- control
   fit$fixed <- fixed
+  if (!boundary) return(fit)
   .emBoundary(design, fit, fixed, method, control, verbose)
 }
 
@@ -439,12 +441,15 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   for (k in small[order(logsd[small])]) {
     random <- .dropRandomTerm(design$randomEffects, stems[k])
     etas <- as.vector(design$etaNames[, stems[k]])
-    reduced <- tryCatch(suppressWarnings(.emFit(.emDesign(design$objfn, random),
-                                                fit$argument[setdiff(names(fit$argument), hyper[k])],
-                                                c(fixed, setNames(numeric(length(etas)), etas)),
-                                                method, control, verbose)),
+    rdesign <- .emDesign(design$objfn, random)
+    rfixed <- c(fixed, setNames(numeric(length(etas)), etas))
+    # a further term is tried only on an accepted reduction: dropping more cannot lower the optimum
+    reduced <- tryCatch(suppressWarnings(.emFit(rdesign, fit$argument[.setdiff(names(fit$argument), hyper[k])],
+                                                rfixed, method, control, verbose, boundary = FALSE)),
                         error = function(e) NULL)
     if (is.null(reduced) || !(reduced$value <= fit$value + tol)) next
+    reduced <- .emBoundary(rdesign, reduced, rfixed, method, control, verbose)
+    if (!(reduced$value <= fit$value + tol)) next
     reduced$boundary <- c(hyper[k], reduced$boundary)
     return(reduced)
   }
@@ -458,9 +463,9 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     # parameter moved into the start for an outer trust without steps
     if (method != "focei")
       stop("em: every parameter is fixed; method = \"focei\" evaluates the marginal there.", call. = FALSE)
-    p <- setdiff(names(fixed), .hyperNames(design))[1]
+    p <- .setdiff(names(fixed), .hyperNames(design))[1]
     control$trustControl <- modifyList(control$trustControl %||% list(), list(iterlim = 0L))
-    fit <- .emFitMethod(design, fixed[p], fixed[setdiff(names(fixed), p)], method, control, verbose)
+    fit <- .emFitMethod(design, fixed[p], fixed[.setdiff(names(fixed), p)], method, control, verbose)
     fit$fixed <- fixed
     fit$argument <- fit$argument[0]
     fit$converged <- TRUE

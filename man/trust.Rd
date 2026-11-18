@@ -126,7 +126,10 @@ parameters are unbounded. Default \code{NULL}, unbounded.}
 \item{tolControl}{List of convergence thresholds, merged into the defaults.
 \describe{
 \item{\code{ftol}}{Change in objective value. Default \code{1e-6}.}
-\item{\code{mtol}}{Predicted model decrease. Default \code{1e-6}.}
+\item{\code{mtol}}{Predicted model decrease, of the step taken and,
+at a convergence stop, of the full Newton step (section Convergence).
+\code{0} switches off both the model test and the condition on the
+full Newton step. Default \code{1e-6}.}
 \item{\code{gtol}}{First-order optimality measure. Default \code{1e-6}.}
 \item{\code{xtol}}{Step norm. Default \code{0}, disabled.}
 \item{\code{rmin}}{Lower limit on the trust radius; falling below it
@@ -219,22 +222,16 @@ objective value at each evaluation. Default \code{FALSE}.}
 the number of the evaluation (column \code{Iteration}), objective value
 and parameters. Default \code{NULL}, no file.}
 
-\item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}. With
-\code{TRUE}, \code{objfun} is called with \code{hessian = "sparse"}, and
-the subproblem of every step is solved on sparse Cholesky factors of the
-Hessian it returns (a \code{Matrix}), a low-rank part \code{lowrank} (see
-\code{\link[=objlist]{objlist()}}) added by Woodbury, where the dense path takes the
-eigendecomposition: the same steps to rounding, with every setting of
-\code{trust()}; the Hessian comes from the objective,
-\code{hessianMethod} \code{"gn"} or \code{"exact"}, and
-\code{boundary = "reflective"}. \code{"auto"} takes the sparse path where
-that holds, outside multiple shooting, when \code{parinit} has at least
-\code{parameters} entries and a step on the sparse Hessian at
-\code{parinit} costs fewer flops than the dense one, by the symbolic
-factorization; \code{parameters} (default 100) comes from
-\code{getOption("dMod2.sparseAuto")}, where a \code{fill} replaces the
-cost by the rule that the sparse Hessian fills at most \code{fill} of the
-matrix.}
+\item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}.
+\code{TRUE} calls \code{objfun} with \code{hessian = "sparse"} and solves
+every subproblem on sparse Cholesky factors of the returned \code{Matrix},
+a low-rank part \code{lowrank} (see \code{\link[=objlist]{objlist()}}) included; the steps equal
+those of the dense path to rounding. It needs \code{hessianMethod}
+\code{"gn"} or \code{"exact"} and \code{boundary = "reflective"}.
+\code{"auto"} takes the sparse path where it applies, outside multiple
+shooting, for at least \code{parameters} entries of \code{parinit} and a
+step cheaper than the dense one at \code{parinit}; the settings come from
+\code{getOption("dMod2.sparseAuto")}, see \link{dMod2-package}.}
 
 \item{...}{Further named arguments passed to \code{objfun}.}
 
@@ -375,6 +372,18 @@ flat within \code{ftol}.
 no longer changes the parameters in floating point. Reports
 \code{converged = FALSE}.
 }
+A \code{"gradient"}, \code{"fvalue"} or \code{"preddiff"} stop that ends the run
+also needs the full Newton step of the model at the current iterate to
+predict a decrease of at most \code{mtol},
+\eqn{\frac{1}{2} g^\top H^{+} g \le} \code{mtol}, in the variables scaled
+for the bounds. \eqn{H^{+}} is the pseudoinverse of the positive part of
+\eqn{H} in the eigenbasis; with \code{sparse = TRUE} the decrease comes
+from the factorization of \eqn{H} where \eqn{H} is positive definite and
+from the dense eigendecomposition elsewhere. \code{trustL1} applies the
+same condition to the model of the coordinates not held at a kink. Without
+the condition the run goes on, within \code{iterlim}; \code{mtol = 0}
+drops the condition.
+
 \code{stopReason} in the result names the test that fired:
 \code{"gradient"}, \code{"fvalue"}, \code{"preddiff"}, \code{"step"},
 \code{"stagnation"}, \code{"radius"}, \code{"objfun"} (three failed

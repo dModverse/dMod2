@@ -29,8 +29,8 @@ chain_params <- function(plan, values, deriv, deriv2, threads, tangents) {
     .Call(`_dMod2_chain_params`, plan, values, deriv, deriv2, threads, tangents)
 }
 
-chain_data <- function(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed) {
-    .Call(`_dMod2_chain_data`, plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed)
+chain_data <- function(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse = FALSE) {
+    .Call(`_dMod2_chain_data`, plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse)
 }
 
 chain_frames <- function(plan, pre, raw, deriv2, threads) {
@@ -105,8 +105,8 @@ pimpl_root <- function(xp, pv, guess, order) {
     .Call(`_dMod2_pimpl_root`, xp, pv, guess, order)
 }
 
-pimpl_spectrum <- function(xp, pv, x, onset) {
-    .Call(`_dMod2_pimpl_spectrum`, xp, pv, x, onset)
+pimpl_spectrum <- function(xp, pv, x, onset, rel) {
+    .Call(`_dMod2_pimpl_spectrum`, xp, pv, x, onset, rel)
 }
 
 pimpl_live <- function(xp) {
@@ -159,5 +159,9 @@ qn_update_impl <- function(B, s, y, method) {
 
 focei_units_lockstep <- function(data_cb, warm, P, control) {
     .Call(`_dMod2_focei_units_lockstep`, data_cb, warm, P, control)
+}
+
+volume_terms <- function(loss, a, b, Wp, Ws, Vp, Vs, pA, sA, pAA, sAA, Hinv, n, q, hessian) {
+    .Call(`_dMod2_volume_terms`, loss, a, b, Wp, Ws, Vp, Vs, pA, sA, pAA, sAA, Hinv, n, q, hessian)
 }
 

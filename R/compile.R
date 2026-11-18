@@ -43,6 +43,19 @@
                            stdout = TRUE, stderr = TRUE))
 }
 
+## `FUN` over the compile jobs `X` in forks. A failed or killed job stops here,
+## so no link or load picks up an object or library the job did not build.
+.compileForked <- function(X, FUN, cores) {
+  res <- parallel::mclapply(X, function(x) tryCatch(FUN(x), error = identity),
+                            mc.cores = cores, mc.preschedule = FALSE)
+  for (i in seq_along(X)) {
+    if (inherits(res[[i]], "error")) stop(conditionMessage(res[[i]]), call. = FALSE)
+    if (is.null(res[[i]]))
+      stop("The compile job of ", X[[i]]$srcfile, " returned no result", call. = FALSE)
+  }
+  res
+}
+
 ## `FUN`, a function of base R only, over `X` on a PSOCK cluster of `cores`
 ## workers, for Windows, which cannot fork. The workers run no package code.
 .compileOnCluster <- function(X, FUN, cores) {
@@ -86,18 +99,21 @@
           "-Wl,--whole-archive", shQuote(lib), "-Wl,--no-whole-archive"), collapse = " ")
 }
 
-## `R CMD config` values, read once per session with a single `--all` call:
-## one subprocess per variable costs ~2.5 s on every compile().
+## `R CMD config` values, read with a single `--all` call per state of the site
+## and user Makevars: one subprocess per variable costs ~2.5 s on every compile().
 .dmodConfig <- new.env(parent = emptyenv())
 
 .compileConfig <- function(var) {
   Rbin <- shQuote(file.path(R.home("bin"), "R"))
-  if (!length(ls(.dmodConfig, all.names = TRUE))) {
+  mv  <- c(tools::makevars_site(), tools::makevars_user())
+  key <- paste(mv, file.mtime(mv), collapse = "|")
+  if (!identical(.dmodConfig$.read, key)) {
+    rm(list = ls(.dmodConfig, all.names = TRUE), envir = .dmodConfig)
     out <- tryCatch(system(paste(Rbin, "CMD config --all"), intern = TRUE),
                     error = function(e) "", warning = function(w) "")
     for (m in regmatches(out, regexec("^([A-Za-z_0-9]+) *= ?(.*)$", out)))
       if (length(m) == 3L) assign(m[2], trimws(m[3]), envir = .dmodConfig)
-    assign(".read", TRUE, envir = .dmodConfig)
+    assign(".read", key, envir = .dmodConfig)
   }
   if (!is.null(v <- .dmodConfig[[var]])) return(v)
   assign(var, trimws(system(paste(Rbin, "CMD config", var), intern = TRUE)),
@@ -401,13 +417,14 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   cppflags  <- paste0("-I", system.file("include", package = "cppDE"))
 
   ## Compiler settings read once, so parallel forks do not each call
-  ## `R CMD config`.
+  ## `R CMD config`. They include the user Makevars, as in R CMD SHLIB.
   cc_bin      <- cfg("CC")
   cxx_bin     <- cfg("CXX")
   cflags_R    <- cfg("CFLAGS")
   cxxflags_R  <- cfg("CXXFLAGS")
   cpicflags   <- cfg("CPICFLAGS")
   cxxpicflags <- cfg("CXXPICFLAGS")
+  cppflags_R  <- cfg("CPPFLAGS")
   r_inc       <- paste0("-I", shQuote(R.home("include")))
 
   ## Toolchain report. Compile flags are per file, so this prints the set every
@@ -476,6 +493,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (!is.null(status) && status != 0L)
       stop("Compilation failed: ", srcfile, "\n",
            paste(utils::tail(out, 12), collapse = "\n"))
+    invisible(srcfile)
   }
 
   compile_one <- function(entry) {
@@ -529,11 +547,11 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     extra_c <- entry$compileArgs %||% ""
     obj     <- sub("\\.[^.]+$", ".o", src)
     if (grepl("\\.cpp$", src, ignore.case = TRUE))
-      paste(cxx_bin, r_inc, cppflags, .mergeFlags(cxx_base, extra_c),
+      paste(cxx_bin, r_inc, cppflags, cppflags_R, .mergeFlags(cxx_base, extra_c),
             if (!is.null(pch)) paste("-Winvalid-pch -include", shQuote(pch)),
             cxxpicflags, cxxflags_R, "-c", shQuote(src), "-o", shQuote(obj))
     else
-      paste(cc_bin, r_inc, cppflags, .mergeFlags(base, extra_c),
+      paste(cc_bin, r_inc, cppflags, cppflags_R, .mergeFlags(base, extra_c),
             cpicflags, cflags_R, "-c", shQuote(src), "-o", shQuote(obj))
   }
 
@@ -557,7 +575,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
            "load at most ", budget, " more (R_MAX_NUM_DLLS).\n  Pass output = <name> ",
            "to link them into a single shared object.", call. = FALSE)
     if (.Platform$OS.type == "unix" && cores > 1)
-      parallel::mclapply(info, compile_one, mc.cores = cores)
+      .compileForked(info, compile_one, cores)
     else if (cores > 1 && length(info) > 1L)
       compile_on_cluster(info)
     else for (e in info) compile_one(e)
@@ -574,7 +592,8 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
       pchdir <- tempfile("dMod_pch"); dir.create(pchdir, showWarnings = FALSE)
       on.exit(unlink(pchdir, recursive = TRUE), add = TRUE)
       pch <- .compilePCH(files[is_cxx],
-                         paste(cxx_bin, r_inc, cppflags, .mergeFlags(cxx_base, cxxArgs),
+                         paste(cxx_bin, r_inc, cppflags, cppflags_R,
+                               .mergeFlags(cxx_base, cxxArgs),
                                cxxpicflags, cxxflags_R), pchdir, verbose)
     }
 
@@ -597,15 +616,12 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 
     jobs <- lapply(which(!fresh), function(i)
       list(srcfile = files[i], cmd = obj_cmd(info[[i]], if (is_cxx[i]) pch)))
-    res <- if (.Platform$OS.type == "unix" && cores > 1)
-      parallel::mclapply(jobs, compile_one_obj, mc.cores = cores)
+    if (.Platform$OS.type == "unix" && cores > 1)
+      .compileForked(jobs, compile_one_obj, cores)
     else if (cores > 1 && length(jobs) > 1L)
       Map(compile_one_obj, jobs,
           .compileOnCluster(vapply(jobs, `[[`, "", "cmd"), .compileRun, cores))
     else lapply(jobs, compile_one_obj)
-    ## mclapply returns a failing fork as a try-error instead of raising it.
-    bad <- vapply(res, inherits, logical(1), "try-error")
-    if (any(bad)) stop(as.character(res[bad][[1]]), call. = FALSE)
     ## the entries of the other sources of the directory stay valid for a later call
     try(saveRDS(c(prev[setdiff(names(prev), files)], keys), cachefile), silent = TRUE)
 

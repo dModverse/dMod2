@@ -83,7 +83,7 @@
 
 
 ## Omega as standard deviations and correlations with standard errors by the delta method on
-## the covariance of the Cholesky parameters, from the Hessian plus its low-rank part.
+## the covariance of the Cholesky parameters, from the Hessian plus the low-rank part.
 .omegaTable <- function(design, pars, hessian, lowrank = NULL) {
   lay <- design$normal
   if (!lay$K) return(NULL)
@@ -349,7 +349,7 @@ logLik.em <- function(object, ...) {
 #' their modes) per condition, with residuals.
 #'
 #' @param object An `em` object, see [em()].
-#' @param times Additional times of the prediction grid.
+#' @param times Additional times of the prediction grid. Default `NULL`, none.
 #' @param type `"all"` (default) both predictions, `"individual"` only IPRED
 #'   with residuals, `"population"` only PRED with residuals.
 #' @param ... Ignored.
@@ -429,8 +429,8 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
 #'   prediction distribution errors from `nsim` simulated data sets,
 #'   decorrelated per group, readings at or below their limit imputed as in
 #'   Nguyen et al. 2012, drawn given the other readings of their group).
-#' @param nsim,seed With `"NPDE"`: number of simulated data sets and the seed
-#'   of the random number generator.
+#' @param nsim,seed With `"NPDE"`: number of simulated data sets, default 1000,
+#'   and the seed of the random number generator, default `NULL`.
 #' @param ... Ignored.
 #' @return Numeric vector, one entry per data row, in the order of the rows of
 #'   `predict(object)` with `source == "obs"`. NPDE have the attribute `tests`,
@@ -599,7 +599,7 @@ anova.em <- function(object, ...) .anovaTable(c(list(object), list(...)))
 #' their lower limit.
 #'
 #' @param object An `em` object, see [em()].
-#' @param nsim Number of data sets.
+#' @param nsim Number of data sets. Default 1.
 #' @param seed Seed of the random number generator, as in [stats::simulate()].
 #' @param ... Ignored.
 #' @return A list of `nsim` [datalist]s in the layout of the data of the fit.

@@ -52,7 +52,7 @@
     allp <- c(p, fixed)
     result <- function(value, gradient = NULL, hess = NULL) {
       gr <- setNames(numeric(length(p)), names(p))
-      free <- intersect(names(p), parnames)
+      free <- .intersect(names(p), parnames)
       if (!is.null(gradient)) gr[free] <- gradient[free]
       hs <- if (cv$sparse) .sparseOver(hess, names(p))
             else if (cv$hessian) matrix(0, length(p), length(p), dimnames = list(names(p), names(p)))
@@ -111,10 +111,10 @@
   v <- L[unname(lay$loc)]
   v[lay$isDiag] <- log(v[lay$isDiag])
   chol <- setNames(v, lay$cholPars)
-  held <- intersect(names(fixed), lay$cholPars)
+  held <- .intersect(names(fixed), lay$cholPars)
   if (!length(held)) return(chol)
   chol[held] <- fixed[held]
-  free <- setdiff(lay$cholPars, held)
+  free <- .setdiff(lay$cholPars, held)
   # tr(Omega^-1 S) + log|Omega|, log|Omega| = 2 sum of the diagonal parameters
   expected <- function(p, ...) {
     all <- chol; all[free] <- p

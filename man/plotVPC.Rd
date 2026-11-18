@@ -23,10 +23,10 @@ plotVPC(x, ...)
 
 \item{...}{Ignored.}
 
-\item{nsim}{Number of simulated data sets.}
+\item{nsim}{Number of simulated data sets. Default 200.}
 
 \item{bins}{Number of bins, at quantiles of the times of the readings, or
-the breaks of the bins.}
+the breaks of the bins. Default 8.}
 
 \item{pc}{\code{TRUE}: prediction corrected (Bergstrand et al. 2011), every
 reading and simulation times the median population prediction of the bin
@@ -40,7 +40,7 @@ own one instead.}
 \item{strata}{Optional column of the condition grid of the data of the fit
 (\link{datalist}), one panel per value.}
 
-\item{seed}{Seed of the random number generator.}
+\item{seed}{Seed of the random number generator. Default \code{NULL}.}
 }
 \value{
 A ggplot, with the BLQ panel a list of two ggplots where cowplot is

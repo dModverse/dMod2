@@ -128,7 +128,7 @@ pp_models <- function() {
   el_vol <- eqnlist() |>
     assignCompartment(B = "nuc", volume = "V") |>
     addReaction("A", "B", "k1*A") |> addReaction("B", "A", "k2*B")
-  vol <- Pimpl(el_vol, modelname = mn("vol"), verbose = FALSE)
+  vol <- Pimpl(el_vol, modelname = mn("vol"), deriv2 = TRUE, verbose = FALSE)
 
   # a conserved cycle driven by a species that is structurally zero at the steady state
   el_rest <- eqnlist() |>
@@ -148,11 +148,20 @@ pp_models <- function() {
   bruss <- Pimpl(c(x = "a - (b + 1) * x + x^2 * y", y = "b * x - x^2 * y"), modelname = mn("bruss"),
                  deriv2 = TRUE, verbose = FALSE)
   bruss_p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = mn("bruss_p"))
+  # a real eigenvalue through 0 where two roots exchange stability, next to a mode that stays
+  trans <- Pimpl(c(x = "x * (q - x)", y = "x - y"), parameters = "q", modelname = mn("trans"),
+                 deriv2 = TRUE, verbose = FALSE, controlsPTC = list(positive = FALSE))
+  # the same steady state as a flow with a stable root required, passing a parameter on, which
+  # differs between two conditions
+  bruss_s <- Pimpl(c(x = "a - (b + 1) * x + x^2 * y", y = "b * x - x^2 * y"), parameters = c("a", "b", "s"),
+                   flow = TRUE, modelname = mn("bruss_s"), deriv2 = TRUE, verbose = FALSE)
+  bruss_c <- P(list(C1 = c(a = "exp(la)", b = "exp(lb)", s = "1"), C2 = c(a = "exp(la)", b = "exp(lb)", s = "2")),
+               modelname = mn("bruss_c"))
 
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
           kink, catalyst, vol, rest, rest_ode, rest_obs, rest_p0, rest_p1, bruss, bruss_p,
-          output = mn("impl"), cores = test_cores())
+          bruss_s, bruss_c, trans, output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
@@ -161,7 +170,7 @@ pp_models <- function() {
     zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
     unstable = unstable, kink = kink, catalyst = catalyst, vol = vol, rest = rest,
     rest_ode = rest_ode, rest_obs = rest_obs, rest_p0 = rest_p0, rest_p1 = rest_p1,
-    bruss = bruss, bruss_p = bruss_p)
+    bruss = bruss, bruss_p = bruss_p, bruss_s = bruss_s, bruss_c = bruss_c, trans = trans)
 }
 
 
@@ -926,30 +935,166 @@ test_that("the spectrum of a steady state has the exact gradients of the eigenva
   expect_equal(sp$re, c(-0.25, -0.25), tolerance = 1e-10)
   expect_equal(abs(sp$im), rep(sqrt(1 - 0.25^2), 2), tolerance = 1e-10)
   expect_equal(unname(sp$grad[, c("a", "b")]), rbind(c(-1, 0.5), c(-1, 0.5)), tolerance = 1e-8)
+  # the rate scale, the largest eigenvalue modulus, with gradient
+  sp <- attr(attr(m$bruss, "mappings")[[1]], "spectrum")(c(a = 1.3, b = 2.1), onset = Inf)
+  expect_length(sp$active, 0L)
+  expect_equal(sp$scale, 1.3, tolerance = 1e-10)
+  expect_equal(unname(sp$scaleGrad[c("a", "b")]), c(1, 0), tolerance = 1e-10)
 })
 
-test_that("constraintStability is zero below the onset and has the exact gradient above it", {
+test_that("the rate scale has the exact gradient, also where a volume moves the manifold", {
+  skip_if_no_compile()
+  pv <- pp_models()$vol
+  tn <- grep("^total", attr(pv, "parameters"), value = TRUE)
+  pars <- c(k1 = 1.5, k2 = 0.5, V = 0.4, setNames(2, tn))
+  spec <- attr(attr(pv, "mappings")[[1]], "spectrum")
+  sp <- spec(pars, onset = -Inf)
+  # on a one-dimensional manifold the scale is the modulus of the eigenvalue
+  expect_equal(sp$scale, abs(sp$re), tolerance = 1e-10)
+  expect_equal(sp$scaleGrad[names(pars)], -sp$grad[1, names(pars)], tolerance = 1e-10)
+  num <- numDeriv::grad(function(q) spec(setNames(q, names(pars)), onset = Inf)$scale, unname(pars))
+  expect_equal(unname(sp$scaleGrad[names(pars)]), num, tolerance = 1e-7)
+})
+
+# The term of one eigenvalue from the real part `re` and the rate scale `s`, with both gradients,
+# for the ramp of width `margin * s` below `tol`.
+.stabilityExact <- function(re, dre, s, ds, w, tol = 0, margin = 1e-6) {
+  span <- margin * s
+  r <- max(0, (re - tol + span) / span)
+  dr <- (dre + (1 - r) * margin * ds) / span
+  rho <- sqrt(w) * if (r <= 1) r^1.5 else 1 + 1.5 * (r - 1)
+  drho <- sqrt(w) * 1.5 * sqrt(min(r, 1)) * dr
+  list(value = rho^2, gradient = 2 * rho * drho, hessian = 2 * tcrossprod(drho), r = r)
+}
+
+test_that("constraintStability is zero on stable steady states and rises at the Hopf boundary", {
   skip_if_no_compile()
   m <- pp_models()
-  stab <- constraintStability(m$bruss, m$bruss_p, onset = -0.5, weight = 10)
+  w <- 10
+  stab <- constraintStability(m$bruss, m$bruss_p, weight = w)
   expect_setequal(attr(stab, "parameters"), c("la", "lb"))
-  expect_equal(stab(c(la = 0, lb = log(0.5)))$value, 0)
-  pars <- c(la = 0.1, lb = log(1.8))
-  out <- stab(pars)
-  re <- (1.8 - 1 - exp(0.2)) / 2
-  expect_equal(out$value, 10 * 2 * ((re + 0.5) / 0.5)^2, tolerance = 1e-8)
+  # the term of the complex pair from the closed-form eigenvalues and rate scale
+  exact <- function(la, lb) {
+    a <- exp(la); b <- exp(lb)
+    one <- .stabilityExact((b - 1 - a^2) / 2, c(-a^2, b / 2), a, c(a, 0), w)
+    list(value = 2 * one$value, gradient = 2 * one$gradient, hessian = 2 * one$hessian, r = one$r)
+  }
+  # zero on stable steady states, also with slow modes
+  expect_equal(stab(c(la = 0, lb = log(1.999)))$value, 0)
+  expect_equal(stab(c(la = log(0.05), lb = log(1e-3)))$value, 0)
+  expect_equal(nrow(attr(stab(c(la = 0, lb = log(1.999))), "eigenvalues")), 0L)
+  # below the onset, on the ramp, at the tolerance and beyond; on the ramp to the accuracy of
+  # the root relative to the width of the ramp
+  for (re in c(-2e-6, -1e-6, -5e-7, -1e-9, 5e-7, 1e-6, 0.25)) {
+    lb <- log(2 + 2 * re)
+    out <- stab(c(la = 0, lb = lb))
+    ref <- exact(0, lb)
+    expect_equal(out$value, ref$value, tolerance = 1e-3)
+    expect_equal(unname(out$gradient), ref$gradient, tolerance = 1e-3)
+    expect_equal(unname(out$hessian), ref$hessian, tolerance = 1e-3)
+  }
+  # each eigenvalue at the tolerance adds the weight, beyond it the term grows quadratically
+  span <- 1e-6
+  expect_equal(stab(c(la = 0, lb = log(2)))$value, 2 * w, tolerance = 1e-3)
+  expect_equal(stab(c(la = 0, lb = log(2 + 2 * span)))$value, 2 * w * 2.5^2, tolerance = 1e-3)
+  pars <- c(la = 0, lb = log(2.5))
   num <- numDeriv::grad(function(q) stab(setNames(q, names(pars)))$value, unname(pars))
-  expect_equal(unname(out$gradient[names(pars)]), num, tolerance = 1e-6)
+  expect_equal(unname(stab(pars)$gradient), num, tolerance = 1e-6)
+  # value, gradient and Gauss-Newton curvature go to 0 at the onset as r^3, r^2 and r
+  near <- vapply(c(1e-3, 1e-2), function(r) {
+    o <- stab(c(la = 0, lb = log(2 + 2 * (r - 1) * span)))
+    c(o$value, sqrt(sum(o$gradient^2)), max(abs(o$hessian)))
+  }, numeric(3))
+  expect_equal(near[, 1] / near[, 2], c(1e-3, 1e-2, 1e-1), tolerance = 1e-2)
+  # and are continuous at the tolerance
+  side <- lapply(c(1 - 1e-7, 1 + 1e-7), function(r) stab(c(la = 0, lb = log(2 + 2 * (r - 1) * span))))
+  expect_equal(side[[1]]$value, side[[2]]$value, tolerance = 1e-5)
+  expect_equal(side[[1]]$gradient, side[[2]]$gradient, tolerance = 1e-5)
+  expect_equal(side[[1]]$hessian, side[[2]]$hessian, tolerance = 1e-5)
+  # the eigenvalues on the ramp and beyond, with the conditions and the leading states
+  ev <- attr(stab(c(la = 0, lb = log(2 + 1e-6))), "eigenvalues")
+  expect_equal(nrow(ev), 2L)
+  expect_equal(ev$re, rep(5e-7, 2), tolerance = 1e-3)
+  expect_equal(sort(ev$im), c(-1, 1), tolerance = 1e-6)
+  expect_equal(sum(ev$penalty), exact(0, log(2 + 1e-6))$value, tolerance = 1e-3)
+  expect_match(ev$states, "^y \\(1\\.00\\), x \\(0\\.71\\)$")
   # the derivatives only where asked for, as the terms it is summed with
   expect_null(stab(pars, deriv = FALSE)$gradient)
   expect_null(stab(pars, hessian = FALSE)$hessian)
   expect_s4_class(stab(pars, hessian = "sparse")$hessian, "sparseMatrix")
   # beyond the boundary the unstable steady state, on which the term rises
   expect_equal(as.numeric(m$bruss(c(a = 1, b = 2.5))[[1]][c("x", "y")]), c(1, 2.5), tolerance = 1e-8)
-  expect_equal(stab(c(la = 0, lb = log(2.5)))$value, 10 * 2 * ((0.25 + 0.5) / 0.5)^2, tolerance = 1e-8)
   # without p on the inputs of the steady state, the same value
-  expect_equal(constraintStability(m$bruss, onset = -0.5, weight = 10)(c(a = exp(0.1), b = 1.8))$value,
-               out$value, tolerance = 1e-10)
-  expect_error(constraintStability(m$bruss, m$bruss_p), "duration")
-  expect_error(constraintStability(m$bruss, m$bruss_p, onset = 0)(pars), "onset")
+  expect_equal(constraintStability(m$bruss, weight = w)(c(a = 1, b = 2 + 1e-6))$value,
+               stab(c(la = 0, lb = log(2 + 1e-6)))$value, tolerance = 1e-3)
+  expect_error(constraintStability(m$bruss, m$bruss_p, weight = 0), "weight")
+})
+
+test_that("constraintStability follows a real eigenvalue through 0 smoothly", {
+  skip_if_no_compile()
+  m <- pp_models()
+  w <- 10
+  stab <- constraintStability(m$trans, weight = w)
+  # a start that leads to the root whose eigenvalue crosses 0
+  pars <- function(re) c(q = -re, x = -sign(re), y = 1)
+  at <- function(re) {
+    o <- stab(pars(re))
+    expect_lt(abs(as.numeric(m$trans(pars(re))[[1]]["x"]) + re), 1e-10)
+    c(value = o$value, gradient = o$gradient[["q"]], hessian = o$hessian["q", "q"])
+  }
+  # the term from the closed-form eigenvalue and rate scale
+  exact <- function(re) {
+    e <- .stabilityExact(re, -1, 1, 0, w)
+    c(value = e$value, gradient = e$gradient, hessian = e$hessian[1, 1])
+  }
+  for (re in c(-1e-3, -2e-6, -1e-6, -5e-7, -1e-9, 1e-7, 1e-6, 0.1, 0.5))
+    expect_equal(at(re), exact(re), tolerance = 1e-3)
+  span <- 1e-6
+  inner <- at((1e-3 - 1) * span) / at((1e-2 - 1) * span)
+  expect_equal(unname(inner), c(1e-3, 1e-2, 1e-1), tolerance = 0.05)
+  # beyond the tolerance the term is smooth enough for a numerical derivative
+  for (re in c(0.1, 0.5)) {
+    g <- stab(pars(re))$gradient[["q"]]
+    expect_equal(g, numDeriv::grad(function(z) stab(c(q = z, x = -sign(re), y = 1))$value, -re),
+                 tolerance = 1e-6)
+  }
+  old <- controls(m$trans, name = "controlsPTC")
+  on.exit(controls(m$trans, name = "controlsPTC") <- old, add = TRUE)
+  # stabilityMargin sets the width of the ramp
+  controls(m$trans, name = "controlsPTC") <- c(old, list(stabilityMargin = 0.1))
+  for (re in c(-0.2, -0.05, 0.05)) {
+    o <- stab(pars(re))
+    expect_equal(o$value, .stabilityExact(re, -1, 1, 0, w, margin = 0.1)$value, tolerance = 1e-8)
+    expect_equal(o$gradient[["q"]], numDeriv::grad(function(z) stab(c(q = z, x = -sign(re), y = 1))$value, -re),
+                 tolerance = 1e-6)
+  }
+  # an absolute stabilityTol moves the ramp
+  controls(m$trans, name = "controlsPTC") <- list(stabilityTol = 0.5, positive = FALSE)
+  for (re in c(0.2, 0.5 - 5e-7, 0.7)) {
+    o <- stab(pars(re))
+    expect_equal(o$value, .stabilityExact(re, -1, 1, 0, w, tol = 0.5)$value, tolerance = 1e-3)
+  }
+  expect_equal(stab(pars(0.7))$gradient[["q"]],
+               numDeriv::grad(function(z) stab(c(q = z, x = -1, y = 1))$value, -0.7), tolerance = 1e-6)
+  expect_error(controls(m$trans, name = "controlsPTC") <- list(stabilityMargin = 0), "stabilityMargin")
+})
+
+test_that("constraintStability counts a steady state once over conditions that differ elsewhere", {
+  skip_if_no_compile()
+  m <- pp_models()
+  pars <- c(la = 0, lb = log(2 - 1e-6))
+  one <- constraintStability(m$bruss, m$bruss_p, weight = 10)(pars)
+  two <- constraintStability(m$bruss_s, m$bruss_c, weight = 10)(pars)
+  expect_gt(one$value, 0)
+  expect_equal(two$value, one$value, tolerance = 1e-3)
+  expect_equal(two$gradient, one$gradient, tolerance = 1e-3)
+  expect_equal(attr(two, "eigenvalues")$condition, c("C1, C2", "C1, C2"))
+})
+
+test_that("Pimpl admits no unstable root beyond the precision of the eigenvalues", {
+  skip_if_no_compile()
+  m <- pp_models()
+  root <- m$bruss_s(c(a = 1, b = 2 + 1e-9, s = 1))[[1]]
+  expect_equal(as.numeric(root[c("x", "y")]), c(1, 2 + 1e-9), tolerance = 1e-8)
+  expect_error(m$bruss_s(c(a = 1, b = 2 + 1e-6, s = 1)), "no stable root")
 })

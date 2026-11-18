@@ -75,13 +75,10 @@ value pass. An unknown entry is an error. Entries:
 of the solve and sweeps a failing step again in substeps, see
 \code{\link[cppDE:adjointControl]{cppDE::adjointControl()}}. Default \code{FALSE}. The value and the \code{chi2}
 attribute of the reverse objective of \code{\link[=normL2]{normL2()}} then include the
-first-order change from the computed trajectory to the one the sweep
-differentiates, so value and gradient belong to one function, which
-need not be closer to the exact value; a call with \code{deriv = FALSE}
-sweeps as well. The change is the attribute
-\code{correction} of the result. Forward values, the sweeps of \code{\link[=em]{em()}} and
-\code{\link[=msem]{msem()}} (forward over reverse) and multiple shooting run without
-refine; \code{\link[=em]{em()}} refuses a prediction with it.
+first-order change to the trajectory the sweep differentiates, returned
+as attribute \code{correction}, and a call with \code{deriv = FALSE} sweeps as
+well. Forward values, the sweeps of \code{\link[=em]{em()}} and \code{\link[=msem]{msem()}} and multiple
+shooting run without refine; \code{\link[=em]{em()}} refuses a prediction with it.
 \item \code{gradtol}: under \code{refine}, the absolute tolerance on each step's share
 of the gradient. Default \code{NULL}, no check on the gradient.
 }}
@@ -228,7 +225,7 @@ this Hessian:
 
 \code{hessian = "sparse"} returns the Gauss-Newton Hessian of the forward sweep
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
-factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov]{vcov()}}
+factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov.objlist]{vcov()}}
 solves it for the columns of \code{which}.
 
 With \code{deriv = FALSE} it returns the value alone.

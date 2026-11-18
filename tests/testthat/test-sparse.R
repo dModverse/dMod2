@@ -155,12 +155,24 @@ test_that("trust(sparse = \"auto\") takes the sparse path above the thresholds, 
                               trust(counted, f$pars, rinit = 1, rmax = 10))
   expect_s4_class(auto$hessian, "sparseMatrix")
   expect_equal(calls, n)
+  # attributes of the start besides the names do not cost an evaluation
+  calls <- 0
+  withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)),
+                      trust(counted, structure(f$pars, scale = "log"), rinit = 1, rmax = 10))
+  expect_equal(calls, n)
   expect_equal(auto$value, dense$value, tolerance = 1e-8)
   # a fill above the threshold or a quasi-Newton Hessian keep the dense path; bounds take the
   # same steps on both
+  calls <- 0
+  denseCounted <- trust(counted, f$pars, rinit = 1, rmax = 10, sparse = FALSE)
+  n <- calls; calls <- 0
   withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 0.01)), {
-    expect_true(is.matrix(trust(obj, f$pars, rinit = 1, rmax = 10)$hessian))
+    kept <- trust(counted, f$pars, rinit = 1, rmax = 10)
+    expect_true(is.matrix(kept$hessian))
   })
+  # the dense path starts from the evaluation of the choice
+  expect_equal(calls, n)
+  expect_equal(kept$argument, denseCounted$argument, tolerance = 1e-10)
   withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)), {
     bounded <- trust(obj, f$pars, parupper = c(C1_a0 = 10))
     expect_s4_class(bounded$hessian, "sparseMatrix")
@@ -254,6 +266,37 @@ test_that("both models step to the boundary along a flat direction, zero at a ze
     tiny <- .modelSteps(Matrix::Diagonal(x = c(1, 2)), g, 1e-170)
     expect_equal(dMod2:::.norm2(tiny$sparse$p) / 1e-170, 1, tolerance = 1e-10)
   }
+})
+
+test_that("both models give the Newton decrease on the positive part, definite or not", {
+  H <- Matrix::Diagonal(x = c(1, 2, 3, 4))
+  lr <- list(U = cbind(c(1, 1, 0, 0), c(0, 0.5, 1, 0)), d = c(2, 0.5))
+  g <- c(1, -1, 0.5, 2)
+  st <- .modelSteps(H, g, 0.1, lr)
+  expect_equal(st$sparse$newtonDecrease, 0.5 * sum(g * solve(st$B, g)), tolerance = 1e-12)
+  expect_equal(st$dense$newtonDecrease, st$sparse$newtonDecrease, tolerance = 1e-12)
+  for (h in list(c(2, -1), c(2, 0))) {
+    st <- .modelSteps(Matrix::Diagonal(x = h), c(1, 1), 0.1)
+    expect_equal(st$dense$newtonDecrease, 0.25)
+    expect_equal(st$sparse$newtonDecrease, 0.25, tolerance = 1e-12)
+  }
+  lr$d <- c(-2, 0.5)
+  st <- .modelSteps(H, g, 0.1, lr)
+  expect_lt(min(eigen(st$B, symmetric = TRUE)$values), 0)
+  expect_equal(st$sparse$newtonDecrease, st$dense$newtonDecrease, tolerance = 1e-10)
+})
+
+test_that("a sparse gradient stop needs the full Newton step to predict at most mtol", {
+  flat <- function(x, deriv = TRUE, hessian = TRUE, ...) {
+    h <- c(1, 1e-3)
+    H <- Matrix::sparseMatrix(i = 1:2, j = 1:2, x = h, dimnames = list(names(x), names(x)))
+    objlist(0.5 * sum(h * x^2), setNames(h * x, names(x)), if (identical(hessian, "sparse")) H else as.matrix(H))
+  }
+  fit <- trust(flat, c(x = 0, y = 9), rinit = 1, rmax = 10, sparse = TRUE,
+               tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2))
+  expect_s4_class(fit$hessian, "sparseMatrix")
+  expect_identical(fit$stopReason, "gradient")
+  expect_lte(fit$value, 1e-4)
 })
 
 test_that("the sparse model takes a low-rank part whose weights differ by many orders", {

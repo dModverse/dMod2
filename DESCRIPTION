@@ -1,7 +1,7 @@
 Package: dMod2
 Type: Package
 Title: Parameter Estimation in Dynamical Models
-Version: 0.15.9
+Version: 0.15.10
 Date: 2026-11-16
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
