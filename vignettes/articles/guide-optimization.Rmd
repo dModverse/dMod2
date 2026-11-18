@@ -89,7 +89,9 @@ with `"fvalue"` or `"iterlim"`.
 | `"iterlim"` | `iterlim` iterations | `FALSE` |
 
 Only `"gradient"` tests first-order optimality; the last quasi-Newton phase ignores the value,
-model and step tests ([Hessian phases](#hessian-phases-and-reverse-sweep)). `ftol` and `gtol`
+model and step tests ([Hessian phases](#hessian-phases-and-reverse-sweep)). `"gradient"`,
+`"fvalue"` and `"preddiff"` end a run of `trust()` or `trustL1()` only where the full Newton step also predicts a decrease of
+at most `mtol` ([Methods > Termination criteria](methods-trust.html#termination-criteria)). `ftol` and `gtol`
 belong at or above the numerical error of value and gradient; `model.R` defines them as
 `tolerances`, which the fitting scripts pass as `tolControl`.
 
@@ -120,7 +122,7 @@ With `hessianInit = "identity"` the objective needs to return gradients only.
 
 `phases` runs several sources in turn. Each phase is a list with `hessianMethod` and optionally
 `iterlim`, `sweep` and `qnControl`. A phase ends on a value, model, step or stagnation stop or on
-its `iterlim` and hands over to the next; `"gradient"` ends the run. `switches` bounds the
+the `iterlim` of the phase and hands over to the next; `"gradient"` ends the run. `switches` bounds the
 handovers (default: one fewer than phases).
 
 ```{r, eval = FALSE}

@@ -54,8 +54,7 @@ run("fit.R", "fitsave")
 # profiles (`lowest`, from helixprofilescollect) and the job runs again.
 run("profiles.R", "refit", "^## ---- profiles$")
 if (exists("lowest")) {
-  fitProfile <- trust(objProfile, lowest, fixed = gauge, rinit = 0.1, rmax = 10, iterlim = 1000,
-                      tolControl = tolerances)
+  fitProfile <- bestFit(lowest)
   best <- fitProfile$argument
 }
 limits <- c(lower = -7, upper = 7)
@@ -115,8 +114,7 @@ run("optimizers.R", "optimizerssave")
 source("reduced.R")
 run("refit.R", "reducedfit", "^## ---- reducedprofiles$")
 if (exists("lowestReduced")) {
-  fitReducedProfile <- trust(objReducedProfile, lowestReduced, fixed = gaugeReduced, rinit = 0.1,
-                             rmax = 10, iterlim = 1000, tolControl = tolerances)
+  fitReducedProfile <- bestReducedFit(lowestReduced)
   bestReducedProfile <- fitReducedProfile$argument
 }
 reducedJob <- distributedComputing({

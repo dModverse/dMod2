@@ -13,6 +13,10 @@ knitr::opts_knit$set(root.dir = project)
 source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/symmetries.R")
+# through do.call: the resource scan of rmarkdown purls the article elsewhere and runs
+# every literal read_chunk() call there
+articles <- getwd()
+do.call(knitr::read_chunk, list(file.path("results", "guide-symmetries.R")))
 # a count as the text writes it
 inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
@@ -171,18 +175,16 @@ rational functions of the coordinates; the search needs msolve and a model with 
 and no events. In the two-compartment model of Godfrey [@godfrey1983compartmental], with the
 amounts $x_1$ and $x_2$, an input $u$ into the first compartment and the second observed,
 
-```{r, eval = FALSE}
-f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
-compartments <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
-compartments
+```{r godfrey, eval = FALSE}
 ```
 
-```text
-#> Result:  structurally locally identifiable (rank 5 / 5)
-#>
-#> Discrete symmetries: 1, 2 solutions over the algebraic closure
-#>   k01 -> k12, x1 -> (k01*x2 - k12*x2 + k21*x1)/k21, k12 -> k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 > 0]
-#>   fundamental domain: k01 < k12
+```{r, echo = FALSE}
+compartments <- stored(file.path(articles, "results", "guide-symmetries.rds"),
+                       file.path(articles, "results", "guide-symmetries.R"))
+```
+
+```{r}
+compartments
 ```
 
 the map exchanges the elimination rate $k_{01}$ and the return rate $k_{12}$ and moves the

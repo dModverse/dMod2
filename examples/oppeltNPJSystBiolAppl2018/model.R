@@ -193,9 +193,9 @@ sigma[turnover] <- 2
 # IKK recovers from its inactive form over hours
 mu["trigger_iIkk"] <- log(1 / 240)
 sigma["trigger_iIkk"] <- 2
-# the cells rest: a term that rises where an eigenvalue of the resting state decays more slowly
-# than over the six hours of data and reaches 100 where the resting state loses stability
-stability <- constraintStability(pSS, p, duration = max(as.data.frame(data)$time))
+# the cells rest: a term that is zero on a stable resting state and reaches 100 where it loses
+# stability
+stability <- constraintStability(pSS, p)
 obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma) + stability
 
 

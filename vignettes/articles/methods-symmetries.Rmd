@@ -13,10 +13,10 @@ Guide: [Symmetries](guide-symmetries.html).
 
 The model is
 
-$$\dot x = f(x, u(t), \theta), \qquad x(t_0) = x_0(\theta), \qquad y = h(x, \theta), \tag{1}$$
+$$\dot x = f(x, u(t), \theta), \qquad x(t_0) = x_0(\theta), \qquad y = g(x, \theta), \tag{1}$$
 
 with states $x$, input $u$, observables $y$ and parameters $\theta \in \Theta \subseteq
-\mathbb{R}^d$ of any kind, and prediction $g(t; \theta) = h(x(t), \theta)$. It is *locally
+\mathbb{R}^d$ of any kind, and prediction $y(t; \theta) = g(x(t), \theta)$. It is *locally
 structurally identifiable* at $\theta$ if no nearby $\tilde\theta \ne \theta$ has the same
 prediction. The property depends on the equations alone, as if every observable were measured
 exactly and continuously, and the answer is the same for every $\theta$ outside a set of measure
@@ -27,7 +27,7 @@ profile [@raue2009structural].
 ## Lie symmetries
 
 A *Lie symmetry* is a one-parameter group $\Phi_\varepsilon$ on $\Theta$ with
-$g(t; \Phi_\varepsilon(\theta)) = g(t; \theta)$ for all $t$ and small $\varepsilon$. The orbits
+$y(t; \Phi_\varepsilon(\theta)) = y(t; \theta)$ for all $t$ and small $\varepsilon$. The orbits
 are the integral curves of the *generator*
 
 $$X = \sum_{i=1}^d \xi_i(\theta)\, \frac{\partial}{\partial \theta_i}, \qquad
@@ -58,11 +58,11 @@ With $z = (x, \theta, t)$, $\dot\theta = 0$, $\dot t = 1$, the model is the vect
 $F = f\, \partial_x + \partial_t$, started at $z_0(\theta) = (x_0(\theta), \theta, t_0)$. The *Lie
 derivatives* of the observables,
 
-$$L_F^0 h = h, \qquad L_F^{k+1} h = F\bigl(L_F^k h\bigr), \tag{3}$$
+$$L_F^0 g = g, \qquad L_F^{k+1} g = F\bigl(L_F^k g\bigr), \tag{3}$$
 
 at $z_0$ are the time derivatives of the prediction at $t_0$, so an analytic prediction is
 
-$$g(t; \theta) = \sum_{k \ge 0} \frac{(t - t_0)^k}{k!}\, L_F^k h\bigl(z_0(\theta)\bigr). \tag{4}$$
+$$y(t; \theta) = \sum_{k \ge 0} \frac{(t - t_0)^k}{k!}\, L_F^k g\bigl(z_0(\theta)\bigr). \tag{4}$$
 
 Collected up to order $N$ they form $\Psi_N(\theta)$, with the observability-identifiability matrix
 
@@ -102,7 +102,7 @@ random points, with or without an error bound, and `"open"` without closed form;
 | `forcings` | input states, 0 at rest |
 | `conditions` | shared parameters; a direction is non-identifiable only if it is so in every condition |
 
-symident writes an observable $a \log h + c$ through $h$. A clock-time factor of $h$ such as
+symident writes an observable $a \log g + c$ through $g$. A clock-time factor of $g$ such as
 $e^{-\tau t}$ is no function of the states of a model at rest, so it is left out of the observables
 passed to `symmetryDetection()`; this is valid where the parameters of that factor take no part in
 a symmetry.

@@ -64,7 +64,7 @@ $$\tilde H_i = H_{SS} - H_{SN} H_{NN}^{-1} H_{NS}, \tag{2}$$
 so the data term on the sparse coordinates is, up to a constant,
 $\exp(-\tfrac12 \eta_{iS}^\top P_i\, \eta_{iS} + b_i^\top \eta_{iS})$ with
 
-$$P_i = \tilde H_i / 2, \qquad b_i = \tfrac12 \bigl( \tilde H_i\, \hat\eta_{iS} - \nabla_S D_i \bigr) \tag{3}$$
+$$P_i = \tilde H_i / 2, \qquad b_i = \tfrac12 \bigl( \tilde H_i\, \hat\eta_{iS} - \nabla_S D_i \bigr) . \tag{3}$$
 
 Unlike in FOCEI, $P_i$ holds no prior; the sparse prior enters the integral $I$ exactly. $P_i$ may
 be singular where the data do not see a coordinate; the integral needs no inverse.
@@ -81,7 +81,7 @@ $$\begin{aligned}
 $D_0$ the $-2 \log L$ of conditions without random effects and of other terms such as priors, and
 
 $$I = \int \prod_i \exp\Bigl( -\tfrac12\, \eta_{iS}^\top P_i\, \eta_{iS} + b_i^\top \eta_{iS} \Bigr)\,
-p(\eta_S)\, d\eta_S \tag{5}$$
+p(\eta_S)\, d\eta_S , \tag{5}$$
 
 $p$ the sparse prior. Without sparse coordinates (4) is the
 [FOCEI value](methods-nlme.html#focei). Every structure, a subset of spike coordinates or a
@@ -275,13 +275,13 @@ approximate marginal, the quadratic model at the joint mode ([Normal coordinates
 times the exact prior, independent over groups:
 
 $$p(\eta_{iS} \mid y_i) \propto \exp\Bigl( -\tfrac12\, \eta_{iS}^\top P_i\, \eta_{iS} + b_i^\top \eta_{iS} \Bigr)
-\prod_k p(\eta_{ik}) , \tag{19}$$
+\prod_k p(\eta_{ik}) . \tag{19}$$
 
 The spike-and-slab symbols of a group form one factor ([Spike and slab](#spike-and-slab)), exact on
 $(P_i, b_i)$ without coupled sparse coordinates. Under EC each coordinate is a factor on a
 one-dimensional Gaussian of precision $a$ and center $m$, a sum of two terms, with slab posterior
 
-$$V = \frac{1}{a + \tau^{-2}}, \qquad \mu = V a\, m . \tag{20}$$
+$$V = \frac{1}{a + \tau^{-2}}, \qquad \mu = V a\, m , \tag{20}$$
 
 deviation probability
 

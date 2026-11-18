@@ -17,7 +17,7 @@ do.call(knitr::read_chunk, list(file.path("results", "guide-nlme.R")))
 A mixed-effects model writes each individual parameter (subject, cell, cell line) as a
 population value plus a random deviation, estimates population values and spread, and integrates
 the deviations out of the likelihood. In dMod2 random effects are declared in the `parfn`; `em()`
-fits by one of four approximations of the integral, all instances of the EM algorithm. Example:
+fits by the EM algorithm with one of four approximations of the integral. Example:
 theophylline, twelve subjects, one oral dose each, plasma concentrations over a day.
 
 ```{r setup}
@@ -311,8 +311,8 @@ Which groups differ at all, rather than by how much: [Sparse deviations](guide-s
 
 ## Multistart optimization
 
-`msem()` runs `em()` from `fits` starts perturbed around `init` with standard deviation `sd` and
-returns the best fit, all starts in `$multistart`. `theophyllineMultistart.R` of the project
+`msem()` runs `em()` from `fits` starts, the first at `init`, the others perturbed around it with
+standard deviation `sd`, and returns the best fit, all starts in `$multistart`. `theophyllineMultistart.R` of the project
 `pharmacometrics` runs 200 starts each for FOCEI, quadrature and SAEM from the same draws:
 
 ```{r, include = FALSE, purl = FALSE}

@@ -32,8 +32,15 @@ ratio <- c(full = dataFull, reduced = dataReduced, difference = dataReduced - da
 ## ---- reducedprofileprior
 # the prior of the profiles of profiles.R, standard deviation 20 at the best fit
 objReducedProfile <- normL2(data, prdReduced, eReduced) + constraintL2(bestReduced, sigma = 20)
-fitReducedProfile <- trust(objReducedProfile, bestReduced, fixed = gaugeReduced, rinit = 0.1,
-                           rmax = 10, iterlim = 1000, tolControl = tolerances)
+# the best of 20 fits from `center` and from starts about it, sd 0.1, as for the full model
+bestReducedFit <- function(center) {
+  fits <- mstrust(objReducedProfile, center, fixed = gaugeReduced, sd = 0.1, fits = 20,
+                  startFromCenter = TRUE, rinit = 0.1, rmax = 10, iterlim = 1000,
+                  tolControl = tolerances, cores = getOption("dMod2.cores"))
+  values <- vapply(fits, function(f) if (is.numeric(f$value)) f$value else Inf, 0)
+  fits[[which.min(values)]]
+}
+fitReducedProfile <- bestReducedFit(bestReduced)
 bestReducedProfile <- fitReducedProfile$argument
 
 ## ---- reducedprofiles
@@ -45,9 +52,7 @@ repeat {
                              optControl = list(iterlim = 100, tolControl = tolerances),
                              cores = getOption("dMod2.cores"))
   if (min(profilesReduced$value) > fitReducedProfile$value - 1e-2) break
-  fitReducedProfile <- trust(objReducedProfile, as.parvec(profilesReduced)[names(bestReducedProfile)],
-                             fixed = gaugeReduced, rinit = 0.1, rmax = 10, iterlim = 1000,
-                             tolControl = tolerances)
+  fitReducedProfile <- bestReducedFit(as.parvec(profilesReduced)[names(bestReducedProfile)])
   bestReducedProfile <- fitReducedProfile$argument
 }
 

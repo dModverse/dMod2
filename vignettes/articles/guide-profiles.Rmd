@@ -62,10 +62,10 @@ reduced model, by `profiles.R`, `variants.R`, `reduced.R` and `refit.R`.
 
 The profile likelihood of a parameter is the data term along the path on which the other
 parameters minimize an objective with that parameter fixed. Here that objective is the one of the
-multistart with its prior replaced by a prior of standard deviation 20 on the log scale at the best
+multistart with the prior replaced by a prior of standard deviation 20 on the log scale at the best
 fit, so that the data term, not the prior, shapes the profiles; the optimum of that objective is
 the lowest point of every profile. Values of the data term
-within the 95 % quantile of $\chi^2_1$, 3.84, of its minimum form the 95 % confidence interval
+within the 95 % quantile of $\chi^2_1$, 3.84, of the minimum form the 95 % confidence interval
 ([Methods > Profile likelihood](methods-profiles.html)). `stepControl = list(stop = "data")` ends a
 profile there, `confint(val.column = "data")` reads the interval off, and `profileThreshold()`
 gives other levels. A profile open towards $-\infty$ on the log scale means the
@@ -94,7 +94,8 @@ profiles parameters in parallel ([Remote computing](guide-remote-computing.html#
 ```{r refit, eval = FALSE}
 ```
 
-and fits the objective of the profiles from there:
+and fits the objective of the profiles from there, the best of 20 fits from starts about the refit,
+since a single fit can stop short of the floor of a flat valley:
 
 ```{r profileprior, eval = FALSE}
 ```
@@ -105,7 +106,7 @@ invisible(stored("results/profiles.rds", "profiles.R"))
 ```
 
 Each side runs until the data term has risen by the threshold or the parameter has moved by 7 on
-the log scale; a profile below the fit restarts the fit from the lowest point. `helix.R` runs
+the log scale; a profile below the fit restarts the 20 fits about its lowest point. `helix.R` runs
 one parameter per cluster task.
 
 ```{r profiles, eval = FALSE}
@@ -199,7 +200,7 @@ for (par in c("act_Ikb_Base", "int_Nfk"))
 
 ## Predictions along a profile
 
-`plotArray()` predicts the model at points along one side of a profile, from the optimum to its
+`plotArray()` predicts the model at points along one side of a profile, from the optimum to the
 end, colored by the profiled parameter; `fixed` adds the gauge the profiles held fixed. Within the
 threshold the measured readouts stay within the noise of the data, so the states show what a
 profile leaves open. Along the upper side of `degrad_RnaA20`, which ends where the data term has
@@ -227,7 +228,7 @@ plotArray("ext_nNfkIkb", profiles, states, minutes, name %in% c("nNfk", "pnNfk",
 ## Core model of the publication
 
 The publication reduced the full model to a core model of 29 reactions [@oppelt2018model,
-Table S5] with fixed values (Tables S8 and S9). Its settings on the log scale:
+Table S5] with fixed values (Tables S8 and S9). The settings on the log scale:
 
 | setting of the core model | parameter of the full model | value |
 |---|---|---|

@@ -38,7 +38,7 @@ from the canaliculi back into the buffer.
 ```
 
 `odemodel()` generates C++ code for ODE and sensitivities, `Xs()` makes the prediction function,
-`Y()` the observables: cells and canaliculi are measured together, both with scale `s`.
+`Y()` the observables: cells and canaliculi are measured together, both observables with scale `s`.
 Expressions follow the
 [expression language of cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
 including switches such as `piecewise()`.
@@ -121,7 +121,7 @@ are bounded on one side only, a practical non-identifiability.
 | `parfn` | parameter transformation, outer to inner: `P()`, `Pexpl()`, `Pimpl()` |
 | `prdfn` | prediction function, parameters to trajectories: `Xs()`, `Xf()` |
 | `obsfn` | observation function, trajectories to observables or errors: `Y()` |
-| `objfn` | objective, $-2 \log L$ or with a prior $-2 \log$ of the posterior: `normL2()`, `constraintL2()` |
+| `objfn` | objective function, $-2 \log L$ or with a prior $-2 \log$ of the posterior: `normL2()`, `constraintL2()` |
 
 `+` and `branch()` join conditions; `*` composes function objects by the chain rule, so every
 call returns values with their derivatives in the outer parameters, the objective value, gradient

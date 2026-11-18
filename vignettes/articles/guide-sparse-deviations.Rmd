@@ -84,8 +84,8 @@ L1 penalty: [Methods > Selection of deviations](methods-sparsity-priors.html#sel
 ## Compound model
 
 The reduced model of [Profile likelihood](guide-profiles.html) with second derivatives for `em()`.
-Its resting state (all NFκB bound to IκBα, all IKK inactive) holds for all rate constants, so a
-compound changes the dynamics only from TNFα on:
+The resting state of the reduced model (all NFκB bound to IκBα, all IKK inactive) holds for all
+rate constants, so a compound changes the dynamics only from TNFα on:
 
 ```{r reactions, include = FALSE}
 ```
@@ -244,7 +244,7 @@ circle has $p_0$ between 0.05 and 0.5.
 ## Data and fit by compound
 
 Prediction per compound at the estimated fixed effects and changes against the compound data, each
-point with its measured standard deviation, which the blots have in place of an error model; gray:
+point with the measured standard deviation, which the blots have in place of an error model; gray:
 the untreated, stimulated control of the same blots at the fixed effects alone. DCF blots span six
 hours, the others 50 minutes:
 
@@ -325,8 +325,8 @@ approximation](methods-sparsity-priors.html#expectation-consistent-approximation
 | `maxOuter` | `200` | joint trust-region iterations, all runs |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as `trust()` |
 
-Other entries are an error. The compound fit uses the `trustControl` tolerances of
-[Setting up models](guide-model.html), above the solver error in value and gradient. A run stopping
+Other entries are an error. The compound fit passes the `tolerances` of
+[Setting up models](guide-model.html) in `trustControl`, above the solver error in value and gradient. A run stopping
 short of `mtol` restarts while runs lower $-2 \log L$ by more than `mtol`. `msem()` perturbs
 concentrations and slab standard deviations on log scale, slab probabilities on logit scale.
 

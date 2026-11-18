@@ -1,4 +1,4 @@
-# The model and fits of guide chapter 7, guide-nlme.Rmd, which shows the labelled parts and reads
+# The model and fits of guide chapter 7, guide-nlme.Rmd, which shows the labeled parts and reads
 # the fits from guide-nlme.rds. Run in this folder.
 
 ## ---- setup

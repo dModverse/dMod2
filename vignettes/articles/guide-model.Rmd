@@ -14,7 +14,7 @@ source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 ```
 
-A model in dMod2 is a chain of function objects, each returning an output together with its
+A model in dMod2 is a chain of function objects, each returning an output together with the
 derivatives with respect to the parameters:
 
 | class | constructors | mapping |
@@ -55,9 +55,9 @@ refractory `iIkk`.
 species in the nucleus of volume `Vnuc` relative to the cytoplasm. Rates are concentration rates
 in the compartment of the educts, of the products for a reaction without net educts, so
 
-$$\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\, V_{f(r)}\, v_r(x, p),$$
+$$\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\, V_{c(r)}\, v_r(x, p),$$
 
-with $S_{ri}$ the stoichiometry and $V_{f(r)}$ the volume of the compartment of reaction $r$.
+with $S_{ri}$ the stoichiometry and $V_{c(r)}$ the volume of the compartment of reaction $r$.
 TNFα is not used up: the reaction `TNF -> TNF + TNFR` keeps it constant as a catalyst.
 
 ```{r reactions, echo = FALSE}
@@ -230,7 +230,7 @@ known:
 
 | parameters | mean | sd | reason |
 |---|---|---|---|
-| bleaching rates `tau_*` | $\log(0.1/360)$ | 2 | a few percent of signal lost over six hours |
+| bleaching rates `tau_*` | $\log(0.1/360)$ | 2 | about 10 % of signal lost over six hours |
 | imaging noise `sigma_*` | $\log 0.05$ | 1 | replicates scatter by about 5 % |
 | basal rates `*_Base` | $-8$ | 2 | activation without TNFα far slower than with it |
 | `shuttle_RnaA20`, `degrad_RnaA20`, `build_A20`, `degrad_A20`, `degrad_mIkb` | $\log(1/60)$ | 2 | transcripts and A20 turn over within about an hour |
@@ -240,8 +240,8 @@ Starts far outside these ranges end on plateaus where a signal bleaches away, th
 every residual or A20 follows NFκB within minutes.
 
 `pSS` returns unstable roots too (`controlsPTC = list(stability = FALSE)`);
-`constraintStability()` adds a term that is zero while every perturbation of the resting state
-decays within the six hours of data and rises to 100 at the stability boundary. It needs
+`constraintStability()` adds a term that is zero on a stable resting state, rises on a narrow ramp
+below the stability boundary and reaches 100 for each eigenvalue at the boundary. It needs
 `Pimpl(deriv2 = TRUE)`. Profiles with `stop = "data"` and likelihood ratios read the data term
 without it ([Methods > Steady states](methods-steady-states.html#stability)).
 

@@ -1,70 +1,43 @@
 ---
-title: "dMod2: Parameter Estimation in Dynamical Models"
 output:
   github_document:
     toc: false
     html_preview: false
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  fig.path = "man/figures/README-",
-  fig.width = 10,
-  fig.height = 4,
-  out.width = "100%",
-  dev = "svglite",
-  message = FALSE,
-  warning = FALSE
-)
-```
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+# dMod2
 
 <!-- badges: start -->
-
 [![R-CMD-check](https://github.com/dModverse/dMod2/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/dModverse/dMod2/actions/workflows/R-CMD-check.yaml)
 [![docs](https://img.shields.io/badge/docs-dmodverse.github.io%2FdMod2-blue)](https://dmodverse.github.io/dMod2/)
-
 <!-- badges: end -->
 
-dMod2 builds ODE models of reaction networks, compiles them to C/C++ with exact derivatives,
-and estimates their parameters from data. It succeeds [dMod](https://github.com/JetiLab/dMod);
-[Migrating from dMod](https://dmodverse.github.io/dMod2/articles/migrating.html) lists what a
-dMod script has to change.
+dMod2 is a framework for dynamic modeling and parameter estimation in R. Reaction networks
+become ODE models compiled to C/C++, with exact first- and second-order sensitivities. Prediction
+functions, observation functions and parameter transformations are function objects composed
+into a model of the data, and objective functions are minimized by multi-start fits with a
+trust-region optimizer. Profile likelihoods, prediction uncertainty, steady states,
+structural identifiability, mixed-effects models and interfaces to SBML and PEtab are part of
+the package. The ODE backend is cppDE.
+
+dMod2 succeeds dMod. [Migrating from dMod](https://dmodverse.github.io/dMod2/articles/migrating.html)
+lists what a dMod script has to change.
 
 ## Installation
 
 ```r
+# install.packages("remotes")
 remotes::install_github("dModverse/dMod2")
 ```
 
-The ODE backend [cppDE](https://github.com/dModverse/cppDE) is installed with it. Models compile
-at run time and need a C++17 compiler and Python with SymPy, see
-[Installation and troubleshooting](https://dmodverse.github.io/dMod2/articles/installation.html).
-Working on the package from a checkout is described in
-[CONTRIBUTING.md](https://github.com/dModverse/dMod2/blob/master/.github/CONTRIBUTING.md).
-
-## Documentation
-
-The [website](https://dmodverse.github.io/dMod2/) starts with
-[Get started](https://dmodverse.github.io/dMod2/articles/dMod2.html). The guide covers
-
-- [model setup](https://dmodverse.github.io/dMod2/articles/guide-model.html) and
-  [structural identifiability](https://dmodverse.github.io/dMod2/articles/guide-symmetries.html),
-- [sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html),
-  [optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html),
-  [profile likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.html) and
-  [prediction uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncertainty.html),
-- [mixed-effects models](https://dmodverse.github.io/dMod2/articles/guide-nlme.html) and
-  [sparse deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html),
-- [alignment of relative data](https://dmodverse.github.io/dMod2/articles/guide-alignment.html),
-  [PEtab and SBML](https://dmodverse.github.io/dMod2/articles/guide-petab.html) and
-  [remote computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html).
-
-Methods, example projects and the reference are listed in the
-[articles](https://dmodverse.github.io/dMod2/articles/index.html) and the
-[reference index](https://dmodverse.github.io/dMod2/reference/index.html).
+cppDE is installed with it. Models are compiled at run time and need a C++17 compiler (Rtools
+on Windows) and Python with SymPy, which reticulate provides on first use.
 
 ## Citation
 
-There is no publication for dMod2 yet. The paper below describes the predecessor dMod and is the reference for the modeling framework:
-
-Kaschek D, Mader W, Fehling-Kaschek M, Rosenblatt M, Timmer J (2019). Dynamic Modeling, Parameter Estimation, and Uncertainty Analysis in R. *Journal of Statistical Software*, 88(10), 1-32. [doi:10.18637/jss.v088.i10](https://doi.org/10.18637/jss.v088.i10)
+There is no publication for dMod2 yet. `citation("dMod2")` gives the paper on the predecessor
+dMod, the reference for the modeling framework: Kaschek D, Mader W, Fehling-Kaschek M,
+Rosenblatt M, Timmer J (2019). Dynamic Modeling, Parameter Estimation, and Uncertainty Analysis
+in R. *Journal of Statistical Software*, 88(10), 1-32, DOI 10.18637/jss.v088.i10.

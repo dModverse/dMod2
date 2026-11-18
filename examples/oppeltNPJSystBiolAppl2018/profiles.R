@@ -13,8 +13,16 @@ refit <- trust(obj, as.parvec(readRDS("results/fits.rds")), fixed = gauge, rinit
 # the profiles replace the prior of model.R by one of standard deviation 20 at the refit, so that
 # the data term shapes them; they start at the optimum of that objective
 objProfile <- normL2(data, prd, e) + constraintL2(refit$argument, sigma = 20) + stability
-fitProfile <- trust(objProfile, refit$argument, fixed = gauge, rinit = 0.1, rmax = 10,
-                    iterlim = 1000, tolControl = tolerances)
+# the best of 20 fits from `center` and from starts about it, sd 0.1, which reaches the floor of
+# a flat valley where a single fit stops on it
+bestFit <- function(center) {
+  fits <- mstrust(objProfile, center, fixed = gauge, sd = 0.1, fits = 20, startFromCenter = TRUE,
+                  rinit = 0.1, rmax = 10, iterlim = 1000, tolControl = tolerances,
+                  cores = getOption("dMod2.cores"))
+  values <- vapply(fits, function(f) if (is.numeric(f$value)) f$value else Inf, 0)
+  fits[[which.min(values)]]
+}
+fitProfile <- bestFit(refit$argument)
 best <- fitProfile$argument
 
 ## ---- profiles
@@ -29,8 +37,7 @@ repeat {
                       optControl = list(iterlim = 100, tolControl = tolerances),
                       cores = getOption("dMod2.cores"))
   if (min(profiles$value) > fitProfile$value - 1e-2) break
-  fitProfile <- trust(objProfile, as.parvec(profiles)[names(best)], fixed = gauge, rinit = 0.1,
-                      rmax = 10, iterlim = 1000, tolControl = tolerances)
+  fitProfile <- bestFit(as.parvec(profiles)[names(best)])
   best <- fitProfile$argument
 }
 

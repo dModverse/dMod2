@@ -18,7 +18,7 @@ needed.
 
 ## Substitution syntax
 
-`define()`, `insert()`, `repar()` and `branch(apply = )` take `"lhs <- rhs"`; `"lhs ~ rhs"` is an
+`define()`, `insert()` and `repar()` take `"lhs <- rhs"`; `"lhs ~ rhs"` is an
 error naming the new form.
 
 | dMod | dMod2 |
@@ -30,7 +30,7 @@ error naming the new form.
 Placeholders in `...`, branch table columns in scope, unnamed logical condition selectors and
 `conditionMatch` are unchanged.
 
-`~` now writes effect formulas: on a branched transformation, `insert()` takes an unquoted formula
+`~` writes effect formulas: on a branched transformation, `insert()` takes an unquoted formula
 and replaces the symbol by a linear predictor over the branch table columns, fixed and random
 effects in lme4 notation:
 
@@ -124,7 +124,7 @@ Dotted argument names are lowerCamelCase.
 
 | dMod | dMod2 |
 |---|---|
-| `optControl = list(fterm = , mterm = )` | any `trust()` argument, e.g. `tolControl` |
+| `optControl = list(fterm = , mterm = )` | `optControl`: any `trust()` argument, e.g. `tolControl` |
 | `stepControl = list(stop = "data")` | `stop`: also any numeric attribute of the objective |
 | threshold `qchisq(1 - alpha, 1)` | `delta = `, e.g. `profileThreshold(method = "F", n = , p = )` |
 | both sides | `side = c("both", "left", "right")` |

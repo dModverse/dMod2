@@ -1,4 +1,4 @@
-# The data, models and fits of guide chapter 9, guide-alignment.Rmd, which shows the labelled parts
+# The data, models and fits of guide chapter 9, guide-alignment.Rmd, which shows the labeled parts
 # and reads the fits from guide-alignment.rds. Run in this folder.
 
 library(dMod2)
