@@ -36,7 +36,7 @@ that object, e.g. \\g_x S + g\_\theta\\ for \\y = g(x, \theta)\\.
 
 Each data point adds, up to a constant,
 
-\\\ell_j = r_j^2 + \log \sigma_j^2, \qquad r_j = \frac{f_j -
+\\\ell_j = r_j^2 + \log \sigma_j^2, \qquad r_j = \frac{g_j -
 y_j}{\sigma_j}, \tag{2}\\
 
 the summand of [the data
@@ -53,7 +53,7 @@ or strong nonlinearity.
 
 ### Gauss-Newton with an error model
 
-For \\\sigma_j(\theta)\\, the Hessian of \\\ell_j\\ in \\(f_j,
+For \\\sigma_j(\theta)\\, the Hessian of \\\ell_j\\ in \\(g_j,
 \sigma_j)\\ is
 
 \\L_j = \frac{2}{\sigma_j^2} \begin{pmatrix} 1 & -2 r_j \\ -2 r_j & 3
@@ -62,13 +62,13 @@ r_j^2)}{\sigma_j^4} \< 0. \tag{4}\\
 
 The Gauss-Newton Hessian of
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md) is
-\\\sum_j J_j^\top L_j J_j\\, \\J_j\\ the Jacobian of \\(f_j,
+\\\sum_j J_j^\top L_j J_j\\, \\J_j\\ the Jacobian of \\(g_j,
 \sigma_j)\\: exact curvature of \\\ell_j\\, no second derivatives of
-\\f_j\\ and \\\sigma_j\\. By (4) \\L_j\\ has one negative eigenvalue at
+\\g_j\\ and \\\sigma_j\\. By (4) \\L_j\\ has one negative eigenvalue at
 every residual, and the \\\sigma\sigma\\ entry \\3 r_j^2 - 1\\ is
 negative where residuals are small, so the matrix is in general
 indefinite along directions that move a sigma. The exact Hessian adds
-the second derivatives of \\f_j\\ and \\\sigma_j\\, weighted by \\2 r_j
+the second derivatives of \\g_j\\ and \\\sigma_j\\, weighted by \\2 r_j
 / \sigma_j\\ and \\2 (1 - r_j^2) / \sigma_j\\.
 
 ## Forward over forward
@@ -154,9 +154,9 @@ pass along \\K\\ tangents serves all groups. A backward sweep with seed
 \\w\\ on the predictions and sigmas of the data rows, and \\\dot w_k\\
 along tangent \\k\\, returns \\J^\top w\\ and
 
-\\\sum_r w_r\\ \nabla^2 f_r\\ v_k + J^\top \dot w_k \tag{6}\\
+\\\sum_r w_r\\ \nabla^2 z_r\\ v_k + J^\top \dot w_k \tag{6}\\
 
-for every \\k\\, \\f_r\\ prediction or sigma of row \\r\\, \\J\\ their
+for every \\k\\, \\z_r\\ prediction or sigma of row \\r\\, \\J\\ their
 Jacobian. With the gradient of the row loss as seed and \\L_r J_r v_k\\
 as tangent derivative, \\L_r\\ the Hessian (4), the sweep gives
 \\\Phi_i^{\eta\eta}\\, \\\Phi_i^{\eta\psi}\\ and the mode shift

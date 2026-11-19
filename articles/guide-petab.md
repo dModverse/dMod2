@@ -97,7 +97,7 @@ compile(petab$prd, petab$e, output = "oppelt_petab", cores = 6)
 c(model.R = attr(obj(c(best, gauge), deriv = FALSE), "data"),
   PEtab   = petab$obj(petab$bestfit, deriv = FALSE)$value)
 #>   model.R     PEtab 
-#> -511.1623 -511.1623
+#> -511.1645 -511.1645
 ```
 
 The imported problem reproduces the data term of `model.R` at the best

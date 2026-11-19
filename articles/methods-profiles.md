@@ -10,13 +10,15 @@ uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncerta
 
 ## Profile and threshold
 
-The objective \\f(\theta) = -2 \log L(\theta) - 2 \log \pi(\theta)\\ is
-the data term plus the prior \\\pi\\ ([Likelihood and
+The objective function \\\mathcal{J}(\theta) = -2 \log L(\theta) - 2
+\log \pi(\theta)\\ is the data term plus the prior \\\pi\\ ([Likelihood
+and
 prior](https://dmodverse.github.io/dMod2/articles/methods-objective.md)).
-Along the profile of \\\theta_i\\ the other parameters minimize \\f\\,
+Along the profile of \\\theta_i\\ the other parameters minimize
+\\\mathcal{J}\\,
 
 \\\hat\theta(c) = \operatorname\*{arg\\min}\_{\theta \\:\\ \theta_i = c}
-f(\theta) , \tag{1}\\
+\mathcal{J}(\theta) , \tag{1}\\
 
 and the profile likelihood is the data term along this path,
 
@@ -26,7 +28,7 @@ Without a prior, (2) is the minimum of \\-2 \log L\\ with \\\theta_i =
 c\\. By the likelihood ratio test, the rise \\\mathrm{PL}\_i(c) -
 \mathrm{PL}\_i(\hat\theta_i)\\ from the optimum \\\hat\theta_i\\ below
 the \\1 - \alpha\\ quantile of \\\chi^2_1\\ (3.84 for 95 %) defines an
-asymptotic confidence interval, invariant under reparametrization of
+asymptotic confidence interval, invariant under reparameterization of
 \\\theta_i\\. Without a prior the optimum is the minimum of (2); with a
 prior (2) may fall below the value at the optimum, and the rise is still
 measured from there.
@@ -36,10 +38,10 @@ estimated standard deviations. A prior wide against the data curvature
 keeps (1) finite where the data do not determine \\\theta_i\\ and
 changes (2) little where they do.
 
-[`profile()`](https://rdrr.io/r/stats/profile.html) stops on \\f\\ by
-default; `stepControl = list(stop = "data")` ends a profile at the
-threshold of (2), and `confint(val.column = "data")` reads the interval
-off (2).
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+stops on \\\mathcal{J}\\ by default; `stepControl = list(stop = "data")`
+ends a profile at the threshold of (2), and
+`confint(val.column = "data")` reads the interval off (2).
 
 ## Shapes
 
@@ -67,20 +69,20 @@ point.
   converged fit per point.
 
 - `method = "integrate"` follows the constrained optimum of the
-  Lagrangian \\f(\theta) + \lambda\\(\theta_i - c)\\, where \\\nabla f +
-  \lambda e_i = 0\\ and \\\theta_i = c\\. Differentiating in \\c\\ gives
-  the path equation
+  Lagrangian \\\mathcal{J}(\theta) + \lambda\\(\theta_i - c)\\, where
+  \\\nabla \mathcal{J} + \lambda e_i = 0\\ and \\\theta_i = c\\.
+  Differentiating in \\c\\ gives the path equation
 
   \\\begin{pmatrix} H & e_i \\ e_i^\top & 0 \end{pmatrix}
   \begin{pmatrix} \mathrm{d}\theta/\mathrm{d}c \\
   \mathrm{d}\lambda/\mathrm{d}c \end{pmatrix} = \begin{pmatrix} 0 \\ 1
   \end{pmatrix} \tag{3}\\
 
-  with the Hessian \\H\\ of \\f\\: one evaluation and one linear solve
-  per step. The step solves (3) with \\-\gamma \nabla f\\ in place of
-  the upper zero, which pulls it back to the constrained optimum
-  (\\\gamma = 1\\ by default, adapted to the size of the pull); with a
-  Gauss-Newton \\H\\ the path still drifts, and
+  with the Hessian \\H\\ of \\\mathcal{J}\\: one evaluation and one
+  linear solve per step. The step solves (3) with \\-\gamma \nabla
+  \mathcal{J}\\ in place of the upper zero, which pulls it back to the
+  constrained optimum (\\\gamma = 1\\ by default, adapted to the size of
+  the pull); with a Gauss-Newton \\H\\ the path still drifts, and
   `algoControl = list(reoptimize = TRUE)` corrects each step by a short
   fit.
 
@@ -92,21 +94,17 @@ Step control and stops:
 | step doubles | mismatch below `0.3 * atol`, or below `0.3 * rtol` relative |
 | side ends | objective (or data term, `stop = "data"`) up by the threshold; `limits` relative to the optimum reached; `limit` steps |
 
-A point of \\f\\ below the start value is a better optimum: fit and
-profiles are then to be repeated from it. Where the curvature jumps, as
-at the onset of
-[`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
-([Steady
-states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)),
-the step shrinks to `min` and stays on the profile.
+A point of \\\mathcal{J}\\ below the start value is a better optimum:
+fit and profiles are then to be repeated from it. Where the curvature
+jumps, the step shrinks to `min` and stays on the profile.
 
 ## Prediction profiles
 
-A prediction \\z = h(t, \theta)\\ has the profile likelihood
+A prediction \\z = g(t, \theta)\\ has the profile likelihood
 
 \\\mathrm{PPL}(z) = -2 \log L\bigl(\hat\theta(z)\bigr) , \quad
-\hat\theta(z) = \operatorname\*{arg\\min}\_{\theta \\:\\ h(t, \theta) =
-z} f(\theta) , \tag{4}\\
+\hat\theta(z) = \operatorname\*{arg\\min}\_{\theta \\:\\ g(t, \theta) =
+z} \mathcal{J}(\theta) , \tag{4}\\
 
 whose threshold gives a confidence interval of the prediction
 [\[2\]](#ref-kreutz2012likelihood); without a prior it is the image of
@@ -116,7 +114,7 @@ region.
 A validation data point makes \\z\\ a parameter \\v\\, tied to the
 prediction by
 
-\\\left( \frac{h(t, \theta) - v}{\sigma_v} \right)^2 . \tag{5}\\
+\\\left( \frac{g(t, \theta) - v}{\sigma_v} \right)^2 . \tag{5}\\
 
 The profile of \\v\\ is (4) for \\\sigma_v \to 0\\ and lies below (4)
 otherwise, so the interval of \\v\\ is wider: for a quadratic (4) of

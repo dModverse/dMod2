@@ -121,7 +121,7 @@ print(x, ...)
 
 - distribution:
 
-  `"normal"` or `"t"` (Student-t,
+  `"normal"` (default) or `"t"` (Student-t,
   [`normT()`](https://dmodverse.github.io/dMod2/reference/normT.md)).
 
 - df:

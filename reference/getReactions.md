@@ -17,8 +17,10 @@ getReactions(eqnlist)
 
 ## Value
 
-`data.frame` with educts, products, rate and description. The first
-column is a check if the reactions comply with reaction kinetics.
+`data.frame` with columns `Check`, `Educt`, `->`, `Product`, `Rate` and
+`Description`, one row per reaction; `Check` is `"!"` where the rate
+does not contain all educts of the reaction. `NULL` for an empty
+equation list.
 
 ## Examples
 

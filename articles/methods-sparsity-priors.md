@@ -67,7 +67,7 @@ so the data term on the sparse coordinates is, up to a constant,
 \eta\_{iS})\\ with
 
 \\P_i = \tilde H_i / 2, \qquad b_i = \tfrac12 \bigl( \tilde H_i\\
-\hat\eta\_{iS} - \nabla_S D_i \bigr) \tag{3}\\
+\hat\eta\_{iS} - \nabla_S D_i \bigr) . \tag{3}\\
 
 Unlike in FOCEI, \\P_i\\ holds no prior; the sparse prior enters the
 integral \\I\\ exactly. \\P_i\\ may be singular where the data do not
@@ -86,7 +86,8 @@ D_i(\hat\eta_i) + \log \lvert H\_{NN}/2 \rvert + \tfrac12
 other terms such as priors, and
 
 \\I = \int \prod_i \exp\Bigl( -\tfrac12\\ \eta\_{iS}^\top P_i\\
-\eta\_{iS} + b_i^\top \eta\_{iS} \Bigr)\\ p(\eta_S)\\ d\eta_S \tag{5}\\
+\eta\_{iS} + b_i^\top \eta\_{iS} \Bigr)\\ p(\eta_S)\\ d\eta_S ,
+\tag{5}\\
 
 \\p\\ the sparse prior. Without sparse coordinates (4) is the [FOCEI
 value](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#focei).
@@ -316,7 +317,7 @@ the joint mode ([Normal coordinates](#normal-coordinates)) times the
 exact prior, independent over groups:
 
 \\p(\eta\_{iS} \mid y_i) \propto \exp\Bigl( -\tfrac12\\ \eta\_{iS}^\top
-P_i\\ \eta\_{iS} + b_i^\top \eta\_{iS} \Bigr) \prod_k p(\eta\_{ik}) ,
+P_i\\ \eta\_{iS} + b_i^\top \eta\_{iS} \Bigr) \prod_k p(\eta\_{ik}) .
 \tag{19}\\
 
 The spike-and-slab symbols of a group form one factor ([Spike and
@@ -325,7 +326,7 @@ coordinates. Under EC each coordinate is a factor on a one-dimensional
 Gaussian of precision \\a\\ and center \\m\\, a sum of two terms, with
 slab posterior
 
-\\V = \frac{1}{a + \tau^{-2}}, \qquad \mu = V a\\ m . \tag{20}\\
+\\V = \frac{1}{a + \tau^{-2}}, \qquad \mu = V a\\ m , \tag{20}\\
 
 deviation probability
 

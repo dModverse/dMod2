@@ -20,7 +20,8 @@ remotes::install_github("dModverse/dMod2")
   changed for users of dMod.
 - [Guide](https://dmodverse.github.io/dMod2/articles/guide-model.md):
   the NFκB project of Oppelt et al. (2018), chapter by chapter, from the
-  setup of the model to fits, profiles and mixed effects.
+  setup of the model to fits, profiles and prediction bands, then mixed
+  effects, sparse deviations, alignment, PEtab and remote computing.
 - [Methods](https://dmodverse.github.io/dMod2/articles/index.md): the
   derivations behind the guide.
 - [Examples](https://dmodverse.github.io/dMod2/articles/index.md):

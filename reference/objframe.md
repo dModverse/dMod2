@@ -1,9 +1,9 @@
 # Objective Frame
 
 An objective frame stores residuals and their derivatives with respect
-to parameters. It is typically created by
-[res](https://dmodverse.github.io/dMod2/reference/res.md) and used
-internally in objective functions.
+to parameters, as
+[`res()`](https://dmodverse.github.io/dMod2/reference/res.md) returns
+them.
 
 ## Usage
 
@@ -21,16 +21,19 @@ objframe(
 
 - mydata:
 
-  data.table produced by
-  [res](https://dmodverse.github.io/dMod2/reference/res.md)
+  Data frame with columns `time`, `name`, `value`, `prediction`,
+  `sigma`, `residual`, `weighted.residual`, `bloq` and `weighted.0`;
+  further columns are dropped.
 
 - deriv:
 
-  numeric matrix of first-order derivatives of residuals (Jacobian)
+  numeric matrix `[n_residuals, p]` of first-order derivatives of the
+  residuals
 
 - deriv.err:
 
-  numeric matrix of first-order derivatives of the error model
+  numeric matrix `[n_residuals, p]` of first-order derivatives of the
+  error model
 
 - deriv2:
 

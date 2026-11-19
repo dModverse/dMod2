@@ -42,6 +42,8 @@ symmetryDetection(
   control = reconstControl(),
   scalingsOnly = FALSE,
   symEngine = c("modular", "symbolic"),
+  mode = c("local", "global"),
+  globalOptions = NULL,
   discrete = FALSE,
   verbose = FALSE
 )
@@ -195,11 +197,29 @@ symmetryDetection(
   `"modular"` (default, finite fields) or `"symbolic"` (sympy, small
   models without `equilibrate` and later events).
 
+- mode:
+
+  `"local"` (default) analyzes local identifiability only. `"global"`
+  analyzes it first, reduces the directions found and then counts the
+  values of the coordinates with the output of a generic one and
+  reconstructs the maps between them, as
+  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
+  (needs msolve, implies `reconstruct = TRUE`). A model the global
+  analysis does not handle gets the reason in
+  `info$discrete$unsupported` and a warning. Needs symident 0.15.0.
+
+- globalOptions:
+
+  A list of arguments of the global analysis: `order`, `points`,
+  `timeout` and `budget` as in
+  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md).
+
 - discrete:
 
   `FALSE` (default), `TRUE` or a list of arguments of
   [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md):
-  also search the discrete symmetries.
+  also search the discrete symmetries; `mode = "global"` does the same
+  through the detection.
 
 - verbose:
 
@@ -223,14 +243,18 @@ An object of class `symmetrydetection`:
   the directions, each a generator \\X = \sum_i \xi_i
   \partial\_{\theta_i}\\: `generator` (\\\xi\\ by coordinate), `weights`
   (a scaling's integer weights), `type` (`"scaling"` or `"general"`),
-  `degree`, `support`, `explicit`, `level`, `stateComponents`, `reason`,
-  `route`, `display`, `completeGenerator` and `factor`. `level` is
-  `"exact"` for a direction proven over the rationals, `"verified"` for
-  one checked at random points modulo a large prime with an error bound,
-  `"checked"` for one checked without an error bound (an unproven Lie or
-  gap order, or a model outside the scope of the bound) and `"open"`
-  without closed form; `stateComponents` holds, for an exact direction,
-  the components on the states of the field that proves it.
+  `kind` (the orbit geometry: `"scaling"`, \\\xi_i = w_i \theta_i\\, a
+  line in logarithmic coordinates; `"translation"`, constant \\\xi\\, a
+  line in linear coordinates; `"curved"`, all others; `NULL` without
+  closed form), `degree`, `support`, `explicit`, `level`,
+  `stateComponents`, `reason`, `route`, `display`, `completeGenerator`
+  and `factor`. `level` is `"exact"` for a direction proven over the
+  rationals, `"verified"` for one checked at random points modulo a
+  large prime with an error bound, `"checked"` for one checked without
+  an error bound (an unproven Lie or gap order, or a model outside the
+  scope of the bound) and `"open"` without closed form;
+  `stateComponents` holds, for an exact direction, the components on the
+  states of the field that proves it.
 
 - `info`:
 

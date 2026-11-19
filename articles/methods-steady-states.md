@@ -11,9 +11,9 @@ models](https://dmodverse.github.io/dMod2/articles/guide-model.html#steady-state
 
 With compartment volumes \\V_i\\, stoichiometric coefficients
 \\S\_{ri}\\ of species \\i\\ in reaction \\r\\, and rates \\v_r\\ in a
-frame of volume \\V\_{f(r)}\\, the right-hand side is
+frame of volume \\V\_{c(r)}\\, the right-hand side is
 
-\\\dot x_i = f_i(x, p) = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{f(r)}\\
+\\\dot x_i = f_i(x, p) = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{c(r)}\\
 v_r(x, p). \tag{1}\\
 
 Every \\w\\ with \\S w = 0\\ conserves the amount
@@ -80,50 +80,63 @@ Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#
 
 A root is a resting state only if every eigenvalue \\\lambda_k\\ of \\J
 = \partial f / \partial x\\ on the conservation manifold has negative
-real part. At a root whose leading eigenvalue has real part above
-`stabilityTol`, or above \\10^{-8}\\ of the largest eigenvalue modulus
-where that is larger, the solver continues along the leading eigenvector
+real part. At a root whose leading eigenvalue has real part above the
+larger of \\10^{-8} s\\, \\s\\ the largest eigenvalue modulus on the
+conservation manifold and \\10^{-8} s\\ the precision of the
+eigenvalues, and the stability tolerance \\\lambda\_{tol}\\,
+`stabilityTol` with default 0, the solver continues along the leading
+eigenvector
 ([cppDE](https://dmodverse.github.io/cppDE/articles/methods-ptc.html#stability)).
 Where neither direction leads to a stable root, the next start is tried;
 the evaluation fails only when no start reaches one.
 `controlsPTC = list(stability = FALSE)` returns the unstable root.
 
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
-adds a term that rises towards the stability boundary:
+adds a term that rises on a ramp below \\\lambda\_{tol}\\, the sum of
+squares of the residuals
 
-\\\kappa \sum_k r_k^2, \qquad r_k = \frac{\max\bigl(0,\\
-\mathrm{Re}\\\lambda_k - \lambda_0\bigr)}{\lambda\_{tol} - \lambda_0},
-\tag{5}\\
+\\\rho_k = \sqrt{\kappa} \begin{cases} r_k^{3/2}, & r_k \le 1, \\ 1 +
+\tfrac{3}{2}(r_k - 1), & r_k \> 1, \end{cases} \qquad r_k =
+\frac{\max\bigl(0,\\ \mathrm{Re}\\\lambda_k -
+\lambda_0\bigr)}{\lambda\_{tol} - \lambda_0}, \qquad \lambda_0 =
+\lambda\_{tol} - m s, \tag{5}\\
 
-with weight \\\kappa\\, \\\lambda\_{tol}\\ the `stabilityTol` of the
-[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) and
-the onset \\\lambda_0\\ given as `onset`, or \\\lambda_0 =
-\lambda\_{tol} - 1/t_D\\ from `duration` \\= t_D\\, the time the data
-span. The term is zero while every perturbation decays faster than the
-experiment lasts. Steady states that agree in all inputs count once. For
-a simple eigenvalue with right and left eigenvectors \\u_k\\, \\v_k\\ of
-\\J\\, \\v_k^{\mathsf H} u_k \ne 0\\, and (4),
+with weight \\\kappa\\ and the relative width \\m\\ of the ramp,
+`stabilityMargin` with default \\10^{-6}\\. The term is zero on a root
+whose leading real part lies more than \\m s\\ below \\\lambda\_{tol}\\,
+however slowly a perturbation decays there; it does not depend on the
+time the data span. Each eigenvalue whose real part reaches
+\\\lambda\_{tol}\\ adds \\\kappa\\, and beyond, the term grows
+quadratically. Steady states that agree in the parameters, resting
+states and start values they read count once. For a simple eigenvalue
+with right and left eigenvectors \\u_k\\, \\v_k\\ of \\J\\,
+\\v_k^{\mathsf H} u_k \ne 0\\, and (4),
 
 \\ \frac{\mathrm{d}\lambda_k}{\mathrm{d}p} = \frac{v_k^{\mathsf H}
 \bigl(\partial_p J + \partial_x J\\ \mathrm{d}x^\*/\mathrm{d}p\bigr)
 u_k} {v_k^{\mathsf H} u_k}, \tag{6} \\
 
-which needs `Pimpl(deriv2 = TRUE)`. The term is a model assumption, not
-data: profiles with `stop = "data"` and likelihood ratios leave it out.
+and \\s = \|\lambda_m\|\\, \\\lambda_m\\ the eigenvalue of largest
+modulus, has the derivative \\\mathrm{Re}(\bar\lambda_m\\
+\mathrm{d}\lambda_m / \mathrm{d}p) / s\\ by (6), continuous except where
+the eigenvalue of largest modulus changes. Both need
+`Pimpl(deriv2 = TRUE)`. The term is a model assumption, not data:
+profiles with `stop = "data"` and likelihood ratios leave it out.
 
-At the onset, (5) and the gradient are continuous and the curvature
-jumps: below, term and Hessian are zero; above, the Gauss-Newton Hessian
-is
+The Gauss-Newton Hessian of (5),
 
-\\\frac{2 \kappa}{(\lambda\_{tol} - \lambda_0)^2} \sum\_{k \\:\\
-\mathrm{Re}\\\lambda_k \> \lambda_0}
-\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}p}
-\frac{\mathrm{d}\\\mathrm{Re}\\\lambda_k}{\mathrm{d}p}^{\mathsf T} ,
+\\2 \sum\_{k \\:\\ \mathrm{Re}\\\lambda_k \> \lambda_0} \frac{\mathrm{d}
+\rho_k}{\mathrm{d}p} \frac{\mathrm{d} \rho_k}{\mathrm{d}p}^{\mathsf T},
+\qquad \frac{\mathrm{d} \rho_k}{\mathrm{d}p} = \frac{3}{2}
+\sqrt{\kappa}\\ \min(r_k, 1)^{1/2}\\ \frac{\mathrm{d} r_k}{\mathrm{d}p},
 \tag{7}\\
 
-nonzero as \\\mathrm{Re}\\\lambda_k \to \lambda_0\\. A profile therefore
-takes small steps across the onset ([Profile
-likelihood](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#computing-a-profile)).
+vanishes at the onset with the term and the gradient and is continuous
+at \\r_k = 1\\. The ramp is \\m s\\ wide, so \\r_k\\ is as accurate as
+the root relative to that width. The eigenvalues above the onset, their
+conditions, half-lives and the states with the largest entries of the
+right eigenvectors are the attribute `"eigenvalues"` of a call of the
+term.
 
 ## Analytical steady-state constraints
 

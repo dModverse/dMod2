@@ -59,8 +59,8 @@ exportPEtab(
 
   A `parfn` produced by
   [`P()`](https://dmodverse.github.io/dMod2/reference/P.md). Required:
-  the symbolic trafo is the source of truth for parameters.tsv,
-  conditions.tsv, and `<initialAssignment>` formulas.
+  parameters.tsv, conditions.tsv and the `<initialAssignment>` formulas
+  are read off the symbolic trafo.
 
 - pouter:
 
@@ -140,8 +140,7 @@ exportPEtab(
 
 - overwrite:
 
-  Logical, whether existing files in `dir` are overwritten. Default
-  `FALSE`.
+  Logical. If `FALSE` (default), existing files in `dir` are an error.
 
 ## Value
 

@@ -114,14 +114,12 @@ Xs(
     Default `FALSE`. The value and the `chi2` attribute of the reverse
     objective of
     [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
-    then include the first-order change from the computed trajectory to
-    the one the sweep differentiates, so value and gradient belong to
-    one function, which need not be closer to the exact value; a call
-    with `deriv = FALSE` sweeps as well. The change is the attribute
-    `correction` of the result. Forward values, the sweeps of
+    then include the first-order change to the trajectory the sweep
+    differentiates, returned as attribute `correction`, and a call with
+    `deriv = FALSE` sweeps as well. Forward values, the sweeps of
     [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) and
-    [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md)
-    (forward over reverse) and multiple shooting run without refine;
+    [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) and
+    multiple shooting run without refine;
     [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) refuses
     a prediction with it.
 
@@ -302,8 +300,8 @@ returns this Hessian:
 sweep as a sparse `Matrix`, assembled from the blocks of the conditions;
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
 factorizes it where the argument `sparse` takes the sparse path, and
-[`vcov()`](https://rdrr.io/r/stats/vcov.html) solves it for the columns
-of `which`.
+[`vcov()`](https://dmodverse.github.io/dMod2/reference/vcov.objlist.md)
+solves it for the columns of `which`.
 
 With `deriv = FALSE` it returns the value alone.
 

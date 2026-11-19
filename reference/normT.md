@@ -78,8 +78,8 @@ An objective function of class `objfn`, as
 returns it, usable in
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html) and
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+and [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
 
 ## See also
 

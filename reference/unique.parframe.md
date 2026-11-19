@@ -29,8 +29,8 @@ unique(x, incomparables = FALSE, tol = 1, ...)
 - ...:
 
   Not used. Select rows first with
-  [`subset()`](https://rdrr.io/r/base/subset.html), as in
-  `unique(subset(x, converged))`.
+  [`subset()`](https://dmodverse.github.io/dMod2/reference/parframe.md),
+  as in `unique(subset(x, converged))`.
 
 ## Value
 

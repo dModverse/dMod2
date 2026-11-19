@@ -57,9 +57,9 @@ generates C++ code for ODE and sensitivities,
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) makes the
 prediction function,
 [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) the
-observables: cells and canaliculi are measured together, both with scale
-`s`. Expressions follow the [expression language of
-cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
+observables: cells and canaliculi are measured together, both
+observables with scale `s`. Expressions follow the [expression language
+of cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
 including switches such as `piecewise()`.
 
 ``` r
@@ -191,10 +191,10 @@ plot((g * x * p)(seq(0, 50, length.out = 200), best, deriv = FALSE), data)
 
 ## Profile likelihood
 
-[`profile()`](https://rdrr.io/r/stats/profile.html) moves each parameter
-away from the optimum, the others following the path on which they stay
-optimal. A confidence interval ends where the profile crosses the
-threshold.
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+moves each parameter away from the optimum, the others following the
+path on which they stay optimal. A confidence interval ends where the
+profile crosses the threshold.
 
 ``` r
 
@@ -242,7 +242,7 @@ one side only, a practical non-identifiability.
 | `parfn` | parameter transformation, outer to inner: [`P()`](https://dmodverse.github.io/dMod2/reference/P.md), [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md), [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) |
 | `prdfn` | prediction function, parameters to trajectories: [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md), [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) |
 | `obsfn` | observation function, trajectories to observables or errors: [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) |
-| `objfn` | objective, \\-2 \log L\\ or with a prior \\-2 \log\\ of the posterior: [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md) |
+| `objfn` | objective function, \\-2 \log L\\ or with a prior \\-2 \log\\ of the posterior: [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md) |
 
 `+` and
 [`branch()`](https://dmodverse.github.io/dMod2/reference/define.md) join

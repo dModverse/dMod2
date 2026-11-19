@@ -37,5 +37,5 @@ detectFreeCores()
 #> attr(,"ncores")
 #> [1] 4
 #> attr(,"used")
-#> [1] 1.3
+#> [1] 1.42
 ```

@@ -167,7 +167,7 @@ Symmetries of ODE models by the Python package symident.
 - [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
   : Structural Non-Identifiabilities of an ODE Model
 - [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
-  : Remove Detected Symmetries by Reparametrization
+  : Remove Detected Symmetries by Reparameterization
 - [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
   : Discrete Symmetries
 - [`reconstControl()`](https://dmodverse.github.io/dMod2/reference/reconstControl.md)

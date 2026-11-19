@@ -45,10 +45,10 @@ simulation, so the gaps close only at convergence.
 
 The trust region bounds parameters and nodes together,
 
-\\\lVert D\\ \Delta\theta \rVert^2 + \lVert V (\alpha z + S\\
+\\\lVert D^{-1} \Delta\theta \rVert^2 + \lVert V (\alpha z + S\\
 \Delta\theta) \rVert^2 \le r^2 , \tag{3}\\
 
-with \\D = \operatorname{diag}(\lvert v \rvert^{-1/2})\\ for the
+with \\D = \operatorname{diag}(\lvert v \rvert^{1/2})\\ for the
 distances \\v\\ to the bounds of [Bound
 constraints](https://dmodverse.github.io/dMod2/articles/methods-trust.html#bound-constraints),
 the identity without bounds, since a region on \\\theta\\ alone leaves
@@ -65,8 +65,8 @@ enter with value, gradient and Gauss-Newton Hessian.
 
 | control | effect |
 |----|----|
-| `stepControl$acceptance = "filter"` (default) | filter of Fletcher and Leyffer [\[3\]](#ref-fletcher2002nonlinear) on the data term \\f\\ and the scaled gap size \\h = \lVert V c \rVert\\ |
-| `stepControl$acceptance = "merit"` | \\\ell_2\\ exact penalty \\f + \mu h\\ |
+| `stepControl$acceptance = "filter"` (default) | filter of Fletcher and Leyffer [\[3\]](#ref-fletcher2002nonlinear) on the objective function \\\mathcal{J}(\theta)\\, \\-2 \log L\\ or \\-2 \log\\ of the posterior, and the scaled gap size \\h = \lVert V c \rVert\\ |
+| `stepControl$acceptance = "merit"` | \\\ell_2\\ exact penalty \\\mathcal{J} + \mu h\\ |
 | `stepControl$soc` (on) | one second-order correction of a rejected step whose gaps did not close as predicted |
 | `tolControl$ctol` | `converged = TRUE` only for \\h\\ below it; stagnation, `rmin`, ten failed solves in a row, `iterlim`, and under `acceptance = "natural"` a zero full step or one failed solve end the run with `converged = FALSE` above it |
 | `hessianMethod = "gn"` | condensed Gauss-Newton blocks |
@@ -81,7 +81,7 @@ From a distant start the condensed step can be forced through a regime
 the data never show, such as a spike threshold. `stepControl$anneal`
 (on) therefore first minimizes
 
-\\f + w \lVert V c \rVert^2 \tag{4}\\
+\\\mathcal{J} + w \lVert V c \rVert^2 \tag{4}\\
 
 over parameters and nodes on the sparse Gauss-Newton matrix, \\w\\
 rising tenfold per stage from one, then hands over to the exact method:
@@ -129,10 +129,11 @@ variable forget their start and follow the measured trajectory.
 rate lies more than eight times
 [`mad()`](https://rdrr.io/r/stats/mad.html), the median absolute
 deviation scaled to a normal standard deviation, off the median rate,
-and fills the rest as `"auto"`. Each change then starts in the segment
-where the data have it, and a wrong timing shows as a gap before the
-next node. Numeric node times, for all conditions or as a list by
-condition, fix the layout.
+keeps the even nodes of ten segments where no change is near, and does
+not cut segments during the fit. Without a fast change in the data it is
+`"auto"`. Each change then starts in the segment where the data have it,
+and a wrong timing shows as a gap before the next node. Numeric node
+times, for all conditions or as a list by condition, fix the layout.
 
 ## Further step controls
 

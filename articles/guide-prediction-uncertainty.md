@@ -87,16 +87,16 @@ saved <- readRDS("results/prediction.rds")
 band <- saved$band
 band[band$time %in% c(0, 10, 30, 55, 60, 70, 85, 90, 120, 240, 360), ]
 #>    time        value        lower        upper
-#> 3    10 2.020110e-06 2.709126e-07 2.995447e-06
-#> 7    30 4.396783e-05 3.660774e-05 5.001520e-05
-#> 12   55 6.835130e-04 4.411350e-04 1.180329e-03
-#> 16   60 2.176148e-02 2.693198e-03 4.596473e-02
-#> 18   70 9.074645e-02 6.448150e-02 1.170152e-01
-#> 21   85 3.227417e-02 4.491027e-03 6.096757e-02
-#> 26   90 4.750388e-04 9.344731e-05 1.188119e-02
-#> 32  120 3.424165e-05 1.781479e-05 5.058673e-05
-#> 38  240 1.082625e-04 8.055950e-05 1.395448e-04
-#> 44  360 8.493611e-05 5.922032e-05 1.124327e-04
+#> 3    10 2.020029e-06 2.721436e-07 2.994902e-06
+#> 7    30 4.396882e-05 3.661270e-05 5.001127e-05
+#> 12   55 6.834805e-04 4.412855e-04 1.179841e-03
+#> 16   60 2.175955e-02 2.696508e-03 4.596137e-02
+#> 18   70 9.074760e-02 6.450871e-02 1.169971e-01
+#> 21   85 3.227699e-02 4.502765e-03 6.094911e-02
+#> 26   90 4.751146e-04 9.354330e-05 1.186641e-02
+#> 32  120 3.424293e-05 1.782673e-05 5.057483e-05
+#> 38  240 1.082623e-04 8.057790e-05 1.395210e-04
+#> 44  360 8.493755e-05 5.923270e-05 1.124127e-04
 ```
 
 Prediction profiles at three times; all times are in [All prediction
@@ -162,7 +162,7 @@ plotProfile(relative, mode == "data") +
 
 Reference:
 [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html),
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`confint()`](https://rdrr.io/r/stats/confint.html),
 [`plotProfile()`](https://dmodverse.github.io/dMod2/reference/plotProfile.md)
 

@@ -20,6 +20,7 @@ importPEtab(
   options = NULL,
   optionsSens = NULL,
   sparse = NULL,
+  stability = TRUE,
   outdir = .dmodOutdir()
 )
 ```
@@ -77,6 +78,14 @@ importPEtab(
   `NULL` (default) lets the cppDE or Sundials backend choose a sparse
   (KLU) or dense linear solver; `TRUE` or `FALSE` sets it.
 
+- stability:
+
+  If `TRUE` (default), a problem with preequilibration gets a
+  [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
+  term per steady state in `obj`, zero on a stable one away from the
+  stability boundary; the steady states are then built with second
+  derivatives. `FALSE` leaves the term out.
+
 - outdir:
 
   Directory of the generated sources and shared objects, one source per
@@ -87,13 +96,15 @@ importPEtab(
 
 A list of class `"petabproblem"` with components `dataList`,
 `reactions`, `odemodel`, `g`, `x`, `p`, `e`, `prd` (the composite
-`g * x * p`), `obj`, `bestfit`, `parlower` and `parupper`. With several
-models, `reactions`, `odemodel`, `g`, `x` and `p` are lists by model id.
-`obj` has the PEtab fixed parameters set; `bestfit` is the PEtab
-`nominalValue` of each estimated parameter on the PEtab
-`parameterScale`, with the scales in the attribute `"petab_scales"`, and
-`parlower` and `parupper` are the bounds on that scale. The attribute
-`"petab_meta"` of the list holds what
+`g * x * p`), `obj`, `stability`, `bestfit`, `parlower` and `parupper`.
+`stability` is the
+[`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
+term in `obj`, or `NULL`. With several models, `reactions`, `odemodel`,
+`g`, `x` and `p` are lists by model id. `obj` has the PEtab fixed
+parameters set; `bestfit` is the PEtab `nominalValue` of each estimated
+parameter on the PEtab `parameterScale`, with the scales in the
+attribute `"petab_scales"`, and `parlower` and `parupper` are the bounds
+on that scale. The attribute `"petab_meta"` of the list holds what
 [`exportPEtabObject()`](https://dmodverse.github.io/dMod2/reference/exportPEtabObject.md)
 needs, among it the fixed parameters as `fixed`, on the linear scale.
 

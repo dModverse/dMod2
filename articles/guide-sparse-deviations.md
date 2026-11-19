@@ -96,9 +96,10 @@ deviations](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.h
 The reduced model of [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md)
 with second derivatives for
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md). Its resting
-state (all NFκB bound to IκBα, all IKK inactive) holds for all rate
-constants, so a compound changes the dynamics only from TNFα on:
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md). The resting
+state of the reduced model (all NFκB bound to IκBα, all IKK inactive)
+holds for all rate constants, so a compound changes the dynamics only
+from TNFα on:
 
 ``` r
 
@@ -211,10 +212,10 @@ saveRDS(saved, "results/compounds.rds")
 fit <- readRDS("results/compounds.rds")
 c(value = fit$value, converged = fit$converged, iterations = fit$iterations)
 #>      value  converged iterations 
-#>  -498.2197     1.0000    54.0000
+#>  -498.2213     0.0000    23.0000
 fit$argument[c("prob_compound", "tau_compound")]
 #> prob_compound  tau_compound 
-#>     0.5693377     0.8098347
+#>     0.5702302     0.8094011
 fit$coupling
 #> NULL
 ```
@@ -240,7 +241,7 @@ plotValues(fit, rank(value, ties.method = "first") <= 100)
 
 ![](guide-sparse-deviations_files/figure-html/unnamed-chunk-6-1.png)
 
-Of the 200 starts, 54 end within 1 of the best -2 log L, 20 did not
+Of the 200 starts, 67 end within 1 of the best -2 log L, 69 did not
 converge and 0 failed.
 
 ## Changes by compound
@@ -254,19 +255,19 @@ changes <- changes[order(changes$group, changes$p0), ]
 rownames(changes) <- NULL
 changes
 #>    group                eta       mode         se           p0
-#> 1    AMD     act_Ikk_by_TNF -0.6236264 0.19984152 5.547170e-03
-#> 2   APAP  prod_mIkb_by_nNfk -0.6792685 0.15466351 1.393103e-04
-#> 3    DCF  prod_mIkb_by_nNfk -0.7921479 0.05803567 0.000000e+00
-#> 4    DCF        degrad_mIkb -1.6578420 0.08888813 0.000000e+00
-#> 5    DCF       trigger_iIkk  0.9114912 0.18657175 8.075395e-07
-#> 6    DCF           act_pIkk  0.5766576 0.13598920 1.991485e-04
-#> 7    DCF     act_Ikb_by_Ikk -0.9749201 0.27060278 1.087037e-03
-#> 8    DCF     shuttle_RnaA20 -0.6644005 0.14014366 1.617996e-02
-#> 9    DCF     act_Ikk_by_TNF -0.5580331 0.16521016 2.794079e-02
-#> 10  FIAU eta_split_pNfkpIkb -0.9531715 0.14002365 3.392044e-08
-#> 11  FIAU       eta_int_pNfk -0.7848230 0.16207891 1.383356e-05
-#> 12  FIAU           act_pIkk -2.0243687 0.42216213 1.614711e-05
-#> 13  FIAU     act_Ikk_by_TNF  0.7828162 0.28374356 4.366442e-03
+#> 1    AMD     act_Ikk_by_TNF -0.6233761 0.19988090 5.562790e-03
+#> 2   APAP  prod_mIkb_by_nNfk -0.6792646 0.15467503 1.389098e-04
+#> 3    DCF  prod_mIkb_by_nNfk -0.7919219 0.05806600 0.000000e+00
+#> 4    DCF        degrad_mIkb -1.6574043 0.08891258 0.000000e+00
+#> 5    DCF       trigger_iIkk  0.9105895 0.18670109 8.294768e-07
+#> 6    DCF           act_pIkk  0.5764056 0.13601052 2.013579e-04
+#> 7    DCF     act_Ikb_by_Ikk -0.9741569 0.27050695 1.084077e-03
+#> 8    DCF     shuttle_RnaA20 -0.6663163 0.14076848 1.621477e-02
+#> 9    DCF     act_Ikk_by_TNF -0.5578158 0.16541868 2.812831e-02
+#> 10  FIAU eta_split_pNfkpIkb -0.9523072 0.14002669 3.485343e-08
+#> 11  FIAU       eta_int_pNfk -0.7847355 0.16210083 1.385864e-05
+#> 12  FIAU           act_pIkk -2.0239328 0.42188882 1.591529e-05
+#> 13  FIAU     act_Ikk_by_TNF  0.7825836 0.28370356 4.345786e-03
 ```
 
 DCF changes 7 of the 20 rate constants, AMD 1, APAP 1, FIAU 4 and XIM 0.
@@ -313,7 +314,7 @@ colored tile without circle has \\p_0\\ between 0.05 and 0.5.
 ## Data and fit by compound
 
 Prediction per compound at the estimated fixed effects and changes
-against the compound data, each point with its measured standard
+against the compound data, each point with the measured standard
 deviation, which the blots have in place of an error model; gray: the
 untreated, stimulated control of the same blots at the fixed effects
 alone. DCF blots span six hours, the others 50 minutes:
@@ -404,11 +405,12 @@ region](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#
 | `maxOuter` | `200` | joint trust-region iterations, all runs |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) |
 
-Other entries are an error. The compound fit uses the `trustControl`
-tolerances of [Setting up
-models](https://dmodverse.github.io/dMod2/articles/guide-model.md),
-above the solver error in value and gradient. A run stopping short of
-`mtol` restarts while runs lower \\-2 \log L\\ by more than `mtol`.
+Other entries are an error. The compound fit passes the `tolerances` of
+[Setting up
+models](https://dmodverse.github.io/dMod2/articles/guide-model.md) in
+`trustControl`, above the solver error in value and gradient. A run
+stopping short of `mtol` restarts while runs lower \\-2 \log L\\ by more
+than `mtol`.
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) perturbs
 concentrations and slab standard deviations on log scale, slab
 probabilities on logit scale.

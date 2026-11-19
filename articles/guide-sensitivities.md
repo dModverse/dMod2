@@ -149,7 +149,7 @@ pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = 
 pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, deriv2 = TRUE, derivMode = dm)
 compile(gR, xR, pSSR, pR, eR, output = "oppelt_rev", cores = getOption("dMod2.cores"))
 objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) +
-  constraintStability(pSSR, pR, duration = max(as.data.frame(data)$time))
+  constraintStability(pSSR, pR)
 ```
 
 ``` r
@@ -175,7 +175,7 @@ max(abs(gradients$forward - gradients$reverse)) / max(abs(gradients$forward))
 ``` r
 
 max(abs(s$gradients$forward - s$gradients$reverse)) / max(abs(s$gradients$forward))
-#> [1] 0.0002236365
+#> [1] 0.0001523368
 ```
 
 within the solver tolerances, since the sweep without `refine` runs on
@@ -198,11 +198,11 @@ timing
 
 s$timing
 #>           value         forward         reverse forward-reverse 
-#>           0.004           0.167           0.011           0.724
+#>           0.007           0.126           0.019           0.873
 ```
 
 A reverse gradient costs a few values, a forward gradient one solve with
-a tangent per parameter, forward over reverse about 4.3 forward
+a tangent per parameter, forward over reverse about 6.9 forward
 gradients. Forward over forward, measured once:
 
 ``` r
@@ -220,11 +220,11 @@ c(seconds = forwardForward, memory)
 
 c(seconds = s$forwardForward, s$memory)
 #>        seconds         before forwardForward 
-#>     14.7570000      0.6036758      0.7602196
+#>     13.6990000      0.7658653      0.9201126
 ```
 
-It takes 20 times as long as forward over reverse and raises the peak
-memory of the process from 0.6 to 0.8 GB; for this model it is a check,
+It takes 16 times as long as forward over reverse and raises the peak
+memory of the process from 0.8 to 0.9 GB; for this model it is a check,
 not a method. Both Hessians agree up to the solver error:
 
 ``` r
@@ -240,7 +240,7 @@ hessians <- data.frame(exact = sort(eigen(exact, symmetric = TRUE, only.values =
 ``` r
 
 max(abs(s$forwardForwardHessian[rownames(s$exact), colnames(s$exact)] - s$exact)) / max(abs(s$exact))
-#> [1] 6.499575e-10
+#> [1] 1.140178e-09
 ```
 
 Eigenvalues of exact and Gauss-Newton Hessian at the best fit:

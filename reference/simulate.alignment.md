@@ -20,11 +20,12 @@ simulate(object, nsim = 1, seed = NULL, ...)
 
 - nsim:
 
-  Number of data sets.
+  Number of data sets. Default 1.
 
 - seed:
 
-  Seed of the random number generator.
+  Seed of the random number generator. Default `NULL`, the current
+  state.
 
 - ...:
 

@@ -11,11 +11,11 @@ tests the core model of the publication, and fits a reduced model, by
 
 The profile likelihood of a parameter is the data term along the path on
 which the other parameters minimize an objective with that parameter
-fixed. Here that objective is the one of the multistart with its prior
+fixed. Here that objective is the one of the multistart with the prior
 replaced by a prior of standard deviation 20 on the log scale at the
 best fit, so that the data term, not the prior, shapes the profiles; the
 optimum of that objective is the lowest point of every profile. Values
-of the data term within the 95 % quantile of \\\chi^2_1\\, 3.84, of its
+of the data term within the 95 % quantile of \\\chi^2_1\\, 3.84, of the
 minimum form the 95 % confidence interval ([Methods \> Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/methods-profiles.md)).
 `stepControl = list(stop = "data")` ends a profile there,
@@ -57,22 +57,32 @@ refit <- trust(obj, as.parvec(readRDS("results/fits.rds")), fixed = gauge, rinit
                iterlim = 1000, tolControl = tolerances)
 ```
 
-and fits the objective of the profiles from there:
+and fits the objective of the profiles from there, the best of 20 fits
+from starts about the refit, since a single fit can stop short of the
+floor of a flat valley:
 
 ``` r
 
 # the profiles replace the prior of model.R by one of standard deviation 20 at the refit, so that
 # the data term shapes them; they start at the optimum of that objective
 objProfile <- normL2(data, prd, e) + constraintL2(refit$argument, sigma = 20) + stability
-fitProfile <- trust(objProfile, refit$argument, fixed = gauge, rinit = 0.1, rmax = 10,
-                    iterlim = 1000, tolControl = tolerances)
+# the best of 20 fits from `center` and from starts about it, sd 0.1, which reaches the floor of
+# a flat valley where a single fit stops on it
+bestFit <- function(center) {
+  fits <- mstrust(objProfile, center, fixed = gauge, sd = 0.1, fits = 20, startFromCenter = TRUE,
+                  rinit = 0.1, rmax = 10, iterlim = 1000, tolControl = tolerances,
+                  cores = getOption("dMod2.cores"))
+  values <- vapply(fits, function(f) if (is.numeric(f$value)) f$value else Inf, 0)
+  fits[[which.min(values)]]
+}
+fitProfile <- bestFit(refit$argument)
 best <- fitProfile$argument
 ```
 
 Each side runs until the data term has risen by the threshold or the
 parameter has moved by 7 on the log scale; a profile below the fit
-restarts the fit from the lowest point. `helix.R` runs one parameter per
-cluster task.
+restarts the 20 fits about its lowest point. `helix.R` runs one
+parameter per cluster task.
 
 ``` r
 
@@ -87,8 +97,7 @@ repeat {
                       optControl = list(iterlim = 100, tolControl = tolerances),
                       cores = getOption("dMod2.cores"))
   if (min(profiles$value) > fitProfile$value - 1e-2) break
-  fitProfile <- trust(objProfile, as.parvec(profiles)[names(best)], fixed = gauge, rinit = 0.1,
-                      rmax = 10, iterlim = 1000, tolControl = tolerances)
+  fitProfile <- bestFit(as.parvec(profiles)[names(best)])
   best <- fitProfile$argument
 }
 ```
@@ -108,10 +117,10 @@ The data term at the refit and at the optimum of the profiles:
 dataTerm <- function(p) attr(obj(p, fixed = gauge), "data")
 c(refit = dataTerm(refit$argument), profiles = dataTerm(fitProfile$argument))
 #>     refit  profiles 
-#> -511.1623 -516.6201
+#> -511.1645 -516.6900
 ```
 
-Without the prior of `model.R` the data term falls by 5.46.
+Without the prior of `model.R` the data term falls by 5.53.
 
 No profile lies more than 0.01 below the fit, so the profiles start at
 the optimum:
@@ -119,8 +128,8 @@ the optimum:
 ``` r
 
 c(fit = fitProfile$value, lowest = min(profiles$value))
-#>      fit   lowest 
-#> -516.381 -516.381
+#>       fit    lowest 
+#> -516.4319 -516.4319
 ```
 
 The intervals and their shapes:
@@ -134,49 +143,45 @@ intervals$shape <- with(intervals, ifelse(is.finite(lower) & is.finite(upper), "
 table(intervals$shape)
 #> 
 #>             finite         open above         open below open on both sides 
-#>                 41                  7                 13                  2
+#>                 43                  5                 13                  2
 rownames(intervals) <- NULL
 intervals[intervals$shape != "finite", c("name", "value", "lower", "upper", "shape")]
 #>                          name       value      lower       upper
-#> 1                act_Ikb_Base  -5.8332017       -Inf  -5.2722343
-#> 3                act_Ikk_Base -12.0110561       -Inf  -7.7725467
-#> 4              act_Ikk_by_TNF  -2.2822540 -3.0018130         Inf
-#> 5                act_Nfk_Base -10.3621412       -Inf  -5.6671276
-#> 11                 deact_TNFR  -5.8862079       -Inf  -1.2760000
-#> 13                 degrad_Ikb   0.6304596 -0.2332254         Inf
-#> 16 eta_act_Ikb_Base_c_pNfkIkb   4.9894331  3.7188255         Inf
-#> 17      eta_act_Ikb_c_pNfkIkb   0.9246619       -Inf   2.5525882
-#> 18 eta_act_Nfk_Base_c_NfkpIkb  -0.8123812       -Inf         Inf
-#> 20       eta_form_complex_nuc   6.7243105  0.3740472         Inf
-#> 21                eta_int_Ikb   3.0148611  1.0684955         Inf
-#> 22               eta_int_pNfk   2.9452523  1.2334470         Inf
-#> 23                eta_s_ppIkk  -4.6153017       -Inf  -0.5808329
-#> 25                ext_nNfkIkb   5.6011287  0.1651337         Inf
-#> 27                    inh_Ikk  -0.2313481       -Inf         Inf
-#> 28                    int_Nfk  -4.4140529       -Inf  -2.7359319
-#> 31                   off_IkBa  -7.7087244       -Inf  -3.2226496
-#> 32          off_ipIkBa_ibIkBa  -2.5290309       -Inf  -1.6111918
-#> 36         off_ipNFkB_ibpIkBa  -7.2911418       -Inf  -2.4761357
-#> 39                  off_pIkBa  -7.2816256       -Inf  -2.3774188
-#> 48            s_ipNFkB_ibNFkB  -2.2346193       -Inf  -0.4932869
-#> 60                 tau_A20GFP -15.4019051       -Inf -10.1806273
+#> 1                act_Ikb_Base  -5.7900112       -Inf  -5.2246989
+#> 3                act_Ikk_Base -12.5395315       -Inf  -7.7842208
+#> 4              act_Ikk_by_TNF  -2.2555809 -3.0468834         Inf
+#> 5                act_Nfk_Base -10.8710745       -Inf  -5.6778514
+#> 13                 degrad_Ikb   0.6960236 -0.2405842         Inf
+#> 16 eta_act_Ikb_Base_c_pNfkIkb   4.9711656  3.7276695         Inf
+#> 17      eta_act_Ikb_c_pNfkIkb   0.8949144       -Inf   2.5454680
+#> 18 eta_act_Nfk_Base_c_NfkpIkb  -0.6889309       -Inf         Inf
+#> 21                eta_int_Ikb   2.8959881  1.0643828         Inf
+#> 22               eta_int_pNfk   2.8549780  1.2419877         Inf
+#> 23                eta_s_ppIkk  -4.4380672       -Inf  -0.5073721
+#> 27                    inh_Ikk  -0.3340083       -Inf         Inf
+#> 28                    int_Nfk  -4.3062722       -Inf  -2.7411592
+#> 29                 off_A20GFP  -0.7466689       -Inf  -0.5113851
+#> 31                   off_IkBa  -7.6912246       -Inf  -3.2198518
+#> 32          off_ipIkBa_ibIkBa  -2.5313816       -Inf  -1.6122589
+#> 36         off_ipNFkB_ibpIkBa  -7.2914722       -Inf  -2.4769839
+#> 39                  off_pIkBa  -7.3229987       -Inf  -2.3854180
+#> 48            s_ipNFkB_ibNFkB  -2.2371683       -Inf  -0.4965864
+#> 60                 tau_A20GFP -15.4028563       -Inf -10.1805725
 #>                 shape
 #> 1          open below
 #> 3          open below
 #> 4          open above
 #> 5          open below
-#> 11         open below
 #> 13         open above
 #> 16         open above
 #> 17         open below
 #> 18 open on both sides
-#> 20         open above
 #> 21         open above
 #> 22         open above
 #> 23         open below
-#> 25         open above
 #> 27 open on both sides
 #> 28         open below
+#> 29         open below
 #> 31         open below
 #> 32         open below
 #> 36         open below
@@ -239,7 +244,7 @@ for (par in c("act_Ikb_Base", "int_Nfk"))
 
 [`plotArray()`](https://dmodverse.github.io/dMod2/reference/plotArray.md)
 predicts the model at points along one side of a profile, from the
-optimum to its end, colored by the profiled parameter; `fixed` adds the
+optimum to the end, colored by the profiled parameter; `fixed` adds the
 gauge the profiles held fixed. Within the threshold the measured
 readouts stay within the noise of the data, so the states show what a
 profile leaves open. Along the upper side of `degrad_RnaA20`, which ends
@@ -276,7 +281,7 @@ plotArray("ext_nNfkIkb", profiles, states, minutes, name %in% c("nNfk", "pnNfk",
 
 The publication reduced the full model to a core model of 29 reactions
 [\[2\]](#ref-oppelt2018model), Table S5 with fixed values (Tables S8 and
-S9). Its settings on the log scale:
+S9). The settings on the log scale:
 
 | setting of the core model | parameter of the full model | value |
 |----|----|----|
@@ -309,22 +314,22 @@ settings$core <- core
 settings$inside <- with(settings, core >= lower & core <= upper)
 rownames(settings) <- NULL
 settings
-#>                     name      lower       upper              shape      core
-#> 1           act_Ikk_Base       -Inf  -7.7725467         open below      -Inf
-#> 2                inh_Ikk       -Inf         Inf open on both sides       Inf
-#> 3           act_Ikb_Base       -Inf  -5.2722343         open below      -Inf
-#> 4  eta_act_Ikb_c_pNfkIkb       -Inf   2.5525882         open below  0.000000
-#> 5           act_Nfk_Base       -Inf  -5.6671276         open below      -Inf
-#> 6            eta_s_ppIkk       -Inf  -0.5808329         open below      -Inf
-#> 7     eta_split_pNfkpIkb -0.8384583   1.4120132             finite  0.000000
-#> 8             deact_TNFR       -Inf  -1.2760000         open below -6.907755
-#> 9                int_Nfk       -Inf  -2.7359319         open below -4.605170
-#> 10           deact_pnNfk -1.3246633   0.4145779             finite  6.907755
-#> 11  eta_form_complex_nuc  0.3740472         Inf         open above  5.034834
-#> 12           ext_nNfkIkb  0.1651337         Inf         open above  6.907755
-#> 13              off_IkBa       -Inf  -3.2226496         open below      -Inf
-#> 14     off_ipIkBa_ibIkBa       -Inf  -1.6111918         open below      -Inf
-#> 15            tau_A20GFP       -Inf -10.1806273         open below      -Inf
+#>                     name       lower       upper              shape      core
+#> 1           act_Ikk_Base        -Inf  -7.7842208         open below      -Inf
+#> 2                inh_Ikk        -Inf         Inf open on both sides       Inf
+#> 3           act_Ikb_Base        -Inf  -5.2246989         open below      -Inf
+#> 4  eta_act_Ikb_c_pNfkIkb        -Inf   2.5454680         open below  0.000000
+#> 5           act_Nfk_Base        -Inf  -5.6778514         open below      -Inf
+#> 6            eta_s_ppIkk        -Inf  -0.5073721         open below      -Inf
+#> 7     eta_split_pNfkpIkb  -0.8458371   1.4787138             finite  0.000000
+#> 8             deact_TNFR -13.6207740  -1.2890428             finite -6.907755
+#> 9                int_Nfk        -Inf  -2.7411592         open below -4.605170
+#> 10           deact_pnNfk  -1.3211662   0.4105904             finite  6.907755
+#> 11  eta_form_complex_nuc   0.2587081  11.5774150             finite  4.966895
+#> 12           ext_nNfkIkb   0.1646880   8.5916617             finite  6.907755
+#> 13              off_IkBa        -Inf  -3.2198518         open below      -Inf
+#> 14     off_ipIkBa_ibIkBa        -Inf  -1.6122589         open below      -Inf
+#> 15            tau_A20GFP        -Inf -10.1805725         open below      -Inf
 #>    inside
 #> 1    TRUE
 #> 2    TRUE
@@ -355,19 +360,19 @@ data terms with the full model:
 | two delay steps of the A20 transcript |     4.74 |      22.45 |     27.59 |
 | separate factor `eta_split_pNfkpIkb`  |     3.39 |      23.80 |     26.30 |
 | `deact_TNFR` estimated                |    -0.40 |      27.59 |     26.30 |
-| `int_Nfk` estimated                   |     0.15 |      27.04 |     26.30 |
+| `int_Nfk` estimated                   |     0.15 |      27.05 |     26.30 |
 | `deact_pnNfk` estimated               |     1.21 |      25.98 |     26.30 |
 | `form_complex_nuc` estimated          |     0.00 |      27.19 |     26.30 |
 | `ext_nNfkIkb` estimated               |    -0.08 |      27.27 |     26.30 |
-| `off_IkBa` estimated                  |    -0.46 |      27.64 |     26.30 |
+| `off_IkBa` estimated                  |    -0.45 |      27.65 |     26.30 |
 | `off_ipIkBa_ibIkBa` estimated         |     3.01 |      24.18 |     26.30 |
-| `tau_A20GFP` estimated                |    -1.45 |      28.64 |     26.30 |
+| `tau_A20GFP` estimated                |    -1.45 |      28.65 |     26.30 |
 
 The core model lies 27.19 above the full model, against the threshold
 27.59 for 17 removed parameters, and is accepted. A negative decrease
 means that the prior on the released parameter costs more than the data
 gain. The two delay steps and the separate factor lower the data term
-most; together they lower it by 8.14 at one added parameter, more than
+most; together they lower it by 8.15 at one added parameter, more than
 the threshold 3.84 of one degree of freedom. `reduced.R` takes these two
 deviations from the publication. In that model the scale
 `s_ipNFkB_ibNFkB` of the NFκB blot after NFκB precipitation has a
@@ -529,7 +534,7 @@ ratio <- c(full = dataFull, reduced = dataReduced, difference = dataReduced - da
 saved <- readRDS("results/reduced.rds")
 saved$ratio
 #>       full    reduced difference    removed  threshold 
-#> -511.16226 -492.11360   19.04866   16.00000   26.29623
+#> -511.16447 -492.11862   19.04585   16.00000   26.29623
 ```
 
 With 16 fewer parameters the data term is higher by 19.05, below the
@@ -544,8 +549,15 @@ the optimum of that objective:
 
 # the prior of the profiles of profiles.R, standard deviation 20 at the best fit
 objReducedProfile <- normL2(data, prdReduced, eReduced) + constraintL2(bestReduced, sigma = 20)
-fitReducedProfile <- trust(objReducedProfile, bestReduced, fixed = gaugeReduced, rinit = 0.1,
-                           rmax = 10, iterlim = 1000, tolControl = tolerances)
+# the best of 20 fits from `center` and from starts about it, sd 0.1, as for the full model
+bestReducedFit <- function(center) {
+  fits <- mstrust(objReducedProfile, center, fixed = gaugeReduced, sd = 0.1, fits = 20,
+                  startFromCenter = TRUE, rinit = 0.1, rmax = 10, iterlim = 1000,
+                  tolControl = tolerances, cores = getOption("dMod2.cores"))
+  values <- vapply(fits, function(f) if (is.numeric(f$value)) f$value else Inf, 0)
+  fits[[which.min(values)]]
+}
+fitReducedProfile <- bestReducedFit(bestReduced)
 bestReducedProfile <- fitReducedProfile$argument
 ```
 
@@ -559,9 +571,7 @@ repeat {
                              optControl = list(iterlim = 100, tolControl = tolerances),
                              cores = getOption("dMod2.cores"))
   if (min(profilesReduced$value) > fitReducedProfile$value - 1e-2) break
-  fitReducedProfile <- trust(objReducedProfile, as.parvec(profilesReduced)[names(bestReducedProfile)],
-                             fixed = gaugeReduced, rinit = 0.1, rmax = 10, iterlim = 1000,
-                             tolControl = tolerances)
+  fitReducedProfile <- bestReducedFit(as.parvec(profilesReduced)[names(bestReducedProfile)])
   bestReducedProfile <- fitReducedProfile$argument
 }
 ```
@@ -578,8 +588,8 @@ table(intervalsReduced$shape)
 #>     finite open above 
 #>         46          1
 intervalsReduced[intervalsReduced$shape != "finite", c("name", "value", "lower", "upper", "shape")]
-#>            name    value      lower upper      shape
-#> 16 form_complex 1.640366 0.03697376   Inf open above
+#>            name    value     lower upper      shape
+#> 16 form_complex 1.642231 0.0371494   Inf open above
 ```
 
 All parameters are identifiable except `form_complex`, bounded below at
@@ -592,27 +602,27 @@ inside the interval. The rate constants:
 
 rates <- setdiff(intervalsReduced$name, grep("^(s|off|sigma|tau)_", intervalsReduced$name, value = TRUE))
 intervalsReduced[intervalsReduced$name %in% rates, c("name", "value", "lower", "upper")]
-#>                     name      value       lower       upper
-#> 1         act_Ikb_by_Ikk -0.5786769 -1.32277502  0.04888701
-#> 2        act_Ikb_complex -0.4446753 -1.52655348  0.73659980
-#> 3         act_Ikk_by_TNF -2.4052865 -2.89632767 -1.88812963
-#> 4         act_Nfk_by_Ikk -0.3113806 -1.07409360  0.34832462
-#> 5               act_pIkk -2.6424929 -2.87070137 -2.41230716
-#> 6              build_A20 -6.6920132 -7.73025435 -3.80704985
-#> 7            deact_ppIkk -2.6563401 -3.12809508 -1.92040146
-#> 8             degrad_A20 -5.6818628 -6.98063651 -0.94324630
-#> 9             degrad_Ikb -0.3416333 -0.73674810  0.75322690
-#> 10           degrad_mIkb -3.3668352 -3.60828348 -3.10788412
-#> 11         degrad_RnaA20 -3.2167915 -6.98100469 -0.69255152
-#> 12 eta_act_Nfk_c_NfkpIkb -0.8339450 -1.45858344 -0.05026128
-#> 13           eta_int_Ikb  2.8945636  2.63874246  3.23312850
-#> 14          eta_int_pNfk  2.9033062  2.60405264  3.30733205
-#> 15    eta_split_pNfkpIkb -0.6480638 -1.03039330  0.06290552
-#> 16          form_complex  1.6403662  0.03697376         Inf
-#> 28     prod_mIkb_by_nNfk -5.3862587 -5.49300296 -5.25943716
-#> 40        shuttle_RnaA20 -3.2227083 -4.90322408 -2.36786569
-#> 44         split_NfkpIkb -2.8945842 -3.76340936 -2.27033830
-#> 47          trigger_iIkk -5.8948990 -6.35863674 -5.45137364
+#>                     name      value      lower       upper
+#> 1         act_Ikb_by_Ikk -0.5785138 -1.3227682  0.04888587
+#> 2        act_Ikb_complex -0.4435216 -1.5265361  0.73659673
+#> 3         act_Ikk_by_TNF -2.4054690 -2.8963347 -1.88812922
+#> 4         act_Nfk_by_Ikk -0.3119924 -1.0740781  0.34832896
+#> 5               act_pIkk -2.6425595 -2.8707011 -2.41230812
+#> 6              build_A20 -6.6944717 -7.7303130 -3.80761477
+#> 7            deact_ppIkk -2.6561999 -3.1280925 -1.92040718
+#> 8             degrad_A20 -5.6818726 -6.9806245 -0.94336508
+#> 9             degrad_Ikb -0.3409813 -0.7367588  0.75321783
+#> 10           degrad_mIkb -3.3669460 -3.6082798 -3.10788652
+#> 11         degrad_RnaA20 -3.2192022 -6.9809076 -0.69389291
+#> 12 eta_act_Nfk_c_NfkpIkb -0.8338219 -1.4585789 -0.05027163
+#> 13           eta_int_Ikb  2.8946116  2.6387424  3.23312699
+#> 14          eta_int_pNfk  2.9035892  2.6040582  3.30735453
+#> 15    eta_split_pNfkpIkb -0.6474823 -1.0303877  0.06290213
+#> 16          form_complex  1.6422314  0.0371494         Inf
+#> 28     prod_mIkb_by_nNfk -5.3862879 -5.4930029 -5.25943593
+#> 40        shuttle_RnaA20 -3.2215379 -4.9032052 -2.36789078
+#> 44         split_NfkpIkb -2.8941365 -3.7634032 -2.27033090
+#> 47          trigger_iIkk -5.8946739 -6.3586374 -5.45137696
 ```
 
 ``` r
@@ -622,7 +632,8 @@ plotProfile(saved$profiles, mode %in% c("data", "prior"), name %in% rates, ncol 
 
 ![](guide-profiles_files/figure-html/unnamed-chunk-23-1.png)
 
-Reference: [`profile()`](https://rdrr.io/r/stats/profile.html),
+Reference:
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`profileThreshold()`](https://dmodverse.github.io/dMod2/reference/profileThreshold.md),
 [`confint()`](https://rdrr.io/r/stats/confint.html),
 [`plotProfile()`](https://dmodverse.github.io/dMod2/reference/plotProfile.md),

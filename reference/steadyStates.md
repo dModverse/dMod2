@@ -2,11 +2,10 @@
 
 Computes symbolic steady-state expressions for use in a parameter
 transformation, following the AlyssaPetit method \[1\], \[2\]. Each
-balance equation is solved for a state or a rate constant such that the
-result is a ratio of sums of positive terms. A state whose equation was
-spent on a rate constant stays a free parameter. Every unknown is solved
-from a combination of balances, so every result is a ratio of positive
-sums, and compartment volumes are fixed. The solver is a Python module
+balance equation, or a combination of balances, is solved for a state or
+a rate constant such that the result is a ratio of sums of positive
+terms. A state whose equation was spent on a rate constant stays a free
+parameter; compartment volumes are fixed. The solver is a Python module
 called through reticulate; it needs numpy, sympy and scipy.
 
 ## Usage

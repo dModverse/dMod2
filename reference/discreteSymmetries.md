@@ -77,9 +77,9 @@ per point (`complex`, `real`, `inDomain`, `undecided`), `closedForms`,
 
 ## Details
 
-The search needs msolve; see
+The search needs msolve;
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
-for its path.
+says where it is searched.
 
 ## References
 

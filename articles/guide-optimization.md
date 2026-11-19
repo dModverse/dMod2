@@ -48,9 +48,16 @@ subproblem, runs a single Gauss-Newton phase, reads only `ftol` and
 
 Only `"gradient"` tests first-order optimality; the last quasi-Newton
 phase ignores the value, model and step tests ([Hessian
-phases](#hessian-phases-and-reverse-sweep)). `ftol` and `gtol` belong at
-or above the numerical error of value and gradient; `model.R` defines
-them as `tolerances`, which the fitting scripts pass as `tolControl`.
+phases](#hessian-phases-and-reverse-sweep)). `"gradient"`, `"fvalue"`
+and `"preddiff"` end a run of
+[`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) or
+[`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md) only
+where the full Newton step also predicts a decrease of at most `mtol`
+([Methods \> Termination
+criteria](https://dmodverse.github.io/dMod2/articles/methods-trust.html#termination-criteria)).
+`ftol` and `gtol` belong at or above the numerical error of value and
+gradient; `model.R` defines them as `tolerances`, which the fitting
+scripts pass as `tolControl`.
 
 ## Model Hessian
 
@@ -81,9 +88,9 @@ only.
 
 `phases` runs several sources in turn. Each phase is a list with
 `hessianMethod` and optionally `iterlim`, `sweep` and `qnControl`. A
-phase ends on a value, model, step or stagnation stop or on its
-`iterlim` and hands over to the next; `"gradient"` ends the run.
-`switches` bounds the handovers (default: one fewer than phases).
+phase ends on a value, model, step or stagnation stop or on the
+`iterlim` of the phase and hands over to the next; `"gradient"` ends the
+run. `switches` bounds the handovers (default: one fewer than phases).
 
 ``` r
 
@@ -156,13 +163,13 @@ fit <- mstrust(obj, best, fixed = gauge, sd = 0.5, fits = 1, rinit = 0.1, rmax =
 fit <- readRDS("results/onefit.rds")
 fit[c("value", "converged", "iterations", "stopReason")]
 #> $value
-#> [1] -488.6656
+#> [1] -488.6772
 #> 
 #> $converged
 #> [1] TRUE
 #> 
 #> $iterations
-#> [1] 30
+#> [1] 263
 #> 
 #> $stopReason
 #> [1] "fvalue"
@@ -227,7 +234,7 @@ best <- as.parvec(fits)
 c(fits = nrow(fits), converged = sum(fits$converged), best = min(fits$value),
   withinOne = sum(fits$value < min(fits$value) + 1))
 #>      fits converged      best withinOne 
-#>  200.0000  180.0000 -488.6748   13.0000
+#>  200.0000  152.0000 -488.6773   11.0000
 ```
 
 The waterfall plot shows the sorted values; each plateau is a local
@@ -275,7 +282,7 @@ opt <- readRDS("results/optimizers.rds")
 top <- min(opt$value, na.rm = TRUE)
 tapply(opt$value < top + 5, factor(opt$method, unique(opt$method)), sum, na.rm = TRUE)
 #>  Gauss-Newton          BFGS           SR1         exact GN, then BFGS 
-#>            24            14             9            20             5
+#>            20            14            13            11            11
 ```
 
 Costs and the full comparison: [Methods \> Forward and reverse

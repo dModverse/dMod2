@@ -1,4 +1,4 @@
-# Remove Detected Symmetries by Reparametrization
+# Remove Detected Symmetries by Reparameterization
 
 Turns the non-identifiable directions of a
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
@@ -21,11 +21,12 @@ symmetryReduction(
   separable = TRUE,
   reportZeroCompatibility = FALSE,
   alternatives = FALSE,
-  timeout = Inf,
-  allowOpen = FALSE,
-  allowChecked = FALSE,
+  timeout = 600,
+  allowOpen = TRUE,
+  allowChecked = TRUE,
   check = TRUE,
   workCap = 4000L,
+  branch = NULL,
   ...
 )
 ```
@@ -77,28 +78,40 @@ symmetryReduction(
 
 - timeout:
 
-  Time limit in seconds for the section search of one block; a block not
-  solved in time keeps the invariants (`"invariant_only"`). Unlike
-  `workCap`, it depends on the load of the machine. Defaults to `Inf`.
+  Wall time in seconds for the section search of one block; a block not
+  solved in time keeps the invariants (`"invariant_only"`) and is named
+  in `limits`. `Inf` lets the search run to its end. Unlike `workCap`,
+  it depends on the load of the machine. Defaults to 600.
 
 - allowOpen:
 
   Logical. Reduce the directions with a closed form and leave those of
-  level `"open"` in place; otherwise such a direction is an error. A
-  direction of level `"verified"` or `"checked"`, and a section claim
-  left unproven, give a warning. Defaults to `FALSE`.
+  level `"open"` in place with a warning; `FALSE` makes such a direction
+  an error. A direction of level `"verified"`, and a section claim left
+  unproven, give a warning. Defaults to `TRUE`.
 
 - allowChecked:
 
   Logical. Reduce also on a direction of level `"checked"`, which holds
   at random points but has no proof, and on a result whose saturation
-  check failed; otherwise either is an error. Defaults to `FALSE`.
+  check failed, with a warning; `FALSE` makes either an error. Defaults
+  to `TRUE`.
 
 - check:
 
   Logical. Run the detection again on the model with the trafo applied
   and record in `checks$loop` whether exactly the remaining directions
   are left. Defaults to `TRUE`; large models may turn it off.
+
+- branch:
+
+  With a discrete symmetry of `symmetryDetection(mode = "global")`: the
+  side of its fixed set as an inequality, e.g. `"k01 > k12"`, whose
+  chart becomes the trafo: free values in the positive orthant map one
+  to one onto that side, chained with the section. Without it every
+  branch is in `$alternatives`; `$discrete$branches` lists them with
+  `injective`, `reach`, `unproven` and the `boundary`. Defaults to
+  `NULL`.
 
 - workCap:
 

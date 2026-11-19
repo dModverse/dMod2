@@ -3,7 +3,9 @@
 Without a prior, dMod2 estimates by maximum likelihood and minimizes
 \\-2 \log L\\. With a prior, it minimizes \\-2 \log\\ of the posterior
 up to a constant, and the minimum is the maximum a posteriori estimate
-[\[1\]](#ref-kaschek2019dmod). Guide: [Setting up
+[\[1\]](#ref-kaschek2019dmod). The methods articles call the minimized
+quantity the objective function \\\mathcal{J}(\theta)\\, \\-2 \log L\\
+or \\-2 \log\\ of the posterior. Guide: [Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.html#likelihood-and-prior);
 derivatives: [Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
@@ -12,11 +14,11 @@ Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
 
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
 computes twice the negative log-likelihood of independent Gaussian
-errors, for data \\y_j\\, predictions \\f_j(\theta)\\ and standard
+errors, for data \\y_j\\, predictions \\g_j(\theta)\\ and standard
 deviations \\\sigma_j(\theta)\\:
 
 \\-2 \log L(\theta) = \sum_j \left( \frac{(y_j -
-f_j(\theta))^2}{\sigma_j(\theta)^2} + \log \sigma_j(\theta)^2 \right) +
+g_j(\theta))^2}{\sigma_j(\theta)^2} + \log \sigma_j(\theta)^2 \right) +
 \text{const}. \tag{1}\\
 
 \\\log \sigma_j^2\\ is constant for given \\\sigma_j\\ and bounds an
@@ -26,7 +28,7 @@ grows, the second rises.
 ## Error model
 
 \\\sigma_j\\ comes from the data column `sigma` where set, otherwise
-from the error model, an `obsfn` \\\sigma = e(f, \theta)\\ of prediction
+from the error model, an `obsfn` \\\sigma = e(g, \theta)\\ of prediction
 and parameters. A constant \\\sigma\\ on a log-scale observable \\y =
 \log(s\\ x + o)\\ is a relative error: to first order, \\\sigma\\ in
 \\\log z\\ is \\\sigma z\\ in \\z\\.

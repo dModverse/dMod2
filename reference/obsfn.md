@@ -122,8 +122,8 @@ returns this Hessian:
 sweep as a sparse `Matrix`, assembled from the blocks of the conditions;
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
 factorizes it where the argument `sparse` takes the sparse path, and
-[`vcov()`](https://rdrr.io/r/stats/vcov.html) solves it for the columns
-of `which`.
+[`vcov()`](https://dmodverse.github.io/dMod2/reference/vcov.objlist.md)
+solves it for the columns of `which`.
 
 With `deriv = FALSE` it returns the value alone.
 
@@ -138,7 +138,7 @@ x <- Xd(grid)
 ## An observation function
 g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
        modelname = "prediction_obs", outdir = tempdir())
-#> Overwriting: /tmp/Rtmpr3VxZ8/prediction_obs.cpp
+#> Overwriting: /tmp/Rtmp6aiYxR/prediction_obs.cpp
 
 ## One parameter transformation per condition
 innerpars <- c(getParameters(x), getParameters(g))

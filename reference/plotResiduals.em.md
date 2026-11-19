@@ -31,8 +31,8 @@ plotResiduals(
 
 - nsim, seed:
 
-  With `"NPDE"`: the number of simulated data sets and the seed of the
-  random number generator.
+  With `"NPDE"`: the number of simulated data sets, default 1000, and
+  the seed of the random number generator, default `NULL`.
 
 - ...:
 
@@ -59,10 +59,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmpr3VxZ8/theoph_obs.cpp
+#> Overwriting: /tmp/Rtmp6aiYxR/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmpr3VxZ8/theoph_err.cpp
+#> Overwriting: /tmp/Rtmp6aiYxR/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

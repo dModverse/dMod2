@@ -144,8 +144,8 @@ returns this Hessian:
 sweep as a sparse `Matrix`, assembled from the blocks of the conditions;
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
 factorizes it where the argument `sparse` takes the sparse path, and
-[`vcov()`](https://rdrr.io/r/stats/vcov.html) solves it for the columns
-of `which`.
+[`vcov()`](https://dmodverse.github.io/dMod2/reference/vcov.objlist.md)
+solves it for the columns of `which`.
 
 With `deriv = FALSE` it returns the value alone.
 

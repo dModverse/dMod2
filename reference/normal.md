@@ -12,11 +12,8 @@ unless given.
 - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
   from \\N(0, \tau^2)\\ (slab); every group deviates with probability
   `prob`, independently. The spike-and-slab random effects of a group
-  are integrated jointly, exactly on the quadratic expansion of the data
-  where the group has no Dirichlet-process random effects the data tie
-  to them and the sum over their subsets stays within a budget; else the
-  expectation consistent (EC) approximation integrates each one against
-  a diagonal cavity.
+  are integrated jointly, see section Sparse random effects of
+  [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
 
 - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
   process with base measure \\N(0, \tau^2)\\ and `concentration`, the

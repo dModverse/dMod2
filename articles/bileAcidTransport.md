@@ -5,7 +5,7 @@ logical(0)
 Shows:
 [`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md),
 [`localNode()`](https://dmodverse.github.io/dMod2/reference/localNode.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html),
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md),
 [`confint()`](https://rdrr.io/r/stats/confint.html).
 

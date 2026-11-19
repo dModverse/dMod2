@@ -163,7 +163,10 @@ trustL1(
 
   `mtol`
 
-  :   Predicted model decrease. Default `1e-6`.
+  :   Predicted model decrease, of the step taken and, at a convergence
+      stop, of the full Newton step (section Convergence). `0` switches
+      off both the model test and the condition on the full Newton step.
+      Default `1e-6`.
 
   `gtol`
 
@@ -311,21 +314,17 @@ trustL1(
 
 - sparse:
 
-  `"auto"` (default), `TRUE` or `FALSE`. With `TRUE`, `objfun` is called
-  with `hessian = "sparse"`, and the subproblem of every step is solved
-  on sparse Cholesky factors of the Hessian it returns (a `Matrix`), a
-  low-rank part `lowrank` (see
+  `"auto"` (default), `TRUE` or `FALSE`. `TRUE` calls `objfun` with
+  `hessian = "sparse"` and solves every subproblem on sparse Cholesky
+  factors of the returned `Matrix`, a low-rank part `lowrank` (see
   [`objlist()`](https://dmodverse.github.io/dMod2/reference/objlist.md))
-  added by Woodbury, where the dense path takes the eigendecomposition:
-  the same steps to rounding, with every setting of `trust()`; the
-  Hessian comes from the objective, `hessianMethod` `"gn"` or `"exact"`,
-  and `boundary = "reflective"`. `"auto"` takes the sparse path where
-  that holds, outside multiple shooting, when `parinit` has at least
-  `parameters` entries and a step on the sparse Hessian at `parinit`
-  costs fewer flops than the dense one, by the symbolic factorization;
-  `parameters` (default 100) comes from `getOption("dMod2.sparseAuto")`,
-  where a `fill` replaces the cost by the rule that the sparse Hessian
-  fills at most `fill` of the matrix.
+  included; the steps equal those of the dense path to rounding. It
+  needs `hessianMethod` `"gn"` or `"exact"` and
+  `boundary = "reflective"`. `"auto"` takes the sparse path where it
+  applies, outside multiple shooting, for at least `parameters` entries
+  of `parinit` and a step cheaper than the dense one at `parinit`; the
+  settings come from `getOption("dMod2.sparseAuto")`, see
+  [dMod2-package](https://dmodverse.github.io/dMod2/reference/dMod2-package.md).
 
 - ...:
 
@@ -504,6 +503,17 @@ also on a rejected Newton step from inside the trust region.
 
 - `rmin`: the trust radius is below `rmin`, or a step no longer changes
   the parameters in floating point. Reports `converged = FALSE`.
+
+A `"gradient"`, `"fvalue"` or `"preddiff"` stop that ends the run also
+needs the full Newton step of the model at the current iterate to
+predict a decrease of at most `mtol`, \\\frac{1}{2} g^\top H^{+} g \le\\
+`mtol`, in the variables scaled for the bounds. \\H^{+}\\ is the
+pseudoinverse of the positive part of \\H\\ in the eigenbasis; with
+`sparse = TRUE` the decrease comes from the factorization of \\H\\ where
+\\H\\ is positive definite and from the dense eigendecomposition
+elsewhere. `trustL1` applies the same condition to the model of the
+coordinates not held at a kink. Without the condition the run goes on,
+within `iterlim`; `mtol = 0` drops the condition.
 
 `stopReason` in the result names the test that fired: `"gradient"`,
 `"fvalue"`, `"preddiff"`, `"step"`, `"stagnation"`, `"radius"`,

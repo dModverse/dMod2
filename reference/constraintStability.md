@@ -4,25 +4,24 @@ A term of the objective that keeps the steady state of a
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
 stable. For every eigenvalue \\\lambda\\ of the Jacobian of the
 right-hand side at the steady state, on the manifold of the conserved
-quantities, it adds \\w\\ r^2\\ with \\r = \max(0,
-\mathrm{Re}\\\lambda - \lambda_0) / (\lambda\_{tol} - \lambda_0)\\:
-nothing while every real part lies below the onset \\\lambda_0\\, and
-the weight \\w\\ for each eigenvalue, both of a complex pair, whose real
-part reaches \\\lambda\_{tol}\\, the `stabilityTol` of `pSS`. Steady
-states that agree in all inputs count once. The gradient is exact, the
-Hessian Gauss-Newton.
+quantities, it adds the square of the residual \\\sqrt{w}\\ r^{3/2}\\
+for \\r \le 1\\ and \\\sqrt{w}\\ (1 + 3 (r - 1) / 2)\\ beyond, with \\r
+= \max(0, \mathrm{Re}\\\lambda - \lambda_0) / (\lambda\_{tol} -
+\lambda_0)\\. With \\s\\ the largest eigenvalue modulus there,
+\\\lambda\_{tol}\\ the `stabilityTol` and \\m\\ the `stabilityMargin` of
+the `controlsPTC` of `pSS`, the ramp begins at \\\lambda_0 =
+\lambda\_{tol} - m s\\. The term is zero on a steady state whose leading
+real part lies more than \\m s\\ below \\\lambda\_{tol}\\, reaches the
+weight \\w\\ for each eigenvalue, both of a complex pair, whose real
+part reaches \\\lambda\_{tol}\\, and grows quadratically beyond. Value,
+gradient and Gauss-Newton Hessian are continuous. Steady states that
+agree in the parameters, resting states and start values they read count
+once. The gradient is exact.
 
 ## Usage
 
 ``` r
-constraintStability(
-  pSS,
-  p = NULL,
-  onset = NULL,
-  duration = NULL,
-  weight = 100,
-  attrName = "stability"
-)
+constraintStability(pSS, p = NULL, weight = 100, attrName = "stability")
 ```
 
 ## Arguments
@@ -38,20 +37,11 @@ constraintStability(
   The parfn whose output `pSS` reads, or `NULL` where `pSS` reads the
   parameters of the objective.
 
-- onset:
-
-  \\\lambda_0\\, below `stabilityTol`. `NULL` (default) for
-  `stabilityTol - 1 / duration`: the term begins where a perturbation of
-  the steady state decays more slowly than the data last.
-
-- duration:
-
-  The time the data span, for the default `onset`.
-
 - weight:
 
   \\w\\, the value of the term where the real part of an eigenvalue
-  reaches `stabilityTol`, in units of \\-2 \log L\\. Default 100.
+  reaches the stability tolerance, in units of \\-2 \log L\\. Default
+  100.
 
 - attrName:
 
@@ -67,13 +57,22 @@ the objective.
 
 The term is an assumption of the model, that the system rests where the
 steady state is taken, not data:
-[`profile()`](https://rdrr.io/r/stats/profile.html) with `stop = "data"`
-and likelihood ratios read the data term without it. Parameters of `p`
-that the evaluation does not give, such as random effects, enter at 0.
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+with `stop = "data"` and likelihood ratios read the data term without
+it. Parameters of `p` that the evaluation does not give, such as random
+effects, enter at 0.
 
-Where `pSS` requires a stable root, an evaluation beyond `stabilityTol`
-fails. With `Pimpl(controlsPTC = list(stability = FALSE))` it returns
-the unstable root there, and the term goes on rising.
+Where `pSS` requires a stable root, an evaluation beyond the stability
+tolerance fails. With `Pimpl(controlsPTC = list(stability = FALSE))` it
+returns the unstable root there, and the term goes on rising.
+
+The attribute `"eigenvalues"` of the result lists the eigenvalues above
+the onset, one row each: the conditions of the steady state, real and
+imaginary part, the half-life or doubling time \\\log 2 /
+\|\mathrm{Re}\\\lambda\|\\, the onset, the contribution to the term, and
+the states with the largest entries of the right eigenvector, scaled to
+a largest entry of 1. The sum with other terms keeps the value only, so
+the attribute is read from a call of the term itself.
 
 ## See also
 
@@ -91,32 +90,22 @@ pSS <- Pimpl(f, deriv2 = TRUE, modelname = "brusselator_ss")
 p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = "brusselator_p")
 compile(pSS, p, output = "brusselator")
 #> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC]
-stab <- constraintStability(pSS, p, onset = -0.5, weight = 10)
-# far from the Hopf point nothing, near it the term with gradient, beyond it the term on the
-# unstable steady state
-stab(c(la = 0, lb = log(0.5)))$value
+stab <- constraintStability(pSS, p, weight = 10)
+# nothing on a stable steady state away from the Hopf point, the ramp just below it, the weight
+# per eigenvalue at it, beyond it the term on the unstable steady state
+stab(c(la = 0, lb = log(1.99)))$value
 #> [1] 0
-stab(c(la = 0, lb = log(1.8)))
-#> value
-#> ==================
-#> 12.8
-#> gradient[1:2] (full length = 2)
-#> ==================
-#>    la    lb 
-#> -64.0  57.6 
-#> 
-#> hessian[1:2,1:2]
-#> ==================
-#>      la     lb
-#> la  160 -144.0
-#> lb -144  129.6
-#> 
-#> 
-#> attributes
-#> ==================
-#>  stability  12.8
+stab(c(la = 0, lb = log(2 - 1e-6)))$value
+#> [1] 2.499998
+out <- stab(c(la = 0, lb = log(2)))
+out$value
+#> [1] 19.99999
+attr(out, "eigenvalues")
+#>   condition            re im     halfLife  onset  penalty             states
+#> 1           -1.096938e-13  1 6.318928e+12 -1e-06 9.999997 y (1.00), x (0.71)
+#> 2           -1.096938e-13 -1 6.318928e+12 -1e-06 9.999997 y (1.00), x (0.71)
 stab(c(la = 0, lb = log(2.5)))$value
-#> [1] 45
+#> [1] 2.812515e+12
 setwd(old)
 # }
 ```

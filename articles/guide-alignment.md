@@ -193,8 +193,8 @@ signif(errors(fitLanes), 2)
 Both fits find nearly the same values and errors, but the lane fit
 reports standard errors smaller by about \\\sqrt{3}\\: it counts 90
 readings, while most of the error is the biological deviation of 30
-samples. Its errors reach 1.8 standard errors, those of the fit of means
-stay within two.
+samples. The errors of the lane fit reach 1.8 standard errors, those of
+the fit of means stay within two.
 
 ## Random background per gel
 
@@ -205,8 +205,8 @@ mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md), with
 their standard deviation by restricted likelihood. Five readings per gel
 say little about it, so a prior holds the standard deviation of the log
-background near 0.3: log `omega_bj_bj` normal around \\\log 0.3\\,
-standard deviation 0.3.
+background near 0.3: `omega_bj_bj`, the log of that standard deviation,
+normal around \\\log 0.3\\ with standard deviation 0.3.
 
 ``` r
 
@@ -486,9 +486,9 @@ background is the common fixed `b` plus `bj`, a normal random effect
 around 0 per gel. A mass spectrometry reading is `yi`. Errors are
 absolute, one per method. The data say little about the background
 (small spread, hidden by bands), so a prior holds the standard deviation
-of `bj` near 0.3 (log `omega_bj_bj` normal around \\\log 0.3\\, standard
-deviation 0.3), and a weak prior puts `b` around 1 nM (normal around 0,
-standard deviation 2).
+of `bj` near 0.3 (`omega_bj_bj`, the log of that standard deviation,
+normal around \\\log 0.3\\ with standard deviation 0.3), and a weak
+prior puts `b` around 1 nM (normal around 0, standard deviation 2).
 
 ``` r
 

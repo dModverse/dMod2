@@ -116,6 +116,9 @@ symmetries
 #>       ξ(split_NfkIkb)       :  - split_NfkIkb
 #> 
 #> exact = proven over Q.
+#> 
+#> 
+#> Discrete symmetries: 0
 ```
 
 The rank of the observability-identifiability matrix is 71 of 79
@@ -185,6 +188,8 @@ reduction
 #>   {X₃, X₄, X₅, X₆, X₇}  form_complex = 1, s_nucNFkB = 1, inh_Ikk = 1, prod_Ikb = 1, build_RnaA20 = 1
 #>   {X₈}                  eta_split_pNfkpIkb = 1
 #>   summary(x, detailed = TRUE) explains each section.
+#> 
+#> Discrete symmetries: 0
 ```
 
 ## Gauge fixing
@@ -253,12 +258,13 @@ compartment and the second observed,
 
 f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
 compartments <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
-compartments
 ```
 
-``` text
+``` r
+
+compartments
 #> Result:  structurally locally identifiable (rank 5 / 5)
-#>
+#> 
 #> Discrete symmetries: 1, 2 solutions over the algebraic closure
 #>   k01 -> k12, x1 -> (k01*x2 - k12*x2 + k21*x1)/k21, k12 -> k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 > 0]
 #>   fundamental domain: k01 < k12

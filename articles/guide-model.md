@@ -1,7 +1,7 @@
 # 1. Setting up models
 
 A model in dMod2 is a chain of function objects, each returning an
-output together with its derivatives with respect to the parameters:
+output together with the derivatives with respect to the parameters:
 
 | class | constructors | mapping |
 |----|----|----|
@@ -54,9 +54,9 @@ places the four nuclear species in the nucleus of volume `Vnuc` relative
 to the cytoplasm. Rates are concentration rates in the compartment of
 the educts, of the products for a reaction without net educts, so
 
-\\\dot x_i = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{f(r)}\\ v_r(x, p),\\
+\\\dot x_i = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{c(r)}\\ v_r(x, p),\\
 
-with \\S\_{ri}\\ the stoichiometry and \\V\_{f(r)}\\ the volume of the
+with \\S\_{ri}\\ the stoichiometry and \\V\_{c(r)}\\ the volume of the
 compartment of reaction \\r\\. TNFα is not used up: the reaction
 `TNF -> TNF + TNFR` keeps it constant as a catalyst.
 
@@ -461,7 +461,7 @@ the magnitude is known:
 
 | parameters | mean | sd | reason |
 |----|----|----|----|
-| bleaching rates `tau_*` | \\\log(0.1/360)\\ | 2 | a few percent of signal lost over six hours |
+| bleaching rates `tau_*` | \\\log(0.1/360)\\ | 2 | about 10 % of signal lost over six hours |
 | imaging noise `sigma_*` | \\\log 0.05\\ | 1 | replicates scatter by about 5 % |
 | basal rates `*_Base` | \\-8\\ | 2 | activation without TNFα far slower than with it |
 | `shuttle_RnaA20`, `degrad_RnaA20`, `build_A20`, `degrad_A20`, `degrad_mIkb` | \\\log(1/60)\\ | 2 | transcripts and A20 turn over within about an hour |
@@ -474,10 +474,11 @@ minutes.
 `pSS` returns unstable roots too
 (`controlsPTC = list(stability = FALSE)`);
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
-adds a term that is zero while every perturbation of the resting state
-decays within the six hours of data and rises to 100 at the stability
-boundary. It needs `Pimpl(deriv2 = TRUE)`. Profiles with `stop = "data"`
-and likelihood ratios read the data term without it ([Methods \> Steady
+adds a term that is zero on a stable resting state, rises on a narrow
+ramp below the stability boundary and reaches 100 for each eigenvalue at
+the boundary. It needs `Pimpl(deriv2 = TRUE)`. Profiles with
+`stop = "data"` and likelihood ratios read the data term without it
+([Methods \> Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)).
 
 ``` r
@@ -506,9 +507,9 @@ sigma[turnover] <- 2
 # IKK recovers from its inactive form over hours
 mu["trigger_iIkk"] <- log(1 / 240)
 sigma["trigger_iIkk"] <- 2
-# the cells rest: a term that rises where an eigenvalue of the resting state decays more slowly
-# than over the six hours of data and reaches 100 where the resting state loses stability
-stability <- constraintStability(pSS, p, duration = max(as.data.frame(data)$time))
+# the cells rest: a term that is zero on a stable resting state and reaches 100 where it loses
+# stability
+stability <- constraintStability(pSS, p)
 obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma) + stability
 ```
 
@@ -533,9 +534,9 @@ best <- as.parvec(readRDS("results/fits.rds"))
 value <- obj(best, fixed = gauge)
 c(value = value$value, data = attr(value, "data"), prior = attr(value, "prior"))
 #>      value       data      prior 
-#> -488.67483 -511.16226   22.48742
+#> -488.67733 -511.16447   22.48714
 max(abs(value$gradient))
-#> [1] 0.009282248
+#> [1] 0.02861733
 ```
 
 The prediction against the data, with one standard deviation of the

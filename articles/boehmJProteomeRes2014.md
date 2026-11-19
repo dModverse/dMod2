@@ -5,7 +5,7 @@
 Shows:
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`reml()`](https://dmodverse.github.io/dMod2/reference/reml.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html),
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`profileThreshold()`](https://dmodverse.github.io/dMod2/reference/profileThreshold.md),
 [`confint()`](https://rdrr.io/r/stats/confint.html),
 [`plotProfile()`](https://dmodverse.github.io/dMod2/reference/plotProfile.md),
@@ -255,7 +255,8 @@ the optimum, so the interval comes from the likelihood itself (Raue et
 al. 2009).
 [`profileThreshold()`](https://dmodverse.github.io/dMod2/reference/profileThreshold.md)
 gives the threshold for
-[`profile()`](https://rdrr.io/r/stats/profile.html) and
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+and
 [`plotProfile()`](https://dmodverse.github.io/dMod2/reference/plotProfile.md);
 [`confint()`](https://rdrr.io/r/stats/confint.html) computes the same
 one from `method`, `n` and `p`. `method = "F"` calibrates it for the

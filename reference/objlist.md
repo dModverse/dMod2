@@ -36,7 +36,7 @@ An object of class `objlist`.
 
 ## Details
 
-Asked for `hessian = "sparse"`, an objective may return part of its
+Asked for `hessian = "sparse"`, an objective may return part of the
 Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
 rows and a vector `d`: the Hessian is then `hessian + U diag(d) U'`.
 

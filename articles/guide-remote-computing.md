@@ -20,21 +20,22 @@ arrays of states and sensitivities costs more than computing them.
 
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) and
-[`profile()`](https://rdrr.io/r/stats/profile.html) run independent fits
-as processes through `cores`. With one number, fits are forks of the
-session, each solving conditions in one thread: a forked child never
-starts the thread team, and BLAS and OpenMP stay at one thread across
-the fork. `cores = c(fits = 4, conditions = 2)` runs four fits with two
-threads each in fresh R processes (a PSOCK cluster), as always on
-Windows. Each process holds a copy of the predictions, so memory grows
-with the process count; keep the product of both below the core count.
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+run independent fits as processes through `cores`. With one number, fits
+are forks of the session, each solving conditions in one thread: a
+forked child never starts the thread team, and BLAS and OpenMP stay at
+one thread across the fork. `cores = c(fits = 4, conditions = 2)` runs
+four fits with two threads each in fresh R processes (a PSOCK cluster),
+as always on Windows. Each process holds a copy of the predictions, so
+memory grows with the process count; keep the product of both below the
+core count.
 
 | where | argument | axis |
 |----|----|----|
 | one evaluation | `options(dMod2.cores = )`, `obj(pars, cores = )` | conditions, threads |
 | [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) | `cores` | groups and conditions, threads |
 | [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md), [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) | `cores`, `c(fits = , conditions = )` | fits, processes |
-| [`profile()`](https://rdrr.io/r/stats/profile.html) | `cores`, `c(pars = , conditions = )` | parameters, processes |
+| [`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md) | `cores`, `c(pars = , conditions = )` | parameters, processes |
 | [`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md) | `tasks`, `on` | tasks, detached processes |
 
 ``` r
@@ -487,7 +488,7 @@ Reference:
 [`dMod2Jobs()`](https://dmodverse.github.io/dMod2/reference/dMod2Jobs.md),
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html)
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
 
 [← 10. PEtab import and
 export](https://dmodverse.github.io/dMod2/articles/guide-petab.md)

@@ -4,10 +4,10 @@ A mixed-effects model writes each individual parameter (subject, cell,
 cell line) as a population value plus a random deviation, estimates
 population values and spread, and integrates the deviations out of the
 likelihood. In dMod2 random effects are declared in the `parfn`;
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) fits by one
-of four approximations of the integral, all instances of the EM
-algorithm. Example: theophylline, twelve subjects, one oral dose each,
-plasma concentrations over a day.
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) fits by the
+EM algorithm with one of four approximations of the integral. Example:
+theophylline, twelve subjects, one oral dose each, plasma concentrations
+over a day.
 
 ``` r
 
@@ -496,10 +496,11 @@ deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.m
 
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) runs
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) from `fits`
-starts perturbed around `init` with standard deviation `sd` and returns
-the best fit, all starts in `$multistart`. `theophyllineMultistart.R` of
-the project `pharmacometrics` runs 200 starts each for FOCEI, quadrature
-and SAEM from the same draws:
+starts, the first at `init`, the others perturbed around it with
+standard deviation `sd`, and returns the best fit, all starts in
+`$multistart`. `theophyllineMultistart.R` of the project
+`pharmacometrics` runs 200 starts each for FOCEI, quadrature and SAEM
+from the same draws:
 
 ``` r
 

@@ -7,15 +7,12 @@ by maximum likelihood, the marginal one with random terms
 normalization of the values per block of experiments (see
 [`alignmentModel()`](https://dmodverse.github.io/dMod2/reference/alignmentModel.md))
 in the objective; the error parameters and the hyperparameters of normal
-random terms by default by restricted likelihood. Every experiment, a
-combination of the columns of the scaling formulas, or with random terms
-every group, is split into conditions of at most 16 values of the first
-biological symbol, so the Hessian is sparse over them;
+random terms by default by restricted likelihood. The Hessian is sparse
+over the experiments, with the normalization as a low-rank part (see
+[`objlist()`](https://dmodverse.github.io/dMod2/reference/objlist.md));
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) and
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) take the
-sparse path as `sparse = "auto"` decides. The normalization enters the
-sparse Hessian as a low-rank part (see
-[`objlist()`](https://dmodverse.github.io/dMod2/reference/objlist.md)).
+sparse path as `sparse = "auto"` decides.
 
 ## Usage
 
@@ -40,26 +37,28 @@ align(
 
 - fits:
 
-  Number of fits from perturbed starts.
+  Number of fits from perturbed starts. Default 10.
 
 - cores:
 
-  Number of fits run in parallel; every fit runs on one core.
+  Number of fits run in parallel; every fit runs on one core. Default 1.
 
 - method:
 
-  With random terms: `"focei"` or `"quadrature"`, see
+  With random terms: `"focei"` (default) or `"quadrature"`, see
   [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
 
 - sd:
 
   Standard deviation of the start perturbation on the parameter scale.
+  Default 0.5.
 
 - iterlim:
 
   Iteration limit of the optimizer; with spike-and-slab or
   Dirichlet-process terms the outer iterations of
-  [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
+  [`em()`](https://dmodverse.github.io/dMod2/reference/em.md). Default
+  1000.
 
 - init:
 

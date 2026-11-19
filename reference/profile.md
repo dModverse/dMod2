@@ -204,11 +204,10 @@ profiled parameter from the value in `pars`), `stepsize`, `gamma` and
 `whichPar` (the profiled parameter), columns for the numeric attributes
 of the objective other than `chi2` and `chi2_*`, and one column per
 parameter. Profiles that fail are dropped with a message; when all fail,
-[`profile()`](https://rdrr.io/r/stats/profile.html) stops with an error.
-The attribute `"ends"` is a data frame with one row per side and the
-columns `whichPar`, `side`, `steps` and `reason`: `"threshold"`,
-`"limit"`, `"step limit"` or the error of the objective that ended the
-side.
+`profile()` stops with an error. The attribute `"ends"` is a data frame
+with one row per side and the columns `whichPar`, `side`, `steps` and
+`reason`: `"threshold"`, `"limit"`, `"step limit"` or the error of the
+objective that ended the side.
 
 ## See also
 

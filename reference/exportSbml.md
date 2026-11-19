@@ -40,13 +40,11 @@ exportSbml(
 
 - inits:
 
-  Named numeric *or* character vector of initial values keyed by state
-  name. Numeric entries (or character entries that parse as numeric) are
-  written as `initialConcentration`, `initialAmount` for states listed
-  in `eqnlist$amountStates`; non-numeric character entries are emitted
-  as `<initialAssignment>` formulas and let the SBML simulator resolve
-  the expression against `parameters` at sim time. Missing states
-  default to 0. Default `NULL`.
+  Named numeric or character vector of initial values keyed by state
+  name. Numbers, also as character, are written as
+  `initialConcentration`, or `initialAmount` for the states in
+  `eqnlist$amountStates`; other expressions as `<initialAssignment>`
+  formulas. Missing states default to 0. Default `NULL`.
 
 - filepath:
 
@@ -61,9 +59,8 @@ exportSbml(
   Object of class
   [eventlist](https://dmodverse.github.io/dMod2/reference/eventlist.md)
   to emit as `<listOfEvents>`, or `NULL`. Rows sharing a trigger become
-  one `<event>`, since SBML applies an event's assignments together. A
-  compartment an event assigns to is written as non-constant. Default
-  `NULL`.
+  one `<event>`. A compartment an event assigns to is written as
+  non-constant. Default `NULL`.
 
 ## Value
 

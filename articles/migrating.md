@@ -25,8 +25,8 @@ with `*` for concatenation, `+` for conditions or objective terms, and
 [`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md),
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html) and `plot*()` keep
-names and main arguments. dMod2 has
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+and `plot*()` keep names and main arguments. dMod2 has
 [`getSymbols()`](https://dmodverse.github.io/dMod2/reference/getSymbols.md)
 and
 [`replaceSymbols()`](https://dmodverse.github.io/dMod2/reference/replaceSymbols.md),
@@ -35,10 +35,9 @@ so [`library(cOde)`](https://rdrr.io/r/base/library.html) is not needed.
 ## Substitution syntax
 
 [`define()`](https://dmodverse.github.io/dMod2/reference/define.md),
-[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md),
-[`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md) and
-`branch(apply = )` take `"lhs <- rhs"`; `"lhs ~ rhs"` is an error naming
-the new form.
+[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md) and
+[`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md) take
+`"lhs <- rhs"`; `"lhs ~ rhs"` is an error naming the new form.
 
 | dMod | dMod2 |
 |----|----|
@@ -49,7 +48,7 @@ the new form.
 Placeholders in `...`, branch table columns in scope, unnamed logical
 condition selectors and `conditionMatch` are unchanged.
 
-`~` now writes effect formulas: on a branched transformation,
+`~` writes effect formulas: on a branched transformation,
 [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md)
 takes an unquoted formula and replaces the symbol by a linear predictor
 over the branch table columns, fixed and random effects in lme4
@@ -151,7 +150,7 @@ settings to `stepControl`.
 
 | dMod | dMod2 |
 |----|----|
-| `optControl = list(fterm = , mterm = )` | any [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) argument, e.g. `tolControl` |
+| `optControl = list(fterm = , mterm = )` | `optControl`: any [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) argument, e.g. `tolControl` |
 | `stepControl = list(stop = "data")` | `stop`: also any numeric attribute of the objective |
 | threshold `qchisq(1 - alpha, 1)` | `delta =`, e.g. `profileThreshold(method = "F", n = , p = )` |
 | both sides | `side = c("both", "left", "right")` |

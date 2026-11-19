@@ -124,10 +124,21 @@ Pimpl(
 
   :   With `stability`, a root counts as stable while the real part of
       the leading eigenvalue on the manifold of the conserved quantities
-      is at most `stabilityTol`, in the units of the rates; default `0`.
-      A small positive value admits a resting state that departs from
-      rest more slowly than the experiment lasts, as near a Hopf
-      bifurcation.
+      is at most the larger of `1e-8` times the largest eigenvalue
+      modulus there, the precision of the eigenvalues, and
+      `stabilityTol`, an absolute value in the units of the rates;
+      default `0`. A positive value admits a resting state that departs
+      from rest more slowly than a time scale of interest, as near a
+      Hopf bifurcation.
+      [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
+      reaches the weight at `stabilityTol`.
+
+  `stabilityMargin`
+
+  :   The width of the ramp of
+      [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
+      below `stabilityTol`, relative to the largest eigenvalue modulus
+      on the manifold of the conserved quantities; default `1e-6`.
 
   `nStarts`
 
@@ -252,8 +263,8 @@ returns this Hessian:
 sweep as a sparse `Matrix`, assembled from the blocks of the conditions;
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
 factorizes it where the argument `sparse` takes the sparse path, and
-[`vcov()`](https://rdrr.io/r/stats/vcov.html) solves it for the columns
-of `which`.
+[`vcov()`](https://dmodverse.github.io/dMod2/reference/vcov.objlist.md)
+solves it for the columns of `which`.
 
 With `deriv = FALSE` it returns the value alone.
 

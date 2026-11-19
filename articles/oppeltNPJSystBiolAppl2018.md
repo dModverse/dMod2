@@ -8,7 +8,7 @@ Shows:
 [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md),
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
-[`profile()`](https://rdrr.io/r/stats/profile.html),
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md),
 [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md),
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md),

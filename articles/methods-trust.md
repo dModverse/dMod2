@@ -1,19 +1,20 @@
 # Trust-region optimization
 
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
-minimizes \\f(\theta)\\, \\-2 \log L\\ or \\-2 \log\\ of the posterior,
-by a trust-region method on the exact gradient
-[\[1\]](#ref-kaschek2019dmod). Arguments and usage:
+minimizes the objective function \\\mathcal{J}(\theta)\\, \\-2 \log L\\
+or \\-2 \log\\ of the posterior, by a trust-region method on the exact
+gradient [\[1\]](#ref-kaschek2019dmod). Arguments and usage:
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md).
 
 ## Trust-region method
 
-At the iterate \\\theta_k\\ with the gradient \\g\\ and a symmetric
-approximation \\H\\ of the Hessian,
+At the iterate \\\theta_k\\ with the gradient \\b = \nabla
+\mathcal{J}(\theta_k)\\ and a symmetric approximation \\H\\ of the
+Hessian,
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
 minimizes the quadratic model of the objective inside a ball,
 
-\\\min\_{s} \\ m(s) = g^\top s + \tfrac{1}{2}\\ s^\top H s \quad
+\\\min\_{s} \\ m(s) = b^\top s + \tfrac{1}{2}\\ s^\top H s \quad
 \text{subject to} \quad \lVert s \rVert \le r . \tag{1}\\
 
 The ratio of actual to predicted decrease decides on the step and the
@@ -25,10 +26,10 @@ for every source of \\H\\ and on the [sparse path](#sparse-hessians).
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) solves
 the subproblem (1) exactly, through the full eigendecomposition of \\H\\
 [\[2\]](#ref-more1983computing). The solution satisfies \\(H + \nu I)\\
-s = -g\\ with a multiplier \\\nu \ge 0\\ that makes \\H + \nu I\\
+s = -b\\ with a multiplier \\\nu \ge 0\\ that makes \\H + \nu I\\
 positive semidefinite and vanishes unless the step reaches the boundary,
 \\\lVert s \rVert = r\\. With \\H = Q \Lambda Q^\top\\, eigenvalues
-\\\lambda_i\\ and \\\gamma = Q^\top g\\, the step
+\\\lambda_i\\ and \\\gamma = Q^\top b\\, the step
 
 \\s(\nu) = -Q (\Lambda + \nu I)^{-1} \gamma \tag{2}\\
 
@@ -55,7 +56,8 @@ path](#sparse-hessians).
 
 With the ratio of actual to predicted decrease
 
-\\\rho_k = \frac{f(\theta_k) - f(\theta_k + s_k)}{-m_k(s_k)}, \tag{4}\\
+\\\rho_k = \frac{\mathcal{J}(\theta_k) - \mathcal{J}(\theta_k +
+s_k)}{-m_k(s_k)}, \tag{4}\\
 
 the radius is updated with \\r\_{\max}\\ = `rmax`:
 
@@ -66,11 +68,11 @@ the radius is updated with \\r\_{\max}\\ = `rmax`:
 
 A step with \\\rho_k \< 1/4\\ is rejected. The radius grows only when
 the step reached the boundary. Under `boundary = "clip"` the radius
-shrinks to \\r_k/4\\, grows after every step that is not the Newton
-step, and a step that lowers \\f\\ is accepted where the value or model
-test ends the run. The first radius is `rinit`. A trial point where the
-objective fails or is not finite counts as rejected; three in a row end
-the run (`"objfun"`).
+shrinks to \\r_k/4\\, grows at \\\rho_k \> 3/4\\ after every step that
+is not the Newton step, and a step that lowers \\\mathcal{J}\\ is
+accepted where the value or model test ends the run. The first radius is
+`rinit`. A trial point where the objective fails or is not finite counts
+as rejected; three in a row end the run (`"objfun"`).
 
 ### Nonmonotone acceptance
 
@@ -79,26 +81,26 @@ decrease is measured from a weighted average of past values
 [\[3\]](#ref-zhang2004nonmonotone),
 
 \\Q\_{k+1} = \eta Q_k + 1, \qquad C\_{k+1} = \frac{\eta Q_k C_k +
-f(\theta\_{k+1})}{Q\_{k+1}}, \tag{6}\\
+\mathcal{J}(\theta\_{k+1})}{Q\_{k+1}}, \tag{6}\\
 
-updated at accepted steps, and \\\rho_k = \bigl(C_k - f(\theta_k +
-s_k)\bigr) / \bigl(-m_k(s_k)\bigr)\\; \\\eta = 0\\ recovers (4). The
-result is the best iterate visited; the termination tests read \\f\\
-itself.
+updated at accepted steps, and \\\rho_k = \bigl(C_k -
+\mathcal{J}(\theta_k + s_k)\bigr) / \bigl(-m_k(s_k)\bigr)\\; \\\eta =
+0\\ recovers (4). The result is the best iterate visited; the
+termination tests read \\\mathcal{J}\\ itself.
 
 ### Bound constraints
 
 `boundary = "reflective"` is the interior method of Coleman and Li
 [\[4\]](#ref-coleman1996interior). With \\v_i\\ the signed distance to
-the bound in the descent direction \\-g_i\\ (1 if infinite), \\D =
+the bound in the descent direction \\-b_i\\ (1 if infinite), \\D =
 \operatorname{diag}(\lvert v \rvert^{1/2})\\ and \\J^v\\ the diagonal of
 \\\partial \lvert v \rvert / \partial \theta\\, the subproblem is solved
 in the scaled variables
 
-\\\hat g = D g, \qquad \hat B = D H D + \operatorname{diag}(g)\\ J^v ,
+\\\hat b = D b, \qquad \hat B = D H D + \operatorname{diag}(b)\\ J^v .
 \tag{7}\\
 
-The optimality measure of `gtol`, \\\max_i \lvert v_i g_i \rvert\\,
+The optimality measure of `gtol`, \\\max_i \lvert v_i b_i \rvert\\,
 vanishes at interior stationary points and at active bounds. A step
 leaving the box is cut to the fraction \\\max(\texttt{thetaMax}, 1 -
 \text{optimality measure})\\ of the distance (`thetaMax` = 0.99995),
@@ -113,15 +115,36 @@ The tests are listed in
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.html#termination-criteria).
 Only `"gradient"` tests optimality; `"fvalue"`, `"preddiff"` and
 `"step"` read the quadratic model and can stop at a non-stationary point
-if \\H\\ is poor. While further phases follow, these tests hand over to
-the next one ([Hessian phases](#hessian-phases)); the last quasi-Newton
-phase therefore ends only on the gradient, stagnation, the radius,
-`iterlim` or a failing objective [\[5\]](#ref-nocedal2006numerical). For
-an ODE integrated at relative tolerance \\\epsilon\\ a weighted residual
-\\r_j\\ of a prediction \\f_j\\ has an error of about \\\epsilon f_j /
-\sigma_j\\, so the value has one of about \\2 \epsilon \sum_j \lvert r_j
-f_j \rvert / \sigma_j\\, growing with the amount of data, the gradient
-more; `ftol` and `gtol` belong at or above these noise floors.
+if \\H\\ is poor. A `"gradient"`, `"fvalue"` or `"preddiff"` stop that
+ends the run also needs the full Newton step of the scaled model (7) at
+the current iterate to predict a decrease of at most `mtol`,
+
+\\\tfrac{1}{2}\\ \hat b^\top \hat B^{+} \hat b = \frac{1}{2}
+\sum\_{\hat\lambda_i \> 0} \frac{(\hat q_i^\top \hat
+b)^2}{\hat\lambda_i} \le \texttt{mtol} , \tag{8}\\
+
+with the eigenpairs \\(\hat\lambda_i, \hat q_i)\\ of \\\hat B\\,
+eigenvalues inside the noise floor of the eigendecomposition counted as
+zero. Along a direction of curvature \\\lambda\\ the gradient at a
+distance \\d\\ from the minimum is \\\lambda d\\ and the value lies
+\\\lambda d^2 / 2\\ above it, so a small gradient along a flat direction
+does not mean a value close to the minimum; (8) bounds that excess. On
+the [sparse path](#sparse-hessians) the Cholesky factors give (8) where
+\\\hat B\\ is positive definite, the dense eigendecomposition of \\\hat
+B\\ elsewhere;
+[`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+evaluates (8) on the model of the coordinates not held at a kink ([L1
+penalties](#l1-penalties)). A run that fails (8) goes on, within
+`iterlim`; `mtol = 0` drops the condition. While further phases follow,
+the value, model and step tests hand over to the next one ([Hessian
+phases](#hessian-phases)); the last quasi-Newton phase therefore ends
+only on the gradient, stagnation, the radius, `iterlim` or a failing
+objective [\[5\]](#ref-nocedal2006numerical). For an ODE integrated at
+relative tolerance \\\epsilon\\ a weighted residual \\r_j\\ of a
+prediction \\g_j\\ has an error of about \\\epsilon g_j / \sigma_j\\, so
+the value has one of about \\2 \epsilon \sum_j \lvert r_j g_j \rvert /
+\sigma_j\\, growing with the amount of data, the gradient more; `ftol`
+and `gtol` belong at or above these noise floors.
 
 ## Sources of the model Hessian
 
@@ -153,8 +176,8 @@ exact also for large residuals and at a much higher cost per iteration.
 
 Both quasi-Newton updates use the secant pair
 
-\\s_k = \theta\_{k+1} - \theta_k, \qquad y_k = \nabla f(\theta\_{k+1}) -
-\nabla f(\theta_k), \tag{8}\\
+\\s_k = \theta\_{k+1} - \theta_k, \qquad y_k = \nabla
+\mathcal{J}(\theta\_{k+1}) - \nabla \mathcal{J}(\theta_k), \tag{9}\\
 
 with the secant equation \\B\_{k+1} s_k = y_k\\. BFGS keeps \\B\\
 positive definite, which needs \\s^\top y \> 0\\; the pair is damped
@@ -163,12 +186,12 @@ positive definite, which needs \\s^\top y \> 0\\; the pair is damped
 \\\vartheta = \begin{cases} 1, & s^\top y \ge 0.2\\ s^\top B s, \\
 \dfrac{0.8\\ s^\top B s}{s^\top B s - s^\top y}, & \text{otherwise,}
 \end{cases} \qquad \tilde y = \vartheta y + (1 - \vartheta) B s ,
-\tag{9}\\
+\tag{10}\\
 
 the update is
 
 \\B\_{k+1} = B_k - \frac{B_k s\\ s^\top B_k}{s^\top B_k s} +
-\frac{\tilde y\\ \tilde y^\top}{s^\top \tilde y}. \tag{10}\\
+\frac{\tilde y\\ \tilde y^\top}{s^\top \tilde y}. \tag{11}\\
 
 Then \\s^\top \tilde y \ge 0.2\\ s^\top B s \> 0\\. `qnCautious` skips
 pairs with \\s^\top y \le c \lVert s \rVert \lVert y \rVert\\ (counted
@@ -181,7 +204,7 @@ BFGS updates from accepted steps only.
 SR1 satisfies the secant equation without definiteness. With \\w = y -
 B_k s\\,
 
-\\B\_{k+1} = B_k + \frac{w\\ w^\top}{w^\top s}, \tag{11}\\
+\\B\_{k+1} = B_k + \frac{w\\ w^\top}{w^\top s}, \tag{12}\\
 
 skipped when \\\lvert w^\top s \rvert \le 10^{-8} \lVert s \rVert \lVert
 w \rVert\\. SR1 approaches the true Hessian, indefinite regions
@@ -204,9 +227,9 @@ ill-conditioning of sloppy models lies along rotated directions
 ### Hessian phases
 
 A phase hands over to the next where a value, model, step or stagnation
-stop or its `iterlim` would end the run; `"gradient"` ends the run. A
-handover resets the radius to `rinit` and seeds a quasi-Newton phase
-with the Gauss-Newton Hessian, as in Fides
+stop or the `iterlim` of the phase would end the run; `"gradient"` ends
+the run. A handover resets the radius to `rinit` and seeds a
+quasi-Newton phase with the Gauss-Newton Hessian, as in Fides
 [\[10\]](#ref-froehlich2022fides).
 
 ### Sparse Hessians
@@ -234,29 +257,29 @@ with the \\4 n\_\theta^3\\ of the eigendecomposition.
 minimizes the objective plus an L1 penalty on some of the parameters
 [\[11\]](#ref-tibshirani1996regression),
 
-\\f(\theta) + \sum\_{i \in P} \lambda_i \lvert \theta_i - \mu_i \rvert ,
-\tag{12}\\
+\\\mathcal{J}(\theta) + \sum\_{i \in P} \lambda_i \lvert \theta_i -
+\mu_i \rvert , \tag{13}\\
 
 with penalized parameters \\P\\, references \\\mu_i\\ and strengths
 \\\lambda_i\\.
 [`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md) runs
 the trust region with the Gauss-Newton Hessian and two changes: a
-parameter on the kink is removed from (1) while \\\lvert \partial f /
-\partial \theta_i \rvert \le \lambda_i\\, and a step across the kink is
-cut back onto \\\mu_i\\, so zero differences are exact. Further
-penalties are a one-sided one,
+parameter on the kink is removed from (1) while \\\lvert \partial
+\mathcal{J} / \partial \theta_i \rvert \le \lambda_i\\, and a step
+across the kink is cut back onto \\\mu_i\\, so zero differences are
+exact. Further penalties are a one-sided one,
 
-\\\lambda_i \max(0,\\ \mu_i - \theta_i) , \tag{13}\\
+\\\lambda_i \max(0,\\ \mu_i - \theta_i) , \tag{14}\\
 
-which keeps a parameter on the kink while \\0 \le \partial f / \partial
-\theta_i \le \lambda_i\\; a gate \\\lambda_i (\theta_i - \mu_i)\\ with
-\\\theta_i \ge \mu_i\\, which keeps it there while \\\partial f /
-\partial \theta_i \ge -\lambda_i\\; and a fused block \\B\\, the
-clustered lasso [\[12\]](#ref-hauber2023uncovering) in the L1 form
-(Hauber et al. favor the exponent 0.8),
+which keeps a parameter on the kink while \\0 \le \partial \mathcal{J} /
+\partial \theta_i \le \lambda_i\\; a gate \\\lambda_i (\theta_i -
+\mu_i)\\ with \\\theta_i \ge \mu_i\\, which keeps it there while
+\\\partial \mathcal{J} / \partial \theta_i \ge -\lambda_i\\; and a fused
+block \\B\\, the clustered lasso [\[12\]](#ref-hauber2023uncovering) in
+the L1 form (Hauber et al. favor the exponent 0.8),
 
 \\\lambda \sum\_{p \< q \in B} w\_{pq}\\ \lvert \theta_p - \theta_q
-\rvert , \tag{14}\\
+\rvert , \tag{15}\\
 
 optionally with an anchor; equal parameters move as one until the data
 split them.
@@ -280,7 +303,7 @@ from `sensitivities.R`:
 timing <- readRDS(file.path(oppelt, "results", "sensitivities.rds"))$timing
 timing
 #>           value         forward         reverse forward-reverse 
-#>           0.004           0.167           0.011           0.724
+#>           0.007           0.126           0.019           0.873
 ```
 
 `optimizers.R` fits from the same 100 prior draws with Gauss-Newton,
@@ -329,17 +352,17 @@ summary <- do.call(rbind, lapply(split(opt, opt$method), function(d) data.frame(
   secondsPerHit = round(sum(d$elapsed, na.rm = TRUE) / max(1, sum(d$value < top + 5, na.rm = TRUE))))))
 summary
 #>               starts failed converged hits iterations iterlim seconds
-#> Gauss-Newton     100      2        86   24      233.0      10    18.4
-#> BFGS             100      2        90   14      374.5       0     4.8
-#> SR1              100      2        80    9      324.5       6     4.4
-#> exact            100      3        95   20      255.0       0    96.4
-#> GN, then BFGS    100      2        70    5      465.5      23     7.4
+#> Gauss-Newton     100      2        70   20      358.0      25    28.8
+#> BFGS             100      2        86   14      662.0       9    11.5
+#> SR1              100      2        59   13      903.5      36    14.7
+#> exact            100      2        82   11      281.0      14   138.2
+#> GN, then BFGS    100      2        49   11      807.0      45    13.8
 #>               secondsPerHit
-#> Gauss-Newton            116
-#> BFGS                     36
-#> SR1                      65
-#> exact                   524
-#> GN, then BFGS           142
+#> Gauss-Newton            239
+#> BFGS                     80
+#> SR1                     109
+#> exact                  3021
+#> GN, then BFGS           126
 ```
 
 Medians over starts; a hit ends within 5 of the best value; `iterlim`
@@ -353,11 +376,11 @@ plotValues(split(opt, opt$method), pseudoLog = TRUE) + ggplot2::theme(legend.pos
 
 ![](methods-trust_files/figure-html/unnamed-chunk-6-1.png)
 
-A reverse gradient costs about 1/15 of the forward sensitivities, an
-exact Hessian by forward over reverse about 4 times. Gauss-Newton
-reaches the lowest plateaus most often, exact converges most often, and
+A reverse gradient costs about 1/7 of the forward sensitivities, an
+exact Hessian by forward over reverse about 7 times. Gauss-Newton
+reaches the lowest plateaus most often, BFGS converges most often, and
 BFGS needs the least time per hit. Gauss-Newton followed by BFGS stops
-at the iteration limit in 23 runs: the BFGS phase starts from the
+at the iteration limit in 45 runs: the BFGS phase starts from the
 Gauss-Newton Hessian far from the optimum ([Seed and
 memory](#seed-and-memory)).
 
