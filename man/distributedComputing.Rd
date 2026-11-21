@@ -118,7 +118,9 @@ tasks of a SLURM job, and a worker runs the tasks dealt to it one after the othe
 for \code{"localhost"} and in the home directory of a remote node. The job manifest
 \code{job.rds} lies in the local \verb{<jobname>_folder} and in that of every remote
 node. A job of the same name that still runs there is an error, also when it
-was submitted from another machine. Every job is registered in
+was submitted from another machine, and so is a job of the same name in the
+folder of a remote node that was submitted from another working directory,
+until it is purged. Every job is registered in
 \code{tools::R_user_dir("dMod2", "data")} until \code{purge(local = TRUE)}, and
 \code{\link[=dMod2Jobs]{dMod2Jobs()}} lists them.
 

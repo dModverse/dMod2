@@ -207,6 +207,11 @@ test_that("a job submitted from another machine is recovered from the nodes and 
                                                input = character(0), jobname = "jm"))
   expect_true(wait_for(job))
   expect_true(file.exists(file.path(remote, "jm_folder", "job.rds")))
+  # the finished job is not replaced by one of the same name from another working directory
+  elsewhere(expect_error(
+    distributedComputing(1, on = on, input = character(0), jobname = "jm"),
+    "the folder of job 'jm' on h1 holds the job submitted from"))
+  expect_identical(job$get(), list(1L, 2L, 3L))
   elsewhere({
     expect_error(distributedComputing(NULL, jobname = "jm", recover = TRUE), "no job 'jm'")
     moved <- distributedComputing(NULL, on = on, jobname = "jm", recover = TRUE)

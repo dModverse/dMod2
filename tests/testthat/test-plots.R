@@ -175,3 +175,109 @@ test_that("plot() of a prdframe takes a data frame", {
   data <- data.frame(name = "A", time = times, value = exp(-times / 2), sigma = 0.1)
   expect_s3_class(plot(pred[[1]], data), "ggplot")
 })
+
+# A fit of spike-and-slab random effects k and A over three groups, as em() returns it, without
+# the model: A of group G3 reaches no data.
+.slabFit <- function(method = "focei", shift = 0) {
+  groups <- paste0("G", 1:3)
+  random <- data.frame(group = rep(groups, 2), eta = rep(c("k", "A"), each = 3),
+                       parameter = paste0("eta_", rep(c("k", "A"), each = 3), "_", groups),
+                       mode = c(0, 0.8, -0.5, 0, 0, 0), se = c(0.05, 0.1, 0.2, 0.3, 0.02, 0.5),
+                       data = c(TRUE, TRUE, TRUE, TRUE, TRUE, FALSE), cluster = c(0, 1, 2, 0, 0, 0),
+                       p0 = c(0.9, 0.01, 0.2, 0.6, 0.95, 0.7), stringsAsFactors = FALSE)
+  modes <- matrix(random$mode, 3, dimnames = list(groups, c("eta_k", "eta_A")))
+  inner <- modes
+  inner[, "eta_A"] <- c(0.2, -0.1, 0)
+  argument <- c(k = -0.5 + shift, A = 2.3, prob_ID = 0.3, tau_ID = 0.7)
+  information <- diag(c(50, 40, 30, 20)) + 1
+  dimnames(information) <- list(names(argument), names(argument))
+  structure(list(argument = argument, value = -40, gradient = 0 * argument, method = method,
+                 information = information, etaModes = modes, innerModes = inner,
+                 random = random,
+                 slab = data.frame(name = c("prob_ID", "tau_ID"), distribution = "spikeSlab", symbols = "k, A",
+                                   estimate = c(0.3, 0.7), fixed = FALSE, stringsAsFactors = FALSE),
+                 stageTrace = data.frame(iter = 1:3, phase = "trust", OFV = c(-30, -39, -40),
+                                         deltaPar = c(NA, 0.2, 0.01), prob_ID = c(0.5, 0.35, 0.3),
+                                         tau_ID = c(0.3, 0.6, 0.7)),
+                 multistart = data.frame(start = 1:4, value = c(-40, -40, -35, NA), converged = TRUE,
+                                         iterations = 10L)),
+            class = c("em", "list"))
+}
+
+test_that("the inclusion heatmap shows 1 - p0 with the reported values of the deviations", {
+  fit <- .slabFit()
+  d <- plotRandomEffects(fit, type = "inclusion")$data
+  expect_equal(d$inclusion, 1 - fit$random$p0)
+  expect_equal(d$label, c("", "0.80", "-0.50", "", "", "no data"))
+  expect_equal(levels(d$eta), c("A", "k"))
+})
+
+test_that("conditional draws of spike-and-slab effects: spike mass p0, the conditional variance, the prior", {
+  fit <- .slabFit()
+  set.seed(1)
+  v <- dMod2:::.spikeSlabValues(fit, "conditional", 20000L)
+  # the effect without data stays out
+  expect_equal(nrow(v), 5 * 20000)
+  r <- fit$random[fit$random$data, ]
+  for (i in seq_len(nrow(r))) {
+    x <- v$value[(i - 1) * 20000 + 1:20000]
+    expect_equal(mean(x == 0), r$p0[i], tolerance = 0.02)
+    expect_equal(sd(x), r$se[i], tolerance = 0.05)
+  }
+  expect_equal(unique(v$spike), 0.7)
+  expect_equal(unique(v$sd), 0.7)
+  # histogram bars have area 1, the exact zeros the mean p0; the prior spike has area 1 - prob
+  p <- plotRandomEffects(fit, draws = 2000L)
+  bars <- p$data
+  for (e in c("k", "A")) {
+    b <- bars[bars$eta == e, ]
+    area <- (b$xmax - b$xmin) * (b$ymax - b$ymin)
+    expect_equal(sum(area), 1)
+    expect_equal(sum(area[b$part == "spike"]), mean(r$p0[r$eta == e]), tolerance = 0.03)
+  }
+  spike <- p$layers[[3]]$data
+  expect_equal(spike$width * spike$density, c(0.7, 0.7))
+  # with only sparse effects there is no QQ plot
+  expect_s3_class(p, "ggplot")
+  expect_s3_class(plotRandomEffects(fit, type = "modes"), "ggplot")
+})
+
+test_that("plotTrace draws the hyperparameters of a sparse fit", {
+  d <- plotTrace(.slabFit())$data
+  expect_equal(levels(d$panel), c("OFV", "|delta par|", "prob_ID", "tau_ID"))
+  expect_true(all(is.finite(d$value)))
+})
+
+test_that("plotTrace leaves out iterations without a value", {
+  fit <- .slabFit()
+  fit$stageTrace$deltaPar[1] <- NA
+  d <- plotTrace(fit)$data
+  expect_equal(sum(d$panel == "|delta par|"), nrow(fit$stageTrace) - 1L)
+  expect_true(all(is.finite(d$value)))
+})
+
+test_that("plotPars draws the estimates of several em fits side by side with Wald intervals", {
+  fits <- list(focei = .slabFit(), saem = .slabFit("saem", shift = 0.1))
+  fits$saem$information <- NULL
+  p <- plotPars(fits, which = c("k", "A", "prob_ID"))
+  d <- p$data
+  expect_equal(nrow(d), 6)
+  expect_equal(levels(d$fit), c("focei", "saem"))
+  expect_equal(d$estimate[d$fit == "saem" & d$parameter == "k"], -0.4)
+  # Wald intervals where the fit has standard errors only
+  se <- sqrt(diag(solve(fits$focei$information)))[1:3]
+  expect_equal(d$upper[d$fit == "focei"] - d$estimate[d$fit == "focei"], unname(qnorm(0.975) * se))
+  expect_true(all(is.na(d$lower[d$fit == "saem"])))
+  # the first fit of a row on top
+  expect_gt(d$position[1], d$position[4])
+  # unnamed fits are labeled by their method
+  expect_equal(levels(plotPars(unname(fits))$data$fit), c("focei", "saem"))
+  expect_error(plotPars(list(a = 1)), "em fits")
+})
+
+test_that("plotValues draws the multistart of an em fit and of a list of them", {
+  fit <- .slabFit()
+  expect_equal(plotValues(fit)$data$value, c(-40, -40, -35))
+  d <- plotValues(list(a = fit, b = fit))$data
+  expect_equal(as.vector(table(d$set)), c(3, 3))
+})

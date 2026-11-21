@@ -65,8 +65,9 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   sims <- .simulatedRows(object, nsim)
   y <- pr$observed
   lloq <- .emObsLimits(design)
-  pars <- c(object$argument, .etaVector(object))
-  units <- lapply(.volumeUnits(design, c(pars, object$fixed), object$fixed), `[[`, "conditions")
+  # the conditions of a group, or of a component of several groupings, share the random effects
+  units <- if (is.null(design$groupings)) unname(design$conditions[design$groups])
+           else lapply(design$components, `[[`, "conditions")
   units <- c(units, as.list(.setdiff(names(design$data), unlist(units))))
   out <- rep(NA_real_, length(y))
   for (u in units) {

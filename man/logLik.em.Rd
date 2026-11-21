@@ -4,17 +4,28 @@
 \alias{logLik.em}
 \title{Log-likelihood of a mixed-effects fit}
 \usage{
-\method{logLik}{em}(object, ...)
+\method{logLik}{em}(object, method = c("fit", "importance"), draws = 1000L, ...)
 }
 \arguments{
 \item{object}{An \code{em} object, see \code{\link[=em]{em()}}.}
+
+\item{method}{\code{"fit"} (default) the marginal log-likelihood of the fit;
+\code{"importance"} the marginal log-likelihood at the estimates by importance
+sampling on the model, for spike-and-slab random effects of one grouping
+(normal ones beside). The proposal is the mixture of the approximation of
+the fit with widened spreads; the fit must contain the design.}
+
+\item{draws}{Draws per group for \code{method = "importance"}, default 1000.}
 
 \item{...}{Ignored.}
 }
 \value{
 The marginal log-likelihood, \code{-value / 2}, of class \code{logLik} with
 the number of estimated parameters as \code{df} and the number of
-observations as \code{nobs}, so \code{\link[stats:AIC]{stats::AIC()}} and \code{\link[stats:BIC]{stats::BIC()}} apply.
+observations as \code{nobs}, so \code{\link[stats:AIC]{stats::AIC()}} and \code{\link[stats:BIC]{stats::BIC()}} apply. With
+\code{method = "importance"} the attributes \code{se} (standard error), \code{ess}
+(effective sample size per group) and \code{approximation} (the log-likelihood
+of the approximation of the fit at the estimates).
 }
 \description{
 Log-likelihood of a mixed-effects fit

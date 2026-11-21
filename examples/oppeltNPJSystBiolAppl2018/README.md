@@ -26,6 +26,8 @@ publication; model after Daniel Kaschek's dMod implementation (dkaschek/dMod_Exa
 | `profiles.R` | profiles of all parameters, saves `results/profiles.rds` |
 | `variants.R` | core model of the publication and variants that release one setting, likelihood ratios, saves `results/variants.rds` |
 | `reduced.R` | the model reduced by the limits the profiles point to |
+| `discrete.R` | the discrete symmetry of the reduced model and the chart of a fundamental domain, saves `results/discrete.rds` |
+| `fundamental.R` | fit and profiles of the reduced model in the chart of the fundamental domain, saves `results/fundamental.rds` |
 | `refit.R` | fit and profiles of the reduced model, likelihood ratio, saves `results/reduced.rds` |
 | `prediction.R` | prediction band of nuclear IκBα, saves `results/prediction.rds` |
 | `compounds.R` | the changes the compounds cause, by spike-and-slab random effects, saves `results/compounds.rds` |
@@ -63,7 +65,7 @@ it reads `results/` and simulates the compiled models.
 
 ## Fit
 
-200 fits, 180 converged. The best value is -488.675, reached by 9 fits within 0.1.
+200 fits, 187 converged. The best value is -488.677, reached by 10 fits within 0.1.
 
 
 <img src="figures/waterfall-1.png" width="768" />

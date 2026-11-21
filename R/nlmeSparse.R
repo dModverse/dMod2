@@ -74,85 +74,53 @@
 
 ## ---- inner mode --------------------------------------------------------------------
 
-## The mode of the etas at `theta`, group by group, since the etas of a group enter only the group
-## conditions: data -2 log L, normal prior and the slab alone, eta^2 / tau^2, per spike-and-slab
-## eta, by trust. The model is differentiated in the etas of the group that reach the group data
-## only, the others rest at 0; the Hessian is Gauss-Newton with a BFGS correction from the points
-## that lowered the value, which adds the curvature of the residuals. A group starts from the lowest of `start` and the modes in
-## `control$optima`, the optima found at earlier points, since the inner problem may have several.
-## The tolerances of the outer trust region, which bound the error the solver leaves, end the search.
-## With `control$phi` the value of every group at the group mode is attribute "phi".
+## The modes of the etas at `theta` by the group kernel, the slab alone per sparse eta, etas that
+## reach no data of the group at 0; each group starts from the lowest of `start` and the earlier
+## optima in `control$optima`. With `control$phi` the inner values are attribute "phi".
 .sparseModes <- function(design, objs, prior, theta, hyp, start, control = list()) {
   lay <- .sparseLayout(design)
   E <- design$etaNames
-  names <- as.vector(E)
-  slab <- .slabPrecision(E, lay, hyp)
-  modes <- matrix(as.vector(start), nrow(E), dimnames = dimnames(E))
+  K <- ncol(E)
   reach <- .reachOf(design)
-  modes[!reach] <- 0
-  given <- as.list(control$trustControl$tolControl)
-  tol <- utils::modifyList(list(ftol = 1e-10, mtol = 1e-10),
-                           given[.intersect(c("ftol", "mtol", "gtol"), names(given))])
-  phis <- setNames(rep(NA_real_, nrow(E)), rownames(E))
-  for (i in seq_len(nrow(E))) {
-    en <- E[i, reach[i, ]]
-    if (!length(en)) next
-    conds <- design$conditions[[i]]
-    sl <- slab[.intersect(names(slab), en)]
-    # the value alone
-    phi <- function(eta) {
-      full <- c(theta, setNames(as.vector(modes), names))
-      full[en] <- as.numeric(eta)
-      v <- sum(vapply(.objEvalMany(objs[conds], rep(list(full[en]), length(conds)), deriv = FALSE,
-                                   fixed = full[.setdiff(names(full), en)]), `[[`, 0, "value"))
-      if (!is.null(prior)) v <- v + prior(pars = full, deriv = FALSE)$value
-      if (length(sl)) v <- v + sum(sl * full[names(sl)]^2) / 2
-      v
-    }
-    known <- control$optima[[i]]
-    if (length(known)) {
-      starts <- rbind(modes[i, reach[i, ]], known[, reach[i, ], drop = FALSE])
-      modes[i, reach[i, ]] <- starts[which.min(vapply(seq_len(nrow(starts)), function(r) phi(starts[r, ]), 0)), ]
-    }
-    best <- Inf; bestAt <- bestGrad <- correction <- NULL
-    objective <- function(eta, ...) {
-      full <- c(theta, setNames(as.vector(modes), names))
-      full[en] <- as.numeric(eta)
-      out <- Reduce(`+`, .objEvalMany(objs[conds], rep(list(full[en]), length(conds)),
-                                      fixed = full[.setdiff(names(full), en)]))
-      v <- out$value
-      gr <- out$gradient[en]
-      he <- out$hessian[en, en, drop = FALSE]
-      if (!is.null(prior)) {
-        pr <- prior(pars = full, deriv = TRUE)
-        nn <- .intersect(en, names(pr$gradient))
-        v <- v + pr$value
-        gr[nn] <- gr[nn] + pr$gradient[nn]
-        he[nn, nn] <- he[nn, nn] + pr$hessian[nn, nn]
-      }
-      if (length(sl)) {
-        es <- full[names(sl)]
-        v <- v + sum(sl * es^2) / 2
-        gr[names(sl)] <- gr[names(sl)] + sl * es
-        he[cbind(names(sl), names(sl))] <- he[cbind(names(sl), names(sl))] + sl
-      }
-      if (is.null(correction)) correction <<- 0 * he
-      # a correction from an earlier point that leaves the model at this one indefinite is dropped
-      if (any(correction != 0) && min(eigen(he + correction, symmetric = TRUE, only.values = TRUE)$values) <= 0)
-        correction <<- 0 * he
-      if (v < best) {
-        if (!is.null(bestAt)) correction <<- .secantCorrection(he, correction, eta - bestAt, gr - bestGrad)
-        best <<- v; bestAt <<- eta; bestGrad <<- gr
-      }
-      list(value = v, gradient = gr, hessian = he + correction)
-    }
-    args <- list(objfun = objective, parinit = setNames(modes[i, reach[i, ]], en), rinit = 1, rmax = 10,
-                 iterlim = control$iterlim %||% 100L, tolControl = tol)
-    fit <- do.call(trust, c(args, list(sparse = FALSE)))
-    modes[i, reach[i, ]] <- fit$argument[en]
-    if (isTRUE(control$phi)) phis[i] <- phi(fit$argument[en])
+  isL <- colnames(E) %in% lay$stem
+  meta <- control$meta %||% .foceiMeta(design, theta, NULL, colnames(E), reach)
+  Pm <- matrix(0, K, K)
+  ld <- 0
+  if (any(!isL)) {
+    L <- .choleskyFactor(design$normal, theta)
+    Pm[!isL, !isL] <- chol2inv(t(L))
+    ld <- 2 * sum(log(diag(L)))
   }
-  if (isTRUE(control$phi)) attr(modes, "phi") <- phis
+  diag(Pm)[isL] <- 1 / hyp$tau[colnames(E)[isL]]^2
+  predictor <- .guardPredictor(.batchPredictor(design))
+  full <- setNames(numeric(length(meta$pars_full_names)), meta$pars_full_names)
+  full[names(theta)] <- theta
+  run <- function(warm, iterlim) {
+    warm <- matrix(as.vector(warm), nrow(E))
+    warm[!reach] <- 0
+    k <- nlme_group_kernel(design$prdfn, .errorModel(design), full, warm, meta, Pm, ld, NULL,
+                           list(iterlim = iterlim), predict_cb = predictor)
+    list(modes = matrix(as.vector(k$eta_modes), nrow(E), dimnames = dimnames(E)), phi = as.numeric(k$value))
+  }
+  # the starts: per group the row of `start` or of an earlier optimum with the lowest value
+  start <- matrix(as.vector(start), nrow(E), dimnames = dimnames(E))
+  depth <- max(0L, vapply(control$optima, function(o) if (is.null(o)) 0L else nrow(o), 0L))
+  if (depth) {
+    low <- run(start, 0L)$phi
+    for (r in seq_len(depth)) {
+      cand <- start
+      for (i in seq_len(nrow(E))) if (!is.null(control$optima[[i]]) && nrow(control$optima[[i]]) >= r)
+        cand[i, ] <- control$optima[[i]][r, ]
+      phi <- run(cand, 0L)$phi
+      lower <- phi < low
+      start[lower, ] <- cand[lower, ]
+      low[lower] <- phi[lower]
+    }
+  }
+  best <- run(start, control$iterlim %||% 100L)
+  modes <- best$modes
+  modes[!reach] <- 0
+  if (isTRUE(control$phi)) attr(modes, "phi") <- setNames(best$phi, rownames(E))
   modes
 }
 
@@ -273,14 +241,16 @@
        sweeps = sp$outer)
 }
 
-## The integral of Dirichlet-process stems by sequential importance sampling
-## (.dirichletImportance), with the standard error of log I; the moments and derivatives of the
-## mean-field result are not formed, they stay 0 or NA.
+## The integral of Dirichlet-process stems, spike-and-slab ones beside them, by sequential
+## importance sampling (.dirichletImportance), with the standard error of log I; the moments and
+## derivatives of the mean-field result are not formed, they stay 0 or NA.
 .importanceField <- function(P, m, lay, hyp, hypers, particles) {
   G <- nrow(m); K <- ncol(m); stems <- colnames(m)
-  if (!all(lay$dist[match(stems, lay$stem)] == "dirichletProcess"))
-    stop("em: importance sampling integrates Dirichlet-process random effects only.", call. = FALSE)
-  is <- .dirichletImportance(P, m, hyp$concentration[stems], hyp$tau[stems], particles)
+  dist <- lay$dist[match(stems, lay$stem)]
+  if (!any(dist == "dirichletProcess"))
+    stop("em: importance sampling integrates Dirichlet-process random effects.", call. = FALSE)
+  is <- .dirichletImportance(P, m, hyp$concentration[stems], hyp$tau[stems], particles,
+                             slab = dist == "spikeSlab", prob = hyp$prob[stems])
   none <- matrix(NA_real_, G, K, dimnames = dimnames(m))
   list(logI = is$logI, se = is$se, dm = 0 * m, dP = lapply(P, function(x) 0 * x),
        dhyper = setNames(numeric(length(hypers)), hypers), mean = none,
@@ -402,7 +372,8 @@
   var <- matrix(vapply(cov, diag, numeric(K)), G, K, byrow = TRUE, dimnames = dimnames(E))
   out <- list(value = value, modes = modes, mean = mean, var = var, cov = cov, slab = sp$slab,
               selected = selected, clusters = clusters, spike = spike, valueSE = 2 * (sp$se %||% 0),
-              coupling = sp$coupling, sites = sp$sites, reach = reach)
+              coupling = sp$coupling, sites = sp$sites, reach = reach,
+              local = list(P = lapply(S, `/`, 2), b = bL))
   if (!grad || importance) return(out)
 
   # derivatives of the value in g, S and the mode on the sparse block, from the moments of the
@@ -540,6 +511,15 @@
   slabPrec <- .slabPrecision(E, lay, hyp)
   Hex[cbind(names(slabPrec), names(slabPrec))] <- Hex[cbind(names(slabPrec), names(slabPrec))] + slabPrec
 
+  # the value at the exact modes to first order: it depends on the modes at first order (dEta), and
+  # the inner search leaves the gradient `inner` at them, which a Newton step on Hex removes
+  inner <- setNames(numeric(length(names)), names)
+  for (i in seq_len(G)) inner[E[i, ]] <- gr[i, ]
+  if (!is.null(pr)) inner[pe] <- inner[pe] + pr$gradient[pe]
+  inner[names(slabPrec)] <- inner[names(slabPrec)] + slabPrec * full[names(slabPrec)]
+  out$value <- value + tryCatch(-sum(dEta[on] * solve(Hex[on, on, drop = FALSE], inner[on])),
+                                error = function(e) 0)
+
   # the shift of the mode: every eta moves with the parameters; the curvature of the mode is block
   # diagonal by groups, so the shift of a group is separate
   td <- .tauDerivative(modes, E, lay, hyp)
@@ -566,7 +546,18 @@
   }
   out$gradient <- c(gradient, hyperGrad)
   out$hessian <- model %||% schur
-  if (scores) out[c("scores", "freeGradient", "freeHessian")] <- list(byGroup, freeGradient, freeHessian)
+  if (scores) {
+    # the terms without random effects enter the information by their expected information
+    info <- 0 * freeHessian
+    terms <- c(lapply(design$freeConditions, function(cn)
+      objs[[cn]](full, fixed = fixed, deriv = TRUE, hessian = "expected")),
+      if (!is.null(extra)) list(extra(pars = full, fixed = fixed, deriv = TRUE, hessian = "expected")))
+    for (o in terms) {
+      an <- .intersect(A, rownames(o$hessian))
+      info[an, an] <- info[an, an] + o$hessian[an, an]
+    }
+    out[c("scores", "freeGradient", "freeHessian")] <- list(byGroup, freeGradient, info)
+  }
   out
 }
 
@@ -638,6 +629,7 @@
   lc$derivMode <- .secondOrderMode(design, design$objfn, par, fixed, control[.setdiff(names(control), "secondOrderCorrection")],
                                    units = lapply(design$groups, function(g)
                                      list(eta = unname(E[g, reach[g, ]]), conditions = design$conditions[[g]])))
+  lc$meta <- .foceiMeta(design, c(par, fixed), NULL, colnames(E), reach)
   maxOuter <- lc$maxOuter %||% 200L
   jointControl <- .trustControl(list(rinit = 1, rmax = 10, tolControl = list(ftol = 1e-10, mtol = 1e-5)),
                                 lc$trustControl, label = "trustControl")
@@ -914,4 +906,119 @@
     if (abs(step) < 1e-12) break
   }
   exp(lt)
+}
+
+
+## ---- importance sampling on the model ------------------------------------------------
+
+## -2 log L of a spike-and-slab fit by importance sampling on the model, `draws` per group from the
+## mixture of the approximation with spreads widened by `widen`: value, standard error, effective
+## sample size per group and the value of the approximation at the same point.
+.sparseImportance <- function(object, draws = 1000L, widen = 1.5, chunk = 250L) {
+  design <- object$design
+  if (is.null(design))
+    stop("logLik: the fit has no design; method = \"importance\" evaluates the model.", call. = FALSE)
+  lay <- .sparseLayout(design)
+  if (!is.null(design$groupings) || is.null(lay) || any(lay$dist != "spikeSlab"))
+    stop("logLik: method = \"importance\" takes spike-and-slab random effects of one grouping, normal ones beside.",
+         call. = FALSE)
+  fixed <- object$fixed
+  hypers <- .intersect(.sparseHypers(lay), names(object$argument))
+  par <- object$argument[.setdiff(names(object$argument), hypers)]
+  theta <- c(par, fixed)
+  hyp <- .stemHypers(lay, c(object$argument, fixed))
+  objs <- .conditionObjectives(design)
+  prior <- if (design$normal$K) .normalPrior(design)
+  E <- design$etaNames
+  # the inner modes of the approximation at the estimates, of a fit without them the modes of the changes
+  warm <- object$innerModes %||% object$etaModes %||% matrix(0, nrow(E), ncol(E), dimnames = dimnames(E))
+  reach <- .reachOf(design)
+  dm <- .secondOrderMode(design, design$objfn, par, fixed, list(), units = lapply(design$groups, function(g)
+    list(eta = unname(E[g, reach[g, ]]), conditions = design$conditions[[g]])))
+  r <- .sparseMarginal(design, objs, prior, theta, hyp, names(par), hypers, fixed, warm, grad = FALSE,
+                       control = list(derivMode = dm))
+  if (isTRUE(r$infeasible)) stop("logLik: the approximation has no value at the estimates.", call. = FALSE)
+  G <- nrow(E)
+  isL <- colnames(E) %in% lay$stem
+  full <- c(theta, setNames(as.vector(r$modes), as.vector(E)))
+  if (design$normal$K) {
+    Lc <- .choleskyFactor(design$normal, theta)
+    Omega <- Lc %*% t(Lc)
+  }
+  dmvn <- function(X, m, S) {
+    R <- chol(S)
+    Z <- backsolve(R, t(X) - m, transpose = TRUE)
+    -colSums(Z^2) / 2 - sum(log(diag(R))) - nrow(R) * log(2 * pi) / 2
+  }
+  groups <- lapply(seq_len(G), function(i) {
+    on <- r$reach[i, ]
+    jL <- which(isL & on); jN <- which(!isL & on)
+    X <- matrix(0, draws, ncol(E))
+    lq <- lp <- numeric(draws)
+    # the subset by the spike probabilities, the slab values of it jointly from the local model
+    # exp(-eta' P eta / 2 + b' eta) of the data times the slab prior
+    if (length(jL)) {
+      kL <- match(jL, which(isL))
+      st <- colnames(E)[jL]
+      tau <- hyp$tau[st]; prob <- hyp$prob[st]
+      p0 <- pmin(pmax(r$spike[i, jL], 0.01), 0.99)
+      P <- r$local$P[[i]][kL, kL, drop = FALSE]
+      bb <- r$local$b[i, kL]
+      Z <- matrix(stats::runif(draws * length(jL)) > rep(p0, each = draws), draws)
+      for (k in seq_len(draws)) {
+        z <- Z[k, ]
+        lq[k] <- sum(ifelse(z, log(1 - p0), log(p0)))
+        lp[k] <- sum(ifelse(z, log(prob), log(1 - prob)))
+        if (!any(z)) next
+        Lam <- P[z, z, drop = FALSE] + diag(1 / tau[z]^2, sum(z))
+        R <- chol(Lam / widen^2)
+        mu <- backsolve(chol(Lam), backsolve(chol(Lam), bb[z], transpose = TRUE))
+        x <- mu + backsolve(R, stats::rnorm(sum(z)))
+        X[k, jL[z]] <- x
+        u <- R %*% (x - mu)
+        lq[k] <- lq[k] + sum(log(diag(R))) - sum(z) * log(2 * pi) / 2 - sum(u^2) / 2
+        lp[k] <- lp[k] + sum(stats::dnorm(x, 0, tau[z], log = TRUE))
+      }
+    }
+    if (length(jN)) {
+      S <- widen^2 * r$cov[[i]][jN, jN, drop = FALSE]
+      m <- r$modes[i, jN]
+      Xn <- matrix(stats::rnorm(draws * length(jN)), draws) %*% chol(S) + rep(m, each = draws)
+      X[, jN] <- Xn
+      lq <- lq + dmvn(Xn, m, S)
+      on <- match(colnames(E)[jN], design$normal$stems)
+      lp <- lp + dmvn(Xn, rep(0, length(jN)), Omega[on, on, drop = FALSE])
+    }
+    list(X = X, lw = lp - lq)
+  })
+  # the data -2 log L of every group at the draws, in chunks of draws over all groups
+  conds <- lapply(seq_len(G), function(i) design$conditions[[design$groups[i]]])
+  data <- matrix(0, G, draws)
+  for (start in seq(1L, draws, by = chunk)) {
+    ks <- start:min(draws, start + chunk - 1L)
+    jobs <- do.call(rbind, lapply(seq_len(G), function(i)
+      expand.grid(group = i, draw = ks, cond = conds[[i]], stringsAsFactors = FALSE)))
+    pars <- lapply(seq_len(nrow(jobs)), function(q) {
+      p <- full
+      p[E[jobs$group[q], ]] <- groups[[jobs$group[q]]]$X[jobs$draw[q], ]
+      p
+    })
+    v <- vapply(.objEvalMany(objs[jobs$cond], pars, deriv = FALSE), `[[`, 0, "value")
+    agg <- tapply(v, list(jobs$group, jobs$draw), sum)
+    data[as.integer(rownames(agg)), as.integer(colnames(agg))] <- agg
+  }
+  terms <- vapply(seq_len(G), function(i) {
+    lw <- groups[[i]]$lw - data[i, ] / 2
+    mx <- max(lw)
+    w <- exp(lw - mx)
+    c(value = -2 * (mx + log(mean(w))), se = 2 * stats::sd(w) / (sqrt(draws) * mean(w)),
+      ess = sum(w)^2 / sum(w^2))
+  }, numeric(3))
+  free <- if (length(design$freeConditions))
+    sum(vapply(.objEvalMany(objs[design$freeConditions], rep(list(full), length(design$freeConditions)),
+                            deriv = FALSE), `[[`, 0, "value"))
+  extra <- .extraObjective(design)
+  beside <- (free %||% 0) + if (!is.null(extra)) extra(pars = full, fixed = fixed, deriv = FALSE)$value else 0
+  list(value = sum(terms["value", ]) + beside, se = sqrt(sum(terms["se", ]^2)),
+       ess = setNames(terms["ess", ], rownames(E)), approximation = r$value)
 }

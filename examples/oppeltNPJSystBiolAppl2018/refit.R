@@ -30,31 +30,20 @@ ratio <- c(full = dataFull, reduced = dataReduced, difference = dataReduced - da
            removed = removed, threshold = qchisq(0.95, removed))
 
 ## ---- reducedprofileprior
-# the prior of the profiles of profiles.R, standard deviation 20 at the best fit
+# the prior of the profiles of profiles.R, standard deviation 20 at the best fit, and one fit from
+# there
 objReducedProfile <- normL2(data, prdReduced, eReduced) + constraintL2(bestReduced, sigma = 20)
-# the best of 20 fits from `center` and from starts about it, sd 0.1, as for the full model
-bestReducedFit <- function(center) {
-  fits <- mstrust(objReducedProfile, center, fixed = gaugeReduced, sd = 0.1, fits = 20,
-                  startFromCenter = TRUE, rinit = 0.1, rmax = 10, iterlim = 1000,
-                  tolControl = tolerances, cores = getOption("dMod2.cores"))
-  values <- vapply(fits, function(f) if (is.numeric(f$value)) f$value else Inf, 0)
-  fits[[which.min(values)]]
-}
-fitReducedProfile <- bestReducedFit(bestReduced)
+fitReducedProfile <- trust(objReducedProfile, bestReduced, fixed = gaugeReduced, rinit = 0.1,
+                           rmax = 10, iterlim = 1000, tolControl = tolerances)
 bestReducedProfile <- fitReducedProfile$argument
 
 ## ---- reducedprofiles
-# the settings of the full model, with the same restart from a lower point of a profile
-repeat {
-  profilesReduced <- profile(objReducedProfile, bestReducedProfile, names(bestReducedProfile),
-                             fixed = gaugeReduced, limits = c(lower = -7, upper = 7),
-                             stepControl = list(stop = "data"), algoControl = list(reoptimize = TRUE),
-                             optControl = list(iterlim = 100, tolControl = tolerances),
-                             cores = getOption("dMod2.cores"))
-  if (min(profilesReduced$value) > fitReducedProfile$value - 1e-2) break
-  fitReducedProfile <- bestReducedFit(as.parvec(profilesReduced)[names(bestReducedProfile)])
-  bestReducedProfile <- fitReducedProfile$argument
-}
+# the settings of the full model
+profilesReduced <- profile(objReducedProfile, bestReducedProfile, names(bestReducedProfile),
+                           fixed = gaugeReduced, limits = c(lower = -7, upper = 7),
+                           stepControl = list(stop = "data"), algoControl = list(reoptimize = TRUE),
+                           optControl = list(iterlim = 100, tolControl = tolerances),
+                           cores = getOption("dMod2.cores"))
 
 ## ---- reducedsave
 # the md5 of the files the result is computed from, which the guide checks on reading

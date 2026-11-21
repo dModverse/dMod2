@@ -31,6 +31,115 @@ test_that("trust(sparse = TRUE) reaches the dense optimum", {
   expect_equal(s$argument[names(d$argument)], d$argument, tolerance = 1e-5)
 })
 
+# Nonlinear least squares with a tridiagonal Gauss-Newton Hessian plus a penalty on the sum, which
+# the sparse Hessian passes as a low-rank part.
+.chainLsq <- function(K = 6L, c = 0.3) {
+  nm <- paste0("x", seq_len(K))
+  t <- seq(0.5, 2, length.out = K)
+  function(pars, hessian = TRUE, ...) {
+    x <- pars[nm]
+    i <- seq_len(K - 1L)
+    r <- c(exp(x) - t, x[i] * x[i + 1L] - 0.5)
+    J <- rbind(diag(exp(x)), matrix(0, K - 1L, K))
+    J[cbind(K + i, i)] <- x[i + 1L]
+    J[cbind(K + i, i + 1L)] <- x[i]
+    u <- sum(x) - 1
+    G <- 2 * crossprod(J)
+    dimnames(G) <- list(nm, nm)
+    lr <- list(U = matrix(1, K, 1L, dimnames = list(nm, NULL)), d = c)
+    out <- objlist(sum(r^2) + 0.5 * c * u^2, setNames(drop(2 * crossprod(J, r)) + c * u, nm),
+                   if (identical(hessian, "sparse")) Matrix::Matrix(G, sparse = TRUE) else G + c)
+    if (identical(hessian, "sparse")) out$lowrank <- lr
+    out
+  }
+}
+
+test_that("limited-memory BFGS on the sparse model: the dense optimum and the compact Hessian", {
+  obj <- .chainLsq()
+  p0 <- setNames(rep(0.3, 6), paste0("x", 1:6))
+  ph <- list(list(hessianMethod = "gn", iterlim = 2),
+             list(hessianMethod = "bfgs", qnControl = list(qnMemory = 3)))
+  d <- trust(obj, p0, rinit = 1, rmax = 10, phases = ph)
+  s <- trust(obj, p0, rinit = 1, rmax = 10, phases = ph, sparse = TRUE, blather = TRUE)
+  expect_true(s$converged)
+  expect_equal(s$value, d$value, tolerance = 1e-8)
+  expect_equal(s$argument, d$argument, tolerance = 1e-5)
+  expect_identical(s$phaseIterations[["gn"]], 2L)
+
+  # B0 the Gauss-Newton Hessian at the handover, the correction of Byrd, Nocedal and Schnabel from
+  # the last qnMemory accepted pairs that pass the cautious test, damped as they enter
+  bf <- which(s$hessianSource == "bfgs")
+  B0 <- obj(s$argpath[bf[1], ])$hessian
+  compact <- function(S, Y) {
+    if (!ncol(S)) return(B0)
+    SY <- crossprod(S, Y)
+    L <- SY * lower.tri(SY)
+    M <- rbind(cbind(crossprod(S, B0 %*% S), L), cbind(t(L), -diag(diag(SY), ncol(S))))
+    W <- cbind(B0 %*% S, Y)
+    B0 - W %*% solve(M, t(W))
+  }
+  model <- function(pts) {
+    if (nrow(pts) > 1) pts <- pts[c(TRUE, rowSums(abs(diff(pts))) > 0), , drop = FALSE]
+    g <- t(apply(pts, 1, function(x) obj(x)$gradient))
+    S <- Y <- matrix(0, ncol(pts), 0)
+    for (k in seq_len(nrow(pts) - 1L)) {
+      sk <- pts[k + 1, ] - pts[k, ]; yk <- g[k + 1, ] - g[k, ]
+      if (sum(sk * yk) <= 1e-8 * sqrt(sum(sk^2) * sum(yk^2))) next
+      Bs <- drop(compact(S, Y) %*% sk)
+      sBs <- sum(sk * Bs); sy <- sum(sk * yk)
+      th <- if (sy < 0.2 * sBs) 0.8 * sBs / (sBs - sy) else 1
+      S <- cbind(S, sk); Y <- cbind(Y, th * yk + (1 - th) * Bs)
+      if (ncol(S) > 3) { S <- S[, -1, drop = FALSE]; Y <- Y[, -1, drop = FALSE] }
+    }
+    compact(S, Y)
+  }
+  # the predicted decrease of every full step of the phase
+  for (k in bf[s$stepback[bf] == "full"]) {
+    B <- model(s$argpath[bf[1]:k, , drop = FALSE])
+    step <- s$argtry[k, ] - s$argpath[k, ]
+    g <- obj(s$argpath[k, ])$gradient
+    expect_equal(s$preddiff[k], sum(g * step) + 0.5 * drop(step %*% B %*% step), tolerance = 1e-8)
+  }
+  # the model Hessian of the result: the sparse B0 and the low-rank part of B0 and the correction
+  H <- as.matrix(s$hessian) + s$lowrank$U %*% (s$lowrank$d * t(s$lowrank$U))
+  expect_equal(unname(H), unname(model(rbind(s$argpath[bf, ], s$argument))), tolerance = 1e-8)
+
+  expect_error(trust(obj, p0, phases = list(list(hessianMethod = "gn"), list(hessianMethod = "sr1")),
+                     sparse = TRUE), "limited-memory BFGS")
+})
+
+test_that("a sparse BFGS phase from an indefinite Hessian keeps a positive definite model", {
+  # double-well terms coupled along a chain: the Hessian is indefinite near zero
+  K <- 6L
+  nm <- paste0("x", seq_len(K))
+  obj <- function(pars, hessian = TRUE, ...) {
+    x <- pars[nm]
+    i <- seq_len(K - 1L)
+    dx <- x[i] - x[i + 1L]
+    g <- 4 * x * (x^2 - 1)
+    g[i] <- g[i] + dx
+    g[i + 1L] <- g[i + 1L] - dx
+    H <- diag(12 * x^2 - 4)
+    H[cbind(i, i)] <- H[cbind(i, i)] + 1
+    H[cbind(i + 1L, i + 1L)] <- H[cbind(i + 1L, i + 1L)] + 1
+    H[cbind(i, i + 1L)] <- H[cbind(i + 1L, i)] <- -1
+    dimnames(H) <- list(nm, nm)
+    objlist(sum((x^2 - 1)^2) + 0.5 * sum(dx^2), setNames(g, nm),
+            if (identical(hessian, "sparse")) Matrix::Matrix(H, sparse = TRUE) else H)
+  }
+  p0 <- setNames(c(0.1, -0.05, 0.2, 0.15, -0.1, 0.05), nm)
+  ph <- list(list(hessianMethod = "gn", iterlim = 1), list(hessianMethod = "bfgs"))
+  d <- trust(obj, p0, rinit = 0.1, rmax = 10, phases = ph)
+  s <- trust(obj, p0, rinit = 0.1, rmax = 10, phases = ph, sparse = TRUE, blather = TRUE)
+  bf <- which(s$hessianSource == "bfgs")
+  expect_lt(min(eigen(obj(s$argpath[bf[1], ])$hessian, only.values = TRUE)$values), 0)
+  expect_true(s$converged)
+  expect_equal(s$value, d$value, tolerance = 1e-8)
+  H <- as.matrix(s$hessian)
+  if (!is.null(s$lowrank)) H <- H + s$lowrank$U %*% (s$lowrank$d * t(s$lowrank$U))
+  expect_gt(min(eigen(H, symmetric = TRUE, only.values = TRUE)$values), 0)
+})
+
 test_that("sparse Hessians of the constraints equal the dense ones, also through a chain", {
   outer <- c(u = 0.3, v = -0.2, w = 1.1, z = 0.5)
   inner <- c(a = 0.3 * -0.2, b = exp(1.1), c = 0.5, s = 0.1)

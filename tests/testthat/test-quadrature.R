@@ -165,7 +165,7 @@ test_that("on nodes frozen in phi the referenced fixed effects, the error model 
                }, 0)), tolerance = 1e-10)
 })
 
-test_that("a stage ends at what the stage nodes resolve, at the best iterate", {
+test_that("a fit on capped levels ends where the levels resolve, at the best iterate", {
   m <- .quad_models()
   fit <- suppressMessages(em(m$objE, randomEffects(m$pw), c(mu = 0.7, mu_w = 0.1, s = log(0.3)),
                              method = "quadrature", verbose = FALSE,
@@ -174,10 +174,79 @@ test_that("a stage ends at what the stage nodes resolve, at the best iterate", {
   tr <- fit$stageTrace
   expect_true(fit$converged)
   expect_lt(nrow(tr), 10L)
-  last <- tr[nrow(tr), ]
-  # ended where a Newton step gains less than the nodes resolve, or after a step that rose
-  expect_true(last$decrement < last$resolution || tr$OFV[nrow(tr)] > tr$OFV[nrow(tr) - 1L])
-  expect_equal(fit$value, min(tr$OFV), tolerance = 1e-7)
+  # every group is held at level 2 with an error above tol / G
+  expect_true(all(tr$capped == 3L))
+  lv <- attr(tr, "levels")
+  expect_equal(lv$level, rep(2L, 3))
+  expect_true(all(lv$capped & lv$levelError > 1e-12))
+  # the decrement stays above tolDecrement: the stop is a rise on unchanged levels
+  expect_identical(fit$stopReason, "resolution")
+  expect_gt(tr$OFV[nrow(tr)], tr$OFV[nrow(tr) - 1L])
+  # the best iterate, not the last
+  expect_equal(fit$value, min(tr$OFV), tolerance = 1e-10)
+  expect_lt(fit$value, tr$OFV[nrow(tr)])
+})
+
+test_that("a fit returns the best iterate when the rebuilds run out", {
+  m <- .quad_models()
+  fit <- suppressMessages(em(m$objE, randomEffects(m$pw), c(mu = 0.7, mu_w = 0.1, s = log(0.3)),
+                             method = "quadrature", verbose = FALSE,
+                             control = list(quadrature = list(maxLevel = 2, tol = 1e-12, tolDecrement = 0,
+                                                              maxEcmPerStage = 2, certificate = FALSE))))
+  tr <- fit$stageTrace
+  expect_false(fit$converged)
+  expect_identical(fit$stopReason, "iterlim")
+  expect_equal(nrow(tr), 2L)
+  expect_equal(fit$value, min(tr$OFV), tolerance = 1e-10)
+})
+
+test_that("a fit on uncapped levels is stationary at tolDecrement", {
+  m <- .quad_models()
+  fit <- suppressMessages(em(m$objE, randomEffects(m$pw), c(mu = 0.7, mu_w = 0.1, s = log(0.3)),
+                             method = "quadrature", verbose = FALSE,
+                             control = list(quadrature = list(tol = 1e-8, tolDecrement = 1e-10,
+                                                              certificate = FALSE))))
+  tr <- fit$stageTrace
+  expect_true(fit$converged)
+  expect_identical(fit$stopReason, "decrement")
+  expect_true(all(tr$capped == 0L))
+  expect_lt(tr$decrement[nrow(tr)], 1e-10)
+  expect_lt(max(abs(fit$gradient)), 1e-5)
+})
+
+test_that("levels over the node budget are rejected and the error comes from the level below", {
+  # nodes per group at K = 20 for levels K + 1 to K + 3: the default budget ends at K + 2
+  expect_equal(vapply(21:23, function(l) dMod2:::.levelNodes(20L, l), 0L), c(41L, 801L, 10041L))
+  m <- .quad_models()
+  d <- dMod2:::.emDesign(m$obj, randomEffects(m$p))
+  psi <- c(mu = 0.7, omega_mu_mu = log(0.3))
+  # one eta: levels 2, 4 and 9 have 3, 9 and 19 nodes
+  logL <- function(level) {
+    q <- dMod2:::.quadratureObjective(d, psi, NULL, list())
+    q$rebuild(psi, level)
+    vapply(seq_along(d$groups), function(i) {
+      n <- q$state$nodes[[i]]
+      log(sum(n$signs * exp(q$integrand(d$groups[i], list(n$eta), psi)[[1]] + n$logW)))
+    }, 0)
+  }
+  q <- dMod2:::.quadratureObjective(d, psi, NULL, list(maxNodes = 9))
+  q$rebuild(psi, 1, tol = 1e-6)
+  st <- q$state
+  expect_equal(st$levels, rep(4L, 3))
+  expect_true(all(st$capped))
+  expect_true(all(vapply(st$nodes, function(n) nrow(n$eta), 0L) <= 9L))
+  expect_equal(st$levelError, 2 * abs(logL(4) - logL(2)), tolerance = 1e-8)
+  expect_false(q$allowed(9L))
+  # a requested level over the budget falls to the highest one within it
+  q <- dMod2:::.quadratureObjective(d, psi, NULL, list(maxNodes = 9))
+  q$rebuild(psi, 9)
+  expect_equal(vapply(q$state$nodes, function(n) nrow(n$eta), 0L), rep(9L, 3))
+  expect_true(all(q$state$capped))
+  # within the budget the levels are those without it
+  q <- dMod2:::.quadratureObjective(d, psi, NULL, list(maxNodes = 35))
+  q$rebuild(psi, 1, tol = 1e-6)
+  expect_equal(q$state$levels, rep(9L, 3))
+  expect_false(any(q$state$capped))
 })
 
 test_that("the certificate at the estimate agrees with the quadrature and is reproducible", {

@@ -77,13 +77,13 @@ of the residuals
 $$\rho_k = \sqrt{\kappa} \begin{cases} r_k^{3/2}, & r_k \le 1, \\
   1 + \tfrac{3}{2}(r_k - 1), & r_k > 1, \end{cases} \qquad
   r_k = \frac{\max\bigl(0,\ \mathrm{Re}\,\lambda_k - \lambda_0\bigr)}{\lambda_{tol} - \lambda_0},
-  \qquad \lambda_0 = \lambda_{tol} - m s,
+  \qquad \lambda_0 = \lambda_{tol} - \max(d, m s),
   \tag{5}$$
 
-with weight $\kappa$ and the relative width $m$ of the ramp, `stabilityMargin` with default
-$10^{-6}$. The term is zero on a root whose leading real part lies more than $m s$ below
-$\lambda_{tol}$, however slowly a perturbation decays there; it does not depend on the time the
-data span. Each eigenvalue whose real part reaches $\lambda_{tol}$ adds $\kappa$,
+with weight $\kappa$ and the width $\max(d, m s)$ of the ramp: at least the absolute `width` $d$,
+default 0, and at least the `margin` $m$ relative to the scale, default $10^{-6}$, the precision of
+the eigenvalues. The term is zero on a root whose leading real part lies below $\lambda_0$,
+however slowly a perturbation decays there. Each eigenvalue whose real part reaches $\lambda_{tol}$ adds $\kappa$,
 and beyond, the term grows quadratically. Steady states that agree in the parameters, resting
 states and start values they read count once. For a simple eigenvalue with right and left
 eigenvectors $u_k$, $v_k$ of $J$, $v_k^{\mathsf H} u_k \ne 0$, and (4),
@@ -97,8 +97,13 @@ $$
 
 and $s = |\lambda_m|$, $\lambda_m$ the eigenvalue of largest modulus, has the derivative
 $\mathrm{Re}(\bar\lambda_m\, \mathrm{d}\lambda_m / \mathrm{d}p) / s$ by (6), continuous except
-where the eigenvalue of largest modulus changes. Both need `Pimpl(deriv2 = TRUE)`. The term is a
-model assumption, not data: profiles with `stop = "data"` and likelihood ratios leave it out.
+where the eigenvalue of largest modulus changes. Eigenvalues that coincide within the error of
+the eigenvalues, as a defective double eigenvalue of a chain of states with equal rates, have no
+derivative each; each takes the mean $\mathrm{tr}(P\, \mathrm{d}J/\mathrm{d}p) / n_c$ over the
+cluster of $n_c$ eigenvalues with spectral projector $P$, which is (6) for a simple eigenvalue and
+exact for a cluster that stays degenerate. Where two real eigenvalues on the ramp meet and become a
+complex pair, the derivatives of both diverge and the gradient of (5) has a kink. Both need
+`Pimpl(deriv2 = TRUE)`. The term is a model assumption, not data: profiles with `stop = "data"` and likelihood ratios leave it out.
 
 The Gauss-Newton Hessian of (5),
 
@@ -107,20 +112,38 @@ $$2 \sum_{k \,:\, \mathrm{Re}\,\lambda_k > \lambda_0}
   \qquad \frac{\mathrm{d} \rho_k}{\mathrm{d}p} = \frac{3}{2} \sqrt{\kappa}\, \min(r_k, 1)^{1/2}\,
   \frac{\mathrm{d} r_k}{\mathrm{d}p}, \tag{7}$$
 
-vanishes at the onset with the term and the gradient and is continuous at $r_k = 1$. The ramp is
-$m s$ wide, so $r_k$ is as accurate as the root relative to that width. The eigenvalues above
-the onset, their conditions, half-lives and the states with the largest entries of the right
+vanishes at the onset with the term and the gradient and is continuous at $r_k = 1$. Outside the
+ramp the term and (7) vanish, so the model of a trust-region step sees the boundary only from
+within the ramp; on a ramp narrow against the change of $\mathrm{Re}\,\lambda_k$ over a step,
+the steps cross it and are rejected, and the iterates creep along the boundary. A `width`
+$d$ in the units of the rates, wide against that change, avoids it and leaves a resting state
+untouched whose slowest mode decays faster than $d$; the ramp then does not move with $s$. A ramp
+$m s$ wide gives $r_k$ as accurate as the root relative to that width. The eigenvalues above the
+onset, their conditions, half-lives and the states with the largest entries of the right
 eigenvectors are the attribute `"eigenvalues"` of a call of the term.
 
 ## Analytical steady-state constraints
 
 `steadyStates()` solves $f(x, p) = 0$ in closed form [@rosenblatt2016customized; @kaschek2019dmod].
-Each unknown, a state or a kinetic parameter, is solved from a combination of balances such that
-the solution is a ratio of sums of positive terms. The solution is thus positive for positive
+The balances are taken in amounts, so that a quantity conserved across compartments is a dependent
+balance. First, a state whose balance is linear in the state, with all terms of the state on one
+side, is solved from that balance, influx over outflux rate, unless the rate constants of the
+solution leave a cycle of the graph of states without a cut; the states of conserved quantities are
+left to the cuts. Then the cycles are cut, each at a state of a conserved quantity, which stays
+free, or at a state whose balance is solved for a rate constant common to the flux terms of one
+side. The cuts are ranked as by @rosenblatt2016customized: conserved quantities first, then sides
+whose flux terms occur in no other balance, fewer balances changed, fewer terms, more cycles
+through the state. Then each unknown, a state or a kinetic parameter, is solved from a combination
+of balances such that the solution is a ratio of sums of positive terms. The solution is thus positive for positive
 parameters, also with `solveQuadratic = TRUE`, which takes the positive root of a balance quadratic
 in the state. A state whose balance is spent on a kinetic parameter stays free, as the parameter of the
 steady-state value of the state. States that are zero in every steady state are set to 0. A conserved quantity
 keeps one state free. Volumes are never solved for.
+
+Only if no solution of this form exists, a side whose flux terms have separate rate constants
+$k_0, \dots, k_m$ is a cut as well. The fluxes $v_j$ of the side get free ratios
+$r_{x,j} = v_j / v_0 > 0$, named `r_<state>_<j>`; $k_0$ is solved, each $k_j$ follows from
+$r_{x,j}$ and $k_0$. The ratios are new parameters of the transformation.
 
 The result, one equation per solved unknown, replaces identity entries of a parameter
 transformation:
@@ -149,8 +172,7 @@ Without a solution of this form, `steadyStates()` returns `0`. The solver is a P
 convergence failure, no solver tolerance in the objective, one parameter less per solved equation.
 Rosenblatt et al. report more reliable and faster optimization than with common numerical
 implementations [@rosenblatt2016customized]. `steadyStates()` does not test stability; `Pimpl()`
-does ([Stability](#stability)). `Pimpl()` is needed where no closed form of positive sums exists,
-as for the network of the guide.
+does ([Stability](#stability)). `Pimpl()` is needed where no closed form of positive sums exists.
 
 Reference: `conservedQuantities()`, `Pimpl()`, `steadyStates()`, `constraintStability()`
 

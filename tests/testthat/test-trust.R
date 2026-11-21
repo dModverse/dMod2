@@ -6,7 +6,11 @@ skip_if_no_compile <- function() {
   testthat::skip_on_cran()
 }
 
-fx_register(multicond = TRUE)
+fx_register(multicond = TRUE, extra = function(bench) list(
+  trust_err = Y(c(y = "sqrt(s0^2 + srel^2 * y^2)"), f = bench$gfn, attachInput = FALSE,
+                condition = "C1", modelname = "trust_err", compile = FALSE),
+  trust_p_err = P(eqnvec(A = "exp(A_log)", k = "exp(k_log)", s0 = "exp(s0_log)", srel = "srel"),
+                  condition = "C1", modelname = "trust_p_err", compile = FALSE)))
 
 
 # Synthetic quadratic objective in arbitrary dimension. Minimum at `target`.
@@ -68,11 +72,25 @@ test_that("a gradient stop needs the full Newton step to predict at most mtol", 
 })
 
 test_that("a value stop needs the full Newton step to predict at most mtol", {
-  fit <- trust(.flat_objfn, c(x = 0, y = 9), rinit = 0.05, rmax = 0.05,
+  fit <- trust(.flat_objfn, c(x = 0, y = 9), rinit = 0.05, rmax = 0.05, hessianMethod = "gn",
                tolControl = list(ftol = 1e-3, mtol = 1e-4, gtol = 1e-6))
   expect_true(fit$converged)
   expect_identical(fit$stopReason, "fvalue")
   expect_lte(fit$value, 1e-4)
+})
+
+
+test_that("a stop held back by the Newton decrease ends the run when the radius collapses", {
+  # the gradient predicts a decrease along the flat direction that the noisy value does not follow
+  h <- c(1, 1e-4)
+  obj <- function(p, ...) {
+    objlist(0.5 * sum(h * p^2) + 5e-5 * sin(1e6 * p[["y"]]), h * p + c(0, 0.01),
+            diag(h) |> `dimnames<-`(list(names(p), names(p))))
+  }
+  fit <- trust(obj, c(x = 1, y = 1), rinit = 1, rmax = 10, iterlim = 200,
+               tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-6, rmin = 1e-3))
+  expect_true(fit$converged)
+  expect_identical(fit$stopReason, "fvalue")
 })
 
 
@@ -352,6 +370,22 @@ test_that("a flat objective under repeated rejection stops as stagnation", {
 })
 
 
+test_that("stagnation is convergence only where the Newton decrease is at most mtol", {
+  # a value that follows no step: the gradient predicts a decrease the run never finds
+  flat <- function(p, ...) list(value = 1, gradient = c(1, 1), hessian = diag(2))
+  fit <- trust(flat, c(a = 0, b = 0), iterlim = 500)
+  expect_identical(fit$stopReason, "stagnation")
+  expect_false(fit$converged)
+  # noise above ftol around the minimum of a quadratic: no step is accepted, the model is at rest
+  start <- c(a = 1e-4, b = 0)
+  noisy <- function(p, ...) list(value = sum(p^2) + 5e-5 * any(p != start), gradient = 2 * p,
+                                 hessian = diag(2, 2))
+  fit <- trust(noisy, start, rinit = 1e-6, iterlim = 500,
+               tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-6))
+  expect_identical(fit$stopReason, "stagnation")
+  expect_true(fit$converged)
+})
+
 test_that("a rank-deficient Gauss-Newton Hessian gives a minimum-norm step", {
   # Rank-deficient Gauss-Newton Hessian with the gradient orthogonal to the null
   # space: the step must not extend along the zero-curvature direction.
@@ -555,8 +589,8 @@ test_that("evalBySource and nSwitch account for every evaluation", {
   # objective has no `deriv2` argument, so it is not driven here.
   for (hm in c("gn", "bfgs", "sr1")) {
     fit <- trust(obj, init, hessianMethod = hm)
-    expect_identical(names(fit$evalBySource), c("gn", "bfgs", "sr1", "exact"),
-                     info = hm)
+    expect_identical(names(fit$evalBySource), c("gn", "bfgs", "sr1", "exact", "sbfgs",
+                                                "ssr1", "gnsbfgs", "gnssr1"), info = hm)
     expect_identical(fit$evalBySource[["exact"]], 0L, info = hm)
     expect_identical(sum(fit$evalBySource), fit$neval, info = hm)
     expect_identical(fit$nSwitch, 0L, info = hm)                 # no handover
@@ -660,7 +694,8 @@ test_that("a soft stop past the handover ends the run", {
   init <- c(a = 0, b = 0)
   hy <- suppressWarnings(trust(obj, init, iterlim = 500,
                                phases = list(list(hessianMethod = "gn"), list(hessianMethod = "bfgs"))))
-  expect_true(hy$converged)
+  # the gradient the value never follows leaves a Newton decrease above mtol: not converged
+  expect_false(hy$converged)
   expect_identical(hy$stopReason, "stagnation")
   expect_lt(hy$iterations, 500L)
 })
@@ -676,6 +711,26 @@ test_that("hessianInit is inert for the methods that need the objective Hessian"
     alt <- do.call(trust, c(args, list(qnControl = list(hessianInit = "identity"))))
     expect_equal(alt$argument, ref$argument, ignore_attr = TRUE, info = hm)
     expect_identical(alt$neval, ref$neval, info = hm)
+  }
+})
+
+test_that("a BFGS phase seeded from an indefinite Hessian starts positive definite", {
+  # a double well in a, coupled to a quadratic in b, from a start of negative curvature
+  obj <- function(x, ...) {
+    a <- x[["a"]]; b <- x[["b"]]
+    list(value = a^4 / 4 - a^2 / 2 + (b - 1)^2 + 0.3 * a * b,
+         gradient = c(a = a^3 - a + 0.3 * b, b = 2 * (b - 1) + 0.3 * a),
+         hessian = matrix(c(3 * a^2 - 1, 0.3, 0.3, 2), 2, dimnames = list(c("a", "b"), c("a", "b"))))
+  }
+  init <- c(a = 0.1, b = 0)
+  runs <- list(
+    seed = list(hessianMethod = "bfgs", qnControl = list(hessianInit = "gn")),
+    handover = list(phases = list(list(hessianMethod = "gn", iterlim = 1), list(hessianMethod = "bfgs"))))
+  for (k in names(runs)) {
+    fit <- do.call(trust, c(list(obj, init, iterlim = 200), runs[[k]]))
+    expect_true(fit$converged, info = k)
+    expect_identical(fit$stopReason, "gradient", info = k)
+    expect_gt(min(eigen(fit$hessian, symmetric = TRUE, only.values = TRUE)$values), 0)
   }
 })
 
@@ -790,7 +845,7 @@ test_that("an iteration-limit stop also reports the last accepted iterate", {
 test_that("a single phase or no switch reproduces the plain run", {
   obj  <- .misscaled_objfn(c(a = 1, b = -2))
   init <- c(a = 0, b = 0)
-  plain <- trust(obj, init, iterlim = 200)
+  plain <- trust(obj, init, iterlim = 200, hessianMethod = "gn")
   expect_identical(plain$phaseIterations, c(gn = plain$iterations))
   expect_null(plain$phaseSweep)
   for (alt in list(list(phases = list(list(hessianMethod = "gn"))),
@@ -895,6 +950,164 @@ test_that("a phase that uses up the phase iterations ends unconverged", {
   expect_identical(utils::tail(g$hessianSource, 1L), "gn")
 })
 
+test_that("a phase hands over after radiusStall iterations at an unchanged radius", {
+  # every step ends on the boundary of the region, so the radius grows to rmax and stays there
+  obj  <- function(p, ...) list(value = 0.5 * sum((p - 10)^2), gradient = p - 10, hessian = diag(2))
+  init <- c(a = 0, b = 0)
+  ph   <- list(list(hessianMethod = "gn", radiusStall = 3), list(hessianMethod = "bfgs"))
+  f <- trust(obj, init, rinit = 0.1, rmax = 0.1, blather = TRUE, phases = ph)
+  expect_identical(f$phaseIterations[["gn"]], 3L)
+  expect_identical(f$hessianSource[1:4], c("gn", "gn", "gn", "bfgs"))
+  expect_true(f$converged)
+
+  # a change of the radius restarts the count
+  g <- trust(obj, init, rinit = 0.1, rmax = 0.4, blather = TRUE, phases = ph)
+  expect_equal(g$r[1:6], c(0.1, 0.2, 0.4, 0.4, 0.4, 0.1))
+  expect_identical(g$phaseIterations[["gn"]], 5L)
+
+  # without a handover left the count stops nothing
+  h <- trust(obj, init, rinit = 0.1, rmax = 0.1, blather = TRUE, phases = ph, switches = 0)
+  expect_identical(names(h$phaseIterations), "gn")
+  expect_true(h$converged)
+  expect_error(trust(obj, init, phases = list(list(hessianMethod = "gn", radiusStall = 0))),
+               "radiusStall must be a positive number")
+})
+
+## ---- Default: the hybrid of Fides -------------------------------------------
+
+# The misscaled quadratic with names on the Hessian, in a dense and a sparse version.
+.misscaled_named <- function(target, sparse = FALSE) {
+  f <- .misscaled_objfn(target)
+  function(p, ..., hessian = TRUE) {
+    out <- f(p)
+    dimnames(out$hessian) <- list(names(p), names(p))
+    if (sparse && identical(hessian, "sparse")) out$hessian <- Matrix::Matrix(out$hessian, sparse = TRUE)
+    out
+  }
+}
+
+# The damped BFGS update of the kernel with the cautious test.
+.bfgs_r <- function(B, s, y, cautious = 1e-8) {
+  if (!(sum(s * y) > cautious * sqrt(sum(s^2) * sum(y^2)))) return(B)
+  Bs <- as.vector(B %*% s)
+  sy <- sum(s * y); sBs <- sum(s * Bs)
+  th <- if (sy < 0.2 * sBs) 0.8 * sBs / (sBs - sy) else 1
+  r <- th * y + (1 - th) * Bs
+  B + tcrossprod(r) / sum(s * r) - tcrossprod(Bs) / sBs
+}
+
+test_that("the default runs Gauss-Newton, then BFGS after 20 iterations at an unchanged radius", {
+  obj  <- .misscaled_named(c(a = 1, b = -2, c = 3))
+  init <- c(a = 0, b = 0, c = 0)
+  fit <- trust(obj, init, iterlim = 200, blather = TRUE)
+  expect_true(fit$converged)
+  expect_identical(fit$nSwitch, 1L)
+  expect_identical(names(fit$phaseIterations), c("gn", "bfgs"))
+  n <- fit$phaseIterations[["gn"]]
+  expect_identical(fit$hessianSource, rep(c("gn", "bfgs"), fit$phaseIterations))
+  # the radius at the head of the last 20 Gauss-Newton iterations is the one at the switch
+  expect_true(all(fit$r[(n - 19):(n + 1)] == fit$r[n + 1]))
+  expect_false(fit$r[n - 20] == fit$r[n + 1])
+  expect_equal(fit$argument, c(a = 1, b = -2, c = 3), tolerance = 1e-6)
+})
+
+test_that("the tracked BFGS matrix is the start Hessian updated with every accepted pair", {
+  obj  <- .misscaled_named(c(a = 1, b = -2, c = 3))
+  init <- c(a = 0, b = 0, c = 0)
+  fit <- trust(obj, init, iterlim = 200, blather = TRUE)
+  expect_identical(fit$nSwitch, 1L)
+  B <- obj(init)$hessian
+  for (i in which(fit$accept == 1)) {
+    s <- fit$argtry[i, ] - fit$argpath[i, ]
+    B <- .bfgs_r(B, s, obj(fit$argtry[i, ])$gradient - obj(fit$argpath[i, ])$gradient)
+  }
+  expect_equal(fit$hessian, B, tolerance = 1e-10, ignore_attr = TRUE)
+  expect_false(isTRUE(all.equal(B, obj(init)$hessian, check.attributes = FALSE)))
+
+  # an indefinite start Hessian enters with the absolute values of the eigenvalues
+  ind <- function(p, ...) {
+    out <- obj(p)
+    out$hessian[] <- diag(c(20, -20, 20))
+    out
+  }
+  expect_warning(f2 <- trust(ind, init, iterlim = 3, blather = TRUE, phases = list(
+    list(hessianMethod = "gn", iterlim = 3),
+    list(hessianMethod = "bfgs", qnControl = list(hessianInit = "tracked")))), "Maximum number")
+  B <- diag(20, 3)
+  for (i in which(f2$accept == 1)) {
+    s <- f2$argtry[i, ] - f2$argpath[i, ]
+    B <- .bfgs_r(B, s, ind(f2$argtry[i, ])$gradient - ind(f2$argpath[i, ])$gradient)
+  }
+  expect_identical(f2$nSwitch, 1L)
+  expect_equal(f2$hessian, B, tolerance = 1e-10, ignore_attr = TRUE)
+})
+
+test_that("keepRadius keeps the radius at the handover, and onStop = \"end\" ends the run", {
+  obj  <- .misscaled_named(c(a = 1, b = -2, c = 3))
+  init <- c(a = 0, b = 0, c = 0)
+  ph <- function(keep) list(list(hessianMethod = "gn", radiusStall = 20, onStop = "end"),
+                            list(hessianMethod = "bfgs", keepRadius = keep,
+                                 qnControl = list(hessianInit = "tracked")))
+  kept <- trust(obj, init, iterlim = 200, blather = TRUE, phases = ph(TRUE))
+  restart <- trust(obj, init, iterlim = 200, blather = TRUE, phases = ph(FALSE))
+  n <- kept$phaseIterations[["gn"]]
+  expect_identical(restart$phaseIterations[["gn"]], n)
+  expect_gt(kept$r[n], 0.1)
+  expect_identical(kept$r[n + 1], kept$r[n])
+  expect_identical(restart$r[n + 1], 0.1)
+
+  # a value stop of the first phase hands over by default and ends the run with "end"
+  flat <- function(p, ...) list(value = 0.5 * sum(c(1, 1e-3) * p^2), gradient = c(1, 1e-3) * p,
+                                hessian = diag(c(1, 1e-3)))
+  run <- function(stop) trust(flat, c(x = 0, y = 9), rinit = 0.05, rmax = 0.05,
+                              tolControl = list(ftol = 1e-3, mtol = 1e-4, gtol = 1e-6),
+                              phases = list(list(hessianMethod = "gn", onStop = stop),
+                                            list(hessianMethod = "bfgs")))
+  expect_identical(run("handover")$nSwitch, 1L)
+  ended <- run("end")
+  expect_identical(ended$nSwitch, 0L)
+  expect_identical(ended$stopReason, "fvalue")
+  expect_true(ended$converged)
+
+  expect_error(trust(obj, init, phases = list(list(hessianMethod = "bfgs",
+                                                   qnControl = list(hessianInit = "tracked")))),
+               "after the first")
+  expect_error(trust(obj, init, phases = list(list(hessianMethod = "gn"),
+                                              list(hessianMethod = "sr1",
+                                                   qnControl = list(hessianInit = "tracked")))),
+               "after the first")
+  expect_error(trust(obj, init, phases = list(list(hessianMethod = "gn", keepRadius = NA))),
+               "TRUE or FALSE")
+  expect_error(trust(obj, init, phases = list(list(hessianMethod = "gn", onStop = "nope"))),
+               "should be one of")
+})
+
+test_that("explicit gn, the sparse path and the clip boundary stay Gauss-Newton", {
+  target <- c(a = 1, b = -2, c = 3)
+  init <- c(a = 0, b = 0, c = 0)
+  dense <- .misscaled_named(target)
+  expect_identical(names(trust(dense, init, iterlim = 200)$phaseIterations), c("gn", "bfgs"))
+  gn <- trust(dense, init, iterlim = 200, hessianMethod = "gn")
+  expect_identical(gn$phaseIterations, c(gn = gn$iterations))
+  expect_null(gn$phaseSweep)
+
+  sp <- .misscaled_named(target, sparse = TRUE)
+  forced <- trust(sp, init, iterlim = 200, sparse = TRUE)
+  auto <- withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)),
+                              trust(sp, init, iterlim = 200))
+  for (f in list(forced, auto)) {
+    expect_s4_class(f$hessian, "sparseMatrix")
+    expect_identical(f$phaseIterations, c(gn = f$iterations))
+    expect_identical(f$iterations, gn$iterations)
+  }
+  expect_error(trust(sp, init, sparse = TRUE, phases = list(
+    list(hessianMethod = "gn"), list(hessianMethod = "bfgs", qnControl = list(hessianInit = "tracked")))),
+    "limited-memory BFGS")
+  clip <- trust(dense, init, iterlim = 200, boundary = "clip")
+  expect_true(clip$converged)
+  expect_null(clip$phaseIterations)
+})
+
 ## ---- Counters across repeated handovers -------------------------------------
 
 # The flat objective with a `sweep` argument; `log()` lists the sweep and the
@@ -918,7 +1131,7 @@ test_that("phase iterations add up, and the handover iteration counts on the pha
     expect_identical(sum(f$phaseIterations), f$iterations)
     expect_identical(rle(f$hessianSource)$lengths, unname(f$phaseIterations))
     expect_identical(f$stopReason, "stagnation")
-    expect_true(f$converged)
+    expect_false(f$converged)
   }
 
   # A budget on the first phase ends it after exactly that many iterations.
@@ -926,7 +1139,7 @@ test_that("phase iterations add up, and the handover iteration counts on the pha
                                                        list(hessianMethod = "bfgs"))))
   expect_identical(g$phaseIterations[["gn"]], 3L)
   expect_identical(g$nSwitch, 1L)
-  expect_true(g$converged)
+  expect_false(g$converged)
 })
 
 test_that("a budget run out after the last handover ends unconverged on either source", {
@@ -1039,4 +1252,284 @@ test_that("a trial point without a Hessian is a failed evaluation, not an error"
     "evaluation failed")
   expect_identical(fit$stopReason, "objfun")
   expect_false(fit$converged)
+})
+
+
+## ---- Structured quasi-Newton methods --------------------------------
+
+# A least-squares objective from residuals: value sum(r^2), gradient 2 J'r, Gauss-Newton Hessian
+# 2 J'J, and with deriv2 the exact Hessian. `res(p)` returns r, J and the residual Hessians Hr.
+.lsq_objfn <- function(res) {
+  function(p, deriv = TRUE, hessian = TRUE, deriv2 = FALSE, ...) {
+    e <- res(p); n <- names(p)
+    H <- 2 * crossprod(e$J)
+    if (deriv2) H <- H + 2 * Reduce(`+`, Map(`*`, e$r, e$Hr))
+    dimnames(H) <- list(n, n)
+    objlist(sum(e$r^2), setNames(as.vector(2 * crossprod(e$J, e$r)), n), H)
+  }
+}
+
+# The same with the data rows of the residuals, as objlist() describes them: Jacobian J, seeds 2 r
+# and the Gauss-Newton Hessian, under hessian = "structured".
+.lsq_rows_objfn <- function(res) {
+  base <- .lsq_objfn(res)
+  function(p, deriv = TRUE, hessian = TRUE, ...) {
+    out <- base(p, deriv = deriv, hessian = hessian, ...)
+    if (identical(hessian, "structured")) {
+      e <- res(p)
+      out$structure <- list(jacobian = unname(e$J), seeds = 2 * e$r, hessian = out$hessian)
+    }
+    out
+  }
+}
+
+# Residuals (x + 1, l x^2 + x - 1) per coordinate: minimum at 0 with value 4 for every l, where
+# the second-order term S = -2 l is not small against J'J = 2.
+.ds_objfn <- function(l) .lsq_objfn(function(p) {
+  x <- p[[1]]; y <- p[[2]]
+  Z <- matrix(0, 2, 2)
+  list(r  = c(x + 1, l * x^2 + x - 1, y + 1, l * y^2 + y - 1),
+       J  = rbind(c(1, 0), c(2 * l * x + 1, 0), c(0, 1), c(0, 2 * l * y + 1)),
+       Hr = list(Z, matrix(c(2 * l, 0, 0, 0), 2), Z, matrix(c(0, 0, 0, 2 * l), 2)))
+})
+
+# Exponential decay fitted to exact data: residual zero at (a, k) = (1, 0.5).
+.exp_objfn <- local({
+  tt <- seq(0, 4, by = 0.5)
+  .lsq_objfn(function(p) {
+    a <- p[[1]]; k <- p[[2]]; e <- exp(-k * tt)
+    list(r = a * e - exp(-0.5 * tt), J = cbind(e, -a * tt * e),
+         Hr = lapply(seq_along(tt), function(i)
+           tt[i] * e[i] * matrix(c(0, -1, -1, a * tt[i]), 2)))
+  })
+})
+
+.structured <- c("sbfgs", "ssr1", "gnsbfgs", "gnssr1")
+.tight <- list(gtol = 1e-6, ftol = 0, mtol = 0)
+
+test_that("every Hessian method reaches the minimum of a large-residual problem", {
+  obj <- .ds_objfn(-0.8)
+  for (hm in c("gn", "bfgs", "sr1", "exact", .structured)) {
+    fit <- trust(obj, c(x = 1, y = -1), rinit = 1, iterlim = 200, hessianMethod = hm,
+                 tolControl = .tight)
+    expect_true(fit$converged, info = hm)
+    expect_equal(unname(fit$argument), c(0, 0), tolerance = 1e-6, info = hm)
+    expect_equal(fit$value, 4, tolerance = 1e-10, info = hm)
+    expect_gt(fit$evalBySource[[hm]], 0L)
+  }
+})
+
+test_that("structured methods need fewer iterations than gn where the residual is large", {
+  obj <- .ds_objfn(-0.8)
+  it <- vapply(c("gn", .structured), function(hm)
+    trust(obj, c(x = 1, y = -1), rinit = 1, iterlim = 200, hessianMethod = hm,
+          tolControl = .tight)$iterations, 1L)
+  expect_gt(it[["gn"]], 40L)
+  expect_true(all(it[.structured] <= 15L), info = paste(names(it), it, collapse = " "))
+})
+
+test_that("the hybrid methods and residual scaling keep Gauss-Newton speed at zero residual", {
+  init <- c(a = 3, k = 2)
+  run <- function(hm, ...) trust(.exp_objfn, init, rinit = 1, iterlim = 200, hessianMethod = hm,
+                                 tolControl = .tight, ...)
+  gn <- run("gn")
+  expect_true(gn$converged)
+  fast <- list(run("gnsbfgs"), run("gnssr1"),
+               run("sbfgs", qnControl = list(qnScaling = "residual")),
+               run("ssr1", qnControl = list(qnScaling = "residual")))
+  for (f in fast) {
+    expect_true(f$converged)
+    expect_equal(unname(f$argument), c(1, 0.5), tolerance = 1e-6)
+    expect_lte(f$iterations, gn$iterations + 1L)
+  }
+  # without the scaling a structured correction remains and slows the end
+  expect_gt(run("sbfgs")$iterations, gn$iterations + 2L)
+  expect_gt(fast[[1]]$hybridGN, 0L)
+})
+
+test_that("the hybrid switch follows the ratio z's / s's against qnHybridTol", {
+  # z = (g+ - g - G+ s) sqrt(f+ / f); "gnsbfgs" takes the Gauss-Newton branch where z's / s's
+  # is below the tolerance, "gnssr1" where |z's| / s's is
+  for (hm in c("gnsbfgs", "gnssr1")) for (tol in c(1e-6, 1e-2)) {
+    fit <- trust(.exp_objfn, c(a = 3, k = 2), rinit = 1, iterlim = 200, hessianMethod = hm,
+                 tolControl = .tight, qnControl = list(qnHybridTol = tol), blather = TRUE)
+    acc <- which(fit$accept == 1)
+    expect_gt(length(acc), 2L)
+    branch <- vapply(acc, function(i) {
+      x0 <- fit$argpath[i, ]; x1 <- fit$argtry[i, ]
+      o0 <- .exp_objfn(x0); o1 <- .exp_objfn(x1)
+      s <- x1 - x0
+      z <- (o1$gradient - o0$gradient - o1$hessian %*% s) * sqrt(o1$value / o0$value)
+      q <- sum(z * s) / sum(s * s)
+      if (hm == "gnssr1") q <- abs(q)
+      if (q < tol) "gn" else hm
+    }, "")
+    inner <- acc < fit$iterations
+    expect_identical(fit$hessianSource[acc[inner] + 1L], branch[inner], info = paste(hm, tol))
+    expect_identical(fit$hybridGN, sum(branch == "gn"), info = paste(hm, tol))
+  }
+  # a negative curvature term keeps "gnsbfgs" on Gauss-Newton, "gnssr1" takes it
+  neg <- .ds_objfn(0.5)
+  b <- trust(neg, c(x = 1, y = 1), rinit = 1, hessianMethod = "gnsbfgs", tolControl = .tight)
+  s <- trust(neg, c(x = 1, y = 1), rinit = 1, hessianMethod = "gnssr1", tolControl = .tight)
+  expect_gte(b$hybridGN, b$iterations - 2L)
+  expect_identical(s$hybridGN, 0L)
+  expect_lt(s$iterations, b$iterations)
+})
+
+test_that("qnHybridShift adds the residual norm to the Gauss-Newton branch", {
+  neg <- .ds_objfn(0.5)
+  fit <- trust(neg, c(x = 1, y = 1), rinit = 1, hessianMethod = "gnsbfgs", tolControl = .tight,
+               qnControl = list(qnHybridShift = TRUE), blather = TRUE)
+  expect_true(fit$converged)
+  gn <- which(fit$hessianSource == "gn")
+  expect_gt(length(gn), 2L)
+  for (i in gn) {
+    x0 <- fit$argpath[i, ]; s <- fit$argtry[i, ] - x0; o <- neg(x0)
+    m <- sum(o$gradient * s) + 0.5 * sum(s * ((o$hessian + sqrt(o$value) * diag(2)) %*% s))
+    expect_equal(fit$preddiff[i], m, tolerance = 1e-8, info = i)
+  }
+})
+
+test_that("a structured SR1 pair orthogonal to the step is skipped", {
+  # f = p'Qp / 2 reported with G = Q + D, so the structured secant is w = -D s, orthogonal to
+  # a first step s = (-1, -1)
+  Q <- c(2, 3); D <- c(1, -1)
+  obj <- function(p, ...) {
+    n <- names(p)
+    objlist(sum(Q * p^2) / 2, setNames(Q * p, n), matrix(diag(Q + D), 2, 2, dimnames = list(n, n)))
+  }
+  one <- function(init) suppressWarnings(
+    trust(obj, init, rinit = 2, iterlim = 1L, hessianMethod = "ssr1", blather = TRUE))
+  skip <- one(c(a = 1.5, b = 2 / 3))
+  expect_equal(unname(skip$argtry[1, ] - skip$argpath[1, ]), c(-1, -1), tolerance = 1e-12)
+  expect_identical(skip$qnSkipped, 1L)
+  expect_equal(unname(skip$hessian), diag(Q + D), tolerance = 1e-12)
+  # off the orthogonal direction the pair updates G by w w' / w's
+  upd <- one(c(a = 1.5, b = 1))
+  s <- upd$argtry[1, ] - upd$argpath[1, ]
+  w <- -D * s
+  expect_identical(upd$qnSkipped, 0L)
+  expect_equal(unname(upd$hessian), diag(Q + D) + tcrossprod(w) / sum(w * s), tolerance = 1e-10)
+})
+
+test_that("structured methods run as phases and take over from any source", {
+  obj  <- .ds_objfn(-0.8)
+  init <- c(x = 1, y = -1)
+  gn <- trust(obj, init, rinit = 1, tolControl = .tight)
+  for (first in c("gn", "bfgs", "exact")) for (hm in .structured) {
+    fit <- trust(obj, init, rinit = 1, tolControl = .tight,
+                 phases = list(list(hessianMethod = first, iterlim = 3), list(hessianMethod = hm)))
+    info <- paste(first, hm)
+    expect_true(fit$converged, info = info)
+    expect_identical(fit$nSwitch, 1L, info = info)
+    expect_identical(names(fit$phaseIterations), c(first, hm), info = info)
+    expect_gt(fit$evalBySource[[hm]], 0L)
+    expect_identical(sum(fit$evalBySource), fit$neval, info = info)
+    expect_lt(fit$iterations, gn$iterations)
+    expect_equal(unname(fit$argument), c(0, 0), tolerance = 1e-6, info = info)
+  }
+})
+
+test_that("structured methods honor bounds and maximization", {
+  obj <- .ds_objfn(-0.8)
+  for (hm in .structured) {
+    fit <- trust(obj, c(x = 1, y = -1), rinit = 1, hessianMethod = hm, tolControl = .tight,
+                 parlower = c(x = 0.2))
+    expect_true(fit$converged, info = hm)
+    expect_equal(fit$argument[["x"]], 0.2, tolerance = 1e-6, info = hm)
+    expect_true(fit$atBound[["x"]], info = hm)
+    neg <- function(p, ...) { o <- obj(p, ...); objlist(-o$value, -o$gradient, -o$hessian) }
+    mx <- trust(neg, c(x = 1, y = -1), rinit = 1, hessianMethod = hm, tolControl = .tight,
+                minimize = FALSE)
+    expect_equal(unname(mx$argument), c(0, 0), tolerance = 1e-6, info = hm)
+  }
+})
+
+test_that("structured methods refuse settings they cannot honor", {
+  obj <- .ds_objfn(-0.8)
+  init <- c(x = 1, y = -1)
+  expect_error(trust(obj, init, hessianMethod = "sbfgs", qnControl = list(qnMemory = 3)),
+               "keeps no pairs")
+  expect_error(trust(obj, init, hessianMethod = "ssr1",
+                     qnControl = list(hessianInit = "identity")), "Gauss-Newton")
+  expect_error(trust(obj, init, phases = list(list(hessianMethod = "gnsbfgs", sweep = "reverse"))),
+               "forward sensitivities")
+  expect_error(trust(obj, init, hessianMethod = "sbfgs", sparse = TRUE), "sparse")
+  expect_error(trust(obj, init, hessianMethod = "sbfgs", boundary = "clip"), "reflective")
+  expect_error(trust(obj, init, hessianMethod = "gnsbfgs", qnControl = list(qnScaling = "x")))
+  expect_error(trustL1(obj, init, hessianMethod = "sbfgs"), "argument of trust")
+})
+
+test_that("structured methods fit a sum of normL2 and a prior to the gn optimum", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  data  <- fx_decay_data(pars = c(A = 1.0, k = 0.5), sigma = 0.02,
+                         times = seq(0, 8, by = 0.5), seed = 17L)
+  obj   <- normL2(data, bench$prd_id) + constraintL2(mu = c(A = 0.8, k = 0.4), sigma = 0.1)
+  init  <- c(A = 0.6, k = 0.9)
+  ref <- trust(obj, init, rinit = 1, iterlim = 200)
+  for (hm in .structured) {
+    fit <- trust(obj, init, rinit = 1, iterlim = 200, hessianMethod = hm)
+    expect_true(fit$converged, info = hm)
+    expect_equal(fit$argument, ref$argument, tolerance = 1e-4, ignore_attr = TRUE, info = hm)
+  }
+})
+
+test_that("the structured secant of an objective with data rows is (J+ - J)'u+", {
+  # one accepted SR1 step from A = 0: the model is G+ + w w' / w's with w the secant
+  res <- function(p) {
+    a <- p[[1]]; k <- p[[2]]; tt <- c(0.5, 1, 2, 3); e <- exp(-k * tt)
+    list(r = a * e - c(2, 0.5, 1.5, 0.2), J = cbind(e, -a * tt * e))
+  }
+  obj <- .lsq_rows_objfn(res)
+  class(obj) <- c("objfn", "fn")
+  fit <- suppressWarnings(trust(obj, c(a = 1, k = 0.3), rinit = 0.2, iterlim = 1L,
+                                hessianMethod = "ssr1", blather = TRUE))
+  expect_true(fit$accept)
+  x0 <- fit$argpath[1, ]; x1 <- fit$argtry[1, ]
+  w <- drop(crossprod(res(x1)$J - res(x0)$J, 2 * res(x1)$r))
+  o1 <- obj(x1)
+  expect_equal(unname(fit$hessian), unname(o1$hessian + tcrossprod(w) / sum(w * (x1 - x0))),
+               tolerance = 1e-10)
+})
+
+test_that("normL2 returns the data rows, and the secant of a sum with a prior is that of the data", {
+  skip_if_no_compile()
+  bench <- fx_decay_compiled()
+  x <- fx_extra()
+  data <- fx_decay_data(pars = c(A = 1.0, k = 0.5), sigma = 0.02, times = seq(0, 8, by = 0.5),
+                        seed = 17L)
+  data[["C1"]]$sigma <- NA
+  data[["C1"]]$value <- data[["C1"]]$value * rep_len(c(1.3, 0.7), nrow(data[["C1"]]))
+  term <- normL2(data, bench$gfn * bench$xfn * x$trust_p_err, x$trust_err)
+  obj <- term + constraintL2(mu = c(A_log = 0, k_log = log(0.4)), sigma = 0.5)
+  init <- c(A_log = log(2), k_log = log(0.9), s0_log = log(0.05), srel = 0.3)
+  rowsOf <- list()
+  for (ev in c("C++", "R")) {
+    withr::local_options(dMod2.evaluation = ev)
+    o <- obj(init, hessian = "structured")
+    d <- term(init)
+    st <- o$structure
+    # a row per data point and one per sigma that depends on parameters
+    expect_identical(dim(st$jacobian), c(2L * nrow(data[["C1"]]), 4L), info = ev)
+    expect_equal(drop(crossprod(st$jacobian, st$seeds)), d$gradient[names(init)], tolerance = 1e-10,
+                 ignore_attr = TRUE, info = ev)
+    expect_equal(st$hessian, d$hessian[names(init), names(init)], tolerance = 1e-10, info = ev)
+    expect_null(obj(init)$structure)
+    rowsOf[[ev]] <- st
+  }
+  expect_equal(rowsOf[["C++"]], rowsOf[["R"]], tolerance = 1e-8)
+  # a scaled objective scales seeds and Hessian
+  sc <- (2 %.*% term)(init, hessian = "structured")$structure
+  expect_equal(sc$seeds, 2 * rowsOf[["C++"]]$seeds, tolerance = 1e-12)
+
+  fit <- suppressWarnings(trust(obj, init, rinit = 0.1, iterlim = 1L, hessianMethod = "ssr1",
+                                blather = TRUE))
+  expect_true(fit$accept)
+  x0 <- fit$argpath[1, ]; x1 <- fit$argtry[1, ]
+  o0 <- obj(x0, hessian = "structured"); o1 <- obj(x1, hessian = "structured")
+  w <- drop(crossprod(o1$structure$jacobian - o0$structure$jacobian, o1$structure$seeds))
+  expect_equal(unname(fit$hessian), unname(o1$hessian + tcrossprod(w) / sum(w * (x1 - x0))),
+               tolerance = 1e-8)
 })

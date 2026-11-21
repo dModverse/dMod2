@@ -14,8 +14,12 @@
 #     identical atoms share one coefficient,
 #   - solutions stay lazy and small: they reference each other, the LP keeps
 #     the references acyclic, and one resolution happens at output time.
-# Where the greedy choice of unknowns runs into a dead end, the states whose
-# solutions block it are left free and the search restarts.
+# States whose own balance gives a ratio of positive sums are solved first. The
+# cycles of the graph of states left are cut then, as in Rosenblatt et al. (2016),
+# which fixes the free states and the rate constants to solve for; a side with
+# separate rate constants is cut with free flux ratios only if nothing else solves.
+# Where the greedy choice of unknowns then runs into a dead end, the unknowns whose
+# solutions block it go last and the search restarts.
 
 import os
 import sys
@@ -487,28 +491,31 @@ def _zero_states(states, fluxes, stoich, volumes):
         fluxes, stoich=nf, ns
     return states, fluxes, stoich, zero
 
-def _atoms(states, fluxes, stoich):
-    # Expand every flux into atoms; the balance of state i is
-    # sum_a B[i][a] * atom_a with exact rational B.
+def _atoms(states, fluxes, stoich, volumes=None):
+    # Expand every flux into atoms; the balance of state i, in amounts (times the
+    # volume of the state), is sum_a B[i][a] * atom_a with exact rational B. In
+    # amounts a conserved quantity across compartments is a rational row dependency.
+    scale=(lambda f, s: _amount_key(f*volumes.get(s, 1))) if volumes else (lambda f, s: f)
     index={}
     atoms=[]
     B=[dict() for _ in states]
     for f, col in zip(fluxes, stoich):
-        for t in sympy.Add.make_args(sympy.expand(f)):
-            coeff, mono=t.as_coeff_Mul()
-            if not coeff.is_positive:
-                raise ValueError('flux term '+str(t)+' is not positive')
-            if mono not in index:
-                index[mono]=len(atoms)
-                atoms.append(mono)
-            a=index[mono]
-            for i, s in enumerate(col):
-                if s!=0:
-                    v=B[i].get(a, Fraction(0))+Fraction(int(s.p), int(s.q))*Fraction(int(coeff.p), int(coeff.q))
-                    if v==0:
-                        B[i].pop(a, None)
-                    else:
-                        B[i][a]=v
+        for i, s in enumerate(col):
+            if s==0:
+                continue
+            for t in sympy.Add.make_args(sympy.expand(scale(f, states[i]))):
+                coeff, mono=t.as_coeff_Mul()
+                if not coeff.is_positive:
+                    raise ValueError('flux term '+str(t)+' is not positive')
+                if mono not in index:
+                    index[mono]=len(atoms)
+                    atoms.append(mono)
+                a=index[mono]
+                v=B[i].get(a, Fraction(0))+Fraction(int(s.p), int(s.q))*Fraction(int(coeff.p), int(coeff.q))
+                if v==0:
+                    B[i].pop(a, None)
+                else:
+                    B[i][a]=v
     return atoms, B
 
 def _linear_factor(atom, s):
@@ -518,7 +525,7 @@ def _linear_factor(atom, s):
         return False
     return n.as_powers_dict().get(s, 0)==1
 
-def _candidates(states, atoms, neglect):
+def _candidates(states, atoms, neglect, positive=()):
     # Symbols linear in at least one atom: states and rate constants. Per
     # symbol, the atoms linear in it (usable on the symbol side of an equation) and
     # the atoms it sits in otherwise (a denominator, a square), which the
@@ -535,8 +542,8 @@ def _candidates(states, atoms, neglect):
             continue
         lin=[a for a in idx if _linear_factor(atoms[a], s)]
         # a rate constant whose fluxes all contain a neglected symbol would be
-        # solved as a ratio over it, and that symbol may be 0
-        if lin and all(atoms[a].free_symbols & held for a in lin) and s not in states:
+        # solved as a ratio over it, and that symbol may be 0; a volume is not
+        if lin and all(atoms[a].free_symbols & (held-positive) for a in lin) and s not in states:
             continue
         if lin:
             cands[s]=lin
@@ -821,8 +828,17 @@ def _reaches(start, target, deps):
         stack.extend(deps.get(x, ()))
     return False
 
+def _ratio_symbol(state, j, names):
+    # r_<state>_<j>, made unique against the names in `names`, which it joins.
+    nm='r_'+str(state)+'_'+str(j)
+    while names is not None and nm in names:
+        nm+='_'
+    if names is not None:
+        names.add(nm)
+    return sympy.Symbol(nm)
+
 def _group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp, span,
-                   sol, deps, B_rows, row_of, state_set):
+                   sol, deps, B_rows, row_of, state_set, names=None):
     # One side of an unsolved state's balance, every atom of it with a separate
     # unsolved rate constant. The fluxes of that side share their sum by
     # new free flux ratios, flux_g = r_g * flux_g0 (v1.3's r_*), and the sum
@@ -867,12 +883,12 @@ def _group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp, span,
             if not G:
                 continue
             g0=G[0]
-            rho={p: sympy.Symbol('r_'+str(y)+'_'+str(i)) for i, p in enumerate(G) if i>0}
+            rho={p: _ratio_symbol(y, i, names) for i, p in enumerate(G) if i>0}
             return g0, [(p, rho[p]) for p in G[1:]], w, c, Au, phi
     return None
 
 def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_of,
-            quadratic=(), roots=None):
+            quadratic=(), roots=None, names=None):
     """Pick r unknowns, in `order`, each the first one an LP can isolate.
 
     States in `quadratic` may take the positive root of their own balance; they
@@ -938,7 +954,7 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
         if picked is None:
             # no single unknown: let one side of a balance share a scale
             grp=_group_unknown(order, cands, nonlin, atoms, atom_syms, basis, Rnp,
-                               span, sol, deps, B_rows, row_of, state_set)
+                               span, sol, deps, B_rows, row_of, state_set, names)
             if grp is not None:
                 g0, others, w, c, Au, phi=grp
                 num=sympy.Add(*[sympy.Rational(v.numerator, v.denominator)*atoms[a]
@@ -989,6 +1005,357 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+# Cycle removal (Rosenblatt et al. 2016)
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
+
+def _state_graph(states, atoms, B):
+    # Edge x -> y if y appears in the balance of x; x -> x only if the balance is
+    # not linear in x. Solving each balance for the state it belongs to is acyclic iff
+    # the graph is.
+    state_set=set(states)
+    graph={}
+    for s, row in zip(states, B):
+        succ=set()
+        for a in row:
+            for y in atoms[a].free_symbols & state_set:
+                if y!=s or not _linear_factor(atoms[a], s):
+                    succ.add(y)
+        graph[s]=succ
+    return graph
+
+def _simple_cycles(graph, cap=20000):
+    # Every simple directed cycle once, from the first of the nodes on it, at most cap.
+    nodes=sorted(graph, key=str)
+    index={n: i for i, n in enumerate(nodes)}
+    cycles=[]
+    for start in nodes:
+        stack=[(start, iter(sorted(graph[start], key=str)))]
+        path=[start]
+        on_path={start}
+        while stack:
+            node, it=stack[-1]
+            nxt=next(it, None)
+            if nxt is None:
+                stack.pop()
+                on_path.discard(path.pop())
+                continue
+            if nxt==start:
+                cycles.append(list(path))
+                if len(cycles)>=cap:
+                    return cycles
+            elif index[nxt]>index[start] and nxt not in on_path:
+                path.append(nxt)
+                on_path.add(nxt)
+                stack.append((nxt, iter(sorted(graph[nxt], key=str))))
+    return cycles
+
+def _derived_cqs(states, B, n_atoms):
+    # Basis of the conserved quantities: the left null space of the amount balances.
+    M=sympy.Matrix(len(states), n_atoms,
+                   lambda i, a: sympy.Rational(B[i].get(a, 0).numerator, B[i].get(a, 0).denominator)
+                   if a in B[i] else 0)
+    return [{s: v for s, v in zip(states, vec) if v!=0} for vec in M.T.nullspace()]
+
+def _given_cqs(givenCQs, states):
+    # Each given quantity "lhs = total" as the coefficients of the states in lhs.
+    out=[]
+    for cq in givenCQs:
+        lhs=str(cq).split('=')[0]
+        names=dict.fromkeys(sympy.Symbol(nm) for nm in re.findall(r'[A-Za-z_][A-Za-z0-9_]*', lhs))
+        lhs=sympy.expand(parse_expr(lhs))
+        vec={s: lhs.diff(s) for s in names if s in states}
+        vec={s: v for s, v in vec.items() if v!=0}
+        if vec:
+            out.append(vec)
+    return out
+
+def _side_type(counts):
+    # 1: a single flux term in no other balance, 2: several, each in no other
+    # balance, 3: cutting there rewires other balances.
+    if len(counts)==1 and counts[0]==1:
+        return 1
+    if len(counts)>1 and all(c==1 for c in counts):
+        return 2
+    return 3
+
+def _ratio_side(side, atoms, cands, state_set, taken):
+    """Rate constants of a side whose flux terms have no common one, or None.
+
+    Each term gets the rate constant linear in it that is linear in the fewest
+    terms; at least two distinct ones are needed. Returns {rate constant: terms},
+    the first entry the one solved for. Every other rate constant has one term,
+    and no flux term contains two of them, so the ratios substitute into
+    single terms.
+    """
+    assign={}
+    for a in side:
+        ps=[p for p in atoms[a].free_symbols if p in cands and p not in state_set
+            and p not in taken and a in cands[p]]
+        if not ps:
+            return None
+        assign.setdefault(min(ps, key=lambda q: (len(cands[q]), str(q))), []).append(a)
+    G=set(assign)
+    if len(G)<2 or sum(len(t)>1 for t in assign.values())>1:
+        return None
+    if any(len(at.free_symbols & G)>1 for at in atoms):
+        return None
+    g0=max(assign, key=lambda p: len(assign[p]))
+    return {g0: assign[g0], **{p: t for p, t in assign.items() if p!=g0}}
+
+def _unsolved_refs(names, solved):
+    # States reached from `names` through the solved states (state -> referenced
+    # states), the solved ones left out.
+    seen=set()
+    stack=list(names)
+    while stack:
+        y=stack.pop()
+        if y in seen:
+            continue
+        seen.add(y)
+        if y in solved:
+            stack.extend(solved[y])
+    return {y for y in seen if y not in solved}
+
+def _state_graph_after(states, atoms, B, solved):
+    # The state graph with the states in `solved` contracted: an edge to a solved
+    # state leads to the states the solution for that state refers to.
+    graph=_state_graph(states, atoms, B)
+    return {s: _unsolved_refs(succ, solved) for s, succ in graph.items() if s not in solved}
+
+def _cut_cycles(states, atoms, B, cands, cqs, prio_rank, given, solved=None, locked=(),
+                ratios=True, replay=()):
+    """Free states and rate constants that remove every cycle of the state graph.
+
+    A cycle is cut at a state of a conserved quantity, whose balance is then the
+    dependent one, or at a state whose balance on one side (influx or outflux)
+    has a rate constant common to all flux terms, which is solved instead of the
+    state. With `ratios`, a side whose flux terms have separate rate constants
+    is a cut as well: the fluxes of the side keep free ratios, and one rate
+    constant is solved. Cuts are ranked as in the publication: a rate
+    constant named in `priority` first and a state named there last, conserved
+    quantity, then side type, rewired balances, number of terms, number of
+    cycles through the state, and occurrence in other balances; a side with one
+    rate constant before one with ratios. States in `solved` (state ->
+    referenced states) are solved directly beforehand and leave the graph, rate
+    constants in `locked` are not cut at, and the cuts in `replay` are made
+    first, in their order.
+
+    Returns (free states, rate constants, cuts, states on cycles left without a
+    cut, None), or, when a ratio cut ranks first, (.., .., cuts so far, ..,
+    (state, {rate constant: flux terms of the side})) for the caller to
+    substitute the ratios and cut again.
+    """
+    solved=solved or {}
+    graph=_state_graph_after(states, atoms, B, solved)
+    state_set=set(states)
+    row_of={s: i for i, s in enumerate(states)}
+    atom_rows={}
+    for i, row in enumerate(B):
+        for a in row:
+            atom_rows[a]=atom_rows.get(a, 0)+1
+    cqs=[dict(c) for c in cqs]
+    used=[False]*len(cqs)
+    free, pivots, cuts=[], [], []
+    taken=set(locked)
+    replay=list(replay)
+
+    def rank(*names):
+        return min((prio_rank[str(x)] for x in names if str(x) in prio_rank), default=len(prio_rank))
+
+    while True:
+        if replay:
+            s, kind, x=replay.pop(0)
+            if kind=='cq':
+                x=next(k for k, c in enumerate(cqs) if not used[k] and c.get(s, 0)!=0)
+                sides=()
+            else:
+                sides=(list(B[row_of[s]]), [])
+        else:
+            cycles=_simple_cycles(graph)
+            if not cycles:
+                return free, pivots, cuts, set(), None
+            n_cyc={}
+            for cyc in cycles:
+                for y in cyc:
+                    n_cyc[y]=n_cyc.get(y, 0)+1
+            in_rhs={y: sum(1 for z, succ in graph.items() if z!=y and y in succ) for y in graph}
+            rows=[]
+            for s in sorted(n_cyc, key=str):
+                tail=(-n_cyc[s], in_rhs[s])
+                # a given quantity keeps the first state on a cycle free
+                k=next((k for k, c in enumerate(cqs) if not used[k] and c.get(s, 0)!=0), None)
+                if k is not None:
+                    first=0 if not given else list(cqs[k]).index(s)
+                    rows.append(((len(prio_rank), str(s) in prio_rank, 0, first, 0, 0, 0)+tail+(0, str(s)),
+                                 ('cq', s, k, ())))
+                    continue
+                row=B[row_of[s]]
+                for sign in (1, -1):
+                    side=[a for a, v in row.items() if (v>0)==(sign>0)]
+                    if not side:
+                        continue
+                    ps=[p for p in cands if p not in state_set and p not in taken
+                        and all(_linear_factor(atoms[a], p) for a in side)]
+                    if ps:
+                        G={min(ps, key=lambda q: (len(cands[q]), str(q))): side}
+                    elif ratios:
+                        G=_ratio_side(side, atoms, cands, state_set, taken)
+                        if G is None:
+                            continue
+                    else:
+                        continue
+                    counts=[atom_rows[a] for a in side]
+                    typ=_side_type(counts)
+                    risk=sum(c-1 for c in counts)
+                    rows.append(((rank(*G), str(s) in prio_rank, typ, 0, risk,
+                                  int(typ==3 and len(side)==1), len(side))+tail+(len(G)>1, str(s)),
+                                 ('pivot' if len(G)==1 else 'ratio', s, G,
+                                  (side, [a for a in row if a not in side]))))
+            if not rows:
+                return free, pivots, cuts, set(n_cyc), None
+            kind, s, x, sides=min(rows, key=lambda r: r[0])[1]
+            if kind=='ratio':
+                return free, pivots, cuts, set(n_cyc), (s, x)
+            if kind=='pivot':
+                x=next(iter(x))
+        if kind=='cq':
+            # the remaining quantities no longer contain s
+            c=cqs[x]
+            for m, d in enumerate(cqs):
+                if m!=x and d.get(s, 0)!=0:
+                    f=d[s]/c[s]
+                    d={y: sympy.cancel(d.get(y, 0)-f*c.get(y, 0)) for y in set(d)|set(c)}
+                    cqs[m]={y: v for y, v in d.items() if v!=0}
+            used[x]=True
+        else:
+            # a balance with the rate constant refers to the states of the solution for it
+            pivots.append(x)
+            taken.add(x)
+            via=set().union(*(atoms[a].free_symbols for a in sides[0]+sides[1])) & state_set
+            # free states are parameters, solved ones refer on
+            via=_unsolved_refs(via, solved) & set(graph)
+            for y, succ in graph.items():
+                if y!=s and any(x in atoms[a].free_symbols for a in B[row_of[y]]):
+                    succ|=via
+        free.append(s)
+        cuts.append((s, kind, x))
+        del graph[s]
+        for succ in graph.values():
+            succ.discard(s)
+
+
+def _on_cycles(graph):
+    # Nodes on a directed cycle: a strongly connected component of two or more
+    # nodes, or a node with a loop (Tarjan, iterative).
+    index, low, stack, on=0, {}, [], set()
+    order={}
+    out=set()
+    for root in sorted(graph, key=str):
+        if root in order:
+            continue
+        work=[(root, iter(sorted(graph[root], key=str)))]
+        order[root]=low[root]=index
+        index+=1
+        stack.append(root)
+        on.add(root)
+        while work:
+            v, it=work[-1]
+            w=next(it, None)
+            if w is not None:
+                if w not in graph:
+                    continue
+                if w not in order:
+                    order[w]=low[w]=index
+                    index+=1
+                    stack.append(w)
+                    on.add(w)
+                    work.append((w, iter(sorted(graph[w], key=str))))
+                elif w in on:
+                    low[v]=min(low[v], order[w])
+                continue
+            work.pop()
+            if work:
+                low[work[-1][0]]=min(low[work[-1][0]], low[v])
+            if low[v]==order[v]:
+                scc=[]
+                while True:
+                    x=stack.pop()
+                    on.discard(x)
+                    scc.append(x)
+                    if x==v:
+                        break
+                if len(scc)>1 or v in graph[v]:
+                    out|=set(scc)
+    return out
+
+def _has_cut(s, row, atoms, cands, state_set, cqs, locked):
+    # Whether a cycle through s can be cut at s with the rate constants not locked.
+    if any(c.get(s, 0)!=0 for c in cqs):
+        return True
+    for sign in (1, -1):
+        side=[a for a, v in row.items() if (v>0)==(sign>0)]
+        if not side:
+            continue
+        if any(p not in state_set and p not in locked and all(_linear_factor(atoms[a], p) for a in side)
+               for p in cands):
+            return True
+        if _ratio_side(side, atoms, cands, state_set, locked) is not None:
+            return True
+    return False
+
+def _direct_pass(states, atoms, B, cands, neglect, cqs, keep=()):
+    """States solved from their own balance before the cycles are cut.
+
+    A state qualifies if the balance is linear in it, with every term of the state
+    on one side and the rest on the other, so the solution is a ratio of positive
+    sums, and if the solution does not lead back to the state through the states
+    solved before. The rate constants in the solution are no longer cut at; a
+    state whose solution would leave a cycle without a cut stays for the cuts, as
+    do the states in `keep`. Returns ({state: states referenced}, locked rate constants).
+    """
+    state_set=set(states)
+    row_of={s: i for i, s in enumerate(states)}
+    solved={}
+    locked=set()
+    progress=True
+    while progress:
+        progress=False
+        for i, y in enumerate(states):
+            if y in solved or y in keep or str(y) in neglect or y not in cands:
+                continue
+            row=B[i]
+            Au=set(cands[y])
+            if any(a not in Au for a in row if y in atoms[a].free_symbols):
+                continue
+            if not (row and all((v<0)==(a in Au) for a, v in row.items())
+                    and any(v>0 for v in row.values()) and any(v<0 for v in row.values())):
+                continue
+            syms=set().union(*(atoms[a].free_symbols for a in row))
+            refs=(syms & state_set)-{y}
+            reach=set()
+            stack=list(refs)
+            while stack:
+                x=stack.pop()
+                if x in reach:
+                    continue
+                reach.add(x)
+                stack.extend(solved.get(x, ()))
+            if y in reach:
+                continue
+            trial={**solved, y: refs}
+            lock=locked|(syms-state_set)
+            graph=_state_graph_after(states, atoms, B, trial)
+            if any(_has_cut(x, B[row_of[x]], atoms, cands, state_set, cqs, locked) and
+                   not _has_cut(x, B[row_of[x]], atoms, cands, state_set, cqs, lock)
+                   for x in _on_cycles(graph)):
+                continue
+            solved=trial
+            locked=lock
+            progress=True
+    return solved, locked
+
+
+# –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 # Entry point, same interface as v1.3
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––
 
@@ -1011,37 +1378,25 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
     states, fluxes, stoich=_read_model(filename, injections)
     ODE_states=list(states)
     ODE=[sympy.Add(*[col[i]*f for f, col in zip(fluxes, stoich)]) for i in range(len(states))]
-    states, fluxes, stoich, zero=_zero_states(states, fluxes, stoich,
-                                              ParseVolumes(volumes))
-    atoms, B=_atoms(states, fluxes, stoich)
-    basis=_row_basis(B, len(atoms))
-    r=len(basis)
-    Rnp=numpy.array([[float(row.get(a, 0)) for a in range(len(atoms))] for row in basis])
-    cands_all, nonlin=_candidates(states, atoms, neglect)
-    # a given conserved quantity keeps one of the quantity states free, the first by
-    # default; if that state's balance is left, the next one is tried
-    cq_groups=[]
-    for cq in givenCQs:
-        lhs=str(cq).split('=')[0]
-        g=[sympy.Symbol(nm) for nm in re.findall(r'[A-Za-z_][A-Za-z0-9_]*', lhs)]
-        g=[x for x in dict.fromkeys(g) if x in states]
-        if g:
-            cq_groups.append(g)
-    cq_pick=[0]*len(cq_groups)
+    vol=ParseVolumes(volumes)
+    states, fluxes, stoich, zero=_zero_states(states, fluxes, stoich, vol)
+    vol_syms=set().union(*(v.free_symbols for v in vol.values())) if vol else set()
 
-    def keep_free():
-        free=[]
-        for g, k in zip(cq_groups, cq_pick):
-            rest=[x for x in g if x not in free]
-            if k<len(rest):
-                free.append(rest[k])
-        return free
-    cq_free=keep_free()
-    cands={x: v for x, v in cands_all.items() if x not in cq_free}
+    def balances(fluxes, held, positive=frozenset()):
+        # Balances in amounts: a quantity conserved across compartments is a row dependency.
+        atoms, B=_atoms(states, fluxes, stoich, vol)
+        basis=_row_basis(B, len(atoms))
+        Rnp=numpy.array([[float(row.get(a, 0)) for a in range(len(atoms))] for row in basis])
+        # volumes and flux ratios are positive, a neglected rate constant may be 0
+        cands_all, nonlin=_candidates(states, atoms, held, vol_syms|set(positive))
+        cqs=_given_cqs(givenCQs, states) if givenCQs else _derived_cqs(states, B, len(atoms))
+        return atoms, B, basis, Rnp, cands_all, nonlin, cqs
+
+    atoms, B, basis, Rnp, cands_all, nonlin, cqs=balances(fluxes, neglect)
+    r=len(basis)
     _say('steadyStates: '+str(len(states))+' states'+
          (', '+str(len(zero))+' zero a priori' if zero else '')+
          ', '+str(r)+' independent balances over '+str(len(atoms))+' flux terms')
-    _say('')
 
     known={str(s) for s in cands_all}
     unknown=[p for p in priority if p not in known]
@@ -1049,97 +1404,78 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
         _note('priority ignores '+', '.join(unknown)+' (no state or rate constant)')
     state_set=set(states)
     prio_rank={p: i for i, p in enumerate(priority)}
+    row_of={s: i for i, s in enumerate(states)}
+    names={str(x) for f in fluxes for x in f.free_symbols}
 
-    # A state whose flux terms occur in no other balance (an mRNA, a protein)
-    # is safe to solve first. One that hands mass on (a precursor, a chain, a
-    # receptor pool) would put the rate constants of the state into the solution, and a
-    # later balance may need exactly those: such states come after the rate
-    # constants.
-    atom_rows={}
-    for i, row in enumerate(B):
-        for a in row:
-            atom_rows.setdefault(a, set()).add(i)
-    isolated={s for i, s in enumerate(states) if all(atom_rows[a]=={i} for a in B[i])}
+    # States with a positive solution from their own balance are solved first.
+    # The cycles of the state graph left are cut then (Rosenblatt et al. 2016):
+    # the cut states stay free, every other state and the rate constants of
+    # the cuts are the unknowns, solved along the remaining acyclic graph.
+    direct, locked={}, set()
+    if _on_cycles(_state_graph(states, atoms, B)):
+        # the cuts decide which state of a conserved quantity stays free
+        keep=set().union(*cqs)
+        direct, locked=_direct_pass(states, atoms, B, cands_all, neglect, cqs, keep)
 
-    def ordering(defer):
-        # user priority first, then isolated states, rate constants, coupled
-        # states, and last whatever blocked a former run
-        def key(s):
-            tier=0 if s in isolated else (2 if s in state_set else 1)
-            return (0 if str(s) in prio_rank else 1, prio_rank.get(str(s), 0),
-                    s in defer, tier, str(s))
-        return sorted(cands, key=key)
+    def attempt(direct, locked, use_ratios):
+        # A ratio cut substitutes flux_p = r_p * flux_g0 on the side of the cut into
+        # every flux; the side then has the common rate constant g0, and the cuts
+        # start over with those made so far.
+        fl, held, M=list(fluxes), set(neglect), (atoms, B, basis, Rnp, cands_all, nonlin, cqs)
+        defs, ratios, replay, rhos=[], [], [], set()
+        taken=set(names)
+        while True:
+            at, Bm, bs, Rn, ca, nl, cq=M
+            cut=_cut_cycles(states, at, Bm, ca, cq, prio_rank, bool(givenCQs), direct, locked,
+                            use_ratios, replay)
+            # direct solutions are taken back if they leave more cycles without a cut
+            if direct and cut[3] and not replay:
+                plain=_cut_cycles(states, at, Bm, ca, cq, prio_rank, bool(givenCQs), None, (),
+                                  use_ratios)
+                if len(plain[3])<len(cut[3]):
+                    return None, [], []
+            if cut[4] is None:
+                break
+            s, assign=cut[4]
+            G=list(assign)
+            row=Bm[row_of[s]]
+            phi={p: sympy.Add(*[abs(sympy.Rational(row[a].numerator, row[a].denominator))*at[a]/p
+                                for a in assign[p]]) for p in G}
+            sub={}
+            for j, p in enumerate(G[1:], 1):
+                rho=_ratio_symbol(s, j, taken)
+                sub[p]=rho*G[0]*phi[G[0]]/phi[p]
+                defs.append((p, sub[p]))
+                ratios.append((str(rho), str(p), str(G[0])))
+                held.add(str(rho))
+                rhos.add(rho)
+            fl=[f.xreplace(sub) for f in fl]
+            replay=cut[2]+[(s, 'pivot', G[0])]
+            M=balances(fl, held, rhos)
+        # without a ratio cut the run is the one without ratio cuts
+        if use_ratios and not ratios:
+            return None, [], []
+        at, Bm, bs, Rn, ca, nl, cq=M
+        solution, more, cq_free=_run_greedy(states, at, Bm, bs, Rn, len(bs), ca, nl, held,
+                                            prio_rank, solveQuadratic, check_time, row_of,
+                                            taken, direct, cut)
+        if solution is None:
+            return None, [], []
+        return solution+defs, ratios+more, cq_free
 
-    ratios=[]
+    # Without a solution the direct solutions are taken back. Ratio cuts restrict the
+    # rate constants of a side to one scale: they are made only if nothing else solves.
+    tries=[(d, lk, use) for use in (False, True)
+           for d, lk in ([(direct, locked)] if direct else [])+[({}, set())]]
     solution=None
-    blockers=None
-    no_root=set()
-    attempt=0
-    for rotation in range(1+sum(len(g) for g in cq_groups)):
-        defer=set()
-        no_root=set()
-        prev=set()
-        for _ in range(4*len(cands)+len(states)+1):
-            attempt+=1
-            order=ordering(defer)
-            quadratic=[]
-            if solveQuadratic:
-                quadratic=[s for s in order if s in state_set]+\
-                          sorted((s for s in states if s not in cands and str(s) not in neglect
-                                  and s not in cq_free), key=str)
-                quadratic=[s for s in quadratic if s not in no_root]
-            roots=[]
-            result, blockers=_greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time,
-                                     B, {s: i for i, s in enumerate(states)}, quadratic, roots)
-            solution=None if result is None else result[0]
-            if solution is not None or blockers is None:
-                ratios=result[1] if result is not None else []
-                break
-            n_used, left, used=_STUCK[0]
-            head='  attempt '+str(attempt)+': '+str(n_used)+'/'+str(r)+' balances, left '+', '.join(left)
-            # full trace: which unknowns this attempt solved differently
-            gained=[u for u in used if u not in prev]
-            lost=sorted(prev-set(used))
-            if prev and (gained or lost):
-                _trace('    '+' '.join(['+'+u for u in gained]+['-'+u for u in lost]))
-            prev=set(used)
-            # a kept state of a conserved quantity is changed before anything else
-            left_syms={sympy.Symbol(x) for x in left}
-            if any(cq_pick[i]+1<len(g) and set(g) & left_syms for i, g in enumerate(cq_groups)):
-                _say(head)
-                break
-            # a root spends a balance a pivot would not: those that blocked go first
-            if roots:
-                banned=[u for u in roots if u in blockers] or roots[-1:]
-                no_root|=set(banned)
-                _say(head+'; next: '+', '.join(str(u) for u in banned)+' not as a root')
-                continue
-            new=blockers-defer
-            if not new:
-                _say(head)
-                break
-            defer|=new
-            _say(head+'; next: '+', '.join(sorted(str(s) for s in new))+' last')
-        if solution is not None or blockers is None or check_time():
+    for k, (d, lk, use) in enumerate(tries):
+        if solution is not None or check_time():
             break
-        # a conserved quantity whose kept state's balance is left moves on
-        left_syms={sympy.Symbol(x) for x in _STUCK[0][1]}
-        moved=next((i for i, g in enumerate(cq_groups)
-                    if cq_pick[i]+1<len(g) and set(g) & left_syms), None)
-        if moved is None:
-            break
-        old=cq_free[moved]
-        cq_pick[moved]+=1
-        cq_free=keep_free()
-        cands={x: v for x, v in cands_all.items() if x not in cq_free}
-        _say('  -> conserved quantity '+' + '.join(str(x) for x in cq_groups[moved])+': '+
-             str(cq_free[moved])+' free instead of '+str(old))
-        _say('')
-    if no_root and solution is not None:
-        _note('no root for '+', '.join(sorted(str(s) for s in no_root))+
-              ': it would take a balance another unknown needs')
-    if attempt>1:
-        _say('')
+        if k:
+            _say('  again'+(' with ratio cuts' if use else '')+
+                 (' without direct solutions' if direct and not d else ''))
+        solution, ratios, cq_free=attempt(d, lk, use)
+
     if solution is None:
         if check_time():
             print('No positive steady state found: walltime exceeded.', flush=True)
@@ -1154,7 +1490,103 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
             print('No positive steady state found.', flush=True)
         _print_notes()
         return 0
+    return _finish(solution, ratios, cq_free, states, state_set, ODE, ODE_states, zero,
+                   injections, simplify, testSteady, check_time, t0)
 
+
+def _run_greedy(states, atoms, B, basis, Rnp, r, cands_all, nonlin, neglect, prio_rank,
+                solveQuadratic, check_time, row_of, names, direct, cut):
+    # The greedy runs after one choice of direct solutions and cuts. Returns
+    # (solution or None, ratios of the greedy, states freed by conserved quantities).
+    free, pivots, cuts, cyclic, _=cut
+    state_set=set(states)
+    if direct:
+        _say('  solved directly: '+', '.join(str(y) for y in direct))
+    if cuts:
+        _say('  cycles cut at '+', '.join(str(s)+(' (conserved quantity)' if kind=='cq'
+                                                else ' ('+str(x)+')') for s, kind, x in cuts))
+    # a cycle without a cut leaves the choice among all rate constants to the greedy runs
+    if cyclic:
+        _say('  no cut for the cycles through '+', '.join(sorted(str(x) for x in cyclic)))
+    cands={x: v for x, v in cands_all.items()
+           if (x in state_set and x not in free) or x in pivots or (cyclic and x not in state_set)}
+    cq_free=[s for s, kind, _ in cuts if kind=='cq']
+    _say('')
+
+    # A state whose flux terms occur in no other balance (an mRNA, a protein)
+    # is safe to solve first. One that hands mass on would put the rate constants
+    # of the state into the solution, and a later balance may need exactly those:
+    # such states come after the rate constants.
+    atom_rows={}
+    for i, row in enumerate(B):
+        for a in row:
+            atom_rows.setdefault(a, set()).add(i)
+    isolated={s for i, s in enumerate(states) if all(atom_rows[a]=={i} for a in B[i])}
+    first={y: i for i, y in enumerate(direct)}
+
+    def ordering(defer):
+        # direct solutions first, user priority, then isolated states, rate
+        # constants, coupled states, and last whatever blocked a former run
+        def key(s):
+            tier=0 if s in isolated else (2 if s in state_set else 1)
+            return (first.get(s, len(first)), 0 if str(s) in prio_rank else 1,
+                    prio_rank.get(str(s), 0), s in defer, tier, str(s))
+        return sorted(cands, key=key)
+
+    # Greedy runs over the unknowns, each moving the unknowns that blocked the
+    # last run to the end.
+    ratios=[]
+    solution=None
+    defer=set()
+    no_root=set()
+    prev=set()
+    attempt=0
+    for _ in range(4*len(cands)+len(states)+1):
+        attempt+=1
+        order=ordering(defer)
+        quadratic=[]
+        if solveQuadratic:
+            quadratic=[s for s in order if s in state_set]+\
+                      sorted((s for s in states if s not in cands and str(s) not in neglect
+                              and s not in cq_free), key=str)
+            quadratic=[s for s in quadratic if s not in no_root]
+        roots=[]
+        result, blockers=_greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time,
+                                 B, row_of, quadratic, roots, names)
+        if result is not None or blockers is None:
+            solution, ratios=(None, []) if result is None else result
+            break
+        n_used, left, used=_STUCK[0]
+        head='  attempt '+str(attempt)+': '+str(n_used)+'/'+str(r)+' balances, left '+', '.join(left)
+        # full trace: which unknowns this attempt solved differently
+        gained=[u for u in used if u not in prev]
+        lost=sorted(prev-set(used))
+        if prev and (gained or lost):
+            _trace('    '+' '.join(['+'+u for u in gained]+['-'+u for u in lost]))
+        prev=set(used)
+        # a root spends a balance a pivot would not: those that blocked go first
+        if roots:
+            banned=[u for u in roots if u in blockers] or roots[-1:]
+            no_root|=set(banned)
+            _say(head+'; next: '+', '.join(str(u) for u in banned)+' not as a root')
+            continue
+        new=blockers-defer
+        if not new:
+            _say(head)
+            break
+        defer|=new
+        _say(head+'; next: '+', '.join(sorted(str(s) for s in new))+' last')
+    if no_root and solution is not None:
+        _note('no root for '+', '.join(sorted(str(s) for s in no_root))+
+              ': it would take a balance another unknown needs')
+    if attempt>1:
+        _say('')
+    return solution, ratios, cq_free
+
+
+def _finish(solution, ratios, cq_free, states, state_set, ODE, ODE_states, zero,
+            injections, simplify, testSteady, check_time, t0):
+    # Output of a solution: simplification, the steady-state test, resolution.
     n_state=sum(1 for u, _ in solution if u in state_set)
     if ratios:
         _say('  '+str(len(ratios))+' new ratio parameter(s): '+

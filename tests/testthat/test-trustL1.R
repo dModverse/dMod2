@@ -294,3 +294,25 @@ test_that("trustL1 stops for convergence only where the full Newton step predict
   expect_identical(val$stopReason, "fvalue")
   expect_lte(val$value, 1e-4)
 })
+
+test_that("trustL1 ends on a stop held back by the Newton decrease when the radius collapses", {
+  # the gradient predicts a decrease along the flat direction that the noisy value does not follow
+  h <- c(1, 1e-4)
+  obj <- function(p, ...) {
+    objlist(0.5 * sum(h * p^2) + 5e-5 * sin(1e6 * p[["y"]]), h * p + c(0, 0.01),
+            diag(h) |> `dimnames<-`(list(names(p), names(p))))
+  }
+  fit <- trustL1(obj, c(x = 1, y = 1), mu = c(x = 0, y = 0), lambda = 0, rinit = 1, rmax = 10,
+                 iterlim = 200, tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-6, rmin = 1e-3))
+  expect_true(fit$converged)
+  expect_identical(fit$stopReason, "fvalue")
+})
+
+test_that("trustL1 ends on stagnation unconverged where the Newton decrease exceeds mtol", {
+  # a value that follows no step: the gradient predicts a decrease the run never finds
+  flat <- function(p, ...) objlist(value = 1, gradient = c(x = 1, y = 1),
+                                   hessian = diag(2) |> `dimnames<-`(list(names(p), names(p))))
+  fit <- trustL1(flat, c(x = 0, y = 0), mu = c(x = 5), lambda = 0.1, iterlim = 500)
+  expect_identical(fit$stopReason, "stagnation")
+  expect_false(fit$converged)
+})

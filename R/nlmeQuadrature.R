@@ -29,6 +29,22 @@
   NA_integer_
 }
 
+## The highest level below `level`, at least K, whose grid differs, NA if there is none.
+.prevLevel <- function(K, level) {
+  a <- .sparseGrid(K, level)
+  for (l in rev(seq_len(level - K) + K - 1L)) {
+    b <- .sparseGrid(K, l)
+    if (!identical(a$key, b$key) || !identical(a$logAbsW, b$logAbsW)) return(l)
+  }
+  NA_integer_
+}
+
+## The node count of a level after pruning.
+.levelNodes <- function(K, level, pruneTol = Inf) {
+  w <- .sparseGrid(K, level)$logAbsW
+  sum(w >= max(w) - pruneTol)
+}
+
 ## Nodes eta = mode + sqrt(2) R^-1 z and log weights w exp(z'z) 2^(K/2) / |R| around the mode
 ## with posterior precision P = R'R, exact for a Gaussian posterior; nodes whose |w| lies
 ## `pruneTol` in log below the largest are dropped.
@@ -45,7 +61,7 @@
 
 
 ## Conditional modes and inner Hessians H_g (of the -2 log density, so the posterior precision
-## is H_g / 2) of every group at `psi`, by the inner trust of the FOCEI kernel.
+## is H_g / 2) of every group at `psi`, by the inner search of the group kernel.
 .innerModes <- function(design, psi, etaInit, fixed, meta, control = list()) {
   lay <- design$normal
   E <- design$etaNames[, lay$stems, drop = FALSE]
@@ -55,7 +71,7 @@
   L <- .choleskyFactor(lay, psi)
   ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control)
-  fr <- focei_inner_trust(model_cb = design$prdfn, err_cb = .errorModel(design), pars_full = full,
+  fr <- nlme_group_kernel(model_cb = design$prdfn, err_cb = .errorModel(design), pars_full = full,
                           eta_warmstart = etaInit, subject_meta = meta,
                           Omega_inv_mat = chol2inv(t(L)), Omega_log_det = 2 * sum(log(diag(L))),
                           fixed = fixed, control = ic, predict_cb = .guardPredictor(.batchPredictor(design)))
@@ -228,6 +244,8 @@
   .requireM3(design, meta, "Quadrature")
   cores <- getOption("dMod2.cores", 1L)
   maxLevel <- control$maxLevel %||% (lay$K + 8L)
+  maxNodes <- control$maxNodes %||% 1000L
+  pruneTol <- control$pruneTol %||% Inf
   shift <- .referenceShift(design)
   state <- new.env()
   state$modes <- matrix(0, nrow(E), lay$K, dimnames = dimnames(E))
@@ -242,8 +260,19 @@
         data, etas)
   }
 
-  # each group at the lowest level from `level` up, never below the previous one, whose next
-  # level changes the group -2 log L by at most tol / G
+  # a level within the node budget; it is evaluated, and the tolerance raises a group to it up to
+  # maxLevel
+  allowed <- function(l) !is.na(l) && .levelNodes(lay$K, l, pruneTol) <= maxNodes
+  # the highest level within the budget up to `level`, at least K
+  accepted <- function(level) {
+    l <- as.integer(level)
+    while (l > lay$K && !allowed(l)) l <- l - 1L
+    l
+  }
+
+  # each group at the lowest level from `level` up, never below the previous one, whose error, the
+  # change of the group -2 log L to the next level within the budget, is at most tol / G; a group
+  # above tol / G at the highest allowed level is capped
   rebuild <- function(psi, level, tol = Inf, etaInit = state$modes) {
     psi <- c(psi, fixed[.setdiff(names(fixed), names(psi))])
     im <- .innerModes(design, psi, etaInit, fixed, meta, control$innerControl %||% list())
@@ -253,44 +282,64 @@
     state$stamp <- state$stamp + 1L
     state$memo <- NULL
     G <- length(design$groups)
-    levels <- pmax(rep(as.integer(level), G), state$levels %||% 0L)
+    levels <- pmax(rep(accepted(level), G), state$levels %||% 0L)
+    capped <- levels < as.integer(level)
     error <- rep(NA_real_, G)
-    nodesAt <- function(i, l) .quadratureNodes(im$modes[i, ], im$H[[i]] / 2, l, control$pruneTol %||% Inf)
+    nodesAt <- function(i, l) .quadratureNodes(im$modes[i, ], im$H[[i]] / 2, l, pruneTol)
     if (is.finite(tol)) {
       # lock step over the groups, the node values kept by key
       seen <- replicate(G, numeric(0), simplify = FALSE)
       open <- seq_len(G)
       while (length(open)) {
         nxt <- vapply(open, function(i) .nextLevel(lay$K, levels[i]), 0L)
+        est <- vapply(nxt, allowed, TRUE)
+        up <- est & !is.na(nxt) & nxt <= maxLevel
+        ref <- ifelse(est, nxt, vapply(open, function(i) .prevLevel(lay$K, levels[i]), 0L))
         grids <- lapply(seq_along(open), function(j)
           list(at = nodesAt(open[j], levels[open[j]]),
-               up = if (!is.na(nxt[j])) nodesAt(open[j], nxt[j])))
+               ref = if (!is.na(ref[j])) nodesAt(open[j], ref[j])))
         need <- lapply(seq_along(open), function(j) {
           gr <- grids[[j]]
-          eta <- rbind(gr$at$eta, gr$up$eta)
-          key <- c(gr$at$key, gr$up$key)
+          eta <- rbind(gr$at$eta, gr$ref$eta)
+          key <- c(gr$at$key, gr$ref$key)
           new <- !duplicated(key) & !(key %in% names(seen[[open[j]]]))
           list(eta = eta[new, , drop = FALSE], key = key[new])
         })
-        vals <- integrand(design$groups[open], lapply(need, `[[`, "eta"), psi)
-        for (j in seq_along(open)) seen[[open[j]]] <- c(seen[[open[j]]], setNames(vals[[j]], need[[j]]$key))
+        some <- which(vapply(need, function(n) length(n$key) > 0L, TRUE))
+        vals <- if (length(some)) integrand(design$groups[open[some]], lapply(need[some], `[[`, "eta"), psi)
+        for (k in seq_along(some)) {
+          j <- some[k]
+          seen[[open[j]]] <- c(seen[[open[j]]], setNames(vals[[k]], need[[j]]$key))
+        }
         done <- logical(length(open))
         for (j in seq_along(open)) {
           i <- open[j]
-          at <- grids[[j]]$at; up <- grids[[j]]$up
+          at <- grids[[j]]$at; rf <- grids[[j]]$ref
           la <- .nodeSum(at$logW + seen[[i]][at$key], at$signs, at$eta, lay$stems)
-          lu <- if (!is.null(up)) .nodeSum(up$logW + seen[[i]][up$key], up$signs, up$eta, lay$stems)
-          e <- if (is.null(la) || is.null(lu)) Inf else 2 * abs(lu$logL - la$logL)
+          lr <- if (!is.null(rf)) .nodeSum(rf$logW + seen[[i]][rf$key], rf$signs, rf$eta, lay$stems)
+          e <- if (is.null(rf)) NA_real_ else if (is.null(la) || is.null(lr)) Inf else 2 * abs(lr$logL - la$logL)
           error[i] <- e
-          if (e <= tol / G || is.na(nxt[j]) || nxt[j] > maxLevel) done[j] <- TRUE
-          else levels[i] <- nxt[j]
+          if (up[j] && e > tol / G) { levels[i] <- nxt[j]; next }
+          done[j] <- TRUE
+          capped[i] <- !up[j] && !isTRUE(e <= tol / G)
         }
         open <- open[!done]
       }
     }
     state$levels <- levels
     state$levelError <- error
+    state$capped <- capped
     state$nodes <- lapply(seq_len(G), function(i) nodesAt(i, levels[i]))
+    invisible(state)
+  }
+
+  # the nodes of a rebuild, to return to without a new mode search
+  fields <- c("modes", "H", "psi0", "levels", "levelError", "capped", "nodes")
+  snapshot <- function() mget(fields, envir = state)
+  restore <- function(snap) {
+    list2env(snap, envir = state)
+    state$stamp <- state$stamp + 1L
+    state$memo <- NULL
     invisible(state)
   }
 
@@ -370,7 +419,8 @@
   }
   class(value) <- c("objfn", "fn")
   attr(value, "parameters") <- names(start)
-  list(value = value, rebuild = rebuild, integrand = integrand, state = state)
+  list(value = value, rebuild = rebuild, integrand = integrand, state = state, allowed = allowed,
+       snapshot = snapshot, restore = restore)
 }
 
 
@@ -394,25 +444,33 @@
 
 ## The final evaluation over every parameter on the nodes at `psi`, with the exact Hessian where
 ## the chain has second derivatives, and the conditional covariance of the etas, M - m m' per group.
+## The stage trace holds the levels per group as attribute "levels".
 .quadratureResult <- function(design, q, psi, fixed, iterations, converged, trace,
-                              exact = .hasDeriv2(q, psi, fixed)) {
+                              exact = .hasDeriv2(q, psi, fixed), stopReason = NULL) {
   out <- q$value(psi, fixed = fixed, deriv2 = exact)
   cov <- Map(function(M, m) M - tcrossprod(m), attr(out, "moments"), attr(out, "means"))
+  if (!is.null(trace)) attr(trace, "levels") <- .levelTable(design, q$state)
   list(argument = psi, value = out$value, gradient = out$gradient, hessian = out$hessian,
        etaModes = q$state$modes, etaCov = setNames(cov, design$groups),
-       converged = converged, iterations = iterations, stageTrace = trace)
+       converged = converged, iterations = iterations, stopReason = stopReason, stageTrace = trace)
 }
 
+## Per group the level, node count, estimated level error and whether the level is capped.
+.levelTable <- function(design, st)
+  data.frame(group = design$groups, level = st$levels, nodes = vapply(st$nodes, function(n) nrow(n$eta), 0L),
+             levelError = st$levelError, capped = st$capped %||% FALSE)
 
-## ECM by quadrature from `start`: per stage of `levels`, the nodes rebuilt at the current
-## parameters and one trust over every parameter on them, until a Newton step on the rebuilt
-## nodes would lower -2 log L by less than `tolDecrement`, or by less than the last step raised it.
+
+## ECM by quadrature from `start`: per stage the nodes rebuilt at the current parameters and one
+## trust over every parameter on them, until the stop "decrement" or "resolution" of em(); the fit
+## returns the best iterate.
 .fitQuadrature <- function(design, start, fixed, control = list(), verbose = FALSE,
                            etaInit = NULL) {
   lay <- design$normal
   qc <- control$quadrature %||% list()
   levels <- qc$levels %||% (lay$K + 1L)
   tol <- qc$tol %||% 0.1
+  nIt <- qc$maxEcmPerStage %||% 10L
   q <- .quadratureObjective(design, start, fixed, modifyList(control, qc))
   if (!is.null(etaInit)) q$state$modes <- etaInit
   psi <- start
@@ -421,45 +479,44 @@
   step <- .trustControl(list(rinit = 1, rmax = 10, hessianMethod = if (exact) "exact" else "gn",
                              tolControl = list(ftol = 1e-8, mtol = 1e-8)),
                         qc$cm1Control, label = "cm1Control")
-  rows <- list(); dec <- Inf; ended <- FALSE
+  rows <- list(); best <- NULL; reason <- "iterlim"
   for (level in levels) {
-    prev <- NULL; best <- NULL; ended <- FALSE
-    for (it in seq_len(qc$maxEcmPerStage %||% 10L)) {
+    prev <- NULL; reason <- "iterlim"
+    for (it in seq_len(nIt)) {
       if (it > 1L || level != levels[1]) q$rebuild(psi, level, tol)
       ev <- q$value(psi, fixed = fixed, deriv2 = exact)
       dec <- .newtonDecrement(ev)
-      # what the nodes resolve: the change of -2 log L by the next level, summed over the groups
-      resolution <- sum(q$state$levelError[is.finite(q$state$levelError)])
-      at <- list(psi = psi, value = ev$value, levels = q$state$levels)
-      # -2 log L rose since the last iterate, on nodes of the same levels, by more than the Newton
-      # decrement here: the change is below what these nodes resolve, the stage ends at the best iterate.
-      unresolved <- !is.null(prev) && identical(prev$levels, at$levels) && at$value - prev$value > dec
+      st <- q$state
+      at <- list(psi = psi, value = ev$value, levels = st$levels, snapshot = q$snapshot())
+      # values on higher levels supersede those on lower ones
       if (is.null(best) || !identical(best$levels, at$levels) || at$value < best$value) best <- at
+      last <- at
       rows[[length(rows) + 1L]] <- data.frame(level = level, ecmIter = it, OFV = ev$value, decrement = dec,
-                                              resolution = resolution, maxLevel = max(q$state$levels),
-                                              nodes = sum(vapply(q$state$nodes, function(n) nrow(n$eta), 0L)),
+                                              resolution = sum(st$levelError[is.finite(st$levelError)]),
+                                              maxLevel = max(st$levels), capped = sum(st$capped),
+                                              nodes = sum(vapply(st$nodes, function(n) nrow(n$eta), 0L)),
                                               maxSoftmax = max(attr(ev, "diagnostics")$maxWeight),
                                               nEffMin = min(attr(ev, "diagnostics")$nEff))
-      if (verbose) message(sprintf("em(quadrature) level %d ecm %d: -2 log L %.6f, decrement %.2e, resolution %.2e",
-                                   level, it, ev$value, dec, resolution))
-      if (dec < max(qc$tolDecrement %||% 1e-4, resolution)) { ended <- TRUE; break }
-      if (unresolved) {
-        ended <- TRUE
-        if (!identical(best$psi, psi)) { psi <- best$psi; q$rebuild(psi, level, tol) }
-        break
+      if (verbose) message(sprintf("em(quadrature) level %d ecm %d: -2 log L %.6f, decrement %.2e, capped groups %d",
+                                   level, it, ev$value, dec, sum(st$capped)))
+      if (dec < (qc$tolDecrement %||% 1e-4)) { reason <- "decrement"; break }
+      # the frozen nodes predicted a decrease the rebuilt ones do not show: the step is below
+      # what these levels resolve
+      if (!is.null(prev) && identical(prev$levels, at$levels) && at$value > prev$value) {
+        reason <- "resolution"; break
       }
+      if (it == nIt) break
       prev <- at
       cm <- .innerTrust(modifyList(step, list(objfun = q$value, parinit = psi, fixed = fixed,
                                               iterlim = qc$maxCm1Iter %||% 30L)))
       psi <- cm$argument
     }
   }
-  converged <- ended
-  if (!converged) q$rebuild(psi, levels[length(levels)], tol)
-  fit <- .quadratureResult(design, q, psi, fixed, length(rows), converged,
-                           do.call(rbind, rows), exact)
+  if (!identical(best, last)) q$restore(best$snapshot)
+  fit <- .quadratureResult(design, q, best$psi, fixed, length(rows), reason != "iterlim",
+                           do.call(rbind, rows), exact, reason)
   if (!isFALSE(qc$certificate))
-    fit$certificate <- .quadratureCertificate(design, q, psi, fixed, qc$certificate %||% list(), tol)
+    fit$certificate <- .quadratureCertificate(design, q, best$psi, fixed, qc$certificate %||% list(), tol)
   fit
 }
 
@@ -547,6 +604,7 @@
   levelError <- st$levelError
   for (i in which(is.na(levelError))) {
     up <- .nextLevel(K, st$levels[i])
+    if (!q$allowed(up)) up <- .prevLevel(K, st$levels[i])
     if (is.na(up)) next
     nodes <- .quadratureNodes(st$modes[i, ], st$H[[i]] / 2, up)
     s <- .nodeSum(nodes$logW + q$integrand(design$groups[i], list(nodes$eta), c(psi, fixed))[[1]],
@@ -561,7 +619,7 @@
     se <- stats::sd(perShift) / sqrt(shifts) / est
     data.frame(group = design$groups[i], level = st$levels[i], quadrature = -2 * quad[i],
                importance = -2 * (mx + log(est)), se = 2 * se, khat = .paretoShape(lw),
-               levelError = levelError[i])
+               levelError = levelError[i], capped = isTRUE(st$capped[i]))
   })
   out <- do.call(rbind, rows)
   allowed <- pmax(if (is.finite(tol)) tol / nrow(out) else 0, out$levelError, na.rm = TRUE)

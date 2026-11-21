@@ -74,9 +74,6 @@ absolute value in the units of the rates; default \code{0}. A positive value
 admits a resting state that departs from rest more slowly than a time
 scale of interest, as near a Hopf bifurcation. \code{\link[=constraintStability]{constraintStability()}}
 reaches the weight at \code{stabilityTol}.}
-\item{\code{stabilityMargin}}{The width of the ramp of \code{\link[=constraintStability]{constraintStability()}}
-below \code{stabilityTol}, relative to the largest eigenvalue modulus on the
-manifold of the conserved quantities; default \code{1e-6}.}
 \item{\code{nStarts}}{Random starts after the deterministic ones, default
 \code{20}.}
 \item{\code{startRange}}{Range of a random start, drawn uniformly per
@@ -173,6 +170,14 @@ this Hessian:
 as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\link[=trust]{trust()}}
 factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov.objlist]{vcov()}}
 solves it for the columns of \code{which}.
+
+\code{hessian = "expected"} returns, in place of the Gauss-Newton Hessian of the
+forward sweep, the expected (Fisher) information of the likelihood:
+\code{2 / sigma^2} in the prediction and \code{4 / sigma^2} in sigma per data point,
+positive semidefinite also where an error model depends on the parameters.
+The Gauss-Newton Hessian keeps the exact curvature of the loss in the
+prediction and sigma, which is indefinite there and shows the optimizer a
+saddle.
 
 With \code{deriv = FALSE} it returns the value alone.
 }

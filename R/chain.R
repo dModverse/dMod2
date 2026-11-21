@@ -245,14 +245,15 @@
 }
 
 ## The data term of `plan` at `values`, the outer values per condition or one vector for all, in
-## the order of the plan, with `sparse` the Hessian as the slots of chain_data(); NULL where the
-## chain fails, for the R path to report it.
-.chainEval <- function(plan, values, deriv, deriv2, hessian, local, cores, bloq, df, sparse = FALSE) {
+## the order of the plan, with `sparse` the Hessian as the slots of chain_data() and with `rows` the
+## data rows; NULL where the chain fails, for the R path to report it.
+.chainEval <- function(plan, values, deriv, deriv2, hessian, local, cores, bloq, df, sparse = FALSE,
+                       rows = FALSE) {
   pre <- .chainParams(plan, values, deriv, deriv2, cores)
   raw <- if (!is.null(pre)) .chainSolveRun(plan, pre$args, cores)
   if (is.null(raw)) return(NULL)
   chain_data(plan, pre, raw, deriv, deriv2, hessian, local, as.integer(cores), bloq, if (is.finite(df)) df else 0,
-             FALSE, sparse)
+             FALSE, sparse, rows)
 }
 
 

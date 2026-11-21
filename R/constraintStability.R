@@ -7,15 +7,17 @@
 #'   \eqn{\sqrt{w}\, r^{3/2}} for \eqn{r \le 1} and
 #'   \eqn{\sqrt{w}\, (1 + 3 (r - 1) / 2)} beyond, with
 #'   \eqn{r = \max(0, \mathrm{Re}\,\lambda - \lambda_0) / (\lambda_{tol} - \lambda_0)}.
-#'   With \eqn{s} the largest eigenvalue modulus there, \eqn{\lambda_{tol}} the
-#'   `stabilityTol` and \eqn{m} the `stabilityMargin` of the `controlsPTC` of
-#'   `pSS`, the ramp begins at \eqn{\lambda_0 = \lambda_{tol} - m s}. The term is
-#'   zero on a steady state whose leading real part lies more than \eqn{m s}
-#'   below \eqn{\lambda_{tol}}, reaches the weight \eqn{w} for each eigenvalue, both of
-#'   a complex pair, whose real part reaches \eqn{\lambda_{tol}}, and grows
-#'   quadratically beyond. Value, gradient and Gauss-Newton Hessian are
-#'   continuous. Steady states that agree in the parameters, resting states and
-#'   start values they read count once. The gradient is exact.
+#'   With \eqn{\lambda_{tol}} the `stabilityTol` of the `controlsPTC` of `pSS`,
+#'   the ramp begins at \eqn{\lambda_0 = \lambda_{tol} - \max(d, m s)}, with
+#'   \eqn{d} the `width`, \eqn{m} the `margin` and \eqn{s} the largest
+#'   eigenvalue modulus on the manifold. The term is zero on a steady state
+#'   whose leading real part lies below \eqn{\lambda_0}, reaches the weight
+#'   \eqn{w} for each eigenvalue, both of a complex pair, whose real part
+#'   reaches \eqn{\lambda_{tol}}, and grows quadratically beyond. Value,
+#'   gradient and Gauss-Newton Hessian are continuous. Steady states that agree in the parameters, resting states and
+#'   start values they read count once. The gradient is exact; eigenvalues that
+#'   coincide within the precision of the eigenvalues take the mean of their
+#'   derivatives, exact where they stay equal.
 #'
 #' @details The term is an assumption of the model, that the system rests where
 #'   the steady state is taken, not data: [profile()] with `stop = "data"` and
@@ -40,6 +42,13 @@
 #' @param weight \eqn{w}, the value of the term where the real part of an
 #'   eigenvalue reaches the stability tolerance, in units of \eqn{-2 \log L}.
 #'   Default 100.
+#' @param width \eqn{d}, the least width of the ramp in the units of the rates,
+#'   default `0`. A ramp wide against the change of the real parts over a step
+#'   shows the boundary to the model of a trust-region step before the step
+#'   crosses it; a resting state whose slowest mode decays faster than
+#'   `width` is not affected.
+#' @param margin \eqn{m}, the least width of the ramp relative to the largest
+#'   eigenvalue modulus, the precision of the eigenvalues; default `1e-6`.
 #' @param attrName Name of the attribute that holds the value of the term,
 #'   default `"stability"`.
 #' @return An objfn of the parameters of `p`, or of `pSS` without `p`, to add to
@@ -47,12 +56,17 @@
 #' @seealso [Pimpl()], [constraintL2()]
 #' @example inst/examples/constraintStability.R
 #' @export
-constraintStability <- function(pSS, p = NULL, weight = 100, attrName = "stability") {
+constraintStability <- function(pSS, p = NULL, weight = 100, width = 0, margin = 1e-6,
+                                attrName = "stability") {
   kernels <- attr(pSS, "mappings")
   if (!length(kernels) || !all(vapply(kernels, function(k) is.function(attr(k, "spectrum")), TRUE)))
     stop("constraintStability: `pSS` is a parfn of Pimpl().", call. = FALSE)
   if (!(is.numeric(weight) && length(weight) == 1L && weight > 0))
     stop("constraintStability: `weight` is a positive number.", call. = FALSE)
+  if (!(is.numeric(margin) && length(margin) == 1L && margin > 0))
+    stop("constraintStability: `margin` is a positive number.", call. = FALSE)
+  if (!(is.numeric(width) && length(width) == 1L && width >= 0))
+    stop("constraintStability: `width` is a number of at least 0.", call. = FALSE)
   inputs <- getParameters(pSS)
   # the parameters of p that enter the inputs of the steady state
   parameters <- if (is.null(p)) inputs else {
@@ -71,9 +85,7 @@ constraintStability <- function(pSS, p = NULL, weight = 100, attrName = "stabili
     args <- list(...)
     pars <- args[[match.fnargs(args, "pars")]]
     free <- names(pars)
-    tol <- attr(kernels[[1]], "stabilityTol")()
-    lamTol <- tol[["stabilityTol"]]
-    margin <- tol[["stabilityMargin"]]
+    lamTol <- attr(kernels[[1]], "stabilityTol")()
     if (is.null(p)) {
       inner <- list(c(unclass(pars), unclass(fixed)))
       jac <- list(matrix(diag(1, length(free)), length(free), dimnames = list(free, free)))
@@ -98,7 +110,7 @@ constraintStability <- function(pSS, p = NULL, weight = 100, attrName = "stabili
     }, "")
     rows <- list()
     for (i in which(!duplicated(keys))) {
-      sp <- attr(kernels[[at[[i]]]], "spectrum")(inner[[i]], lamTol, margin)
+      sp <- attr(kernels[[at[[i]]]], "spectrum")(inner[[i]], lamTol - width, margin)
       if (!length(sp$active)) next
       J <- jac[[i]]
       cols <- intersect(free, colnames(J))
@@ -109,14 +121,17 @@ constraintStability <- function(pSS, p = NULL, weight = 100, attrName = "stabili
         if (length(on) && length(cols)) g[cols] <- drop(v[on] %*% J[on, cols, drop = FALSE])
         g
       }
-      # the ramp ends at the tolerance and is `margin` times the largest eigenvalue modulus wide
-      ds <- chain(sp$scaleGrad)
-      span <- margin * sp$scale
+      # the ramp ends at the tolerance and is `width` or `margin` times the largest eigenvalue
+      # modulus wide, whichever is wider
+      relative <- margin * sp$scale >= width
+      span <- if (relative) margin * sp$scale else width
+      dspan <- if (relative) margin * chain(sp$scaleGrad) else 0
       lam0 <- lamTol - span
       for (k in seq_along(sp$active)) {
         re <- sp$re[sp$active[k]]
+        if (re <= lam0) next
         r <- (re - lam0) / span
-        dr <- (chain(sp$grad[k, ]) + (1 - r) * margin * ds) / span
+        dr <- (chain(sp$grad[k, ]) + (1 - r) * dspan) / span
         # residual sqrt(w) r^(3/2) up to the tolerance, then linear with the same slope
         rho <- sqrt(weight) * if (r <= 1) r^1.5 else 1 + 1.5 * (r - 1)
         drho <- sqrt(weight) * 1.5 * sqrt(min(r, 1)) * dr

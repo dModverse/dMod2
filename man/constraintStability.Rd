@@ -4,7 +4,14 @@
 \alias{constraintStability}
 \title{Stability of the steady state of Pimpl() as a constraint}
 \usage{
-constraintStability(pSS, p = NULL, weight = 100, attrName = "stability")
+constraintStability(
+  pSS,
+  p = NULL,
+  weight = 100,
+  width = 0,
+  margin = 1e-06,
+  attrName = "stability"
+)
 }
 \arguments{
 \item{pSS}{A parfn of \code{\link[=Pimpl]{Pimpl()}}, built with \code{deriv2 = TRUE}.}
@@ -15,6 +22,15 @@ parameters of the objective.}
 \item{weight}{\eqn{w}, the value of the term where the real part of an
 eigenvalue reaches the stability tolerance, in units of \eqn{-2 \log L}.
 Default 100.}
+
+\item{width}{\eqn{d}, the least width of the ramp in the units of the rates,
+default \code{0}. A ramp wide against the change of the real parts over a step
+shows the boundary to the model of a trust-region step before the step
+crosses it; a resting state whose slowest mode decays faster than
+\code{width} is not affected.}
+
+\item{margin}{\eqn{m}, the least width of the ramp relative to the largest
+eigenvalue modulus, the precision of the eigenvalues; default \code{1e-6}.}
 
 \item{attrName}{Name of the attribute that holds the value of the term,
 default \code{"stability"}.}
@@ -31,15 +47,17 @@ quantities, it adds the square of the residual
 \eqn{\sqrt{w}\, r^{3/2}} for \eqn{r \le 1} and
 \eqn{\sqrt{w}\, (1 + 3 (r - 1) / 2)} beyond, with
 \eqn{r = \max(0, \mathrm{Re}\,\lambda - \lambda_0) / (\lambda_{tol} - \lambda_0)}.
-With \eqn{s} the largest eigenvalue modulus there, \eqn{\lambda_{tol}} the
-\code{stabilityTol} and \eqn{m} the \code{stabilityMargin} of the \code{controlsPTC} of
-\code{pSS}, the ramp begins at \eqn{\lambda_0 = \lambda_{tol} - m s}. The term is
-zero on a steady state whose leading real part lies more than \eqn{m s}
-below \eqn{\lambda_{tol}}, reaches the weight \eqn{w} for each eigenvalue, both of
-a complex pair, whose real part reaches \eqn{\lambda_{tol}}, and grows
-quadratically beyond. Value, gradient and Gauss-Newton Hessian are
-continuous. Steady states that agree in the parameters, resting states and
-start values they read count once. The gradient is exact.
+With \eqn{\lambda_{tol}} the \code{stabilityTol} of the \code{controlsPTC} of \code{pSS},
+the ramp begins at \eqn{\lambda_0 = \lambda_{tol} - \max(d, m s)}, with
+\eqn{d} the \code{width}, \eqn{m} the \code{margin} and \eqn{s} the largest
+eigenvalue modulus on the manifold. The term is zero on a steady state
+whose leading real part lies below \eqn{\lambda_0}, reaches the weight
+\eqn{w} for each eigenvalue, both of a complex pair, whose real part
+reaches \eqn{\lambda_{tol}}, and grows quadratically beyond. Value,
+gradient and Gauss-Newton Hessian are continuous. Steady states that agree in the parameters, resting states and
+start values they read count once. The gradient is exact; eigenvalues that
+coincide within the precision of the eigenvalues take the mean of their
+derivatives, exact where they stay equal.
 }
 \details{
 The term is an assumption of the model, that the system rests where

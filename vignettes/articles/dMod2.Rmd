@@ -127,11 +127,4 @@ are bounded on one side only, a practical non-identifiability.
 call returns values with their derivatives in the outer parameters, the objective value, gradient
 and Hessian.
 
-## Next steps
-
-- [Setting up models](guide-model.html): reactions, compartments, error models, steady states and
-  events on the NFκB model.
-- [Optimization](guide-optimization.html) and [Profile likelihood](guide-profiles.html): fits
-  and identifiability.
-- [Nonlinear mixed-effects models](guide-nlme.html): random effects with `em()`.
-- [Installation and troubleshooting](installation.html): compilers and Python.
+[1. Setting up models →](guide-model.html)

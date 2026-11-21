@@ -313,14 +313,14 @@ plotPars.parframe <- function(x, ..., tol = 1) {
 }
 
 
-# Plain numbers below 10^4, powers of ten from there, so that a wide axis keeps short labels.
+# Powers of ten as 10^k on every tick when all nonzero breaks are powers of ten, plain numbers
+# on every tick otherwise.
 .decadeLabels <- function(breaks) {
   labels <- format(breaks, trim = TRUE, scientific = FALSE, drop0trailing = TRUE)
-  big <- is.finite(breaks) & abs(breaks) >= 1e4
-  k <- floor(log10(abs(breaks[big])) + 1e-9)
-  m <- round(breaks[big] / 10^k)
-  labels[big] <- ifelse(m == 1, paste0("10^", k),
-                        ifelse(m == -1, paste0("-10^", k), paste0(m, " %*% 10^", k)))
+  nz <- is.finite(breaks) & breaks != 0
+  k <- round(log10(abs(breaks[nz])))
+  if (!all(abs(abs(breaks[nz]) / 10^k - 1) < 1e-9)) return(labels)
+  labels[nz] <- paste0(ifelse(breaks[nz] < 0, "-", ""), "10^", k)
   parse(text = labels)
 }
 
@@ -831,6 +831,15 @@ print.parvec <- function(x, ...) {
 #'
 #' @export
 c.parvec <- function(...) {
+
+  # An operand without names takes the argument name, numbered for several values.
+  an <- ...names()
+  if (any(nzchar(an))) {
+    args <- list(...)
+    for (i in which(nzchar(an) & vapply(args, function(z) is.null(names(z)) && length(z) > 0L, TRUE)))
+      names(args[[i]]) <- if (length(args[[i]]) == 1L) an[i] else paste0(an[i], seq_along(args[[i]]))
+    return(do.call(c.parvec, unname(args)))
+  }
 
   # One operand, alone or beside NULL or an empty one, as
   # prdframe(parameters = c(pars, fixed)) has it for every condition: the same

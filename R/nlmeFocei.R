@@ -178,10 +178,11 @@
 
 
 ## Kernel description of the groups: per group the etas and condition blocks, the layout of
-## the outer and full parameter vectors and the Cholesky layout.
-.foceiMeta <- function(design, start, fixed) {
+## the outer and full parameter vectors and the Cholesky layout. The etas are those of `stems`; with
+## `reach` (groups x stems) a group has those it marks as coordinates, the others rest at 0.
+.foceiMeta <- function(design, start, fixed, stems = design$normal$stems, reach = NULL) {
   lay <- design$normal
-  E <- design$etaNames[, lay$stems, drop = FALSE]
+  E <- design$etaNames[, stems, drop = FALSE]
   outer <- names(start) %||% character(0)
   full <- c(outer, as.vector(E))
   probe <- setNames(numeric(length(full)), full)
@@ -195,14 +196,17 @@
   meta <- lapply(groups, function(g) {
     blocks <- lapply(design$conditions[[g]], function(cn) .conditionBlock(design, cn, probe, fixed, frames[[cn]]))
     used <- unique(unlist(lapply(blocks, `[[`, "parameters")))
-    absent <- .setdiff(E[g, ], used)
+    on <- if (is.null(reach)) rep(TRUE, ncol(E)) else reach[g, stems]
+    absent <- .setdiff(E[g, on], used)
     if (length(absent))
       stop("em: the random effects ", paste(absent, collapse = ", "), " of group ", g,
            " enter none of the conditions of that group.", call. = FALSE)
-    list(eta_idx_in_pars = match(E[g, ], full), eta_names = unname(E[g, ]),
-         blocks = lapply(blocks, function(b) { b$parameters <- NULL; b }))
+    out <- list(eta_idx_in_pars = match(E[g, on], full), eta_names = unname(E[g, on]),
+                blocks = lapply(blocks, function(b) { b$parameters <- NULL; b }))
+    if (!all(on)) out$coords <- which(on)
+    out
   })
-  list(subjects = groups, conditions = names(design$data), K = lay$K,
+  list(subjects = groups, conditions = names(design$data), K = ncol(E),
        eta_idx_global = matrix(match(E, full), nrow(E)), eta_names = lapply(groups, function(g) unname(E[g, ])),
        outer_names = outer, outer_idx_in_full = match(outer, full),
        other_etas_init = setNames(rep(0, length(E)), as.vector(E)), pars_full_names = full,
@@ -601,8 +605,7 @@
     return(.fitFoceiSparse(design, joint, start, fixed, control))
   ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control$innerControl %||% list())
-  oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200, ftol = 1e-7, mtol = 1e-5),
-                   control$trustControl %||% list())
+  oc <- .foceiOuterControl(control$trustControl, oneGrouping = TRUE)
   cores <- getOption("dMod2.cores", 1L)
   meta <- .foceiMeta(design, start, fixed)
   .requireM3(design, meta, "FOCEI")
@@ -614,10 +617,11 @@
   # gradient, and d eta*/d theta, which starts the modes of the next trial to first order
   learn <- .outerSecant(outer)
   last <- NULL
-  volume <- function(full_pars, joint_hessian, H_inv_list, data_gradient) {
+  # the volume derivatives contract dH with the weights of the integrator, the Schur complement takes H_NN^-1
+  volume <- function(full_pars, joint_hessian, H_inv_list, weight_list, data_gradient) {
     ff <- mode == "forward-forward"
-    vol <- if (ff) .foceiVolume(design, full_pars, fixed, outer, H_inv_list, hessian = TRUE, cores = cores)
-           else .volumeReverse(design, full_pars, fixed, outer, H_inv_list, cores = cores)
+    vol <- if (ff) .foceiVolume(design, full_pars, fixed, outer, weight_list, hessian = TRUE, cores = cores)
+           else .volumeReverse(design, full_pars, fixed, outer, weight_list, cores = cores)
     curvature <- if (ff) vol$hessian[outer, outer] else 0
     if (ff) last <<- list(full = full_pars, hessian = vol$hessian)
     base <- .gnSchur(joint_hessian, outer, meta$eta_names, H_inv_list) + curvature
@@ -652,13 +656,40 @@
     # the volume Hessian of the last correction where the fit ends on the correction point
     vol <- if (!is.null(last) && identical(names(last$full), names(full)) &&
                identical(unname(unclass(last$full)), unname(full))) last$hessian
-           else .foceiVolume(design, full, fixed, outer, fit$H_inv, hessian = TRUE, cores = cores)$hessian
+           else .foceiVolume(design, full, fixed, outer, fit$weight, hessian = TRUE, cores = cores)$hessian
     hessian <- hessian + vol[on, on]
   }
   list(argument = fit$argument, value = fit$value, gradient = fit$gradient, hessian = hessian,
        etaModes = etaModes, etaCov = setNames(lapply(fit$H_inv, function(H) 2 * H), design$groups),
        converged = isTRUE(fit$converged), iterations = fit$iterations, trace = fit$trace,
        derivMode = mode, hessianExact = exact)
+}
+
+## The outer trust settings of FOCEI from `control$trustControl`. Flat ftol, mtol, gtol and xtol join
+## `tolControl`. Over several groupings the outer search is trust(), and every other argument of
+## trust() passes; one grouping runs a separate outer loop, which reads rinit, rmax and iterlim.
+.foceiOuterControl <- function(tc, oneGrouping) {
+  tc <- tc %||% list()
+  nms <- names(tc)
+  if (length(tc) && (is.null(nms) || !all(nzchar(nms))))
+    stop("em: all entries of control$trustControl must be named.", call. = FALSE)
+  flat <- c("ftol", "mtol", "gtol", "xtol")
+  rest <- tc[.setdiff(nms, c(flat, "tolControl"))]
+  tol <- modifyList(list(ftol = 1e-7, mtol = 1e-5), c(tc$tolControl %||% list(), tc[.intersect(nms, flat)]))
+  if ("sparse" %in% names(rest))
+    stop("em: sparse is an argument of em(), not an entry of control$trustControl.", call. = FALSE)
+  if (oneGrouping) {
+    bad <- .setdiff(names(rest), c("rinit", "rmax", "iterlim"))
+    if (length(bad))
+      stop("em: control$trustControl: ", paste(bad, collapse = ", "), " reach trust() with random ",
+           "effects over several groupings only. FOCEI of one grouping runs a separate outer trust ",
+           "region on rinit, rmax, iterlim, ftol and mtol.", call. = FALSE)
+    return(c(modifyList(list(rinit = 1, rmax = 10, iterlim = 200L), rest), tol))
+  }
+  out <- .trustControl(list(rinit = 1, rmax = 10, iterlim = 200L), rest, label = "em: control$trustControl")
+  if (is.null(out$phases) && is.null(out$hessianMethod)) out$hessianMethod <- "gn"
+  out$tolControl <- tol
+  out
 }
 
 ## How FOCEI gets the second derivatives: `control$derivMode`, forward over reverse by default;
@@ -843,8 +874,7 @@
 .fitFoceiSparse <- function(design, joint, start, fixed = NULL, control = list()) {
   ic <- modifyList(list(rinit = 1, rmax = 10, iterlim = 30, steptol = 1e-8, mtol = 1e-12,
                         eigen_floor_relative = 1e-10), control$innerControl %||% list())
-  oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200, ftol = 1e-7, mtol = 1e-5),
-                   control$trustControl %||% list())
+  oc <- .foceiOuterControl(control$trustControl, oneGrouping = TRUE)
   cores <- getOption("dMod2.cores", 1L)
   meta <- .foceiMeta(design, start, fixed)
   .requireM3(design, meta, "FOCEI")
@@ -864,12 +894,12 @@
     L <- .choleskyFactor(lay, c(theta, fixed))
     full <- setNames(numeric(length(meta$pars_full_names)), meta$pars_full_names)
     full[outer] <- theta
-    inner <- focei_inner_trust(design$prdfn, errfn, full, warm, meta, chol2inv(t(L)),
+    inner <- nlme_group_kernel(design$prdfn, errfn, full, warm, meta, chol2inv(t(L)),
                                2 * sum(log(diag(L))), fixed, control = ic, predict_cb = predictor)
     full[etas] <- as.vector(inner$eta_modes)
     jt <- joint(pars = full, fixed = fixed, deriv = TRUE, hessian = "sparse", conditions = meta$conditions)
     list(theta = theta, full = full, inner = inner, joint = jt,
-         value = jt$value + sum(inner$log_det_H) - N * K * log(2))
+         value = jt$value + sum(inner$term) + inner$constant)
   }
   # the gradient and the sparse Hessian of the outer objective, and d eta*/d theta per group
   derivativesAt <- function(ev, deriv2 = FALSE) {
@@ -894,12 +924,12 @@
     # forward over reverse: the exact volume gradient on the Gauss-Newton Schur model, whose
     # curvature the SR1 correction learns
     if (mode == "forward-reverse" && !deriv2) {
-      vol <- .volumeReverse(design, ev$full, fixed, outer, ev$inner$H_inv, cores = cores, local = TRUE)
+      vol <- .volumeReverse(design, ev$full, fixed, outer, ev$inner$weight, cores = cores, local = TRUE)
       ev$gradient <- ev$gradient + vol$gradient[outer]
       ev$shift <- vol$etaShift
       return(ev)
     }
-    vol <- .foceiVolume(design, ev$full, fixed, outer, ev$inner$H_inv, hessian = "sparse", cores = cores)
+    vol <- .foceiVolume(design, ev$full, fixed, outer, ev$inner$weight, hessian = "sparse", cores = cores)
     ev$gradient <- ev$gradient + vol$gradient[outer]
     ev$hessian <- Matrix::forceSymmetric(ev$hessian + vol$hessian)
     ev$lowrank <- .lowrankJoin(ev$lowrank, vol$lowrank)
@@ -1062,10 +1092,8 @@
     attr(out, "Hinv") <- Hinv
     out
   }
-  oc <- modifyList(list(rinit = 1, rmax = 10, iterlim = 200L, ftol = 1e-7, mtol = 1e-5), control$trustControl %||% list())
-  args <- list(objfun = outerObjective, parinit = start, rinit = oc$rinit, rmax = oc$rmax, iterlim = oc$iterlim,
-               tolControl = oc[.intersect(names(oc), c("ftol", "mtol", "gtol"))],
-               sparse = sparse)
+  oc <- .foceiOuterControl(control$trustControl, oneGrouping = FALSE)
+  args <- c(list(objfun = outerObjective, parinit = start), oc, list(sparse = sparse))
   # iterlim 0 evaluates the marginal at the start, which is no failure to converge
   fit <- if (oc$iterlim > 0) do.call(trust, args) else .innerTrust(args)
   final <- outerObjective(fit$argument, volumeHessian = TRUE)
@@ -1077,7 +1105,7 @@
   list(argument = fit$argument[outer], value = final$value, gradient = final$gradient,
        hessian = final$hessian, lowrank = final$lowrank, etas = warm, etaCovUnits = cov, units = units,
        converged = isTRUE(fit$converged), iterations = fit$iterations, stopReason = fit$stopReason,
-       derivMode = mode,
+       phaseIterations = fit$phaseIterations, derivMode = mode,
        hessianExact = mode == "forward-forward" || .jointDeriv2(joint, c(fit$argument[outer], warm), fixed))
 }
 

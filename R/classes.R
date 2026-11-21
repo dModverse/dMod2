@@ -1046,6 +1046,10 @@ match.fnargs <- function(arglist, choices) {
     # An absent gradient or Hessian stays absent.
     out <- lapply(unclass(x2), function(x) if (is.null(x) || is.list(x)) x else x1 * x)
     if (!is.null(x2$lowrank)) out$lowrank$d <- x1 * x2$lowrank$d
+    if (!is.null(x2$structure)) {
+      out$structure$seeds <- x1 * x2$structure$seeds
+      out$structure$hessian <- x1 * x2$structure$hessian
+    }
     numericAttrs <- names(Filter(is.numeric, attributes(x2)))
     attributes(out) <- attributes(x2)
     for (n in numericAttrs) attr(out, n) <- x1 * attr(x2, n)

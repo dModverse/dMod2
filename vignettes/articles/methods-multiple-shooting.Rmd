@@ -25,8 +25,43 @@ inFraction <- function(x) if (round(1 / x) %in% 2:10) c("half", "a third", "a qu
 Single shooting integrates from the initial state over the whole time axis. For oscillating or
 spiking systems the objective is rugged: a parameter change shifts every later period, and a peak
 moved by more than the peak width leaves the residuals without direction, so few starts reach the
-narrow valleys. `trust()` offers multiple shooting instead
-([switching it on](guide-optimization.html#multiple-shooting), [trust region](methods-trust.html)).
+narrow valleys. `trust()` offers multiple shooting instead ([trust region](methods-trust.html)).
+
+## Usage
+
+Multiple shooting is a control of the objective:
+
+```{r, eval = FALSE}
+obj <- normL2(data, g * x * p, multipleShootingControl = TRUE)
+fit <- trust(obj, start)
+fit$multipleShooting$violation
+controls(obj, "multipleShootingControl") <- NULL   # single shooting again
+```
+
+The chain must be `g * x * p` with one `Xs()` built on `odemodel(..., includeTimeZero = FALSE)`.
+Not available with it: `hessianMethod = "exact"`, `qnControl$hessianInit = "exact"`, several
+phases, `switches`, `hessianReseed`, `qnMemory`, `nonmonotone`, `boundary = "clip"`,
+`minimize = FALSE`, `traceFile`.
+
+| entry of `multipleShootingControl` | default | controls |
+|---|---|---|
+| `nodes` | `"auto"` | `"auto"`, `"transitions"`, or node times |
+| `growth`, `misfit` | `10`, `3` | thresholds at which `"auto"` cuts a segment |
+| `minPoints` | states + 1 | data points per half of a cut |
+| `charts` | all linear | `"log10"`, `"linear"` or `"angle"` per state |
+| `scale` | from the data | scale of the gaps and node steps |
+| `init` | `"data"` | node values: `"data"`, `"spline"`, `"simulation"` or a list |
+| `breaks` | none | node times without continuity |
+
+| entry of `stepControl` | default | controls |
+|---|---|---|
+| `acceptance` | `"filter"` | `"filter"`, `"merit"` or `"natural"` |
+| `soc` | `TRUE` | second-order correction of a rejected step |
+| `anneal` | `TRUE` | penalty on the gaps raised in stages |
+| `twoPhase`, `restore`, `regularize` | off | further globalizations |
+
+`converged = TRUE` requires the scaled gaps below `tolControl$ctol`. The result has a list
+`multipleShooting` with `nodes`, `gaps`, `violation` and the counts of the globalization.
 
 ## Segments and gaps
 

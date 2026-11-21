@@ -463,6 +463,69 @@ test_that("the natural level function converges to the single-shooting optimum",
                      stepControl = list(acceptance = "natural")), "hessianMethod")
 })
 
+# A summand that rises steeply off the start rejects every trial, so a run
+# ends on stagnation at the start. With `slope`, the gradient off the start
+# also defeats every damping of the natural level function.
+.ms_wall <- function(start, slope = 0) {
+  nm <- names(start)
+  wall <- function(pars, fixed = NULL, deriv = TRUE, ...) {
+    off <- any(pars[nm] != start)
+    objlist(value = 1e6 * off, gradient = setNames(rep(slope * off, length(nm)), nm),
+            hessian = matrix(0, length(nm), length(nm), dimnames = list(nm, nm)))
+  }
+  class(wall) <- c("objfn", "fn")
+  wall
+}
+
+test_that("stagnation is convergence only where the Newton step predicts no decrease", {
+  mo <- .ms_models()
+  obj0 <- normL2(mo$data, mo$g * mo$x * mo$p)
+  ref <- trust(obj0, mo$truth, iterlim = 200)
+  ms <- normL2(mo$data, mo$g * mo$x * mo$p,
+               multipleShootingControl = list(nodes = seq(2, 18, 2), init = "simulation"))
+  start <- mo$truth + c(0.8, -0.6, 0.4, -0.3, 0.3)
+  for (th in list(start, ref$argument)) {
+    fit <- trust(ms + .ms_wall(th), th, iterlim = 50,
+                 tolControl = list(ftol = 1e7, gtol = 0),
+                 stepControl = list(anneal = FALSE))
+    expect_identical(fit$stopReason, "stagnation")
+    expect_equal(fit$argument, th)
+    expect_lt(fit$multipleShooting$violation, 1e-6)
+    expect_identical(fit$converged, identical(th, ref$argument))
+  }
+})
+
+test_that("the handover from the natural level function keeps the total iterlim", {
+  mo <- .ms_models()
+  ms <- normL2(mo$data, mo$g * mo$x * mo$p,
+               multipleShootingControl = list(nodes = seq(2, 18, 2), init = "simulation"))
+  start <- mo$truth + c(0.8, -0.6, 0.4, -0.3, 0.3)
+  fit <- trust(ms + .ms_wall(start, slope = 1e6), start, iterlim = 5, blather = TRUE,
+               tolControl = list(ftol = 1e7),
+               stepControl = list(anneal = FALSE, acceptance = "natural"))
+  expect_identical(fit$multipleShooting$acceptance, "natural, then filter")
+  expect_identical(fit$stopReason, "iterlim")
+  expect_identical(fit$iterations, 5L)
+  expect_length(fit$multipleShooting$trace, 5L)
+  expect_false(fit$converged)
+})
+
+test_that("a value stop waits for the Newton step to predict no decrease", {
+  mo <- .ms_models()
+  obj0 <- normL2(mo$data, mo$g * mo$x * mo$p)
+  ref <- trust(obj0, mo$truth, iterlim = 200)
+  ms <- normL2(mo$data, mo$g * mo$x * mo$p,
+               multipleShootingControl = list(nodes = seq(2, 18, 2), init = "simulation"))
+  start <- mo$truth + c(0.8, -0.6, 0.4, -0.3, 0.3)
+  for (acc in c("filter", "natural")) {
+    fit <- trust(ms, start, iterlim = 200, tolControl = list(ftol = 1e7, ctol = 1e3),
+                 stepControl = list(anneal = FALSE, acceptance = acc))
+    # gaps within ctol leave the value near, not at, the single-shooting one
+    expect_true(fit$converged, info = acc)
+    expect_equal(fit$value, ref$value, tolerance = 1e-2, info = acc)
+  }
+})
+
 test_that("the residuals of a segment make up the segment value, gradient and Hessian", {
   mo <- .ms_models()
   obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = list(nodes = c(5, 10, 15)))

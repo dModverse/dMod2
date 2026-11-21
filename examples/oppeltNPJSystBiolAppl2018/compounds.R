@@ -1,5 +1,6 @@
 # The DILI compounds as a grouping of the reduced model: which rates each compound changes, by
-# spike-and-slab random effects. Saves results/compounds.rds.
+# spike-and-slab random effects, and the L1 scan of the same changes. Saves results/compounds.rds,
+# results/compoundsCheck.rds and results/compoundsL1.rds.
 
 # reduced.R, unless it ran in this session
 if (!exists("objReduced")) source("reduced.R")
@@ -97,3 +98,88 @@ saved[c("design", "prdfn", "errfn", "data")] <- NULL
 sources <- c("model.R", "reduced.R", "compounds.R", "data/oppelt2018.csv", "results/reduced.rds")
 attr(saved, "stamp") <- list(md5 = tools::md5sum(sources), dMod2 = packageVersion("dMod2"))
 saveRDS(saved, "results/compounds.rds")
+
+## ---- compoundcheck
+# -2 log L of the best fit by importance sampling on the model, 5000 draws per compound, against
+# the approximation of the fit at the same estimates
+set.seed(4)
+checkCompounds <- logLik(fitCompounds, method = "importance", draws = 5000)
+attr(checkCompounds, "stamp") <- list(md5 = tools::md5sum(sources), dMod2 = packageVersion("dMod2"))
+saveRDS(checkCompounds, "results/compoundsCheck.rds")
+
+## ---- compoundsL1
+# The L1 scan of the publication on the same data and model: every change of a rate constant by a
+# compound is a parameter of the objective with the penalty lambda |eta|, one lambda for all
+# compounds; changes that reach no data of the compound stay at 0
+fitSS <- readRDS("results/compounds.rds")
+reach <- fitSS$random$data %||% rep(TRUE, nrow(fitSS$random))
+etasL1 <- fitSS$random$parameter[reach]
+fixedL1 <- c(gaugeReduced, setNames(numeric(sum(!reach)), fitSS$random$parameter[!reach]))
+objL1 <- objCompounds + priorCompounds
+# two starts per penalty: the spike-and-slab estimates with the modes of the changes, and the start
+# of compoundfit with all changes at 0
+effects <- setdiff(names(init), c("prob_compound", "tau_compound"))
+startsL1 <- list(spikeSlab = c(fitSS$argument[effects], setNames(fitSS$random$mode[reach], etasL1)),
+                 reduced = c(init[effects], setNames(numeric(length(etasL1)), etasL1)))
+lambdas <- c(0, 0.5, 1, 2, 3, 4, 6, 8, 10, 12, 15, 20, 25, 30, 40, 60, 100)
+tasksL1 <- expand.grid(lambda = lambdas, start = names(startsL1), stringsAsFactors = FALSE)
+# the penalized fit of a task, with -2 log L without the penalty
+penalizedL1 <- function(task) {
+  fit <- trustL1(objL1, startsL1[[task$start]], mu = setNames(numeric(length(etasL1)), etasL1),
+                 lambda = task$lambda, rinit = 1, rmax = 10, iterlim = 1000, fixed = fixedL1,
+                 tolControl = tolerances)
+  list(lambda = task$lambda, start = task$start, argument = fit$argument,
+       value = objL1(fit$argument, fixed = fixedL1, deriv = FALSE)$value,
+       converged = fit$converged, iterations = fit$iterations)
+}
+# the changes a penalized fit keeps, fitted again without penalty, the others fixed at 0
+refitL1 <- function(task) {
+  off <- setdiff(etasL1, task$support)
+  fixed <- c(fixedL1, setNames(numeric(length(off)), off))
+  fit <- trust(objL1, task$argument[setdiff(names(task$argument), off)], rinit = 1, rmax = 10,
+               iterlim = 1000, fixed = fixed, tolControl = tolerances)
+  list(support = task$support, value = fit$value, converged = fit$converged,
+       iterations = fit$iterations)
+}
+
+## ---- compoundsL1fit
+# one fit per task, on one core each
+penalized <- parallel::mclapply(split(tasksL1, seq_len(nrow(tasksL1))), penalizedL1,
+                                mc.cores = getOption("dMod2.cores"))
+
+## ---- compoundsL1refit
+# per penalty the better start; each set of changes kept once, refitted from the penalized fit
+values <- vapply(penalized, function(r) r$value + r$lambda * sum(abs(r$argument[etasL1])), 0)
+bestL1 <- lapply(split(seq_along(penalized), tasksL1$lambda), function(i) penalized[[i[which.min(values[i])]]])
+supports <- lapply(bestL1, function(r) etasL1[r$argument[etasL1] != 0])
+first <- !duplicated(vapply(supports, paste, "", collapse = " "))
+refits <- parallel::mclapply(Map(function(r, s) list(support = s, argument = r$argument),
+                                 bestL1[first], supports[first]),
+                             refitL1, mc.cores = getOption("dMod2.cores"))
+
+## ---- compoundsL1save
+# per penalty the number of changes kept and -2 log L of the refit; the likelihood ratio test of each
+# refit against the refit with all changes, the selection that of the largest penalty not worse at
+# p < 0.001, the threshold of the publication
+key <- function(s) paste(s, collapse = " ")
+refitValue <- setNames(vapply(refits, `[[`, 0, "value"), vapply(refits, function(r) key(r$support), ""))
+scan <- data.frame(lambda = as.numeric(names(bestL1)), changes = lengths(supports),
+                   penalized = vapply(bestL1, `[[`, 0, "value"),
+                   converged = vapply(bestL1, `[[`, TRUE, "converged"),
+                   refit = unname(refitValue[vapply(supports, key, "")]), row.names = NULL)
+full <- scan$refit[scan$lambda == 0]
+scan$p <- pchisq(scan$refit - full, df = max(scan$changes) - scan$changes, lower.tail = FALSE)
+scan$p[scan$changes == max(scan$changes)] <- 1
+chosen <- max(scan$lambda[scan$p >= 0.001])
+path <- t(vapply(bestL1, function(r) r$argument[etasL1], numeric(length(etasL1))))
+rownames(path) <- names(bestL1)
+selectedL1 <- fitSS$random[match(supports[[as.character(chosen)]], fitSS$random$parameter),
+                           c("group", "eta", "parameter")]
+selectedL1$value <- bestL1[[as.character(chosen)]]$argument[selectedL1$parameter]
+rownames(selectedL1) <- NULL
+compoundsL1 <- list(scan = scan, path = path, lambda = chosen, selected = selectedL1,
+                    penalized = penalized, refits = refits)
+sourcesL1 <- c("model.R", "reduced.R", "compounds.R", "data/oppelt2018.csv", "results/reduced.rds",
+               "results/compounds.rds")
+attr(compoundsL1, "stamp") <- list(md5 = tools::md5sum(sourcesL1), dMod2 = packageVersion("dMod2"))
+saveRDS(compoundsL1, "results/compoundsL1.rds")

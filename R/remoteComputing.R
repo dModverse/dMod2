@@ -862,10 +862,10 @@ print.dMod2Target <- function(x, ...) {
        ", see dMod2Jobs()", call. = FALSE)
 }
 
-## An error when a job of this name still runs where the new one would replace
-## the folders: in this working directory, or on one of the same remote nodes,
-## also when it was submitted from another machine.
-.refuseRunning <- function(jobname, wd, hosts) {
+## An error when a job of this name still runs where the new one would replace the folders, here
+## or on a remote node, also from another machine, and when a remote folder holds a job of this name
+## from another working directory.
+.refuseReplace <- function(jobname, wd, hosts) {
   f <- file.path(wd, paste0(jobname, "_folder"), "job.rds")
   remote <- hosts[!vapply(hosts, .isLocalhost, NA)]
   same <- function(m) identical(m$jobname, jobname) &&
@@ -881,6 +881,15 @@ print.dMod2Target <- function(x, ...) {
       stop("the job '", jobname, "' submitted from ", m$wd, " still runs ", running,
            " tasks; recover = TRUE returns the job functions, and terminate() stops it",
            call. = FALSE)
+  }
+  here <- normalizePath(wd, mustWork = FALSE)
+  for (i in seq_along(remote)) {
+    m <- onNodes[[i]]
+    if (!identical(m$jobname, jobname) ||
+        identical(normalizePath(m$wd, mustWork = FALSE), here)) next
+    stop("the folder of job '", jobname, "' on ", remote[i], " holds the job submitted from ",
+         m$wd, "; get() the results there and purge() the job, or choose another jobname",
+         call. = FALSE)
   }
 }
 
@@ -943,10 +952,15 @@ print.dMod2Target <- function(x, ...) {
   terminate <- function() {
     for (k in seq_along(m$hosts)) {
       cmd <- if (m$slurm) paste("scancel", .slurmSelect(m, cancel = TRUE))
-      else paste0("for f in slot_*.pid slot_*.run; do [ -f \"$f\" ] || continue; ",
-                  "p=$(cat \"$f\"); kill -TERM -- -$p 2>/dev/null || ",
-                  "{ pkill -TERM -P $p; kill -TERM $p; }; ",
-                  "done 2>/dev/null; true")
+      # SIGTERM, and SIGKILL to what still runs after 5 seconds, since R may outlive SIGTERM
+      else {
+        signal <- function(sig) paste0("for f in slot_*.pid slot_*.run; do [ -f \"$f\" ] || continue; ",
+                                       "p=$(cat \"$f\"); kill -", sig, " -- -$p 2>/dev/null || ",
+                                       "{ pkill -", sig, " -P $p; kill -", sig, " $p; }; done 2>/dev/null; ")
+        paste0(signal("TERM"), "i=0; while [ $i -lt 50 ]; do a=; for f in slot_*.pid slot_*.run; do ",
+               "[ -f \"$f\" ] && kill -0 $(cat \"$f\") 2>/dev/null && a=1; done; [ -z \"$a\" ] && break; ",
+               "sleep 0.1; i=$((i+1)); done; ", signal("KILL"), "true")
+      }
       .onMachine(m$hosts[k], cmd, file.path(m$folder, k), m$wd, ignore.stderr = TRUE)
     }
     invisible(NULL)
@@ -999,7 +1013,9 @@ print.dMod2Job <- function(x, ...) {
 #' for `"localhost"` and in the home directory of a remote node. The job manifest
 #' `job.rds` lies in the local `<jobname>_folder` and in that of every remote
 #' node. A job of the same name that still runs there is an error, also when it
-#' was submitted from another machine. Every job is registered in
+#' was submitted from another machine, and so is a job of the same name in the
+#' folder of a remote node that was submitted from another working directory,
+#' until it is purged. Every job is registered in
 #' `tools::R_user_dir("dMod2", "data")` until `purge(local = TRUE)`, and
 #' [dMod2Jobs()] lists them.
 #'
@@ -1123,7 +1139,7 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
   if (is.null(jobname))
     jobname <- paste0("job_", paste(sample(c(0:9, letters), 6, replace = TRUE), collapse = ""))
   if (is.null(seed)) seed <- sample.int(1e6, 1L)
-  .refuseRunning(jobname, wd, hosts)
+  .refuseReplace(jobname, wd, hosts)
 
   # The worker of every task, dealt in turn: a node, or an array task of SLURM
   worker <- (seq_len(n) - 1L) %% workers + 1L

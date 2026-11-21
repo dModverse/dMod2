@@ -11,7 +11,7 @@ if (!exists("obj")) source("model.R")
 doses <- data.frame(dose_TNF = c(0, 1), row.names = c("control", "TNF"))
 # without the bleaching terms: in the resting control the states are constant, and the slope of
 # an imaging readout is the bleaching rate alone
-unbleached <- eqnvec(sub(" - tau_.*$", "", observables), names = names(observables))
+unbleached <- setNames(eqnvec(sub(" - tau_.*$", "", observables)), names(observables))
 symmetries <- symmetryDetection(reactions, unbleached, events = events, forcings = "TNF",
                                 conditions = doses, equilibrate = TRUE, reduceCQ = TRUE, reconstruct = TRUE,
                                 cores = getOption("dMod2.cores"))

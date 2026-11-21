@@ -16,6 +16,7 @@
   out <- list(argument = fit$argument, value = fit$value, gradient = fit$gradient,
               hessian = fit$hessian, lowrank = fit$lowrank, information = fit$information, converged = fit$converged,
               iterations = fit$iterations, trustIterations = fit$trustIterations,
+              phaseIterations = fit$phaseIterations,
               stopReason = fit$stopReason, failures = fit$failures,
               method = method, fixed = fixed,
               nObs = nObs, valueNonmem = if (!is.finite(design$df)) fit$value - nDensity * log(2 * pi) else NA_real_,
@@ -223,9 +224,10 @@ coef.em <- function(object, ...) object$argument
 vcov.em <- function(object, ...) {
   H <- .emCurvature(object)
   if (is.null(H) && !is.null(object$information))
-    stop("vcov: the scores of the ", length(object$design$groups), " groups do not span every ",
-         "direction of the ", length(object$argument), " parameters; confint(method = \"profile\") gives ",
-         "intervals.", call. = FALSE)
+    stop("vcov: the empirical information is not positive definite: the scores of the ",
+         length(unique(object$random$group)), " groups do not span every direction of the ",
+         length(object$argument), " parameters, or the Hessian of the terms without random effects is ",
+         "indefinite; confint(method = \"profile\") gives intervals.", call. = FALSE)
   if (is.null(H))
     stop("vcov: the fit has no Hessian of the marginal -2 log L and, with Dirichlet-process random effects, ",
          "no empirical information; confint(method = \"profile\") gives intervals.", call. = FALSE)
@@ -330,15 +332,28 @@ print.summary.em <- function(x, digits = 4, ...) {
 #' Log-likelihood of a mixed-effects fit
 #'
 #' @param object An `em` object, see [em()].
+#' @param method `"fit"` (default) the marginal log-likelihood of the fit;
+#'   `"importance"` the marginal log-likelihood at the estimates by importance
+#'   sampling on the model, for spike-and-slab random effects of one grouping
+#'   (normal ones beside). The proposal is the mixture of the approximation of
+#'   the fit with widened spreads; the fit must contain the design.
+#' @param draws Draws per group for `method = "importance"`, default 1000.
 #' @param ... Ignored.
 #' @return The marginal log-likelihood, `-value / 2`, of class `logLik` with
 #'   the number of estimated parameters as `df` and the number of
-#'   observations as `nobs`, so [stats::AIC()] and [stats::BIC()] apply.
+#'   observations as `nobs`, so [stats::AIC()] and [stats::BIC()] apply. With
+#'   `method = "importance"` the attributes `se` (standard error), `ess`
+#'   (effective sample size per group) and `approximation` (the log-likelihood
+#'   of the approximation of the fit at the estimates).
 #' @example inst/examples/emEstimates.R
 #' @export
-logLik.em <- function(object, ...) {
-  structure(-object$value / 2, df = length(object$argument), nobs = object$nObs,
-            class = "logLik")
+logLik.em <- function(object, method = c("fit", "importance"), draws = 1000L, ...) {
+  method <- match.arg(method)
+  out <- structure(-object$value / 2, df = length(object$argument), nobs = object$nObs, class = "logLik")
+  if (method == "fit") return(out)
+  is <- .sparseImportance(object, draws)
+  out[] <- -is$value / 2
+  structure(out, se = is$se / 2, ess = is$ess, approximation = -is$approximation / 2)
 }
 
 

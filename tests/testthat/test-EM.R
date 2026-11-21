@@ -667,6 +667,26 @@ test_that("one grouping through the component path equals the kernel path", {
   expect_equal(unname(at$hessian), unname(fit$hessian), tolerance = 1e-6)
 })
 
+test_that("the outer search over several groupings takes the arguments of trust(), others are an error", {
+  m <- .crossed()
+  re <- randomEffects(m$p)
+  ph <- list(list(hessianMethod = "gn", iterlim = 1), list(hessianMethod = "bfgs"))
+  tight <- list(mtol = 1e-10, ftol = 1e-12)
+  gn <- em(m$obj, re, c(a = 0.5), verbose = FALSE, sparse = FALSE, control = list(trustControl = tight))
+  for (sp in c(FALSE, TRUE)) {
+    fit <- em(m$obj, re, c(a = 0.5), verbose = FALSE, sparse = sp,
+              control = list(trustControl = c(tight, list(phases = ph))))
+    expect_identical(names(fit$phaseIterations), c("gn", "bfgs"))
+    expect_identical(fit$phaseIterations[["gn"]], 1L)
+    expect_equal(fit$value, gn$value, tolerance = 1e-6)
+  }
+  expect_error(em(m$obj, re, c(a = 0.5), verbose = FALSE, control = list(trustControl = list(nope = 1))),
+               "unknown entries nope")
+  l <- .lin()
+  expect_error(em(l$obj, randomEffects(l$p), c(a = 0.5, b = 0.2), verbose = FALSE,
+                  control = list(trustControl = list(phases = ph))), "several groupings only")
+})
+
 test_that("sparse FOCEI equals the dense fit, for one grouping and for crossed groupings", {
   m <- .lin()
   re <- randomEffects(m$p)

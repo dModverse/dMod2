@@ -49,7 +49,12 @@ default 0.3.}
 \item{\code{innerControl}}{the trust region of the modes; it stops where the
 Newton step is below \code{steptol}, default 1e-8.}
 \item{\code{trustControl}}{the outer trust region; it stops where the
-predicted change of -2 log L is below \code{mtol}, default 1e-5.}
+predicted change of -2 log L is below \code{mtol}, default 1e-5. Takes
+\code{ftol}, \code{mtol}, \code{gtol} and \code{xtol} flat or in \code{tolControl}. With random
+effects over several groupings the outer search is \code{\link[=trust]{trust()}}, and
+every argument of \code{\link[=trust]{trust()}} passes, \code{hessianMethod}, \code{phases} and
+\code{qnControl} included; FOCEI of one grouping reads \code{rinit}, \code{rmax},
+\code{iterlim}, \code{ftol} and \code{mtol}. Other entries are an error.}
 \item{\code{secondOrderCorrection}}{the derivative of the volume term,
 default \code{TRUE}.}
 \item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume
@@ -89,9 +94,16 @@ part of the Hessian kept apart (see \code{\link[=objlist]{objlist()}}).}
 \item{\code{information}}{with spike-and-slab random effects the
 empirical information that gives the standard errors: \code{G / (G - 1)}
 times the sum of the outer products of the centered scores of the \code{G}
-groups, plus half the Hessian of the conditions without random
-effects.}
-\item{\code{converged}, \code{iterations}}{}
+groups, of rank at most \code{G - 1}, plus half the curvature of the terms
+without random effects (conditions outside every group, priors) by
+their expected information (\code{hessian = "expected"}, see \link{dModfn}),
+positive semidefinite. It is not the Hessian of the marginal -2 log L
+and is singular where the scores and those terms span fewer directions
+than there are parameters. \link[=vcov.em]{vcov()} inverts it where it is
+positive definite.}
+\item{\code{converged}, \code{iterations}}{the convergence of the outer search
+and the iterations; with several groupings also \code{phaseIterations} of
+\code{\link[=trust]{trust()}}.}
 \item{\code{Omega}, \code{omega}}{the covariance of the normal random effects,
 their standard deviations and correlations with standard errors.}
 \item{\code{random}}{per group the modes with conditional standard errors;
@@ -132,14 +144,14 @@ Methods:
 \describe{
 \item{\code{"focei"}}{Laplace approximation at the conditional modes with the
 exact derivative of the volume term. The default, and the method for
-spike-and-slab and Dirichlet-process random effects (at most 14
-groups) and for several groupings.}
+several groupings; also for spike-and-slab and Dirichlet-process
+random effects (at most 14 groups).}
 \item{\code{"quadrature"}}{adaptive sparse-grid quadrature around the modes,
 started from the FOCEI fit; section Quadrature.}
 \item{\code{"laplaceEM"}}{ECM on the Laplace approximation with the
 covariance-corrected update of \code{Omega}.}
-\item{\code{"saem"}}{stochastic-approximation EM, also for Dirichlet-process
-random effects; section SAEM.}
+\item{\code{"saem"}}{stochastic-approximation EM, also for spike-and-slab and
+Dirichlet-process random effects; section SAEM.}
 }
 }
 \section{Quadrature}{
@@ -152,17 +164,27 @@ in \verb{phi = X beta + eta}. Entries of \code{control$quadrature}:
 \item{\code{tol}}{allowed change of -2 log L by the next level, default 0.1,
 split over the groups; each group takes the lowest level from the current
 stage of the group up within \code{tol / G} and never a lower one than before.
-\code{Inf} keeps the
-levels of the stages.}
+Where the next level exceeds \code{maxNodes}, the change from the level below
+is the estimate. \code{Inf} keeps the levels of the stages.}
 \item{\code{levels}}{the stages, default \code{K + 1} with \code{K} the number of random
 effects of a group; level \code{K + s} integrates polynomials of total
 degree \verb{2 s + 1} exactly.}
-\item{\code{maxLevel}}{highest level, default \code{K + 8}.}
+\item{\code{maxLevel}, \code{maxNodes}}{highest level, default \code{K + 8}, and the
+largest node count of a level per group, default 1000. A group whose
+error exceeds \code{tol / G} at the highest level within both is capped.
+Column \code{capped} of \code{stageTrace} counts the capped groups; attribute
+\code{"levels"} of \code{stageTrace} and the \code{certificate} list level, level error
+and cap per group.}
 \item{\code{tolDecrement}}{a stage ends when a Newton step on the rebuilt
-nodes would lower -2 log L by less than this, default 1e-4, or than the
-nodes resolve.}
+nodes would lower -2 log L by less than this, default 1e-4
+(\code{stopReason} \code{"decrement"}), or when -2 log L rose after a step on nodes
+of unchanged levels, so the step lies below what the levels resolve
+(\code{"resolution"}). \code{converged} means stationary at the levels reached,
+capped ones included; the fit returns the iterate of lowest -2 log L on
+the highest levels.}
 \item{\code{maxEcmPerStage}, \code{cm1Control}, \code{maxCm1Iter}}{rebuilds per stage
-(default 10), \code{\link[=trust]{trust()}} settings and iterations of a step (default 30).}
+(default 10, \code{stopReason} \code{"iterlim"} where they run out), \code{\link[=trust]{trust()}}
+settings and iterations of a step (default 30).}
 \item{\code{pruneTol}}{nodes whose weight lies this much in log below the
 largest are dropped, default \code{Inf}.}
 \item{\code{certificate}}{\code{FALSE}, or a list of \code{points} (default 256) and
@@ -194,15 +216,43 @@ modes, default 5, and the factor of the proposal covariance, default
 significant slope over the last \code{window} iterations (default 25), the
 averaging when the expected rise of -2 log L from the Monte Carlo error
 is below \code{mcTol} (default 0.05).}
-\item{\code{particles}}{with Dirichlet-process random effects the particles of
-the sequential importance sampling of -2 log L, default 500.}
+\item{\code{particles}}{the particles of the sequential importance sampling
+of -2 log L with Dirichlet-process random effects, default 500.}
 \item{\code{cm1Control}}{\code{\link[=trust]{trust()}} settings of the Newton steps of the other
 parameters, default one iteration per SAEM iteration.}
+\item{\code{nFlip}}{with spike-and-slab random effects the sweeps over the
+indicators per iteration, default 1.}
+\item{\code{nodes}}{Gauss-Hermite nodes of the slab mass of an indicator, 3
+(default) or 5.}
+\item{\code{integral}}{\code{"importance"} takes -2 log L by importance sampling
+over the partitions also where Dirichlet-process random effects beside
+spike-and-slab ones allow the exact sum.}
 }
-With Dirichlet-process random effects a Gibbs sweep draws the clusters of
-the groups (Neal 2000, algorithm 8), the averaging runs \code{nEM} iterations,
-and the reported clusters are the most frequent partition of the late
-draws.
+With spike-and-slab or Dirichlet-process random effects the averaging runs
+\code{nEM} iterations. A sweep of Metropolis-Hastings moves visits every
+indicator of a group once, in random order and for all groups at once,
+with the slab value integrated out: the other slab values of the group
+follow along the regression of the local quadratic model of the data, the
+slab mass on that line is a Gauss-Hermite sum with the exact model at the
+nodes, and the proposal draws the indicator from the resulting conditional
+inclusion probability and the slab value from the local Gaussian; the
+independence Metropolis-Hastings step keeps the posterior exact. \code{nMcmc}
+random-walk steps move the slab values of every group jointly. \code{prob} and
+\code{tau} follow in closed form from the averaged conditional inclusion
+probabilities and slab second moments of the sweeps, not from the drawn
+indicators; an estimated \code{tau} starts at least at the largest group mode
+under the slab alone. An \code{em} fit as \code{init} starts the chain at the
+selected random effects of that fit instead, the way to check a FOCEI
+optimum by SAEM. The acceptance rates of births, deaths and random-walk
+steps per iteration are columns of \code{stageTrace}. A Gibbs sweep draws
+the clusters of the Dirichlet-process random effects (Neal 2000,
+algorithm 8). The reported clusters are the most frequent partition of
+the late draws, a spike-and-slab random effect is selected where the mean
+conditional inclusion probability of the late sweeps is above 1/2, \code{p0}
+one minus that mean. -2 log L is that of \code{method = "focei"} at the
+estimate; with Dirichlet-process random effects alone, or beside
+spike-and-slab ones on more than 14 groups, by importance sampling over the
+partitions, with \code{valueSE}.
 }
 
 \section{Sparse random effects}{
@@ -215,8 +265,9 @@ nodes; else it is the expectation consistent (EC) approximation, and a
 trial point at which EC does not converge is a failed evaluation. Entries of \code{control$sparseFit}:
 \describe{
 \item{\code{maxOuter}}{iterations of the trust region, default 200.}
-\item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings; \code{ftol}, \code{mtol} and \code{gtol}
-of the \code{tolControl} there also end the search of the modes (else 1e-10).}
+\item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings of the outer search. The modes
+are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
+below 1e-8.}
 }
 }
 

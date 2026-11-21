@@ -116,7 +116,8 @@
 # The marginal of `p` at `theta` with every slab probability or concentration `share` and slab
 # standard deviation `tau`; the decay data unless `obj` is given.
 .marginalAt <- function(p, theta, share = NA, tau = NA, grad = TRUE, obj = NULL,
-                        scores = FALSE, derivMode = NULL, reach = TRUE) {
+                        scores = FALSE, derivMode = NULL, reach = TRUE, tolControl = NULL,
+                        warm = NULL, iterlim = 300L) {
   m <- .sparse()
   obj <- obj %||% normL2(m$data, m$g * Xt() * p, errmodel = m$err)
   d <- dMod2:::.emDesign(obj, randomEffects(p))
@@ -125,10 +126,11 @@
   hyp <- lapply(list(prob = share, concentration = share, tau = tau),
                 function(v) setNames(rep(v, nrow(lay)), lay$stem))
   prior <- if (d$normal$K) dMod2:::.normalPrior(d)
-  warm <- matrix(0, length(d$groups), ncol(d$etaNames))
+  warm <- warm %||% matrix(0, length(d$groups), ncol(d$etaNames))
   dMod2:::.sparseMarginal(d, dMod2:::.conditionObjectives(d), prior, theta, hyp, names(theta),
                           dMod2:::.sparseHypers(lay), NULL, warm, grad = grad,
-                          control = list(iterlim = 300, derivMode = derivMode), scores = scores)
+                          control = list(iterlim = iterlim, derivMode = derivMode,
+                                         trustControl = list(tolControl = tolControl)), scores = scores)
 }
 
 # The slope of a marginal: the inner iterations leave noise of about 1e-10 in the value, so the
@@ -145,7 +147,8 @@ test_that("the marginal alone needs no second-order sensitivities under forward 
     real(...)
   }, .package = "dMod2")
   alone <- .marginalAt(m$ps, theta, 0.4, 0.5, grad = FALSE, derivMode = "forward-reverse")
-  expect_equal(alone$value, full$value, tolerance = 1e-10)
+  # the value alone lacks the first-order correction for the modes, which needs the exact inner Hessian
+  expect_equal(alone$value, full$value, tolerance = 1e-8)
 })
 
 test_that("forward over reverse gives the gradient and the model Hessian rows of forward over forward", {
@@ -363,6 +366,22 @@ test_that("em refuses entries of control$sparseFit it does not read", {
   obj <- normL2(m$data, m$g * Xt() * m$ps, errmodel = m$err)
   expect_error(em(obj, randomEffects(m$ps), m$init, control = list(sparseFit = list(coupling = "meanField"))),
                "unknown")
+  expect_error(em(obj, randomEffects(m$ps), m$init, control = list(sparseFit = list(trustControl = list(nope = 1)))),
+               "unknown entries nope")
+})
+
+test_that("the joint trust region of sparse random effects runs the phases of trust()", {
+  m <- .sparse()
+  obj <- normL2(m$data, m$g * Xt() * m$ps, errmodel = m$err)
+  ph <- list(list(hessianMethod = "gn", iterlim = 2), list(hessianMethod = "bfgs"))
+  fit <- em(obj, randomEffects(m$ps), m$init, verbose = FALSE,
+            control = list(sparseFit = list(trustControl = list(phases = ph))))
+  expect_true(is.finite(fit$value))
+  expect_lt(max(abs(.freeGradient(fit))), 0.05)
+  expect_warning(em(obj, randomEffects(m$ps), m$init, verbose = FALSE,
+                    control = list(sparseFit = list(maxOuter = 1L, trustControl = list(
+                      phases = list(list(hessianMethod = "gn"), list(hessianMethod = "nope")))))),
+                 "trust region stopped")
 })
 
 test_that("an eta that reaches no data of the group rests at the prior, with the marginal and gradient unchanged", {
@@ -653,6 +672,23 @@ test_that("the spike-and-slab and cluster marginals have the exact gradient, nor
   }
 })
 
+test_that("the marginal is that at the exact modes to first order, whatever the outer tolerances", {
+  m <- .sparse()
+  theta <- m$init + c(0.05, -0.02, 0.1)
+  for (p in list(m$ps, m$psm)) {
+    th <- if (any(randomEffects(p)$terms$dist == "normal")) c(theta, omega_A_A = log(0.2)) else theta
+    exact <- .marginalAt(p, th, share = 0.4, tau = 0.5)
+    loose <- .marginalAt(p, th, share = 0.4, tau = 0.5, tolControl = list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2))
+    expect_equal(loose$value, exact$value, tolerance = 1e-9)
+    expect_equal(loose$gradient, exact$gradient, tolerance = 1e-6)
+    # modes moved off and held there: the value is off at second order in the shift only
+    off <- vapply(c(2e-3, 1e-3), function(h)
+      abs(suppressWarnings(.marginalAt(p, th, share = 0.4, tau = 0.5, warm = exact$modes + h, iterlim = 0L))$value -
+            exact$value), 0)
+    expect_gt(off[1] / off[2], 3.5)
+  }
+})
+
 test_that("the curvature of the hyperparameters is that of the complete-data prior, the secant the M-step", {
   lay <- data.frame(stem = c("b", "c"), probName = c("prob_ID", NA), concentrationName = c(NA, "concentration_ID"),
                     tauName = c("tau_ID", "tau_ID_2"), stringsAsFactors = FALSE)
@@ -762,4 +798,30 @@ test_that("spike-and-slab fits select the groups that differ and estimate the th
   A <- center$random[center$random$eta == "A", ]
   expect_true(all(A$mode == 0))
   expect_true(all(A$p0 > 0.5))
+})
+
+test_that("NPDE and the random-effect plots of a fit with spike-and-slab random effects alone", {
+  m <- .sparse()
+  fit <- em(normL2(m$data, m$g * Xt() * m$ps, errmodel = m$err), randomEffects(m$ps), m$init, verbose = FALSE)
+  npde <- residuals(fit, type = "NPDE", nsim = 100, seed = 1)
+  expect_length(npde, sum(vapply(m$data, nrow, 0L)))
+  expect_true(all(is.finite(npde)))
+  set.seed(1)
+  expect_s3_class(plotRandomEffects(fit), "ggplot")
+  d <- plotRandomEffects(fit, type = "inclusion")$data
+  expect_equal(d$inclusion, 1 - fit$random$p0)
+  expect_true(all(c("prob_ID", "tau_ID") %in% levels(plotTrace(fit)$data$panel)))
+})
+
+test_that("importance sampling on the model agrees with the marginal where the approximation is exact", {
+  m <- .sparse()
+  withr::local_seed(1)
+  fit <- em(normL2(m$linear, m$gl * Xt() * m$pls), randomEffects(m$pls), c(a = 1, b = 0.5, omega_a_a = log(0.5)),
+            verbose = FALSE)
+  l <- logLik(fit, "importance", draws = 2000L)
+  expect_equal(attr(l, "approximation"), as.numeric(logLik(fit)), tolerance = 1e-6)
+  expect_lt(abs(as.numeric(l) - as.numeric(logLik(fit))), 4 * attr(l, "se"))
+  expect_true(all(attr(l, "ess") > 200))
+  fit$design <- NULL
+  expect_error(logLik(fit, "importance"), "no design")
 })

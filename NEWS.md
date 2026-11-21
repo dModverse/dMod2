@@ -1,3 +1,148 @@
+# dMod2 0.16.0
+
+* `trust()` runs the hybrid method of Fides (Fröhlich and Sorger 2022) by default: Gauss-Newton,
+  then BFGS once the trust radius stayed the same for 20 iterations. The BFGS matrix starts from the
+  Gauss-Newton Hessian at the start and is updated along the Gauss-Newton steps, and the radius is
+  kept at the switch. `hessianMethod = "gn"` keeps plain Gauss-Newton. The sparse path, multiple
+  shooting and `boundary = "clip"` run Gauss-Newton. `mstrust()` and `profile()` follow the
+  default; `em()` and FOCEI keep Gauss-Newton.
+* New settings of `trust()` phases: `keepRadius` starts a phase at the radius of the handover, and
+  `onStop = "end"` ends the run on a value, model, step or stagnation stop instead of handing over.
+  `qnControl$hessianInit = "tracked"` starts a later BFGS phase from a BFGS matrix updated over the
+  whole run.
+* `trust()` with multiple shooting: a stop on stagnation, value, predicted decrease or gradient
+  reports `converged = TRUE` only where the full step of the condensed model predicts a decrease of
+  at most `mtol`, as in single shooting.
+* `trust()` with multiple shooting: after the natural level function hands over to the filter,
+  `iterlim` bounds both parts together and `iterations` counts both.
+* A phase of `trust()` takes `radiusStall`, the number of consecutive iterations at an unchanged
+  trust radius after which it hands over to the next phase, the switch of the hybrid method of
+  Fides (Fröhlich and Sorger).
+* `trust(sparse = TRUE)` runs a BFGS phase with `qnControl$hessianInit = "gn"` as limited-memory
+  BFGS: the sparse Hessian of the objective at the start of the phase, shifted by a multiple of the
+  identity where it is not positive definite, plus the compact correction
+  of Byrd, Nocedal and Schnabel from the last `qnMemory` pairs, 10 where it is 0, as a low-rank
+  part of the model. `sparse = "auto"` takes the sparse path only where every phase takes the
+  Hessian of the objective.
+* `em()` with random effects over several groupings passes every argument of `trust()` in
+  `control$trustControl` to the outer search, `hessianMethod`, `phases`, `switches` and
+  `qnControl` included, and reports `phaseIterations`. FOCEI of one grouping reads `rinit`,
+  `rmax`, `iterlim`, `ftol` and `mtol`; flat `ftol`, `mtol`, `gtol` and `xtol` join `tolControl`.
+  Other entries of `control$trustControl` are an error.
+* `symmetryDetection()`, `symmetryReduction()` and `discreteSymmetries()` need symident 0.16.0.
+* `trust()` takes the structured quasi-Newton Hessians `hessianMethod = "sbfgs"` and `"ssr1"`
+  (Dennis, Martínez and Tapia), the Gauss-Newton Hessian of the objective at every iterate plus a
+  correction learned by a BFGS or an SR1 update, and the hybrids `"gnsbfgs"` and `"gnssr1"` (Zhou and
+  Chen), which choose at every accepted step between the Gauss-Newton Hessian alone, or plus the
+  residual norm times the identity with `qnControl$qnHybridShift = TRUE`, and the structured
+  model. The structured secant is that of Dennis, Martínez and Tapia, `(J+ - J)'u+`
+  from the Jacobian `J` of the predictions and sigmas at the data and the derivatives `u` of the
+  value in them, generalized to the error models and censored data of `normL2()`; the other terms
+  of a sum, such as a prior, enter with the gradient and Hessian they return. Objectives asked for
+  `hessian = "structured"` return these data rows in an entry `structure` of the objlist, which
+  `+` stacks; an objective without them gets the secant of gradient and Gauss-Newton Hessian.
+  The BFGS update of `"sbfgs"` is undamped and restores the secant also where the Gauss-Newton
+  Hessian of the new iterate plus the correction is indefinite along the step.
+  `qnControl$qnScaling = "residual"` scales the correction with the residual norm `|u|`
+  (Huschens), `qnControl$qnHybridTol` sets the switch of the hybrids. The methods run
+  inside `phases` and through `mstrust()`; the result reports `hybridGN`, and `evalBySource` names
+  the four new sources. `trustL1()` refuses `hessianMethod`.
+* `distributedComputing()` refuses a job whose name a job submitted from another working directory
+  still holds in the folder of a remote node, until that job is purged.
+* `terminate()` of a `dMod2Job` on SSH nodes or the local machine sends SIGKILL to the tasks that
+  still run 5 seconds after SIGTERM.
+* `trust()` and `trustL1()` end on a convergence stop that the Newton decrease held back where the
+  run then ends on the radius without an accepted step that changes the value by `ftol` or more,
+  with `converged = TRUE`. On an objective with noise above `mtol`, such as a FOCEI marginal, the
+  runs end on that convergence stop at the optimum.
+* `trust()` and `trustL1()` end on `"stagnation"` with `converged = TRUE` only where the full Newton
+  step of the model predicts a decrease of at most `mtol`, or where a convergence stop was held
+  back since the last step that changed the value by `ftol` or more.
+* `constraintStability()` takes `width`, the least width of the ramp in the units of the rates,
+  default `0`, and `margin`, the least width relative to the largest eigenvalue modulus, default
+  `1e-6`, which replaces the control `stabilityMargin` of `Pimpl()`. A wide ramp shows the
+  boundary to the model of a trust-region step before the step crosses it.
+* The gradient of `constraintStability()` is exact on a defective double eigenvalue, such as that of
+  a chain of states with equal rates: eigenvalues that coincide within the precision of the
+  eigenvalues take the mean of their derivatives, the trace of the spectral projector times the
+  derivative of the Jacobian. The eigenvalues of a Jacobian with large entries are matched within a
+  precision relative to the norm of the Jacobian.
+* With spike-and-slab or Dirichlet-process random effects the marginal is the value at the exact
+  modes to first order: the value depends on the modes at first order, and the gradient the inner
+  search leaves at them is removed by one Newton step on the exact inner Hessian. Value and
+  gradient do not depend on the outer tolerances.
+* The modes of spike-and-slab and Dirichlet-process random effects are found by the C++ group
+  kernel of FOCEI, all groups in one batched prediction per step, and end where the Gauss-Newton
+  step is below `1e-8`; `control$sparseFit$trustControl` sets the outer search only.
+* `em(method = "saem")` and `msem(method = "saem")` fit spike-and-slab random effects, also beside
+  normal and Dirichlet-process ones: per-indicator birth and death moves from the local Gaussian
+  model of the data, the other slab values of the group following along the regression of that
+  model, and a joint random walk on the slab values; `prob` and `tau` follow in closed form, an
+  estimated `tau` starts at least at the largest group mode under the slab alone.
+  `control$saem$nFlip` sets the indicator sweeps per iteration; the acceptance rates of births,
+  deaths and random-walk steps are columns of `stageTrace`. -2 log L is that of `method = "focei"`
+  at the estimate, with the inclusion probabilities from the late draws. With many spike-and-slab
+  effects per group the chain can settle with every effect in the slab and `prob` near 1.
+* `logLik(fit, method = "importance")` estimates the marginal log-likelihood of a fit with
+  spike-and-slab random effects at the estimates by importance sampling on the model, with standard
+  error and effective sample size per group.
+* `em(method = "quadrature")` returns the best iterate of the outer loop, not the last.
+* `control$quadrature$maxNodes` (default 1000): a level with more nodes per group is never
+  evaluated. There the level error is estimated by the change from the level below, and a group
+  above `tol / G` is capped.
+* `converged` of a quadrature fit means stationary at the levels reached: the Newton decrement is
+  below `tolDecrement` (`stopReason` `"decrement"`), or -2 log L rose after a step on unchanged
+  levels (`"resolution"`). A small decrement relative to the summed level error does not end the
+  fit. Capped groups are listed in column `capped` of `stageTrace` and `certificate`, and in
+  attribute `"levels"` of `stageTrace`.
+* `plotRandomEffects()` draws spike-and-slab random effects: `type = "inclusion"` gives a heatmap of
+  the probability of a deviation per group and effect; `"conditional"` and `"modes"` show draws from
+  the conditional mixture against the prior spike and slab.
+* `plotTrace()` draws the hyperparameters of sparse random effects recorded in the trace.
+* `plotPars()` takes an `em` fit or a list of them: estimates with Wald intervals, fits side by side.
+* `residuals(type = "NPDE")` and `plotResiduals()` work for fits with sparse random effects only.
+* Objective functions take `hessian = "expected"`: `normL2()` then returns the expected (Fisher)
+  information of the likelihood in place of the Gauss-Newton Hessian, `2 / sigma^2` in the
+  prediction and `4 / sigma^2` in sigma per data point (Student-t: `2 (nu + 1)` and `4 nu` over
+  `(nu + 3) sigma^2`), positive semidefinite also where an error model depends on the parameters.
+  `$information` of spike-and-slab fits takes it for the terms without random effects.
+* The documentation of `em()` describes `$information` of spike-and-slab fits as an empirical
+  information, positive semidefinite, not a Hessian.
+* `steadyStates()` follows the procedure of Rosenblatt et al. (2016): the cycles of the graph of
+  states are cut first, at a state of a conserved quantity or at a state whose balance is solved for
+  a rate constant of one flux side, and the remaining states and rate constants are solved from
+  balances in amounts. A quantity conserved across compartments is recognized, and networks whose
+  cycles defeated the greedy choice of unknowns are solved. Where no cycle forces a cut, the result
+  solves for states rather than rate constants and can differ in form from earlier versions.
+* `steadyStates()` solves a state from the balance of that state before cutting cycles, where the
+  solution is a ratio of positive sums and every cycle keeps a cut; the states of conserved
+  quantities are left to the cuts.
+* `steadyStates()` cuts a flux side whose terms have separate rate constants when no other cut gives
+  a solution: the fluxes of the side keep free ratios `r_<state>_<j>`, new parameters of the
+  transformation, and one rate constant of the side is solved.
+* `em(method = "saem")` with spike-and-slab random effects draws each indicator with the slab value
+  integrated out (Gauss-Hermite on the local model, exact model at the nodes, independence
+  Metropolis-Hastings) and takes `prob` and `tau` from Rao-Blackwellized statistics; the chain no
+  longer settles with every effect in the slab and `prob` near 1. `p0` is the mean conditional
+  spike probability of the late sweeps. New `control$saem$nodes`.
+* `em(method = "saem")` with Dirichlet-process random effects beside spike-and-slab ones takes any
+  number of groups: -2 log L by sequential importance sampling over the partitions with `valueSE`
+  beyond 14 groups, or with `control$saem$integral = "importance"`.
+* An `em` fit as `init` of `em(method = "saem")` with sparse random effects starts the chain at the
+  selected effects of that fit.
+* `em(method = "saem")` with sparse random effects reports `innerModes`, the modes of the
+  approximate marginal at the estimates, and `logLik(method = "importance")` starts from them, or
+  from `etaModes` in a fit without them.
+* A BFGS phase of `trust()` seeded from an indefinite Hessian (`hessianInit = "gn"` or `"exact"`, or
+  a handover from Gauss-Newton) starts from the absolute values of the Hessian eigenvalues.
+* `c()` of a parvec names an unnamed operand by the argument name, `c(p, z = 1)`.
+* `plotValues(pseudoLog = TRUE)` labels every tick as a power of ten where all are, and every tick
+  as a plain number otherwise.
+* `discreteSymmetries()` handles models with several conditions and events.
+* `symmetryDetection(mode = "global")` reads a reduction with one trafo per condition, keeps the
+  parameter names in the section and the state maps of a discrete symmetry, and prints the
+  coordinates the section pins.
+
 # dMod2 0.15.10
 
 * `constraintStability(pSS, p, weight)` penalizes instability only. With `s` the largest eigenvalue
@@ -37,7 +182,7 @@
   `discreteSymmetries()`. A model the global analysis does not handle gets the reason in
   `info$discrete$unsupported`. Needs symident 0.15.0.
 * `symmetryReduction()` limits the section search of each block to `timeout = 600` seconds by
-  default (`Inf` lets it run to its end), and `allowOpen` and `allowChecked` default to `TRUE`: an
+  default (`Inf` lets the search run to the end), and `allowOpen` and `allowChecked` default to `TRUE`: an
   open or checked direction gives a warning, as in symident 0.15.0.
 * `symmetryReduction(branch = )` takes the chart of one side of the fixed set of a discrete
   symmetry as the trafo; without it the branch charts are in `$alternatives`. Needs symident 0.15.0.

@@ -55,7 +55,12 @@ default 0.3.}
 \item{\code{innerControl}}{the trust region of the modes; it stops where the
 Newton step is below \code{steptol}, default 1e-8.}
 \item{\code{trustControl}}{the outer trust region; it stops where the
-predicted change of -2 log L is below \code{mtol}, default 1e-5.}
+predicted change of -2 log L is below \code{mtol}, default 1e-5. Takes
+\code{ftol}, \code{mtol}, \code{gtol} and \code{xtol} flat or in \code{tolControl}. With random
+effects over several groupings the outer search is \code{\link[=trust]{trust()}}, and
+every argument of \code{\link[=trust]{trust()}} passes, \code{hessianMethod}, \code{phases} and
+\code{qnControl} included; FOCEI of one grouping reads \code{rinit}, \code{rmax},
+\code{iterlim}, \code{ftol} and \code{mtol}. Other entries are an error.}
 \item{\code{secondOrderCorrection}}{the derivative of the volume term,
 default \code{TRUE}.}
 \item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume

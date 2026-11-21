@@ -125,7 +125,7 @@
             hessian = cd$hcc[free, free, drop = FALSE])
   }
   if (!length(free)) return(chol)
-  fit <- trust(expected, chol[free], rinit = 1, rmax = 10, iterlim = 100)
+  fit <- trust(expected, chol[free], rinit = 1, rmax = 10, iterlim = 100, hessianMethod = "gn")
   chol[free] <- fit$argument
   chol
 }

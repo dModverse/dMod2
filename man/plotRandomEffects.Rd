@@ -9,7 +9,7 @@ plotRandomEffects(x, ...)
 
 \method{plotRandomEffects}{em}(
   x,
-  type = c("conditional", "modes"),
+  type = c("conditional", "modes", "inclusion"),
   draws = 20L,
   bins = 30,
   covariates = NULL,
@@ -22,10 +22,21 @@ plotRandomEffects(x, ...)
 \item{...}{Ignored.}
 
 \item{type}{\code{"conditional"} (default): per group \code{draws} values from the
-conditional distribution of the random effects of the group, normal around the mode with
-the conditional standard error; under the model they follow \code{N(0, Omega_kk)}
-whatever the shrinkage. \code{"modes"}: the modes, narrower than \code{N(0, Omega_kk)}
-by the shrinkage.}
+conditional distribution of the random effects of the group; under the
+model they follow the random-effect distribution whatever the shrinkage.
+A normal random effect is drawn normal around the mode with the
+conditional standard error, against \code{N(0, Omega_kk)}. A spike-and-slab
+random effect is 0 with the posterior probability \code{p0} and otherwise
+normal, with the reported value, or where the reported structure has the
+spike the mode of the slab, as mean and the variance that gives the
+conditional standard error; drawn against the prior, the slab density
+\verb{prob N(0, tau^2)} and a cap at the height of a bar of area \code{1 - prob}
+at 0. \code{"modes"}: the
+modes, or the reported values of spike-and-slab random effects, narrower
+than the distribution by the shrinkage. \code{"inclusion"}: a heatmap of the
+posterior probability \code{1 - p0} of a deviation per group and sparse random
+effect, labeled with the reported value where the reported structure has
+a deviation.}
 
 \item{draws}{Number of draws per group with \code{type = "conditional"}. Default 20.}
 
@@ -41,9 +52,14 @@ the others.}
 \value{
 A ggplot (or a list of ggplots if \code{cowplot} is unavailable).
 
-A ggplot, or without cowplot a list with \code{hist} and \code{qq}. With
-\code{covariates}, a ggplot for one covariate; for several a cowplot grid, or
-without cowplot a list of ggplots named by covariate.
+A ggplot, or without cowplot a list with \code{hist} and \code{qq}; the QQ
+plot has the normal random effects only, a fit with sparse random effects
+alone gives the histograms as one ggplot. With \code{type = "inclusion"} a
+ggplot. With \code{covariates}, a ggplot for one covariate; for several a
+cowplot grid, or without cowplot a list of ggplots named by covariate.
+Spike-and-slab random effects that reach no data of the group are left
+out; Dirichlet-process random effects, which couple the groups, appear in
+the heatmap only.
 }
 \description{
 Per random effect a histogram against the estimated

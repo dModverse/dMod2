@@ -19,7 +19,7 @@ pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = 
 pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, deriv2 = TRUE, derivMode = dm)
 compile(gR, xR, pSSR, pR, eR, output = "oppelt_rev", cores = getOption("dMod2.cores"))
 objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) +
-  constraintStability(pSSR, pR)
+  constraintStability(pSSR, pR, width = rampWidth)
 
 ## ---- gradients
 # the data term, whose gradient the prior balances at the optimum, so that it does not vanish

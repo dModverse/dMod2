@@ -131,15 +131,48 @@ evalConditionResidual <- function(dataI, predictionI, pars,
   }
   out
 }
-# Resolve deriv -> hessian -> deriv2. `hessian = NULL` means TRUE forward, FALSE
-# backwards, TRUE under deriv2. A contradicting explicit value (deriv2 with
-# hessian = FALSE, or hessian backwards without deriv2) warns and takes the cheaper.
+# The data rows `st` of an objlist (see objlist()) over the parameters `pnames`, zero for a
+# parameter they lack; unnamed columns are taken as `pnames`.
+.structureOver <- function(st, pnames) {
+  if (is.null(st)) return(NULL)
+  J <- st$jacobian
+  H <- st$hessian
+  if (!is.null(colnames(J)) && !identical(colnames(J), pnames)) {
+    Z <- matrix(0, nrow(J), length(pnames), dimnames = list(NULL, pnames))
+    hit <- .intersect(pnames, colnames(J))
+    Z[, hit] <- J[, hit, drop = FALSE]
+    J <- Z
+  }
+  if (!is.null(rownames(H)) && !identical(rownames(H), pnames)) {
+    Z <- matrix(0, length(pnames), length(pnames), dimnames = list(pnames, pnames))
+    hit <- .intersect(pnames, rownames(H))
+    Z[hit, hit] <- H[hit, hit]
+    H <- Z
+  }
+  list(jacobian = J, seeds = st$seeds, hessian = H)
+}
+
+# The data rows of two terms of a sum over the parameters `pars`: the rows stacked, the
+# Gauss-Newton Hessians of the data terms added.
+.structureBind <- function(s1, s2, pars) {
+  if (is.null(s1)) return(.structureOver(s2, pars))
+  if (is.null(s2)) return(.structureOver(s1, pars))
+  a <- .structureOver(s1, pars)
+  b <- .structureOver(s2, pars)
+  list(jacobian = rbind(a$jacobian, b$jacobian), seeds = c(a$seeds, b$seeds), hessian = a$hessian + b$hessian)
+}
+
+# Resolve deriv -> hessian -> deriv2: `hessian = NULL` is TRUE forward or under deriv2, FALSE
+# backwards; a contradicting explicit value warns and takes the cheaper. "structured" is the
+# Gauss-Newton Hessian with the data rows of the term, see objlist().
 .resolveCurvature <- function(deriv, deriv2, hessian, sweep) {
   reverse <- identical(sweep, "reverse")
   asked   <- !is.null(hessian)
   sparse  <- identical(hessian, "sparse")
+  expected <- identical(hessian, "expected")
+  structured <- identical(hessian, "structured")
   deriv2  <- isTRUE(deriv2)
-  want    <- if (asked) isTRUE(hessian) || sparse else (deriv2 || !reverse)
+  want    <- if (asked) isTRUE(hessian) || sparse || expected || structured else (deriv2 || !reverse)
 
   if (deriv2 && asked && !want) {
     warning("'hessian = FALSE' overrides 'deriv2 = TRUE'; no Hessian is built.",
@@ -155,7 +188,8 @@ evalConditionResidual <- function(dataI, predictionI, pars,
     want <- FALSE
   }
   want   <- isTRUE(deriv) && want
-  list(hessian = want, deriv2 = deriv2 && want, sparse = sparse && want)
+  list(hessian = want, deriv2 = deriv2 && want, sparse = sparse && want, expected = expected && want && !deriv2,
+       structured = structured && want && !deriv2)
 }
 
 
@@ -318,13 +352,13 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
   # the plans of the native chain (.chainContext())
   .chain <- .chainContext(list(prdfn = x, errfn = errmodel, data = data, timesD = timesD))
   .chainObjective <- function(pars, fixed, conditions, deriv, deriv2, hessian, cores, parsList = NULL,
-                              sparse = FALSE) {
+                              sparse = FALSE, rows = FALSE) {
     free <- if (is.null(parsList)) rep(list(names(pars)), length(conditions)) else lapply(parsList, names)
     plan <- .chainLookup(.chain, conditions, free, names(fixed), if (is.null(parsList)) names(pars), deriv, deriv2)
     if (is.null(plan)) return(NULL)
     values <- if (is.null(parsList)) list(c(unclass(pars), unclass(fixed)))
               else lapply(parsList, function(p) c(unclass(p), unclass(fixed)))
-    .chainEval(plan, values, deriv, deriv2, hessian, !is.null(parsList), cores, optBLOQ, df, sparse)
+    .chainEval(plan, values, deriv, deriv2, hessian, !is.null(parsList), cores, optBLOQ, df, sparse, rows)
   }
 
   # Controls of the objective, changed later by controls<-. trust() lays out the
@@ -352,6 +386,8 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
     hessian <- cv$hessian
     deriv2  <- cv$deriv2
     sparse  <- cv$sparse
+    expected <- cv$expected
+    structured <- cv$structured
     if (identical(sweep, "reverse")) {
       if (!is.null(.prediction))
         stop("normL2: a handed-in prediction is a forward-mode shortcut and ",
@@ -389,15 +425,18 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 
     # the native chain where the pieces of the chain allow it, the R path below otherwise; the predictions
     # are computed when the environment is asked for them
-    if (is.null(.prediction) && !.local && .evalCpp() &&
+    if (is.null(.prediction) && !.local && !expected && .evalCpp() &&
         !exists("prediction", envir = env, inherits = FALSE)) {
-      res <- .chainObjective(pars, fixed, conditions, deriv, deriv2, build_hessian, cores, sparse = sparse)
+      res <- .chainObjective(pars, fixed, conditions, deriv, deriv2, build_hessian, cores, sparse = sparse,
+                             rows = structured)
       if (!is.null(res)) {
         pn <- names(pars)
         H <- if (build_hessian && sparse) .sparseFromSlots(res$hessian, pn)
              else if (build_hessian) matrix(res$hessian, length(pn), dimnames = list(pn, pn))
         out <- if (deriv) objlist(value = res$value, gradient = setNames(res$gradient, pn), hessian = H)
         else objlist(value = res$value, gradient = NULL, hessian = NULL)
+        if (structured)
+          out$structure <- list(jacobian = `colnames<-`(res$rows$jacobian, pn), seeds = res$rows$seeds, hessian = H)
         attr(out, attrName) <- out$value
         attr(out, "chi2") <- setNames(res$chi2, attrName)
         delayedAssign("prediction", x(times = .timesOf(conditions), pars = pars, fixed = fixed, deriv = deriv,
@@ -503,7 +542,9 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
       bloq_mode        = optBLOQ,
       build_hessian    = build_hessian,
       local_blocks     = .local || (build_hessian && sparse),
-      t_df             = df
+      t_df             = df,
+      expected         = expected,
+      want_rows        = structured
     )
     # the value, gradient and Hessian of every condition in the condition parameters
     if (.local) return(setNames(kr$local, conditions))
@@ -515,6 +556,12 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
                             hessian = kr$hessian), names(pars))
     else
       objlist(value = kr$value, gradient = NULL, hessian = NULL)
+    if (structured) {
+      J <- kr$rows$jacobian
+      colnames(J) <- par_names_global
+      out$structure <- .structureOver(list(jacobian = J, seeds = kr$rows$seeds, hessian = out$hessian),
+                                      names(pars))
+    }
     attr(out, attrName) <- out$value
     # The sum of squares alone, tagged with the contribution it belongs to.
     # Summing objectives pools terms sharing an `attrName` into one `chi2` and
@@ -1363,6 +1410,8 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
   }
   lr <- .lowrankBind(e1$lowrank, e2$lowrank)
   if (!is.null(lr)) out12$lowrank <- lr
+  if (!is.null(e1$structure) || !is.null(e2$structure))
+    out12$structure <- .structureBind(e1$structure, e2$structure, pars)
 
   # Numeric attributes are summed, an absent one counting as zero. The chi2 contributions are kept
   # apart from that: they are pooled by the `attrName` they belong to, not by the attribute they
@@ -1636,6 +1685,15 @@ res <- function(data, out, err = NULL) {
 #' @details Asked for `hessian = "sparse"`, an objective may return part of
 #'   the Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
 #'   rows and a vector `d`: the Hessian is then `hessian + U diag(d) U'`.
+#'
+#'   Asked for `hessian = "structured"`, a data term such as [normL2()]
+#'   returns the Gauss-Newton Hessian and an entry `structure`, a list of the
+#'   matrix `jacobian`, one row per data point with the derivatives of the
+#'   prediction, and one more for a sigma that depends on parameters, the
+#'   vector `seeds` of the derivatives of the value in these predictions and
+#'   sigmas, and the Gauss-Newton Hessian `hessian` of the data term. `+` stacks
+#'   the rows and adds the Hessians; a term without data rows has none.
+#'   The structured methods of [trust()] read it.
 #' @return An object of class `objlist`.
 #' @seealso [as.objlist()]
 #' @export

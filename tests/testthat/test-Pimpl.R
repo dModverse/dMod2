@@ -157,11 +157,15 @@ pp_models <- function() {
                    flow = TRUE, modelname = mn("bruss_s"), deriv2 = TRUE, verbose = FALSE)
   bruss_c <- P(list(C1 = c(a = "exp(la)", b = "exp(lb)", s = "1"), C2 = c(a = "exp(la)", b = "exp(lb)", s = "2")),
                modelname = mn("bruss_c"))
+  # two states in a chain whose rates can coincide, a defective double eigenvalue, beside a fast mode
+  chain <- Pimpl(c(x = "k0 - k1 * x", y = "k1 * x - k2 * y + c * z", z = "kf0 - kf * z + d * y"),
+                 parameters = c("k0", "k1", "k2", "kf0", "kf", "c", "d"), modelname = mn("chain"),
+                 deriv2 = TRUE, verbose = FALSE)
 
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
           kink, catalyst, vol, rest, rest_ode, rest_obs, rest_p0, rest_p1, bruss, bruss_p,
-          bruss_s, bruss_c, trans, output = mn("impl"), cores = test_cores())
+          bruss_s, bruss_c, trans, chain, output = mn("impl"), cores = test_cores())
 
   .pp_env$models <- list(
     lin = lin, d2 = d2, d2_2 = d2_2, d2_cq = d2_cq, moiety2_im = moiety2_im,
@@ -170,7 +174,8 @@ pp_models <- function() {
     zero = zero, pd = pd, pd2 = pd2, plasmid = plasmid, bistable = bistable,
     unstable = unstable, kink = kink, catalyst = catalyst, vol = vol, rest = rest,
     rest_ode = rest_ode, rest_obs = rest_obs, rest_p0 = rest_p0, rest_p1 = rest_p1,
-    bruss = bruss, bruss_p = bruss_p, bruss_s = bruss_s, bruss_c = bruss_c, trans = trans)
+    bruss = bruss, bruss_p = bruss_p, bruss_s = bruss_s, bruss_c = bruss_c, trans = trans,
+    chain = chain)
 }
 
 
@@ -942,6 +947,32 @@ test_that("the spectrum of a steady state has the exact gradients of the eigenva
   expect_equal(unname(sp$scaleGrad[c("a", "b")]), c(1, 0), tolerance = 1e-10)
 })
 
+test_that("coinciding eigenvalues have the exact gradient of their sum", {
+  skip_if_no_compile()
+  m <- pp_models()
+  spec <- attr(attr(m$chain, "mappings")[[1]], "spectrum")
+  # a double eigenvalue with one eigenvector: each takes the mean of the derivatives
+  pars <- c(k0 = 2, k1 = 1.3, k2 = 1.3, kf0 = 1, kf = 10, c = 0, d = 0)
+  sp <- spec(pars, onset = -Inf)
+  slow <- which(abs(sp$re + 1.3) < 1e-8)
+  expect_length(slow, 2L)
+  expect_equal(unname(sp$grad[slow, c("k1", "k2", "kf")]), rbind(c(-0.5, -0.5, 0), c(-0.5, -0.5, 0)),
+               tolerance = 1e-10)
+  # the term on a ramp that holds both, smooth in the rates
+  w <- 10
+  stab <- constraintStability(m$chain, weight = w, margin = 0.2)
+  r <- 1 - 1.3 / (0.2 * 10)
+  out <- stab(pars)
+  expect_equal(out$value, 2 * w * r^3, tolerance = 1e-8)
+  expect_equal(out$gradient[c("k1", "k2", "kf")], c(k1 = -3 * w * r^2 / 2, k2 = -3 * w * r^2 / 2,
+                                                    kf = 2 * 3 * w * r^2 * 1.3 / (0.2 * 100)), tolerance = 1e-8)
+  # with feedback through the fast mode the pair splits; the gradient is that of the value
+  for (q in list(pars, replace(pars, c("c", "d"), c(0.5, 0.3)))) {
+    num <- numDeriv::grad(function(v) stab(setNames(v, names(q)))$value, unname(q))
+    expect_equal(unname(stab(q)$gradient[names(q)]), num, tolerance = 1e-7)
+  }
+})
+
 test_that("the rate scale has the exact gradient, also where a volume moves the manifold", {
   skip_if_no_compile()
   pv <- pp_models()$vol
@@ -971,7 +1002,7 @@ test_that("constraintStability is zero on stable steady states and rises at the 
   skip_if_no_compile()
   m <- pp_models()
   w <- 10
-  stab <- constraintStability(m$bruss, m$bruss_p, weight = w)
+  stab <- constraintStability(m$bruss, m$bruss_p, weight = w, margin = 1e-6)
   expect_setequal(attr(stab, "parameters"), c("la", "lb"))
   # the term of the complex pair from the closed-form eigenvalues and rate scale
   exact <- function(la, lb) {
@@ -1025,16 +1056,28 @@ test_that("constraintStability is zero on stable steady states and rises at the 
   # beyond the boundary the unstable steady state, on which the term rises
   expect_equal(as.numeric(m$bruss(c(a = 1, b = 2.5))[[1]][c("x", "y")]), c(1, 2.5), tolerance = 1e-8)
   # without p on the inputs of the steady state, the same value
-  expect_equal(constraintStability(m$bruss, weight = w)(c(a = 1, b = 2 + 1e-6))$value,
+  expect_equal(constraintStability(m$bruss, weight = w, margin = 1e-6)(c(a = 1, b = 2 + 1e-6))$value,
                stab(c(la = 0, lb = log(2 + 1e-6)))$value, tolerance = 1e-3)
   expect_error(constraintStability(m$bruss, m$bruss_p, weight = 0), "weight")
+  expect_error(constraintStability(m$bruss, m$bruss_p, margin = 0), "margin")
+  expect_error(constraintStability(m$bruss, m$bruss_p, width = -1), "width")
+  # an absolute width beyond margin * s: a ramp that does not move with the scale
+  wide <- constraintStability(m$bruss, m$bruss_p, weight = w, width = 0.05)
+  for (re in c(-0.06, -0.03, -0.01, 0.02)) {
+    pars <- c(la = 0, lb = log(2 + 2 * re))
+    ref <- .stabilityExact(re, c(-1, 1 + re), 1, c(0, 0), w, margin = 0.05)
+    out <- wide(pars)
+    expect_equal(out$value, 2 * ref$value, tolerance = 1e-6)
+    expect_equal(unname(out$gradient), 2 * ref$gradient, tolerance = 1e-6)
+    expect_equal(unname(out$hessian), 2 * ref$hessian, tolerance = 1e-6)
+  }
 })
 
 test_that("constraintStability follows a real eigenvalue through 0 smoothly", {
   skip_if_no_compile()
   m <- pp_models()
   w <- 10
-  stab <- constraintStability(m$trans, weight = w)
+  stab <- constraintStability(m$trans, weight = w, margin = 1e-6)
   # a start that leads to the root whose eigenvalue crosses 0
   pars <- function(re) c(q = -re, x = -sign(re), y = 1)
   at <- function(re) {
@@ -1058,16 +1101,16 @@ test_that("constraintStability follows a real eigenvalue through 0 smoothly", {
     expect_equal(g, numDeriv::grad(function(z) stab(c(q = z, x = -sign(re), y = 1))$value, -re),
                  tolerance = 1e-6)
   }
-  old <- controls(m$trans, name = "controlsPTC")
-  on.exit(controls(m$trans, name = "controlsPTC") <- old, add = TRUE)
-  # stabilityMargin sets the width of the ramp
-  controls(m$trans, name = "controlsPTC") <- c(old, list(stabilityMargin = 0.1))
+  # margin sets the width of the ramp relative to the scale
+  wide <- constraintStability(m$trans, weight = w, margin = 0.1)
   for (re in c(-0.2, -0.05, 0.05)) {
-    o <- stab(pars(re))
+    o <- wide(pars(re))
     expect_equal(o$value, .stabilityExact(re, -1, 1, 0, w, margin = 0.1)$value, tolerance = 1e-8)
-    expect_equal(o$gradient[["q"]], numDeriv::grad(function(z) stab(c(q = z, x = -sign(re), y = 1))$value, -re),
+    expect_equal(o$gradient[["q"]], numDeriv::grad(function(z) wide(c(q = z, x = -sign(re), y = 1))$value, -re),
                  tolerance = 1e-6)
   }
+  old <- controls(m$trans, name = "controlsPTC")
+  on.exit(controls(m$trans, name = "controlsPTC") <- old, add = TRUE)
   # an absolute stabilityTol moves the ramp
   controls(m$trans, name = "controlsPTC") <- list(stabilityTol = 0.5, positive = FALSE)
   for (re in c(0.2, 0.5 - 5e-7, 0.7)) {
@@ -1076,15 +1119,14 @@ test_that("constraintStability follows a real eigenvalue through 0 smoothly", {
   }
   expect_equal(stab(pars(0.7))$gradient[["q"]],
                numDeriv::grad(function(z) stab(c(q = z, x = -1, y = 1))$value, -0.7), tolerance = 1e-6)
-  expect_error(controls(m$trans, name = "controlsPTC") <- list(stabilityMargin = 0), "stabilityMargin")
 })
 
 test_that("constraintStability counts a steady state once over conditions that differ elsewhere", {
   skip_if_no_compile()
   m <- pp_models()
   pars <- c(la = 0, lb = log(2 - 1e-6))
-  one <- constraintStability(m$bruss, m$bruss_p, weight = 10)(pars)
-  two <- constraintStability(m$bruss_s, m$bruss_c, weight = 10)(pars)
+  one <- constraintStability(m$bruss, m$bruss_p, weight = 10, margin = 1e-6)(pars)
+  two <- constraintStability(m$bruss_s, m$bruss_c, weight = 10, margin = 1e-6)(pars)
   expect_gt(one$value, 0)
   expect_equal(two$value, one$value, tolerance = 1e-3)
   expect_equal(two$gradient, one$gradient, tolerance = 1e-3)

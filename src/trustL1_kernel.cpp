@@ -388,6 +388,9 @@ struct RefState {
   bool accept = true, converged = false, bail = false, done = false;
   int iter = 0, n_iter = 0, n_fail = 0, n_stall = 0;
   std::string stop_reason = "iterlim";
+  // The convergence stop held back by ref_newton_small() since the last accepted step that changed
+  // the value by ftol or more; a run that then ends on the radius ends on that stop.
+  const char* vetoed = nullptr;
 
   std::vector<RCoord> rc;
   std::vector<double> zr, lbr, ubr, gr, Hr, absv, jv, sqrtv, ghat, Bhat;
@@ -540,8 +543,11 @@ bool ref_propose(RefState& s, const RefTune& t) {
   const int K = s.K;
   if (s.accept) {
     ref_build(s, t);
-    if (s.opt_measure <= t.gtol && ref_newton_small(s, t)) {
-      s.converged = true; s.stop_reason = "gradient"; s.done = true; return false;
+    if (s.opt_measure <= t.gtol) {
+      if (ref_newton_small(s, t)) {
+        s.converged = true; s.stop_reason = "gradient"; s.done = true; return false;
+      }
+      s.vetoed = "gradient";
     }
   }
   const int Kred = static_cast<int>(s.rc.size());
@@ -638,6 +644,7 @@ bool ref_accept(RefState& s, const RefTune& t, bool eval_ok, double val_obj_try,
   // Count rejected steps that also left the objective flat.
   if (s.accept || !eval_ok || dval >= t.ftol) s.n_stall = 0;
   else                                        s.n_stall++;
+  if (s.accept && eval_ok && dval >= t.ftol) s.vetoed = nullptr;
 
   if (s.accept && eval_ok) {
     s.theta = s.theta_try;
@@ -665,12 +672,20 @@ bool ref_accept(RefState& s, const RefTune& t, bool eval_ok, double val_obj_try,
     const char* soft = (dval < t.ftol) ? "fvalue" : (std::fabs(s.m_value) < t.mtol) ? "preddiff" : nullptr;
     if (soft) ref_build(s, t);
     if (soft && ref_newton_small(s, t)) { s.converged = true; s.stop_reason = soft; s.done = true; return false; }
+    if (soft) s.vetoed = soft;
     if (!soft && t.xtol > 0.0 && s.stepnorm < t.xtol)
                                       { s.converged = true; s.stop_reason = "step";     s.done = true; return false; }
   }
-  if (s.r < t.rmin) { s.stop_reason = "radius"; s.done = true; return false; }
+  if (s.r < t.rmin) {
+    if (s.vetoed != nullptr) { s.converged = true; s.stop_reason = s.vetoed; }
+    else s.stop_reason = "radius";
+    s.done = true; return false;
+  }
+  // stagnation is convergence where the model predicts at most mtol or a convergence stop was held back
   if (s.n_stall >= kStallLimit) {
-    s.converged = true; s.stop_reason = "stagnation"; s.done = true; return false;
+    ref_build(s, t);
+    s.converged = s.vetoed != nullptr || ref_newton_small(s, t);
+    s.stop_reason = "stagnation"; s.done = true; return false;
   }
   return true;
 }

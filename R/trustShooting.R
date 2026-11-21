@@ -14,7 +14,7 @@
 
   hm <- hessianMethod
   bad <- c(
-    if (hm == "exact") "hessianMethod = \"exact\"",
+    if (hm %in% c("exact", .structuredMethods)) paste0("hessianMethod = \"", hm, "\""),
     if (!identical(qn$hessianInit, "gn") && !identical(qn$hessianInit, "identity"))
       "qnControl$hessianInit = \"exact\"",
     if (!identical(qn$hessianReseed %||% "never", "never")) "qnControl$hessianReseed",
@@ -441,6 +441,12 @@
   }
   converged <- FALSE; stopReason <- "iterlim"
   iter <- 0L
+  # As in trust(), a convergence stop needs the full Newton step to predict at
+  # most mtol; a stop held back names itself if the run later stagnates or
+  # ends on the radius before a step changes the value by ftol.
+  vetoed <- NULL
+  newtonSmall <- function(C) tol$mtol <= 0 ||
+    .shootNewtonDecrease(C, thx(theta), lbx, ubx, psxOf()) <= tol$mtol
   trace <- list()
   C <- NULL
 
@@ -448,6 +454,8 @@
   # Peifer and Timmer (2007), sec. 3.4: predictor-corrector damping; a step is
   # taken when the simplified step at the step end has shrunk.
   handedOver <- FALSE
+  # iterations of the natural level function before a handover; iterlim bounds both
+  itNat <- 0L
   if (acc == "natural") {
     if (!is.null(attr(sobj, "args")$errmodel) ||
         !all(vapply(spec$segs, function(sg) all(is.finite(sg$data$sigma)), TRUE)))
@@ -465,11 +473,12 @@
     h <- .shootViolation(E$gaps, scale)
     omega <- NA_real_
     for (iter in seq_len(iterlim)) {
-      C <- condense(E)
+      if (is.null(C)) C <- condense(E)
       psx <- psxOf()
       opt <- .shootOptimality(thx(theta), C$g0, lbx, ubx, psx)
       if (opt$measure <= tol$gtol && h <= tol$ctol) {
-        converged <- TRUE; stopReason <- "gradient"; break
+        if (newtonSmall(C)) { converged <- TRUE; stopReason <- "gradient"; break }
+        vetoed <- "gradient"
       }
       FS <- .shootFullStep(C, thx(theta), lbx, ubx, psx, reg)
       nDu <- FS$norm
@@ -521,8 +530,10 @@
       if (inherits(ET, "error")) { stopReason <- "objfun"; break }
       df <- abs(f - (ET$value + PRT$value))
       theta <- thetaT; nodes <- nodesT; E <- ET; PR <- PRT
+      C <- NULL
       f <- E$value + PR$value
       h <- .shootViolation(E$gaps, scale)
+      if (df >= tol$ftol) vetoed <- NULL
       if (adaptive) {
         E2 <- splitAt(violators(E))
         if (!is.null(E2)) {
@@ -533,7 +544,9 @@
         }
       }
       if (lam == 1 && h <= tol$ctol && df < tol$ftol) {
-        converged <- TRUE; stopReason <- "fvalue"; break
+        C <- condense(E)
+        if (newtonSmall(C)) { converged <- TRUE; stopReason <- "fvalue"; break }
+        vetoed <- "fvalue"
       }
     }
     C <- NULL
@@ -541,6 +554,8 @@
     # the full step; the filter's trust region takes over from here.
     if (stopReason == "damping") {
       handedOver <- TRUE
+      itNat <- iter
+      iter <- 0L
       acc <- "filter"
       stopReason <- "iterlim"
       f <- E$value + PR$value
@@ -553,12 +568,13 @@
   # SR1 learns from rejected trials too, and needs their gradients
   trialDeriv <- hm != "gn" && isTRUE(qn$qnRejected)
   lastAccepted <- TRUE
-  if (acc != "natural") for (iter in seq_len(iterlim)) {
+  if (acc != "natural") for (iter in seq_len(iterlim - itNat)) {
     if (is.null(C)) C <- condense(E)
     psx <- psxOf()
     opt <- .shootOptimality(thx(theta), C$g0, lbx, ubx, psx)
     if (opt$measure <= tol$gtol && h <= tol$ctol) {
-      converged <- TRUE; stopReason <- "gradient"; break
+      if (newtonSmall(C)) { converged <- TRUE; stopReason <- "gradient"; break }
+      vetoed <- "gradient"
     }
 
     znorm <- C$znorm
@@ -713,8 +729,19 @@
           next
         }
       }
-      if (n_stall >= 5L) { converged <- TRUE; stopReason <- "stagnation"; break }
-      if (tol$rmin > 0 && r < tol$rmin) { stopReason <- "radius"; break }
+      # rejected steps that leave value and gaps flat are convergence only
+      # where the model predicts no decrease above mtol, or a stop was held back
+      if (n_stall >= 5L) {
+        if (is.null(C)) C <- condense(E)
+        converged <- h <= tol$ctol && (!is.null(vetoed) || newtonSmall(C))
+        stopReason <- "stagnation"
+        break
+      }
+      if (tol$rmin > 0 && r < tol$rmin) {
+        converged <- !is.null(vetoed)
+        stopReason <- if (converged) vetoed else "radius"
+        break
+      }
       next
     }
 
@@ -739,11 +766,17 @@
       }
     }
 
-    if (hm == "gn" && h <= tol$ctol) {
-      if (df < tol$ftol) { converged <- TRUE; stopReason <- "fvalue"; break }
-      if (abs(dmf) < tol$mtol) { converged <- TRUE; stopReason <- "preddiff"; break }
-      if (tol$xtol > 0 && stepnorm < tol$xtol) { converged <- TRUE; stopReason <- "step"; break }
+    if (df >= tol$ftol) vetoed <- NULL
+    if (hm != "gn" || h > tol$ctol) next
+    stop1 <- if (df < tol$ftol) "fvalue"
+             else if (abs(dmf) < tol$mtol) "preddiff"
+             else if (tol$xtol > 0 && stepnorm < tol$xtol) "step"
+    if (is.null(stop1)) next
+    if (stop1 != "step") {
+      C <- condense(E)
+      if (!newtonSmall(C)) { vetoed <- stop1; next }
     }
+    converged <- TRUE; stopReason <- stop1; break
   }
 
   if (is.null(C)) C <- condense(E)
@@ -766,7 +799,7 @@
   list(argument = theta, value = f,
        gradient = setNames(as.numeric(C$g0[seq_len(K)]), tnames),
        hessian = C$H[seq_len(K), seq_len(K), drop = FALSE],
-       iterations = iter, neval = neval,
+       iterations = itNat + iter, neval = neval,
        qnSkipped = qnSkipped,
        converged = converged, stopReason = stopReason,
        atBound = opt$atBound[seq_len(K)],
@@ -799,7 +832,7 @@
   }
   class(f1) <- c("objfn", "fn")
   r <- tryCatch(suppressWarnings(trust(f1, theta, rinit = rinit, rmax = rmax,
-                                       iterlim = iterlim,
+                                       iterlim = iterlim, hessianMethod = "gn",
                                        parupper = ub, parlower = lb)),
                 error = function(e) NULL)
   if (is.null(r) || !all(is.finite(r$argument)))
@@ -1161,6 +1194,23 @@
   x[hi] <- ub[hi] - eps[hi]
   x[lo] <- lb[lo] + eps[lo]
   x
+}
+
+# The decrease the full step of the condensed model predicts, in the variables
+# scaled for the bounds as in trust(): the gradient on the pseudoinverse of the
+# positive part of the scaled Hessian, plus the change from closing the gaps.
+.shootNewtonDecrease <- function(C, x, lb, ub, ps) {
+  K <- length(x)
+  gz <- C$g0 / ps
+  b <- ifelse(gz < 0, ub, lb)
+  fin <- is.finite(b)
+  sv <- sqrt(ifelse(fin, abs(x - b) * ps, 1))
+  ghat <- sv * (C$g0 + C$gz) / ps
+  Hhat <- C$H * tcrossprod(sv / ps) + diag(abs(gz) * fin, K)
+  e <- eigen(0.5 * (Hhat + t(Hhat)), symmetric = TRUE)
+  keep <- e$values > 8 * K * .Machine$double.eps * max(abs(e$values))
+  t1 <- crossprod(e$vectors[, keep, drop = FALSE], ghat)
+  0.5 * sum(t1^2 / e$values[keep]) - C$q0 - 0.5 * C$q2
 }
 
 # The optimality measure of the box problem, as trust() computes it.

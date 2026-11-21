@@ -23,14 +23,14 @@
 #' \describe{
 #'   \item{`"focei"`}{Laplace approximation at the conditional modes with the
 #'     exact derivative of the volume term. The default, and the method for
-#'     spike-and-slab and Dirichlet-process random effects (at most 14
-#'     groups) and for several groupings.}
+#'     several groupings; also for spike-and-slab and Dirichlet-process
+#'     random effects (at most 14 groups).}
 #'   \item{`"quadrature"`}{adaptive sparse-grid quadrature around the modes,
 #'     started from the FOCEI fit; section Quadrature.}
 #'   \item{`"laplaceEM"`}{ECM on the Laplace approximation with the
 #'     covariance-corrected update of `Omega`.}
-#'   \item{`"saem"`}{stochastic-approximation EM, also for Dirichlet-process
-#'     random effects; section SAEM.}
+#'   \item{`"saem"`}{stochastic-approximation EM, also for spike-and-slab and
+#'     Dirichlet-process random effects; section SAEM.}
 #' }
 #'
 #' @param obj Objective of the data, [normL2()] or [normT()] of the model
@@ -60,7 +60,12 @@
 #'     \item{`innerControl`}{the trust region of the modes; it stops where the
 #'       Newton step is below `steptol`, default 1e-8.}
 #'     \item{`trustControl`}{the outer trust region; it stops where the
-#'       predicted change of -2 log L is below `mtol`, default 1e-5.}
+#'       predicted change of -2 log L is below `mtol`, default 1e-5. Takes
+#'       `ftol`, `mtol`, `gtol` and `xtol` flat or in `tolControl`. With random
+#'       effects over several groupings the outer search is [trust()], and
+#'       every argument of [trust()] passes, `hessianMethod`, `phases` and
+#'       `qnControl` included; FOCEI of one grouping reads `rinit`, `rmax`,
+#'       `iterlim`, `ftol` and `mtol`. Other entries are an error.}
 #'     \item{`secondOrderCorrection`}{the derivative of the volume term,
 #'       default `TRUE`.}
 #'     \item{`derivMode`}{how FOCEI gets the second derivatives of the volume
@@ -95,9 +100,16 @@
 #'     \item{`information`}{with spike-and-slab random effects the
 #'       empirical information that gives the standard errors: `G / (G - 1)`
 #'       times the sum of the outer products of the centered scores of the `G`
-#'       groups, plus half the Hessian of the conditions without random
-#'       effects.}
-#'     \item{`converged`, `iterations`}{}
+#'       groups, of rank at most `G - 1`, plus half the curvature of the terms
+#'       without random effects (conditions outside every group, priors) by
+#'       their expected information (`hessian = "expected"`, see [dModfn]),
+#'       positive semidefinite. It is not the Hessian of the marginal -2 log L
+#'       and is singular where the scores and those terms span fewer directions
+#'       than there are parameters. [vcov()][vcov.em] inverts it where it is
+#'       positive definite.}
+#'     \item{`converged`, `iterations`}{the convergence of the outer search
+#'       and the iterations; with several groupings also `phaseIterations` of
+#'       [trust()].}
 #'     \item{`Omega`, `omega`}{the covariance of the normal random effects,
 #'       their standard deviations and correlations with standard errors.}
 #'     \item{`random`}{per group the modes with conditional standard errors;
@@ -128,17 +140,27 @@
 #'   \item{`tol`}{allowed change of -2 log L by the next level, default 0.1,
 #'     split over the groups; each group takes the lowest level from the current
 #'     stage of the group up within `tol / G` and never a lower one than before.
-#'     `Inf` keeps the
-#'     levels of the stages.}
+#'     Where the next level exceeds `maxNodes`, the change from the level below
+#'     is the estimate. `Inf` keeps the levels of the stages.}
 #'   \item{`levels`}{the stages, default `K + 1` with `K` the number of random
 #'     effects of a group; level `K + s` integrates polynomials of total
 #'     degree `2 s + 1` exactly.}
-#'   \item{`maxLevel`}{highest level, default `K + 8`.}
+#'   \item{`maxLevel`, `maxNodes`}{highest level, default `K + 8`, and the
+#'     largest node count of a level per group, default 1000. A group whose
+#'     error exceeds `tol / G` at the highest level within both is capped.
+#'     Column `capped` of `stageTrace` counts the capped groups; attribute
+#'     `"levels"` of `stageTrace` and the `certificate` list level, level error
+#'     and cap per group.}
 #'   \item{`tolDecrement`}{a stage ends when a Newton step on the rebuilt
-#'     nodes would lower -2 log L by less than this, default 1e-4, or than the
-#'     nodes resolve.}
+#'     nodes would lower -2 log L by less than this, default 1e-4
+#'     (`stopReason` `"decrement"`), or when -2 log L rose after a step on nodes
+#'     of unchanged levels, so the step lies below what the levels resolve
+#'     (`"resolution"`). `converged` means stationary at the levels reached,
+#'     capped ones included; the fit returns the iterate of lowest -2 log L on
+#'     the highest levels.}
 #'   \item{`maxEcmPerStage`, `cm1Control`, `maxCm1Iter`}{rebuilds per stage
-#'     (default 10), [trust()] settings and iterations of a step (default 30).}
+#'     (default 10, `stopReason` `"iterlim"` where they run out), [trust()]
+#'     settings and iterations of a step (default 30).}
 #'   \item{`pruneTol`}{nodes whose weight lies this much in log below the
 #'     largest are dropped, default `Inf`.}
 #'   \item{`certificate`}{`FALSE`, or a list of `points` (default 256) and
@@ -167,15 +189,43 @@
 #'     significant slope over the last `window` iterations (default 25), the
 #'     averaging when the expected rise of -2 log L from the Monte Carlo error
 #'     is below `mcTol` (default 0.05).}
-#'   \item{`particles`}{with Dirichlet-process random effects the particles of
-#'     the sequential importance sampling of -2 log L, default 500.}
+#'   \item{`particles`}{the particles of the sequential importance sampling
+#'     of -2 log L with Dirichlet-process random effects, default 500.}
 #'   \item{`cm1Control`}{[trust()] settings of the Newton steps of the other
 #'     parameters, default one iteration per SAEM iteration.}
+#'   \item{`nFlip`}{with spike-and-slab random effects the sweeps over the
+#'     indicators per iteration, default 1.}
+#'   \item{`nodes`}{Gauss-Hermite nodes of the slab mass of an indicator, 3
+#'     (default) or 5.}
+#'   \item{`integral`}{`"importance"` takes -2 log L by importance sampling
+#'     over the partitions also where Dirichlet-process random effects beside
+#'     spike-and-slab ones allow the exact sum.}
 #' }
-#' With Dirichlet-process random effects a Gibbs sweep draws the clusters of
-#' the groups (Neal 2000, algorithm 8), the averaging runs `nEM` iterations,
-#' and the reported clusters are the most frequent partition of the late
-#' draws.
+#' With spike-and-slab or Dirichlet-process random effects the averaging runs
+#' `nEM` iterations. A sweep of Metropolis-Hastings moves visits every
+#' indicator of a group once, in random order and for all groups at once,
+#' with the slab value integrated out: the other slab values of the group
+#' follow along the regression of the local quadratic model of the data, the
+#' slab mass on that line is a Gauss-Hermite sum with the exact model at the
+#' nodes, and the proposal draws the indicator from the resulting conditional
+#' inclusion probability and the slab value from the local Gaussian; the
+#' independence Metropolis-Hastings step keeps the posterior exact. `nMcmc`
+#' random-walk steps move the slab values of every group jointly. `prob` and
+#' `tau` follow in closed form from the averaged conditional inclusion
+#' probabilities and slab second moments of the sweeps, not from the drawn
+#' indicators; an estimated `tau` starts at least at the largest group mode
+#' under the slab alone. An `em` fit as `init` starts the chain at the
+#' selected random effects of that fit instead, the way to check a FOCEI
+#' optimum by SAEM. The acceptance rates of births, deaths and random-walk
+#' steps per iteration are columns of `stageTrace`. A Gibbs sweep draws
+#' the clusters of the Dirichlet-process random effects (Neal 2000,
+#' algorithm 8). The reported clusters are the most frequent partition of
+#' the late draws, a spike-and-slab random effect is selected where the mean
+#' conditional inclusion probability of the late sweeps is above 1/2, `p0`
+#' one minus that mean. -2 log L is that of `method = "focei"` at the
+#' estimate; with Dirichlet-process random effects alone, or beside
+#' spike-and-slab ones on more than 14 groups, by importance sampling over the
+#' partitions, with `valueSE`.
 #' @section Sparse random effects:
 #' With spike-and-slab or Dirichlet-process random effects the
 #' parameters and hyperparameters move in one trust region. The integral of a
@@ -185,8 +235,9 @@
 #' trial point at which EC does not converge is a failed evaluation. Entries of `control$sparseFit`:
 #' \describe{
 #'   \item{`maxOuter`}{iterations of the trust region, default 200.}
-#'   \item{`trustControl`}{the [trust()] settings; `ftol`, `mtol` and `gtol`
-#'     of the `tolControl` there also end the search of the modes (else 1e-10).}
+#'   \item{`trustControl`}{the [trust()] settings of the outer search. The modes
+#'     are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
+#'     below 1e-8.}
 #' }
 #'
 #' @seealso [msem()], [randomEffects()], [insert()]; the guide chapters
@@ -208,6 +259,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   design <- .emDesign(obj, random)
   start <- .emStart(design, init, fixed, sd = control$sd %||% 0.3)
   control$modes <- cont$modes
+  control$selected <- cont$selected
   .withCores(cores, .emFit(design, start, fixed, method, control, verbose))
 }
 
@@ -298,6 +350,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   design <- .emDesign(obj, random)
   center <- .emStart(design, init, fixed, sd = control$sd %||% 0.3)
   control$modes <- cont$modes
+  control$selected <- cont$selected
   sd <- .perturbSd(sd, center)
   # every start and every seed is drawn here, so set.seed() reproduces a run whatever `cores`;
   # an inner axis above 1 runs the fits in PSOCK workers, as mstrust()
@@ -405,7 +458,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   }
   fixed <- c(fixed, init$fixed[.setdiff(names(init$fixed), names(fixed))])
   list(random = random, init = init$argument[.setdiff(names(init$argument), names(fixed))], fixed = fixed,
-       modes = init$innerModes)
+       modes = init$innerModes, selected = init$etaModes)
 }
 
 ## One fit of `design` from `start` by `method`, with `control`; -2 log L of the data at the
@@ -479,11 +532,11 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     return(.emResult(design, .fitFoceiJoint(design, joint, start, fixed, control), method, fixed))
   }
   if (any(vapply(design$blocks, function(b) b$dist != "normal", TRUE))) {
-    if (method == "saem") return(.emResult(design, .fitSaemDirichlet(design, start, fixed, control, verbose),
+    if (method == "saem") return(.emResult(design, .fitSaemSparse(design, start, fixed, control, verbose),
                                            method, fixed))
     if (method != "focei")
       stop("em: spike-and-slab and Dirichlet-process random effects are fitted by method = \"focei\" ",
-           "(Dirichlet-process ones also by \"saem\").", call. = FALSE)
+           "or \"saem\".", call. = FALSE)
     return(.emResult(design, .fitSparse(design, start, fixed, control, verbose), method, fixed))
   }
   joint <- design$objfn + .normalPrior(design)
@@ -505,6 +558,8 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
 
 ## trust() for an inner step of an EM loop, whose iteration limit is part of the loop: that one
 ## warning is muffled, others pass.
-.innerTrust <- function(args)
+.innerTrust <- function(args) {
+  if (is.null(args$phases) && is.null(args$hessianMethod)) args$hessianMethod <- "gn"
   withCallingHandlers(suppressMessages(do.call(trust, args)), warning = function(w)
     if (grepl("Maximum number of iterations", conditionMessage(w), fixed = TRUE)) invokeRestart("muffleWarning"))
+}

@@ -132,7 +132,9 @@ conservedQuantities(reactions)
 `Pimpl()` solves the steady state numerically in every evaluation, with the totals `totalNfk` and
 `totalIkk` as parameters, `TNF` held at 0, and exact derivatives of the root
 ([Methods > Steady states](methods-steady-states.html)). `steadyStates()`, the analytic
-alternative, finds no positive closed form for this network.
+alternative, solves the balances of this network for the rate constants `eta_int_Ikb` and
+`prod_Ikb`, with `Ikk`, `NfkIkb`, `Ikb` and `nIkb` free; the guide keeps the totals as parameters
+of `Pimpl()`.
 
 ```{r steadystate}
 ```
@@ -240,8 +242,9 @@ Starts far outside these ranges end on plateaus where a signal bleaches away, th
 every residual or A20 follows NFκB within minutes.
 
 `pSS` returns unstable roots too (`controlsPTC = list(stability = FALSE)`);
-`constraintStability()` adds a term that is zero on a stable resting state, rises on a narrow ramp
-below the stability boundary and reaches 100 for each eigenvalue at the boundary. It needs
+`constraintStability()` adds a term that is zero on a stable resting state, rises on a ramp below
+the stability boundary, a tenth of the inverse time span of the data wide (`width`, about 2.8e-4
+per minute), and reaches 100 for each eigenvalue at the boundary. It needs
 `Pimpl(deriv2 = TRUE)`. Profiles with `stop = "data"` and likelihood ratios read the data term
 without it ([Methods > Steady states](methods-steady-states.html#stability)).
 

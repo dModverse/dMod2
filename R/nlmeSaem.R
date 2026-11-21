@@ -17,9 +17,9 @@
                 else stats::pnorm(-w[censored], log.p = TRUE))
 }
 
-## -2 log p(y_g, eta_g) of every group at the rows of `eta`, the value of the FOCEI kernel per
-## group: the data term of every condition in one evaluation without derivatives, in C++ where the
-## model allows it, else from the predictions and the row losses in R.
+## -2 log p(y_g, eta_g) of every group at the rows of `eta`, as the FOCEI kernel per group, all
+## conditions in one evaluation without derivatives; with `full` a list of parameter vectors, one
+## column per vector.
 .groupDensity <- function(design, meta, fixed, cores = 1L) {
   errfn <- .errorModel(design)
   node <- .fnNode(errfn)
@@ -28,19 +28,18 @@
   conditions <- vapply(blocks, function(b) as.character(b$condition), "")
   times <- lapply(blocks, `[[`, "times")
   etaNames <- lapply(meta$fast_meta, `[[`, "eta_names")
-  dataTerm <- function(parsList) {
-    d <- .chainLocal(design$chain, conditions, parsList, rep(list(fixed), length(parsList)), FALSE, FALSE, cores,
-                     design$bloq, design$df)
+  G <- length(etaNames)
+  dataTerm <- function(parsList, n) {
+    d <- .chainLocal(design$chain, rep(conditions, n), parsList, rep(list(fixed), length(parsList)), FALSE, FALSE,
+                     cores, design$bloq, design$df)
     if (is.null(d)) return(NULL)
     v <- vapply(d, function(x) as.numeric(x$value), 0)
-    vapply(seq_along(etaNames), function(g) sum(v[group == g]), 0)
+    matrix(rowsum(v, rep(group, n) + G * rep(seq_len(n) - 1L, each = length(group)), reorder = TRUE), G, n)
   }
-  function(full, eta, Oinv, logDet) {
+  one <- function(full, eta) {
     parsList <- lapply(seq_along(blocks), function(j) {
       p <- full; p[etaNames[[group[j]]]] <- eta[group[j], ]; p
     })
-    value <- dataTerm(parsList)
-    if (!is.null(value)) return(value + rowSums((eta %*% Oinv) * eta) + logDet)
     preds <- .predictMany(design$prdfn, times = times, parsList = parsList, conditions = conditions,
                           fixed = fixed, deriv = FALSE, cores = cores)
     inner <- lapply(preds, function(q) attr(q, "parameters"))
@@ -49,7 +48,7 @@
                               fixed = vector("list", length(preds))), FALSE, FALSE, NULL, cores)
       else lapply(seq_along(preds), function(j)
         errfn(out = preds[[j]], pars = inner[[j]], conditions = conditions[j])[[1L]]))
-    value <- numeric(length(etaNames))
+    value <- numeric(G)
     for (j in seq_along(blocks)) {
       b <- blocks[[j]]
       err <- errs[[j]] %||% .dataSigmaErrfn(design$data)(out = preds[[j]], conditions = conditions[j])[[1L]]
@@ -59,7 +58,17 @@
       s[recorded] <- b$sigma_data[recorded]
       value[group[j]] <- value[group[j]] + .rowLoss(p, s, b$y_data, seq_along(p) > b$n_aloq, design$df)
     }
-    value + rowSums((eta %*% Oinv) * eta) + logDet
+    value
+  }
+  function(full, eta, Oinv, logDet) {
+    many <- is.list(full)
+    sets <- if (many) full else list(full)
+    parsList <- unlist(lapply(sets, function(f) lapply(seq_along(blocks), function(j) {
+      p <- f; p[etaNames[[group[j]]]] <- eta[group[j], ]; p
+    })), recursive = FALSE)
+    value <- dataTerm(parsList, length(sets)) %||% vapply(sets, one, numeric(G), eta = eta)
+    value <- matrix(value, G) + rowSums((eta %*% Oinv) * eta) + logDet
+    if (many) value else value[, 1]
   }
 }
 
@@ -442,24 +451,179 @@
 }
 
 
-## SAEM with Dirichlet-process random effects, normal ones beside them: Metropolis and Gibbs draws,
-## Robbins-Monro statistics with closed-form M-steps, the structural parameters on the averaged
-## quadratic model; -2 log L by importance sampling, the clusters the most frequent late partition.
-.fitSaemDirichlet <- function(design, start, fixed, control = list(), verbose = FALSE) {
+## ---- spike-and-slab random effects ---------------------------------------------------------
+
+## The quadratic model of the data -2 log L of every group in the spike-and-slab coordinates `at`
+## (G x J names) at the values `ref`: exact gradient and the curvature of the objective at `pars`
+## with `at` set to `ref`.
+.slabModel <- function(design, objs, pars, at, ref) {
+  G <- nrow(at)
+  out <- .groupData(design, objs, lapply(seq_len(G), function(g) { p <- pars[[g]]; p[at[g, ]] <- ref[g, ]; p }))
+  grad <- t(vapply(seq_len(G), function(g) .named(out[[g]]$gradient, at[g, ]), numeric(ncol(at))))
+  if (ncol(at) == 1L) grad <- t(grad)
+  if (any(!is.finite(grad))) return(NULL)
+  H <- lapply(seq_len(G), function(g) .namedHessian(out[[g]]$hessian, at[g, ]))
+  if (any(!is.finite(unlist(H)))) return(NULL)
+  # the curvature with negative eigenvalues set to 0, so every subset has a Gaussian
+  H <- lapply(H, function(h) {
+    e <- eigen((h + t(h)) / 2, symmetric = TRUE)
+    structure(e$vectors %*% (t(e$vectors) * pmax(e$values, 0)), dimnames = dimnames(h))
+  })
+  list(ref = ref, grad = grad, H = H)
+}
+
+## The Gaussian of the slab values of group `g` in the subset `s`, the other coordinates at 0, on
+## the quadratic model plus the slab prior: the mean (0 off `s`) and the upper factor R of the
+## precision P, the covariance 2 `scale` P^-1.
+.slabGaussian <- function(model, g, s, tau, scale) {
+  mean <- numeric(length(s))
+  if (!any(s)) return(list(mean = mean, R = NULL, s = s, scale = scale))
+  H <- model$H[[g]]
+  R <- chol(H[s, s, drop = FALSE] + diag(2 / tau[s]^2, sum(s)))
+  rhs <- drop(H %*% model$ref[g, ])[s] - model$grad[g, s]
+  mean[s] <- backsolve(R, forwardsolve(t(R), rhs))
+  list(mean = mean, R = R, s = s, scale = scale)
+}
+
+## Probabilists' Gauss-Hermite nodes and weights of order 3 or 5: sum w f(t) = E f(Z), Z ~ N(0, 1),
+## exact for polynomials of degree 2 n - 1.
+.hermiteNodes <- function(n) switch(as.character(n),
+  "3" = list(t = c(-sqrt(3), 0, sqrt(3)), w = c(1, 4, 1) / 6),
+  "5" = list(t = c(-2.856970013872806, -1.355626179974266, 0, 1.355626179974266, 2.856970013872806),
+             w = c(0.011257411327721, 0.222075922005613, 0.533333333333333, 0.222075922005613, 0.011257411327721)),
+  stop("em: `control$saem$nodes` is 3 or 5.", call. = FALSE))
+
+## The collapsed move on indicator `j[g]` of every group g (NA: none), the slab value integrated
+## out by Gauss-Hermite on the local Gaussian, an independence Metropolis-Hastings step on the exact
+## posterior (methods-nlme, SAEM); `dataAt(V)` is -2 log p(y_g, eta_g) at V, `value` the current.
+.slabCollapsed <- function(V, Z, value, dataAt, model, prob, tau, j, scale, gh) {
+  G <- nrow(V); J <- ncol(V)
+  go <- !is.na(j)
+  base <- V; dir <- matrix(0, G, J); m <- sd <- rep(NA_real_, G)
+  # a group whose local model has no Gaussian along the line does not move
+  for (g in which(go)) tryCatch({
+    i <- j[g]
+    o <- which(Z[g, ] & seq_len(J) != i)
+    H <- model$H[[g]]
+    S <- c(i, o)
+    P <- H[S, S, drop = FALSE] + diag(2 / tau[S]^2, length(S))
+    B <- if (length(o)) -solve(P[-1, -1, drop = FALSE], P[-1, 1]) else numeric(0)
+    if (Z[g, i]) { base[g, o] <- V[g, o] - B * V[g, i]; base[g, i] <- 0 }
+    dir[g, i] <- 1; dir[g, o] <- B
+    grad <- model$grad[g, ] + drop(H %*% (base[g, ] - model$ref[g, ])) + 2 * base[g, ] / tau^2
+    s <- P[1, 1] + if (length(o)) sum(P[1, -1] * B) else 0
+    if (!(s > 0)) stop("no curvature")
+    m[g] <- -(grad[i] + sum(B * grad[o])) / s
+    sd[g] <- sqrt(2 / s)
+  }, error = function(e) go[g] <<- FALSE)
+  out <- list(V = V, Z = Z, value = value, birth = rep(NA, G), ok = rep(FALSE, G),
+              pinc = rep(NA_real_, G), slab2 = rep(NA_real_, G))
+  if (!any(go)) return(out)
+  ig <- cbind(seq_len(G), ifelse(go, j, 1L))
+  # log p(y, eta) of a group on the line at x from the data term d, with the prior of every
+  # coordinate of the group
+  lp1 <- matrix(log(prob), G, J, byrow = TRUE); lp0 <- matrix(log1p(-prob), G, J, byrow = TRUE)
+  sdSlab <- matrix(tau, G, J, byrow = TRUE)
+  logF <- function(x, d, slab) {
+    z <- Z; z[ig] <- slab
+    v <- base + ifelse(go, x, 0) * dir
+    out <- rowSums(ifelse(z, lp1 + stats::dnorm(v, 0, sdSlab, log = TRUE), lp0)) - d / 2
+    ifelse(go, out, NA_real_)
+  }
+  # the data term on the line at the columns of `x`, all in one evaluation; where that fails each
+  # column alone, a failed column Inf
+  at <- function(x) {
+    x <- matrix(x, G)
+    x[!go, ] <- 0
+    one <- function(k) tryCatch(dataAt(base + x[, k] * dir), error = function(e) rep(Inf, G))
+    d <- tryCatch(matrix(dataAt(lapply(seq_len(ncol(x)), function(k) base + x[, k] * dir)), G),
+                  error = function(e) vapply(seq_len(ncol(x)), one, numeric(G)))
+    matrix(ifelse(is.finite(d), d, Inf), G)
+  }
+  inSlab <- go & Z[ig] == 1
+  nodes <- outer(m, rep(1, length(gh$t))) + outer(sd, gh$t)
+  d <- at(cbind(0, nodes))
+  d0 <- ifelse(inSlab, d[, 1], value)
+  lf0 <- logF(numeric(G), d0, FALSE)
+  lw <- vapply(seq_along(gh$t), function(q) {
+    x <- nodes[, q]
+    log(gh$w[q]) + logF(x, d[, q + 1L], TRUE) - stats::dnorm(x, m, sd, log = TRUE)
+  }, numeric(G))
+  sp <- sd * sqrt(scale)
+  lw <- matrix(lw, G)
+  top <- apply(lw, 1, max)
+  logI <- top + log(rowSums(exp(lw - top)))
+  logI[!is.finite(top)] <- -Inf
+  m2 <- rowSums(exp(lw - top) * nodes^2) / rowSums(exp(lw - top))
+  pinc <- ifelse(is.finite(lf0), 1 / (1 + exp(lf0 - logI)), 1)
+  pinc[!go] <- NA
+  q1 <- 0.01 + 0.98 * pinc
+  logW <- function(slab, x, lf) ifelse(slab, lf - log(q1) - stats::dnorm(x, m, sp, log = TRUE), lf - log1p(-q1))
+  cur <- logW(inSlab, V[ig], ifelse(inSlab, logF(V[ig], value, TRUE), lf0))
+  slabNew <- stats::runif(G) < q1
+  xNew <- ifelse(slabNew, m + sp * stats::rnorm(G), 0)
+  dNew <- d0
+  if (any(go & slabNew)) dNew[go & slabNew] <- at(xNew)[go & slabNew, 1]
+  new <- logW(slabNew, xNew, ifelse(slabNew, logF(xNew, dNew, TRUE), lf0))
+  ok <- go & is.finite(new) & (!is.finite(cur) | log(stats::runif(G)) < new - cur)
+  for (g in which(ok)) {
+    out$V[g, ] <- base[g, ] + xNew[g] * dir[g, ]
+    out$Z[g, j[g]] <- slabNew[g]
+    out$value[g] <- dNew[g]
+  }
+  # a proposed change of the indicator: TRUE a birth, FALSE a death
+  out$birth <- ifelse(go & slabNew != inSlab, slabNew, NA)
+  out$ok <- ok
+  out$pinc <- pinc
+  out$slab2 <- ifelse(go, pinc * ifelse(is.finite(m2), m2, 0), NA)
+  out
+}
+
+## A random-walk Metropolis step on all slab values of every group where the indicator is set, of
+## size `step` per group times `sd` per coordinate; the acceptance per group.
+.slabWalk <- function(V, Z, value, dataAt, tau, step, sd) {
+  G <- nrow(V)
+  prop <- ifelse(Z, V + step * sd * matrix(stats::rnorm(length(V)), G), V)
+  pv <- tryCatch(dataAt(prop), error = function(e) rep(Inf, G))
+  t2 <- matrix(rep(tau^2, each = G), G)
+  ok <- rowSums(Z) > 0 & is.finite(pv) &
+    log(stats::runif(G)) < (value - pv) / 2 - rowSums((prop^2 - V^2) / (2 * t2))
+  V[ok, ] <- prop[ok, ]
+  value[ok] <- pv[ok]
+  list(V = V, value = value, accept = ok)
+}
+
+
+## SAEM with spike-and-slab and Dirichlet-process random effects, normal ones beside them; the
+## estimate is the mean of the late iterates, the selected effects and clusters come from the late
+## draws.
+.fitSaemSparse <- function(design, start, fixed, control = list(), verbose = FALSE) {
   lay <- design$normal
   sl <- .sparseLayout(design)
-  if (any(sl$dist != "dirichletProcess"))
-    stop("em: method = \"saem\" takes normal and Dirichlet-process random effects.", call. = FALSE)
   sc <- control$saem %||% list()
   maxBurnin <- sc$nBurnin %||% 200L
   maxAveraging <- sc$nEM %||% 300L
   nMcmc <- sc$nMcmc %||% 3L
   window <- sc$window %||% 25L
+  laplaceScale <- sc$laplaceScale %||% 1.5
+  nFlip <- sc$nFlip %||% 1L
+  gh <- .hermiteNodes(sc$nodes %||% 3L)
   cores <- getOption("dMod2.cores", 1L)
   E <- design$etaNames[, lay$stems, drop = FALSE]
   Dp <- design$etaNames[, sl$stem, drop = FALSE]
   G <- nrow(Dp); K <- ncol(E)
+  dpStems <- sl$stem[sl$dist == "dirichletProcess"]
+  slabStems <- sl$stem[sl$dist == "spikeSlab"]
+  # -2 log L by importance sampling over the partitions where the exact sum beside spike-and-slab
+  # random effects is too large or `integral` asks for it, else by the exact sum or EC
+  importance <- length(dpStems) > 0L &&
+    (!length(slabStems) || G > 14L || identical(sc$integral, "importance"))
   hypers <- .intersect(.sparseHypers(sl), names(start))
+  off <- .intersect(attr(.extraObjective(design), "parameters"), c(.sparseHypers(sl), as.vector(design$etaNames)))
+  if (length(off))
+    stop("em: with spike-and-slab or Dirichlet-process random effects the terms beside the data ",
+         "take the fixed effects only; ", paste(off, collapse = ", "), " are hyperparameters or random effects.",
+         call. = FALSE)
   outer <- start[.setdiff(names(start), hypers)]
   meta <- .foceiMeta(design, c(outer, setNames(numeric(length(Dp)), as.vector(Dp))), fixed)
   .requireM3(design, meta, "SAEM")
@@ -494,22 +658,50 @@
             hessian = .namedHessian(out$hessian, structural))
   }
 
-  # every group starts in a separate cluster at the group mode under the slab alone, so the sampler
-  # merges clusters rather than finding deviations by draws from the slab
+  # every group starts in the slab and in a separate cluster at the group mode under the slab
+  # alone, so the sampler removes deviations rather than finding them by draws from the slab; a
+  # fit as init gives the start instead: the selected values, 0 in the spike, clusters by value
   objs <- .conditionObjectives(design)
   prior <- if (K) .normalPrior(design)
-  start0 <- matrix(0, G, ncol(design$etaNames), dimnames = dimnames(design$etaNames))
+  En <- design$etaNames
+  fitted <- function(m) is.matrix(m) && all(rownames(En) %in% rownames(m)) && all(colnames(En) %in% colnames(m))
+  selected0 <- if (fitted(control$selected)) control$selected[rownames(En), colnames(En), drop = FALSE]
+  start0 <- if (fitted(control$modes)) control$modes[rownames(En), colnames(En), drop = FALSE]
+            else matrix(0, G, ncol(En), dimnames = dimnames(En))
   mode0 <- .sparseModes(design, objs, prior, c(outer, fixed), .stemHypers(sl, c(hyper, fixed)), start0,
                         list(iterlim = 300L))
-  state <- lapply(setNames(nm = sl$stem), function(st) list(z = seq_len(G), v = unname(mode0[, st])))
+  if (!is.null(selected0)) mode0[, sl$stem] <- selected0[, sl$stem]
+  state <- lapply(setNames(nm = dpStems), function(st) {
+    if (is.null(selected0)) return(list(z = seq_len(G), v = unname(mode0[, st])))
+    v <- unique(mode0[mode0[, st] != 0, st])
+    list(z = match(mode0[, st], v, nomatch = 0L), v = unname(v))
+  })
   for (st in sl$stem) full[Dp[, st]] <- mode0[, st]
+  Ds <- Dp[, slabStems, drop = FALSE]
+  reach <- .reachOf(design)[, slabStems, drop = FALSE]
+  full[Ds[!reach]] <- 0
+  incl <- if (is.null(selected0)) reach else reach & matrix(full[Ds] != 0, G)
+  slabRef <- matrix(full[Ds], G, dimnames = dimnames(Ds))
+  # an estimated slab starts at least as wide as the largest of those modes: in a narrow slab a
+  # coordinate without a deviation costs little, and tau and prob drift together to the limit of
+  # a slab of width 0 in which every coordinate is included
+  for (b in Filter(function(b) b$dist == "spikeSlab", design$blocks)) {
+    tn <- unname(b$hyper["tau"])
+    if (tn %in% hypers && is.null(selected0))
+      hyper[[tn]] <- max(hyper[[tn]], abs(slabRef[, match(b$stems, slabStems)]))
+  }
+  slabProp <- NULL
+  slabStep <- rep(0.5, G)
+  groupPars <- function() lapply(seq_len(G), function(g) {
+    p <- full; p[names(fixed)] <- fixed; p[E[g, ]] <- eta[g, ]; p
+  })
   eta <- mode0[, lay$stems, drop = FALSE]
   step <- rep(0.4, G)
-  valueStep <- setNames(rep(0.3, nrow(sl)), sl$stem)
+  valueStep <- setNames(rep(0.3, length(dpStems)), dpStems)
   beta <- c(outer, fixed)[refPars]
   s1 <- s2 <- NULL
   stats <- NULL
-  blocks <- Filter(function(b) b$dist == "dirichletProcess", design$blocks)
+  blocks <- Filter(function(b) b$dist != "normal", design$blocks)
   psiOf <- function() c(full[names(outer)], hyper)[names(start)]
   history <- matrix(NA_real_, 0, length(start), dimnames = list(NULL, names(start)))
   draws <- list()
@@ -522,6 +714,7 @@
     logDet <- if (K) 2 * sum(log(diag(L))) else 0
     hyp <- .stemHypers(sl, c(hyper, fixed))
     accept <- NA_real_
+    moves <- c(birth = NA_real_, death = NA_real_, walk = NA_real_)
     if (K) {
       rw <- .metropolisGroups(function(e) density(full, e, Oinv, logDet), eta,
                               tryCatch(density(full, eta, Oinv, logDet), error = function(e) rep(Inf, nrow(eta))),
@@ -530,7 +723,7 @@
       accept <- mean(rw$accept)
       if (burnin) step <- pmin(pmax(step * exp(0.3 * (rw$accept - 0.4)), 0.02), 5)
     }
-    for (st in sl$stem) {
+    for (st in dpStems) {
       at <- Dp[, st]
       dataAt <- function(v) { f <- full; f[at] <- v; density(f, eta, Oinv, logDet) }
       state[[st]] <- .dpGibbs(state[[st]], dataAt, hyp$concentration[[st]], hyp$tau[[st]])
@@ -540,9 +733,65 @@
         valueStep[[st]] <- min(max(valueStep[[st]] * exp(0.3 * (mv$accept - 0.4)), 0.01), 5)
       full[at] <- c(0, state[[st]]$v)[state[[st]]$z + 1L]
     }
+    # the indicators and slab values against proposals from the local models; where those cannot
+    # be refreshed the previous ones stay, the moves are exact either way
+    if (length(slabStems)) {
+      tauS <- hyp$tau[slabStems]; probS <- hyp$prob[slabStems]
+      local <- tryCatch(.slabModel(design, objs, groupPars(), Ds, slabRef), error = function(e) NULL)
+      if (!is.null(local)) {
+        slabProp <- local
+        # the reference of the next model: the mean of the local Gaussian in the slab alone, within
+        # five slab standard deviations
+        for (g in seq_len(G)) slabRef[g, ] <- tryCatch(
+          pmin(pmax(.slabGaussian(local, g, reach[g, ], tauS, 1)$mean, -5 * tauS), 5 * tauS),
+          error = function(e) slabRef[g, ])
+      }
+      slabProp <- slabProp %||% list(ref = 0 * slabRef, grad = 0 * slabRef, H = rep(list(diag(0, ncol(Ds))), G))
+      V <- matrix(full[Ds], G)
+      blockAt <- function(x) {
+        set <- function(v) { f <- full; f[Ds] <- v; f }
+        density(if (is.list(x)) lapply(x, set) else set(x), eta, Oinv, logDet)
+      }
+      value <- tryCatch(blockAt(V), error = function(e) rep(Inf, G))
+      # the conditional standard deviations of the local model, the scales of the random walk
+      sd <- t(vapply(slabProp$H, function(h) sqrt(2 / (pmax(diag(h), 0) + 2 / tauS^2)), numeric(ncol(Ds))))
+      if (ncol(Ds) == 1L) sd <- t(sd)
+      # per sweep every indicator of a group once, in random order, one round over all groups per indicator
+      tried <- c(birth = 0, death = 0); taken <- tried
+      # the Rao-Blackwellized inclusion and slab second moment per coordinate, summed over the sweeps
+      rbIncl <- rbSlab2 <- rbCount <- matrix(0, G, ncol(Ds))
+      for (s in seq_len(nFlip)) {
+        order <- lapply(seq_len(G), function(g) { i <- which(reach[g, ]); i[sample.int(length(i))] })
+        for (r in seq_len(max(lengths(order), 0L))) {
+          j <- vapply(order, function(i) if (r <= length(i)) i[r] else NA_integer_, 0L)
+          fl <- .slabCollapsed(V, incl, value, blockAt, slabProp, probS, tauS, j, laplaceScale, gh)
+          V <- fl$V; incl <- fl$Z; value <- fl$value
+          tried <- tried + c(sum(fl$birth, na.rm = TRUE), sum(!fl$birth, na.rm = TRUE))
+          taken <- taken + c(sum(fl$ok & fl$birth, na.rm = TRUE), sum(fl$ok & !fl$birth, na.rm = TRUE))
+          done <- which(!is.na(fl$pinc))
+          at <- cbind(done, j[done])
+          rbIncl[at] <- rbIncl[at] + fl$pinc[done]
+          rbSlab2[at] <- rbSlab2[at] + fl$slab2[done]
+          rbCount[at] <- rbCount[at] + 1
+        }
+      }
+      # a coordinate whose collapsed step failed in every sweep enters with the draw
+      rbIncl <- ifelse(rbCount > 0, rbIncl / pmax(rbCount, 1), incl)
+      rbSlab2 <- ifelse(rbCount > 0, rbSlab2 / pmax(rbCount, 1), incl * V^2)
+      walked <- numeric(G)
+      for (s in seq_len(nMcmc)) {
+        sw <- .slabWalk(V, incl, value, blockAt, tauS, slabStep, sd)
+        V <- sw$V; value <- sw$value
+        walked <- walked + sw$accept / nMcmc
+      }
+      moves <- c(taken / tried, walk = sum(walked) / max(sum(rowSums(incl) > 0), 1))
+      full[Ds] <- V
+      if (burnin) slabStep <- ifelse(rowSums(incl) > 0, pmin(pmax(slabStep * exp(0.3 * (walked - 0.25)), 0.01), 5),
+                                     slabStep)
+    }
 
     # A-step and M-steps: Omega and the GLS fixed effects on the averages of phi, then per block
-    # the slab sd and the concentration
+    # the slab sd and the concentration or the probability of a deviation
     if (K) {
       phi <- eta + shift(beta)
       s1 <- if (is.null(s1)) phi else s1 + gamma * (phi - s1)
@@ -560,20 +809,29 @@
       full[free] <- beta[free]
       eta <- phi - shift(beta)
     }
-    cur <- vapply(blocks, function(b) c(free = sum(vapply(b$stems, function(st) length(state[[st]]$v), 0)),
-                                        slab2 = sum(vapply(b$stems, function(st) sum(state[[st]]$v^2), 0))),
-                  numeric(2))
+    cur <- vapply(blocks, function(b) {
+      if (b$dist == "dirichletProcess")
+        return(c(free = sum(vapply(b$stems, function(st) length(state[[st]]$v), 0)), groups = 0,
+                 slab2 = sum(vapply(b$stems, function(st) sum(state[[st]]$v^2), 0))))
+      j <- match(b$stems, slabStems)
+      c(free = sum(rbIncl[, j][reach[, j]]), groups = sum(reach[, j]), slab2 = sum(rbSlab2[, j][reach[, j]]))
+    }, numeric(3))
     stats <- if (is.null(stats)) cur else stats + gamma * (cur - stats)
-    # while annealing the slab and the concentration change by a factor of at most 0.95 to 1.25
-    # per iteration, so one sweep cannot drive them to a limit
+    # while annealing the slab, the concentration and the odds of a deviation change by a factor
+    # of at most 0.95 to 1.25 per iteration, so one sweep cannot drive them to a limit
     bound <- function(new, old) if (burnin) min(max(new, 0.95 * old), 1.25 * old) else new
+    odds <- function(p) p / (1 - p)
     for (j in seq_along(blocks)) {
       b <- blocks[[j]]
-      tn <- b$hyper[["tau"]]; cn <- b$hyper[["concentration"]]
+      tn <- unname(b$hyper["tau"]); cn <- unname(b$hyper["concentration"]); pn <- unname(b$hyper["prob"])
       if (tn %in% hypers && stats["free", j] > 1e-8)
         hyper[[tn]] <- bound(sqrt(stats["slab2", j] / stats["free", j]), hyper[[tn]])
       if (cn %in% hypers)
         hyper[[cn]] <- bound(.ewensConcentration(stats["free", j], rep(G, length(b$stems))), hyper[[cn]])
+      if (pn %in% hypers && stats["groups", j] > 0) {
+        o <- bound(odds(min(max(stats["free", j] / stats["groups", j], 1e-8), 1 - 1e-8)), odds(hyper[[pn]]))
+        hyper[[pn]] <- o / (1 + o)
+      }
     }
     # where the complete-data objective fails at the draws, the structural parameters keep their values
     if (length(structural) && burnin) {
@@ -589,7 +847,9 @@
     prev <- if (nrow(history)) history[nrow(history), ] else psiOf()
     psi <- psiOf()
     history <- rbind(history, psi)
-    if (!burnin) draws[[length(draws) + 1L]] <- lapply(state, .canonicalClusters)
+    if (!burnin) draws[[length(draws) + 1L]] <- list(dp = lapply(state, .canonicalClusters), incl = incl,
+                                                     pinc = if (length(slabStems)) rbIncl,
+                                                     v = matrix(full[Ds], G, dimnames = dimnames(Ds)))
 
     if (burnin) {
       stationary <- k >= window && all(abs(.slopeStatistics(utils::tail(history, window))) < 2)
@@ -601,7 +861,9 @@
     rows[[k]] <- data.frame(iter = k, phase = if (is.na(burnEnd) || k <= burnEnd) "burnin" else "averaging",
                             gamma = gamma, deltaPsi = if (length(psi)) max(abs(psi - prev)) else 0,
                             deltaStruct = if (length(structural)) max(abs(psi[structural] - prev[structural])) else 0,
-                            accept = accept, clusters = sum(vapply(state, function(s) length(s$v), 0)))
+                            accept = accept, clusters = sum(vapply(state, function(s) length(s$v), 0)),
+                            included = sum(incl), acceptBirth = moves[["birth"]], acceptDeath = moves[["death"]],
+                            acceptWalk = moves[["walk"]])
     if (verbose && k %% 50L == 0L) message(sprintf("em(saem) iteration %d, %s", k, rows[[k]]$phase))
     if (!burnin && k - burnEnd >= maxAveraging) break
   }
@@ -612,27 +874,47 @@
   full[names(outer)] <- psi[names(outer)]
   hyper[] <- psi[hypers]
 
-  # the most frequent partition of every stem in the late draws, the cluster values averaged over
-  # the draws with that partition, and the share of draws at the population value per group
+  # the most frequent partition of every Dirichlet-process stem in the late draws, the cluster
+  # values averaged over the draws with that partition; per spike-and-slab coordinate the mean
+  # conditional inclusion probability of the late sweeps, selected above 1/2 with the mean slab value
   keep <- utils::tail(draws, length(late))
+  if (!length(keep)) keep <- list(list(dp = lapply(state, .canonicalClusters), incl = incl, pinc = incl,
+                                       v = matrix(full[Ds], G, dimnames = dimnames(Ds))))
   modes <- matrix(0, G, ncol(design$etaNames), dimnames = dimnames(design$etaNames))
   modes[, lay$stems] <- eta
   clusters <- spike <- matrix(NA_real_, G, ncol(design$etaNames), dimnames = dimnames(design$etaNames))
-  for (st in sl$stem) {
-    keys <- vapply(keep, function(d) paste(d[[st]]$z, collapse = " "), "")
+  for (st in dpStems) {
+    keys <- vapply(keep, function(d) paste(d$dp[[st]]$z, collapse = " "), "")
     top <- names(which.max(table(keys)))
     with <- keep[keys == top]
-    z <- with[[1]][[st]]$z
-    values <- colMeans(do.call(rbind, lapply(with, function(d) d[[st]]$v)) %||% matrix(0, 1, 0))
+    z <- with[[1]]$dp[[st]]$z
+    values <- colMeans(do.call(rbind, lapply(with, function(d) d$dp[[st]]$v)) %||% matrix(0, 1, 0))
     modes[, st] <- c(0, values)[z + 1L]
     clusters[, st] <- z
-    spike[, st] <- colMeans(do.call(rbind, lapply(keep, function(d) d[[st]]$z == 0L)))
+    spike[, st] <- colMeans(do.call(rbind, lapply(keep, function(d) d$dp[[st]]$z == 0L)))
   }
+  if (length(slabStems)) {
+    Z <- Reduce(`+`, lapply(keep, `[[`, "incl"))
+    V <- Reduce(`+`, lapply(keep, function(d) d$v * d$incl))
+    inclusion <- Reduce(`+`, lapply(keep, `[[`, "pinc")) / length(keep)
+    selected <- inclusion > 0.5
+    modes[, slabStems] <- ifelse(selected & Z > 0, V / pmax(Z, 1), 0)
+    spike[, slabStems] <- ifelse(reach, 1 - inclusion, 1 - rep(hyp$prob[slabStems], each = G))
+    clusters[, slabStems] <- apply(selected, 2, function(s) ifelse(s, cumsum(s), 0))
+  }
+  warm <- modes
+  # -2 log L as em(method = "focei") defines it, with the second derivatives the models provide
+  reachAll <- .reachOf(design)
+  derivMode <- .secondOrderMode(design, design$objfn, full[names(outer)], fixed,
+                                control[.setdiff(names(control), "secondOrderCorrection")],
+                                units = lapply(design$groups, function(g)
+                                  list(eta = unname(design$etaNames[g, reachAll[g, ]]), conditions = design$conditions[[g]])))
+  integral <- if (importance) list(integral = "importance", particles = sc$particles %||% 500L)
   r <- .sparseMarginal(design, objs, prior, c(full[names(outer)], fixed), .stemHypers(sl, c(hyper, fixed)),
-                       as.character(.intersect(names(outer), names(start))), character(0), fixed, modes, grad = TRUE,
-                       control = list(integral = "importance", particles = sc$particles %||% 500L, iterlim = 300L))
+                       as.character(.intersect(names(outer), names(start))), character(0), fixed, warm, grad = FALSE,
+                       control = c(integral, list(iterlim = 300L, derivMode = derivMode)))
   modes[, lay$stems] <- r$modes[, lay$stems]
-  list(argument = psi, value = r$value, valueSE = r$valueSE, gradient = NULL, hessian = NULL,
-       etaModes = modes, etaCov = setNames(r$cov, design$groups), clusters = clusters, spike = spike,
+  list(argument = psi, value = r$value, valueSE = if (importance) r$valueSE, gradient = NULL, hessian = NULL,
+       etaModes = modes, innerModes = r$modes, etaCov = setNames(r$cov, design$groups), clusters = clusters, spike = spike,
        converged = stationary, iterations = nrow(trace), stageTrace = trace)
 }

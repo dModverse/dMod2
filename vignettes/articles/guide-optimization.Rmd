@@ -83,7 +83,7 @@ with `"fvalue"` or `"iterlim"`.
 | `"fvalue"` | an accepted step changed the value by less than `ftol` | `TRUE` |
 | `"preddiff"` | predicted decrease below `mtol` | `TRUE` |
 | `"step"` | step norm below `xtol` (default 0, off) | `TRUE` |
-| `"stagnation"` | five rejected steps in a row, value flat within `ftol` | `TRUE` |
+| `"stagnation"` | five rejected steps in a row, value flat within `ftol` | `TRUE` where the full Newton step predicts at most `mtol` |
 | `"radius"` | radius below `rmin`, or a step that no longer changes the parameters | `FALSE` |
 | `"objfun"` | three failed evaluations in a row | `FALSE` |
 | `"iterlim"` | `iterlim` iterations | `FALSE` |
@@ -104,13 +104,20 @@ belong at or above the numerical error of value and gradient; `model.R` defines 
 | `"bfgs"` | damped BFGS update, positive definite | value, gradient |
 | `"sr1"` | symmetric rank-one update, possibly indefinite | value, gradient |
 
+Without `hessianMethod` and `phases`, `trust()` runs the hybrid method of Fides
+[@froehlich2022fides]: Gauss-Newton until the radius stayed the same for 20 iterations, then BFGS
+from a matrix updated along the Gauss-Newton steps, at the radius of the switch
+([Methods > Hessian phases](methods-trust.html#hessian-phases)). A fit that converges before stays
+Gauss-Newton; `hessianMethod = "gn"` keeps Gauss-Newton throughout. The sparse path, multiple
+shooting and `boundary = "clip"` run Gauss-Newton.
+
 The exact Hessian needs second-order sensitivities, `deriv2 = TRUE` or `derivMode =
 "forward-reverse"` ([Sensitivities](guide-sensitivities.html)). The quasi-Newton settings are
 entries of `qnControl`:
 
 | entry | default | controls |
 |---|---|---|
-| `hessianInit` | `"gn"` | seed: Gauss-Newton at the start, `"identity"`, or `"exact"` |
+| `hessianInit` | `"gn"` | seed: Gauss-Newton at the start, `"identity"`, `"exact"`, or for a later BFGS phase `"tracked"`, the BFGS matrix updated along the phases before |
 | `hessianReseed` | `"never"` | `"stall"`: reseed at the current iterate instead of stopping on stagnation or on a step that no longer moves it, where the iterate moved since the last reseed, at most eight times per phase |
 | `qnMemory` | `0` | `0` accumulates all updates; $m > 0$ rebuilds from the last $m$ pairs |
 | `qnCautious` | `1e-8` | cautious test of BFGS; `0` turns it off |
@@ -121,9 +128,12 @@ With `hessianInit = "identity"` the objective needs to return gradients only.
 ### Hessian phases and reverse sweep
 
 `phases` runs several sources in turn. Each phase is a list with `hessianMethod` and optionally
-`iterlim`, `sweep` and `qnControl`. A phase ends on a value, model, step or stagnation stop or on
-the `iterlim` of the phase and hands over to the next; `"gradient"` ends the run. `switches` bounds the
-handovers (default: one fewer than phases).
+`iterlim`, `radiusStall`, `sweep`, `keepRadius`, `onStop` and `qnControl`. A phase ends on a value,
+model, step or stagnation stop, on the `iterlim` of the phase or after `radiusStall` iterations at
+an unchanged radius and hands over to the next; `"gradient"` ends the run, and with
+`onStop = "end"` so do the other stops. The next phase starts at `rinit`, or at the radius of the
+handover with `keepRadius = TRUE`. `switches` bounds the handovers (default: one fewer than
+phases).
 
 ```{r, eval = FALSE}
 fit <- trust(obj, best, fixed = gauge, tolControl = tolerances,
@@ -152,7 +162,7 @@ moves the lower bound or replaces the cost by an upper bound of the fill.
 |---|---|---|
 | `rinit`, `rmax` | `0.1`, `10` | first and largest radius |
 | `iterlim` | `1000` | iterations over all phases |
-| `hessianMethod` | `"gn"` | source of the model Hessian |
+| `hessianMethod` | Gauss-Newton, then BFGS | source of the model Hessian |
 | `phases`, `switches` | none | several sources in turn |
 | `parlower`, `parupper`, `boundary` | none, `"reflective"` | bounds |
 | `tolControl` | `ftol`, `mtol`, `gtol` `1e-6`; `xtol`, `rmin` `0`; `ctol` `1e-6` | termination; `ctol` for multiple shooting |
@@ -232,11 +242,15 @@ of the basin of attraction:
 
 The parameters that differ by more than 0.1 between the plateaus within 5 of the best:
 
-```{r, fig.height = 3}
+```{r}
 pl <- plotPars(fits, value < min(value) + 5)
 med <- with(pl$data, tapply(parvalue, list(name, step), median))
 differ <- rownames(med)[apply(med, 1, function(m) diff(range(m, na.rm = TRUE))) > 0.1]
-pl %+% subset(pl$data, name %in% differ) +
+pl$data <- subset(pl$data, name %in% differ)
+```
+
+```{r, fig.height = 1 + 0.22 * length(differ)}
+pl +
   coord_flip() +
   scale_x_discrete(limits = rev) +
   labs(x = NULL, y = "log value", color = "plateau")
@@ -244,9 +258,12 @@ pl %+% subset(pl$data, name %in% differ) +
 
 ## Comparison of Hessian sources
 
-`optimizers.R` fits from the same 100 starts with Gauss-Newton, BFGS and SR1 on the reverse
-gradient, the exact Hessian, and Gauss-Newton followed by BFGS. `hits` counts the starts that end
-within 5 of the best value:
+`optimizers.R` fits from the same 100 starts with the default of `trust()`, Gauss-Newton, BFGS and
+SR1 on the reverse gradient, the exact Hessian, Gauss-Newton followed by BFGS after 20 iterations or once the
+trust-region radius stays unchanged, and the structured methods, which add a learned correction
+to the Gauss-Newton Hessian. A task runs at most 30 minutes. `converged`
+counts the runs that end on a convergence stop, `hits` the starts that end within 5 of the best
+value:
 
 ```{r, echo = FALSE}
 invisible(stored("results/optimizers.rds", "optimizers.R"))
@@ -255,10 +272,24 @@ invisible(stored("results/optimizers.rds", "optimizers.R"))
 ```{r}
 opt <- readRDS("results/optimizers.rds")
 top <- min(opt$value, na.rm = TRUE)
-tapply(opt$value < top + 5, factor(opt$method, unique(opt$method)), sum, na.rm = TRUE)
+shown <- c("default (Fides hybrid)", "Gauss-Newton", "BFGS", "exact", "GN, then BFGS", "GN, then BFGS at stall 50", "SSR1, scaled",
+           "GNSBFGS")
+opt <- opt[opt$method %in% shown, ]
+method <- factor(opt$method, shown)
+t(rbind(converged = tapply(opt$converged, method, sum),
+        hits = tapply(opt$value < top + 5, method, sum, na.rm = TRUE),
+        secondsPerHit = round(tapply(opt$elapsed, method, sum, na.rm = TRUE) /
+                              tapply(opt$value < top + 5, method, sum, na.rm = TRUE))))
 ```
 
-Costs and the full comparison:
+A start without a stable resting state is replaced by a draw that has one, as `mstrust()` draws
+anew. The exact Hessian converges most often, SR1 with the residual-scaled structured correction
+reaches the best plateaus most often, and Gauss-Newton followed by BFGS needs the least time per
+hit, since the BFGS phase takes the reverse gradient alone. The default converges more often than
+Gauss-Newton at about the same time per hit: half of the default fits stop in the Gauss-Newton
+phase, and the BFGS phase takes the forward gradient. Gauss-Newton stops at the iteration limit on plateaus
+where the model lacks the curvature of the residuals, and SR1 from the identity needs about as
+many iterations as `iterlim` allows. All variants with costs, stops and causes:
 [Methods > Forward and reverse derivatives on the Oppelt fit](methods-trust.html#forward-and-reverse-derivatives-on-the-oppelt-fit).
 
 ## L1 penalties
@@ -271,43 +302,8 @@ penalizes differences within blocks of parameters. Bounds and tolerances are tho
 `mstrust(optmethod = "trustL1")` runs it from many starts. Details:
 [Methods > L1 penalties](methods-trust.html#l1-penalties).
 
-## Multiple shooting
-
-Multiple shooting integrates segments of the time axis from separate node values and makes
-continuity a constraint, which helps for oscillating or spiking systems
-([Methods > Multiple shooting](methods-multiple-shooting.html)). It is a control of the objective:
-
-```{r, eval = FALSE}
-obj <- normL2(data, g * x * p, multipleShootingControl = TRUE)
-fit <- trust(obj, start)
-fit$multipleShooting$violation
-controls(obj, "multipleShootingControl") <- NULL   # single shooting again
-```
-
-The chain must be `g * x * p` with one `Xs()` built on `odemodel(..., includeTimeZero = FALSE)`.
-Not available with it: `hessianMethod = "exact"`, `qnControl$hessianInit = "exact"`, several
-phases, `switches`, `hessianReseed`, `qnMemory`, `nonmonotone`, `boundary = "clip"`,
-`minimize = FALSE`, `traceFile`.
-
-| entry of `multipleShootingControl` | default | controls |
-|---|---|---|
-| `nodes` | `"auto"` | `"auto"`, `"transitions"`, or node times |
-| `growth`, `misfit` | `10`, `3` | thresholds at which `"auto"` cuts a segment |
-| `minPoints` | states + 1 | data points per half of a cut |
-| `charts` | all linear | `"log10"`, `"linear"` or `"angle"` per state |
-| `scale` | from the data | scale of the gaps and node steps |
-| `init` | `"data"` | node values: `"data"`, `"spline"`, `"simulation"` or a list |
-| `breaks` | none | node times without continuity |
-
-| entry of `stepControl` | default | controls |
-|---|---|---|
-| `acceptance` | `"filter"` | `"filter"`, `"merit"` or `"natural"` |
-| `soc` | `TRUE` | second-order correction of a rejected step |
-| `anneal` | `TRUE` | penalty on the gaps raised in stages |
-| `twoPhase`, `restore`, `regularize` | off | further globalizations |
-
-`converged = TRUE` requires the scaled gaps below `tolControl$ctol`. The result has a list
-`multipleShooting` with `nodes`, `gaps`, `violation` and the counts of the globalization.
+Multiple shooting, a control of the objective for oscillating or spiking systems, is described
+with usage and controls in [Methods > Multiple shooting](methods-multiple-shooting.html).
 
 Reference: `trust()`, `mstrust()`, `trustL1()`, `msParframe()`, `as.parframe()`, `load.parlist()`,
 `plotValues()`, `plotPars()`, `normL2()`

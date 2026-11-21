@@ -22,6 +22,23 @@ test_that("mstrust returns the global minimum across random starts on a convex q
 })
 
 
+test_that("mstrust passes structured Hessian methods and phases through to trust", {
+  target <- c(a = 1.0, b = -0.5)
+  obj <- constraintL2(mu = target, sigma = 1)
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd), add = TRUE)
+  for (args in list(list(hessianMethod = "gnssr1"),
+                    list(phases = list(list(hessianMethod = "gn", iterlim = 2),
+                                       list(hessianMethod = "sbfgs"))))) {
+    fits <- do.call(mstrust, c(list(objfun = obj, center = c(a = 0, b = 0),
+                                    name = "test_mstrust_structured", rinit = 1, iterlim = 100,
+                                    fits = 3, sd = 1, cores = 1, output = FALSE), args))
+    pf <- as.parframe(fits)
+    expect_identical(nrow(pf), 3L)
+    expect_equal(min(pf$value), 0, tolerance = 1e-8)
+  }
+})
+
+
 test_that("set.seed() reproduces the starts of a multi-start whatever the cores", {
   skip_on_os("windows")
   obj <- constraintL2(mu = c(a = 1, b = -0.5), sigma = 1)

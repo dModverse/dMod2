@@ -13,10 +13,7 @@ knitr::opts_knit$set(root.dir = project)
 source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/symmetries.R")
-# through do.call: the resource scan of rmarkdown purls the article elsewhere and runs
-# every literal read_chunk() call there
-articles <- getwd()
-do.call(knitr::read_chunk, list(file.path("results", "guide-symmetries.R")))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/discrete.R")
 # a count as the text writes it
 inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
@@ -169,29 +166,53 @@ different choice of units. [Optimization](guide-optimization.html) fits the rema
 ## Discrete symmetries
 
 A locally identifiable model can still give the output of a parameter value at other, isolated
-values: a discrete symmetry. `symmetryDetection(discrete = TRUE)`, or `discreteSymmetries()` on a
-result, counts these values in the domain and reconstructs the maps between them where they are
-rational functions of the coordinates; the search needs msolve and a model with one condition
-and no events. In the two-compartment model of Godfrey [@godfrey1983compartmental], with the
-amounts $x_1$ and $x_2$, an input $u$ into the first compartment and the second observed,
+values: a discrete symmetry. `symmetryDetection(mode = "global")`, or `discrete = TRUE`, reduces
+the directions, counts these values in the domain and reconstructs the maps between them where they
+are rational functions of the coordinates; the search needs msolve. `discreteSymmetries()` runs it
+on an earlier result.
 
-```{r godfrey, eval = FALSE}
+In the reduced model of [Profile likelihood](guide-profiles.html#reduced-model) some rates are
+fixed and the resting state is given by the totals of NFκB and IKK; both enter the detection as
+`trafo`, the other settings are those above. Code: `discrete.R`.
+
+```{r discrete, eval = FALSE}
 ```
 
 ```{r, echo = FALSE}
-compartments <- stored(file.path(articles, "results", "guide-symmetries.rds"),
-                       file.path(articles, "results", "guide-symmetries.R"))
+invisible(stored("results/discrete.rds", "discrete.R"))
 ```
 
 ```{r}
-compartments
+saved <- readRDS("results/discrete.rds")
+discrete <- saved$discrete
+discrete$info$discrete[c("count", "countFinal", "fundamentalDomain")]
+swap <- discrete$discreteSymmetries[[1]]
+swap[c("map", "level", "stateMaps")]
 ```
 
-the map exchanges the elimination rate $k_{01}$ and the return rate $k_{12}$ and moves the
-initial value of $x_1$, so the model is locally but not globally identifiable. `exact` means
-proven by a map of the states. The fundamental domain $k_{01} < k_{12}$ keeps one of the two
-points; a fit restricted to it has a unique optimum. A model with directions is reduced first,
-and the maps are stated in the coordinates of the reduced model.
+The search finds `r inWords(discrete$info$discrete$count)` parameter values with the output of a
+generic one, the value itself and the image under the map, which exchanges the degradation rates of the A20
+transcript and of A20 and leaves the other coordinates in place; `countFinal` says that no other
+value is left. `exact` means proven by the map of the states: only the last stage of the
+transcript changes, by the difference of the rates times A20, in units in which `build_A20` is 1.
+The A20 branch is a linear chain from nuclear NFκB to the A20 readout, and A20 does not act back
+on the network, so the readout depends on the two rates only through their sum and product. The
+map moves no coordinate of the scalings, so it holds in the original coordinates as well.
+
+The fundamental domain `degrad_A20 < degrad_RnaA20` keeps one of the two points.
+`symmetryReduction(branch = )` gives a chart of this side in positive coordinates:
+
+```{r fundamental, eval = FALSE}
+```
+
+```{r}
+fundamental <- saved$fundamental
+fundamental$trafo[c("degrad_A20", "degrad_RnaA20")]
+```
+
+`delta` is the positive difference of the two rates; a fit in this chart has one optimum where the
+model without it has two
+([Profile likelihood > Profiles in the fundamental domain](guide-profiles.html#profiles-in-the-fundamental-domain)).
 
 Reference: `symmetryDetection()`, `symmetryReduction()`, `discreteSymmetries()`
 

@@ -15,6 +15,7 @@ knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/profiles.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/refit.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/fundamental.R")
 ```
 
 The profile likelihood [@raue2009structural] determines how well the data constrain each
@@ -94,8 +95,7 @@ profiles parameters in parallel ([Remote computing](guide-remote-computing.html#
 ```{r refit, eval = FALSE}
 ```
 
-and fits the objective of the profiles from there, the best of 20 fits from starts about the refit,
-since a single fit can stop short of the floor of a flat valley:
+and fits the objective of the profiles once from there:
 
 ```{r profileprior, eval = FALSE}
 ```
@@ -106,8 +106,7 @@ invisible(stored("results/profiles.rds", "profiles.R"))
 ```
 
 Each side runs until the data term has risen by the threshold or the parameter has moved by 7 on
-the log scale; a profile below the fit restarts the 20 fits about its lowest point. `helix.R` runs
-one parameter per cluster task.
+the log scale. `helix.R` runs one parameter per cluster task.
 
 ```{r profiles, eval = FALSE}
 ```
@@ -355,7 +354,7 @@ With `r round(saved$ratio[["removed"]])` fewer parameters the data term is highe
 
 ## Profiles of the reduced model
 
-With the prior and the settings of the profiles of the full model, from the optimum of that
+With the prior and the settings of the profiles of the full model, from one fit of that
 objective:
 
 ```{r reducedprofileprior, eval = FALSE}
@@ -385,8 +384,8 @@ fcLower <- intervalsReduced$lower[intervalsReduced$name == "form_complex"] / log
 All parameters are identifiable except `form_complex`, bounded below at
 `r signif(fcLower, 2)` on the log10 scale and open above on a plateau `r round(plateau, 2)` above
 the optimum; the publication reports (-0.21, 3.03). The profiles of `degrad_A20`,
-`degrad_RnaA20` and `shuttle_RnaA20` have a second minimum inside the interval. The rate
-constants:
+`degrad_RnaA20` and `shuttle_RnaA20` have a second minimum inside the interval, see below. The
+rate constants:
 
 ```{r}
 rates <- setdiff(intervalsReduced$name, grep("^(s|off|sigma|tau)_", intervalsReduced$name, value = TRUE))
@@ -396,6 +395,125 @@ intervalsReduced[intervalsReduced$name %in% rates, c("name", "value", "lower", "
 ```{r, fig.height = 11}
 plotProfile(saved$profiles, mode %in% c("data", "prior"), name %in% rates, ncol = 4) + readable
 ```
+
+```{r, include = FALSE}
+along <- as.data.frame(saved$profiles)
+optimum <- saved$fitProfile$argument
+# the fits of the multistart within 0.001 of the best, by side of the fixed set of the swap
+fits <- as.data.frame(saved$fits)
+best <- fits[fits$value < min(fits$value) + 1e-3, ]
+below <- sum(best$degrad_A20 < best$degrad_RnaA20)
+# the point of the profile of degrad_RnaA20 at the mirror image of the optimum
+rna <- along[along$whichPar == "degrad_RnaA20", ]
+mirror <- rna[which.min(abs(rna$degrad_RnaA20 - optimum[["degrad_A20"]])), ]
+# the first local minimum of the lower side of the profile of shuttle_RnaA20, away from the optimum
+shuttle <- along[along$whichPar == "shuttle_RnaA20" &
+                   along$shuttle_RnaA20 < optimum[["shuttle_RnaA20"]] - 0.5, ]
+shuttle <- shuttle[order(shuttle$shuttle_RnaA20), ]
+second <- shuttle[which(diff(sign(diff(shuttle$data))) > 0)[1] + 1, ]
+# the fits of the multistart at that point
+atSecond <- sum(abs(fits$shuttle_RnaA20 - second$shuttle_RnaA20) < 0.1 &
+                  abs(fits$degrad_A20 - fits$degrad_RnaA20) < 0.1)
+```
+
+The reduced model has a discrete symmetry
+([Symmetries > Discrete symmetries](guide-symmetries.html#discrete-symmetries)): exchanging
+`degrad_A20` and `degrad_RnaA20` leaves every readout unchanged, and the prior of `model.R` has the
+same mean and standard deviation for both. Of the `r nrow(best)` best fits of the multistart,
+`r below` lie on the side `degrad_A20 < degrad_RnaA20` and `r nrow(best) - below` at the mirror
+image, with the same value. The lower side of the profile of `degrad_RnaA20` passes through the
+mirror image of the optimum, with a data term within
+`r format(signif(mirror$data - min(along$data), 1), scientific = FALSE)`
+of that at the optimum.
+
+The second minimum of `shuttle_RnaA20` is no image of the optimum: the swap leaves
+`shuttle_RnaA20` in place, and symident finds no other discrete symmetry. At
+`shuttle_RnaA20` = `r round(second$shuttle_RnaA20, 2)` the two degradation rates nearly coincide,
+`r round(second$degrad_A20, 2)` and `r round(second$degrad_RnaA20, 2)`: the point lies close to
+the fixed set of the swap, with a data term `r round(second$data - min(along$data), 2)` above the
+optimum. It is another local optimum, which `r atSecond` fits of the multistart reach as well;
+the profile of `degrad_A20` runs into it rather than into the mirror image.
+
+The fundamental domain `degrad_A20 < degrad_RnaA20`, which holds the optimum, removes the swap.
+
+## Profiles in the fundamental domain
+
+`fundamental.R` fits the reduced model in the chart of the fundamental domain that
+`symmetryReduction(branch = "degrad_A20 < degrad_RnaA20")` returns: `degrad_RnaA20` is
+`degrad_A20` plus a positive difference. On the log scale, the line
+`define("degrad_RnaA20 <- degrad_A20 + delta_RnaA20")` before `insert("x <- exp(x)")` makes
+`exp(delta_RnaA20)` that difference; the fixed set of the swap lies at `delta_RnaA20` $\to -\infty$.
+ODE, observables and errors are those of `reduced.R`, only the parameter transformation is new:
+
+```{r fundamentaltrafo, eval = FALSE}
+```
+
+`delta_RnaA20` has the prior of `degrad_RnaA20`, mean $\log(1/60)$ and standard deviation 2:
+
+```{r fundamentalobjective, eval = FALSE}
+```
+
+The best fit of `refit.R` lies in the fundamental domain. In the chart it has the same data term,
+and one fit from there changes the data term only by the change of the prior on the moved
+coordinate:
+
+```{r fundamentalfit, eval = FALSE}
+```
+
+```{r, echo = FALSE}
+invisible(stored("results/fundamental.rds", "fundamental.R"))
+```
+
+```{r}
+fundamental <- readRDS("results/fundamental.rds")
+fundamental$dataTerms
+```
+
+The profiles have the prior and the settings of those of the reduced model, from one fit of that
+objective, whose optimum is that of the reduced model:
+
+```{r fundamentalprofileprior, eval = FALSE}
+```
+
+```{r fundamentalprofiles, eval = FALSE}
+```
+
+```{r}
+c(reduced = saved$fitProfile$value, fundamental = fundamental$fitProfile$value)
+intervalsFundamental <- confint(fundamental$profiles, level = 0.95, val.column = "data")
+rownames(intervalsFundamental) <- NULL
+swapped <- c("degrad_A20", "delta_RnaA20", "shuttle_RnaA20")
+intervalsFundamental[intervalsFundamental$name %in% swapped, c("name", "value", "lower", "upper")]
+```
+
+```{r, include = FALSE}
+alongFundamental <- as.data.frame(fundamental$profiles)
+# the data term at the lower end of the profile of delta_RnaA20, against the optimum
+delta <- alongFundamental[alongFundamental$whichPar == "delta_RnaA20", ]
+edge <- delta[which.min(delta$delta_RnaA20), ]
+plateauDelta <- edge$data - min(alongFundamental$data)
+upperA20 <- intervalsFundamental$upper[intervalsFundamental$name == "degrad_A20"]
+upperA20Reduced <- intervalsReduced$upper[intervalsReduced$name == "degrad_A20"]
+# the largest change of an interval bound of another parameter
+both <- merge(intervalsFundamental, intervalsReduced, by = "name")
+both <- both[!both$name %in% swapped, ]
+moved <- max(abs(c(both$lower.x - both$lower.y, both$upper.x - both$upper.y)), na.rm = TRUE)
+```
+
+```{r, fig.height = 11}
+ratesFundamental <- setdiff(intervalsFundamental$name,
+                            grep("^(s|off|sigma|tau)_", intervalsFundamental$name, value = TRUE))
+plotProfile(fundamental$profiles, mode %in% c("data", "prior"), name %in% ratesFundamental,
+            ncol = 4) + readable
+```
+
+No profile crosses into the mirror image any more. The profile of `delta_RnaA20` is open below:
+toward the fixed set the data term levels off `r round(plateauDelta, 2)` above the optimum, at the
+local optimum of equal degradation rates, inside the threshold. The upper bound of `degrad_A20`
+falls from `r round(upperA20Reduced, 2)` to `r round(upperA20, 2)`, since `degrad_A20` can no
+longer pass `degrad_RnaA20`; the profile of `shuttle_RnaA20` keeps the second minimum at the
+fixed set. The intervals of the other parameters change by at most
+`r format(signif(moved, 1), scientific = FALSE)`.
 
 Reference: `profile()`, `profileThreshold()`, `confint()`, `plotProfile()`, `plotPaths()`,
 `plotArray()`

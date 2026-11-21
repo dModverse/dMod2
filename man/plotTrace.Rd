@@ -11,7 +11,9 @@ plotTrace(x, ...)
 }
 \arguments{
 \item{x}{An \code{em} fit, see \code{\link[=em]{em()}}, with a stage trace: every method except \code{"focei"}
-with normal random effects only.}
+with normal random effects only. The hyperparameters of spike-and-slab and
+Dirichlet-process random effects that the trace records (\verb{prob_<grouping>},
+\verb{tau_<grouping>}, \verb{concentration_<grouping>}) get one panel each.}
 
 \item{...}{Ignored.}
 }

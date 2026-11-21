@@ -28,6 +28,8 @@ publication; model after Daniel Kaschek's dMod implementation (dkaschek/dMod_Exa
 | `profiles.R` | profiles of all parameters, saves `results/profiles.rds` |
 | `variants.R` | core model of the publication and variants that release one setting, likelihood ratios, saves `results/variants.rds` |
 | `reduced.R` | the model reduced by the limits the profiles point to |
+| `discrete.R` | the discrete symmetry of the reduced model and the chart of a fundamental domain, saves `results/discrete.rds` |
+| `fundamental.R` | fit and profiles of the reduced model in the chart of the fundamental domain, saves `results/fundamental.rds` |
 | `refit.R` | fit and profiles of the reduced model, likelihood ratio, saves `results/reduced.rds` |
 | `prediction.R` | prediction band of nuclear IκBα, saves `results/prediction.rds` |
 | `compounds.R` | the changes the compounds cause, by spike-and-slab random effects, saves `results/compounds.rds` |
