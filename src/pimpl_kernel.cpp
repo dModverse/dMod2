@@ -329,8 +329,9 @@ bool derivatives(const State& s, const std::vector<double>& pv, int order, Root&
 }
 
 // The eigenvalues `re` + i `im` of J = df/dx on ker C, the scale max |lambda| with gradient; for each
-// real part above `onset` - `rel` * scale (`active`, 1-based) the gradient Re w^H (J_p + J_x D) u / (w^H u),
-// D = dx/dp, and |u| scaled to a largest entry of 1 (`vectors`).
+// real part above `onset` - `rel` * scale (`active`, 1-based) the gradient Re tr(P (J_p + J_x D)) / m,
+// D = dx/dp, P the spectral projector of the cluster of m eigenvalues (one for a simple eigenvalue),
+// and the moduli of an eigenvector scaled to a largest entry of 1 (`vectors`).
 bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<double>& x, double onset,
               double rel, std::vector<double>& re, std::vector<double>& im, std::vector<int>& active,
               std::vector<double>& grad, double& scale, std::vector<double>& scaleGrad,
@@ -419,66 +420,122 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
           v += N[i + (std::size_t) n * a] * J[i + (std::size_t) n * j] * N[j + (std::size_t) n * b];
       A[a + (std::size_t) q * b] = v;
     }
-  std::vector<double> vl, vr, wrJ, wiJ, vlJ, vrJ;
-  if (!eigen(A, q, false, re, im, vl, vr) || !eigen(J, n, true, wrJ, wiJ, vlJ, vrJ)) {
+  std::vector<double> vl, vr;
+  if (!eigen(A, q, false, re, im, vl, vr)) {
     error = "the eigenvalues of the Jacobian at the steady state failed";
     return false;
   }
+  // the complex Schur form J = Z T Z^H, reordered per cluster below
+  std::vector<cd> T0((std::size_t) n * n), Z0((std::size_t) n * n), wJ(n);
+  {
+    for (std::size_t t = 0; t < (std::size_t) n * n; ++t) T0[t] = J[t];
+    int nn = n, sdim = 0, lwork = -1, info = 0;
+    std::vector<double> rwork(std::max(n, 1));
+    std::vector<int> bwork(1);
+    cd wq = 0.0;
+    F77_CALL(zgees)("V", "N", nullptr, &nn, reinterpret_cast<Rcomplex*>(T0.data()), &nn, &sdim,
+                    reinterpret_cast<Rcomplex*>(wJ.data()), reinterpret_cast<Rcomplex*>(Z0.data()), &nn,
+                    reinterpret_cast<Rcomplex*>(&wq), &lwork, rwork.data(), bwork.data(), &info FCONE FCONE);
+    lwork = std::max(1, (int) wq.real());
+    std::vector<cd> w(lwork);
+    F77_CALL(zgees)("V", "N", nullptr, &nn, reinterpret_cast<Rcomplex*>(T0.data()), &nn, &sdim,
+                    reinterpret_cast<Rcomplex*>(wJ.data()), reinterpret_cast<Rcomplex*>(Z0.data()), &nn,
+                    reinterpret_cast<Rcomplex*>(w.data()), &lwork, rwork.data(), bwork.data(), &info FCONE FCONE);
+    if (info != 0) {
+      error = "the Schur decomposition of the Jacobian at the steady state failed";
+      return false;
+    }
+  }
   auto H = [&](int i, int j, int l) { return d2y[i + (std::size_t) m * (j + (std::size_t) nd * l)]; };
-  // the gradient in the parameters of eigenvalue t of A, complex, and the moduli of the right
-  // eigenvector; false where the eigenvalue has no match in J
+  // the scale: the largest modulus, d|lambda| = Re(conj(lambda) dlambda) / |lambda|
+  scale = 0.0;
+  int lead = -1;
+  for (int t = 0; t < q; ++t)
+    if (std::hypot(re[t], im[t]) > scale) { scale = std::hypot(re[t], im[t]); lead = t; }
+  // the Frobenius norm of J and the precision of a defective double eigenvalue relative to it
+  double normJ = 0.0;
+  for (double v : J) normJ += v * v;
+  normJ = std::sqrt(normJ);
+  const double precision = 16.0 * std::sqrt(std::numeric_limits<double>::epsilon()) * normJ;
+  // Eigenvalue t and those within the error of t, at most the precision of a defective double, form a
+  // cluster; each takes tr(P dJ) / m, P the spectral projector of J on the cluster, m the members on
+  // ker C: exact for a simple eigenvalue and a cluster that stays degenerate. False without a match.
   auto derivative = [&](int t, std::vector<cd>& g, std::vector<double>& umod) {
-    int c = 0;
-    double best = std::numeric_limits<double>::infinity();
+    const cd lam(re[t], im[t]);
+    int e0 = 0;
+    for (int e = 1; e < n; ++e)
+      if (std::abs(wJ[e] - lam) < std::abs(wJ[e0] - lam)) e0 = e;
+    const double nearest = std::abs(wJ[e0] - lam);
+    if (nearest > std::max(1e-6 * (1.0 + std::abs(lam)), precision)) return false;
+    std::vector<int> select(n, 0);
+    std::vector<cd> T(T0), Z(Z0), w(n), work(std::max(n * n, 1));
+    int nn = n, mm = 0, lwork = (int) work.size(), info = 0;
+    double cond = 0.0, sepdummy = 0.0;
+    // the error of the eigenvalue alone, eps |J| / s with s the reciprocal condition number
+    select[e0] = 1;
+    F77_CALL(ztrsen)("E", "N", select.data(), &nn, reinterpret_cast<Rcomplex*>(T.data()), &nn,
+                     reinterpret_cast<Rcomplex*>(Z.data()), &nn, reinterpret_cast<Rcomplex*>(w.data()), &mm,
+                     &cond, &sepdummy, reinterpret_cast<Rcomplex*>(work.data()), &lwork, &info FCONE FCONE);
+    if (info != 0) return false;
+    const double err = 16.0 * std::numeric_limits<double>::epsilon() * normJ;
+    const double radius = std::max(nearest, cond * precision > err ? err / cond : precision);
+    int mJ = 0, mA = 0;
     for (int e = 0; e < n; ++e) {
-      const double dist = std::hypot(wrJ[e] - re[t], wiJ[e] - im[t]);
-      if (dist < best) { best = dist; c = e; }
+      select[e] = std::abs(wJ[e] - lam) <= radius ? 1 : 0;
+      mJ += select[e];
     }
-    if (best > 1e-6 * (1.0 + std::hypot(re[t], im[t]))) return false;
-    std::vector<cd> u(n), w(n);
-    for (int i = 0; i < n; ++i) {
-      if (wiJ[c] == 0.0) {
-        u[i] = vrJ[i + (std::size_t) n * c];
-        w[i] = vlJ[i + (std::size_t) n * c];
-      } else if (wiJ[c] > 0.0) {
-        u[i] = cd(vrJ[i + (std::size_t) n * c], vrJ[i + (std::size_t) n * (c + 1)]);
-        w[i] = cd(vlJ[i + (std::size_t) n * c], vlJ[i + (std::size_t) n * (c + 1)]);
-      } else {
-        u[i] = cd(vrJ[i + (std::size_t) n * (c - 1)], -vrJ[i + (std::size_t) n * c]);
-        w[i] = cd(vlJ[i + (std::size_t) n * (c - 1)], -vlJ[i + (std::size_t) n * c]);
+    for (int e = 0; e < q; ++e)
+      if (std::abs(cd(re[e], im[e]) - lam) <= radius) ++mA;
+    T = T0;
+    Z = Z0;
+    F77_CALL(ztrsen)("N", "V", select.data(), &nn, reinterpret_cast<Rcomplex*>(T.data()), &nn,
+                     reinterpret_cast<Rcomplex*>(Z.data()), &nn, reinterpret_cast<Rcomplex*>(w.data()), &mm,
+                     &cond, &sepdummy, reinterpret_cast<Rcomplex*>(work.data()), &lwork, &info FCONE FCONE);
+    if (info != 0 || mm != mJ) return false;
+    // P = Z1 Y^H with Y^H = Z1^H + X Z2^H, where T11 X - X T22 = T12
+    const int r2 = n - mJ;
+    std::vector<cd> X((std::size_t) mJ * std::max(r2, 1), 0.0);
+    if (r2 > 0) {
+      for (int j = 0; j < r2; ++j)
+        for (int i = 0; i < mJ; ++i) X[i + (std::size_t) mJ * j] = T[i + (std::size_t) n * (mJ + j)];
+      int isgn = -1, a1 = mJ, a2 = r2;
+      double sc = 1.0;
+      F77_CALL(ztrsyl)("N", "N", &isgn, &a1, &a2, reinterpret_cast<Rcomplex*>(T.data()), &nn,
+                       reinterpret_cast<Rcomplex*>(T.data() + (std::size_t) n * mJ + mJ), &nn,
+                       reinterpret_cast<Rcomplex*>(X.data()), &a1, &sc, &info FCONE FCONE);
+      if (info < 0 || !(sc > 0.0)) return false;
+      for (cd& v : X) v /= sc;
+    }
+    std::vector<cd> P((std::size_t) n * n, 0.0);
+    for (int j = 0; j < n; ++j)
+      for (int c = 0; c < mJ; ++c) {
+        cd y = std::conj(Z[j + (std::size_t) n * c]);
+        for (int b = 0; b < r2; ++b) y += X[c + (std::size_t) mJ * b] * std::conj(Z[j + (std::size_t) n * (mJ + b)]);
+        for (int i = 0; i < n; ++i) P[i + (std::size_t) n * j] += Z[i + (std::size_t) n * c] * y;
       }
-    }
     double umax = 0.0;
-    for (int i = 0; i < n; ++i) umax = std::max(umax, std::abs(u[i]));
+    for (int i = 0; i < n; ++i) umax = std::max(umax, std::abs(Z[i]));
     umod.assign(n, 0.0);
-    for (int i = 0; i < n; ++i) umod[i] = umax > 0.0 ? std::abs(u[i]) / umax : 0.0;
-    cd den = 0.0;
-    for (int i = 0; i < n; ++i) den += std::conj(w[i]) * u[i];
-    // Q_l = w^H (dJ/dz_l) u for every variable and parameter z_l
+    for (int i = 0; i < n; ++i) umod[i] = umax > 0.0 ? std::abs(Z[i]) / umax : 0.0;
+    // Q_l = tr(P dJ/dz_l) for every variable and parameter z_l
     std::vector<cd> Q(nd, 0.0);
     for (int l = 0; l < nd; ++l)
-      for (int j = 0; j < n; ++j) {
-        if (u[j] == cd(0.0)) continue;
-        cd v = 0.0;
-        for (int i = 0; i < n; ++i) v += std::conj(w[i]) * H(i, j, l);
-        Q[l] += v * u[j];
-      }
+      for (int j = 0; j < n; ++j)
+        for (int i = 0; i < n; ++i) {
+          const double h = H(i, j, l);
+          if (h != 0.0) Q[l] += P[j + (std::size_t) n * i] * h;
+        }
     g.assign(np, 0.0);
     for (int a = 0; a < np; ++a) {
       cd v = Q[n + a];
       for (int l = 0; l < n; ++l) v += Q[l] * r.D[l + (std::size_t) n * a];
-      g[a] = v / den;
+      g[a] = v / (double) std::max(mA, 1);
     }
     return true;
   };
   std::vector<cd> g;
   std::vector<double> umod;
-  // the scale: the largest modulus, d|lambda| = Re(conj(lambda) dlambda) / |lambda|
-  scale = 0.0;
   scaleGrad.assign(np, 0.0);
-  int lead = -1;
-  for (int t = 0; t < q; ++t)
-    if (std::hypot(re[t], im[t]) > scale) { scale = std::hypot(re[t], im[t]); lead = t; }
   if (lead >= 0) {
     if (!derivative(lead, g, umod)) {
       error = "an eigenvalue on ker C has no match in the Jacobian";

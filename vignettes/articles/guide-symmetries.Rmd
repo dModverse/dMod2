@@ -13,20 +13,16 @@ knitr::opts_knit$set(root.dir = project)
 source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/symmetries.R")
-# through do.call: the resource scan of rmarkdown purls the article elsewhere and runs
-# every literal read_chunk() call there
-articles <- getwd()
-do.call(knitr::read_chunk, list(file.path("results", "guide-symmetries.R")))
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/discrete.R")
 # a count as the text writes it
 inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five", "six", "seven",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
-If a continuous family of parameter values gives the same prediction for every observable, no
-data of these observables can tell the members apart. `symmetryDetection()`, through the Python
-package [symident](https://dmodverse.github.io/symident/), finds such families in the model of
-[Setting up models](guide-model.html); they are removed before the fit. Code: `symmetries.R` and
-the end of `model.R`.
+`symmetryDetection()`, through the Python package
+[symident](https://dmodverse.github.io/symident/), finds continuous families of parameter values
+with identical observables in the model of [Setting up models](guide-model.html). Code:
+`symmetries.R` and the end of `model.R`.
 
 ```{r setup, echo = FALSE}
 ```
@@ -60,26 +56,19 @@ the end of `model.R`.
 
 ## Lie symmetries and detection
 
-Such a family is the orbit of a Lie symmetry with a generator, a vector field on the parameters.
-Most symmetries of reaction networks are scalings: the moved parameters are multiplied by powers
-of one factor, and on log scale an orbit is a straight line. symident obtains the generators as
-the kernel of the observability-identifiability matrix, built from the Lie derivatives of the
-observables, and proves scalings exactly; see
-[Methods > Structural identifiability and Lie symmetries](methods-symmetries.html).
+Each family is the orbit of a Lie symmetry. symident obtains the generators as the kernel of the
+observability-identifiability matrix and proves scalings exactly
+([Methods > Structural identifiability and Lie symmetries](methods-symmetries.html)).
 
 ## Detection settings
 
-- `equilibrate = TRUE`: the cells start at the steady state without TNFα, so initial values are
-  functions of the parameters.
-- `reduceCQ = TRUE`: one species per conserved moiety is eliminated, symmetries act on the totals,
-  the parameters of `Pimpl()`.
-- `forcings = "TNF"`: TNFα is an input state, 0 at rest and set by the event at time 0.
-- `conditions`: the two doses; a direction is non-identifiable only if it is so in both.
+- `equilibrate = TRUE`: initial values are the steady state without TNFα.
+- `reduceCQ = TRUE`: symmetries act on the conserved totals, the parameters of `Pimpl()`.
+- `forcings = "TNF"`: TNFα is an input state, set by the event at time 0.
+- `conditions`: a direction is non-identifiable only if it is so in both doses.
 
-The imaging readouts bleach, $y = \log(s x + o) - \tau t$; $e^{-\tau t}$ is no function of the
-states of a model at rest. In the control the states are constant and the slope of an imaging
-readout is $-\tau$ alone, so the bleaching rates are in no symmetry, and `symmetries.R` drops the
-bleaching terms.
+The imaging readouts bleach, $y = \log(s x + o) - \tau t$. In the control the states are constant,
+so the bleaching rates are in no symmetry, and `symmetries.R` drops the bleaching terms.
 
 ## Symmetries of the full model
 
@@ -87,6 +76,8 @@ bleaching terms.
 invisible(stored("results/symmetries.rds", "symmetries.R"))
 invisible(stored("results/reduction.rds", "symmetries.R"))
 ```
+
+Computed by `symmetries.R`, loaded from `results/symmetries.rds`:
 
 ```{r symmetries, eval = FALSE}
 ```
@@ -100,34 +91,23 @@ symmetries
 types <- vapply(symmetries$symmetries, `[[`, "", "type")
 ```
 
-The rank of the observability-identifiability matrix is `r symmetries$rank` of
-`r symmetries$dim` coordinates, proven; the kernel is spanned by
-`r inWords(length(types))` scalings, each proven over the rationals. The `r inWords(length(types))` printed generators
-are one basis, sums of them are symmetries too. Up to such sums there are four kinds.
+The rank is `r symmetries$rank` of `r symmetries$dim` coordinates, proven; the kernel is spanned
+by `r inWords(length(types))` scalings, each proven over the rationals. The generators are one
+basis; up to sums there are four kinds.
 
-- **Unobserved intermediates.** Active receptor `TNFR`, IκBα transcript `mIkb`, A20 transcript and
-  A20 protein are unmeasured, A20 only up to a scale. Each acts through the product of level and
-  driven rate constant: level and production rate times $\lambda$, driven rate divided by
-  $\lambda$. $X_1$: receptor (`uptake`, `act_Ikk_by_TNF`); $X_4$: IκBα transcript
-  (`prod_mIkb_by_nNfk`, `prod_Ikb`); $X_6$: A20 transcript (`build_RnaA20`, `build_A20`). $X_7$
-  moves A20 with the A20 production, the IKK inhibition constant `inh_Ikk` (entering as
-  `A20 / inh_Ikk`) and the scale of the A20 imaging readout.
-- **Relative measurements.** Blots and imaging give no absolute amounts. $X_2$ divides the IKK
-  total and every IKK form by $\lambda$ and multiplies the IKK-catalyzed phosphorylation rates and
-  the pIKK blot scale by $\lambda$; the IKK cycle is linear in IKK. NFκB and IκBα scale together:
-  every form times $\lambda$; complex formation (second order), the readout scales and the A20
-  transcription driven by nuclear NFκB divided by $\lambda$. The printed $X_3$ is this direction
-  plus $X_4$ and $X_5$, hence it also moves nuclear volume and IκBα production.
-- **Nuclear volume.** In $X_5$ `Vnuc` grows at fixed amounts, nuclear concentrations fall, and the
-  rates reading them (transcription of IκBα and A20, nuclear complex formation) and the scale of
-  nuclear NFκB grow to compensate.
-- **A product.** `split_NfkIkb` appears only multiplied by `eta_split_pNfkpIkb` ($X_8$).
+- **Unobserved intermediates**, level against driven rate: receptor $X_1$, IκBα transcript $X_4$,
+  A20 transcript $X_6$, A20 $X_7$ (with `inh_Ikk` and the A20 imaging scale).
+- **Relative measurements**: IKK $X_2$; NFκB and IκBα together, printed as $X_3$ plus $X_4$ and
+  $X_5$.
+- **Nuclear volume** `Vnuc` against the rates reading nuclear concentrations, $X_5$.
+- **A product**: `split_NfkIkb` appears only times `eta_split_pNfkpIkb`, $X_8$.
 
 ## Symmetry reduction
 
-`symmetryReduction()` returns in `$trafo` a parameter transformation that removes the directions, for scalings
+`symmetryReduction()` returns in `$trafo` a transformation without the directions, for scalings
 by fixing one coordinate per direction
-([Methods > Gauge and reduction](methods-symmetries.html#gauge-and-reduction)).
+([Methods > Gauge and reduction](methods-symmetries.html#gauge-and-reduction)). Loaded from
+`results/reduction.rds`:
 
 ```{r reduction, eval = FALSE}
 ```
@@ -139,9 +119,7 @@ reduction
 
 ## Gauge fixing
 
-The objective is flat along every orbit, so the fit fixes one moved coordinate per symmetry, the
-gauge. This chooses units and leaves the fit unchanged. `model.R` fixes one parameter per scaling
-at 1, 0 on log scale:
+`model.R` fixes one moved parameter per scaling at 1, 0 on log scale, the gauge:
 
 ```{r gauge}
 ```
@@ -158,40 +136,56 @@ W
 det(W)
 ```
 
-This is the gauge of Oppelt et al. [@oppelt2018model]: NFκB and IKK totals and nuclear volume set
-the concentration units, so a concentration is a fraction of the moiety total; receptor and A20
-transcript are in units of their production rates, the IκBα transcript in units of the translation
-it drives, A20 in units of the A20 imaging scale. The reduction fixes other coordinates, a
-different choice of units. [Optimization](guide-optimization.html) fits the remaining
+This is the gauge of Oppelt et al. [@oppelt2018model]: concentrations are fractions of the NFκB
+and IKK totals, receptor and transcripts are in units of the rates they drive, A20 in units of
+the A20 imaging scale. [Optimization](guide-optimization.html) fits the remaining
 `r length(setdiff(getParameters(p), names(gauge)))` parameters,
 [Profile likelihood](guide-profiles.html) checks which the data determine.
 
 ## Discrete symmetries
 
-A locally identifiable model can still give the output of a parameter value at other, isolated
-values: a discrete symmetry. `symmetryDetection(discrete = TRUE)`, or `discreteSymmetries()` on a
-result, counts these values in the domain and reconstructs the maps between them where they are
-rational functions of the coordinates; the search needs msolve and a model with one condition
-and no events. In the two-compartment model of Godfrey [@godfrey1983compartmental], with the
-amounts $x_1$ and $x_2$, an input $u$ into the first compartment and the second observed,
+A discrete symmetry maps a parameter value to isolated other values with the same output.
+`symmetryDetection(mode = "global")` counts these values and reconstructs rational maps between
+them (requires msolve). `discrete.R` applies it to the reduced model of
+[Profile likelihood](guide-profiles.html#reduced-model), passed as `trafo`; loaded from
+`results/discrete.rds`:
 
-```{r godfrey, eval = FALSE}
+```{r discrete, eval = FALSE}
 ```
 
 ```{r, echo = FALSE}
-compartments <- stored(file.path(articles, "results", "guide-symmetries.rds"),
-                       file.path(articles, "results", "guide-symmetries.R"))
+invisible(stored("results/discrete.rds", "discrete.R"))
 ```
 
 ```{r}
-compartments
+saved <- readRDS("results/discrete.rds")
+discrete <- saved$discrete
+discrete$info$discrete[c("count", "countFinal", "fundamentalDomain")]
+swap <- discrete$discreteSymmetries[[1]]
+swap[c("map", "level", "stateMaps")]
 ```
 
-the map exchanges the elimination rate $k_{01}$ and the return rate $k_{12}$ and moves the
-initial value of $x_1$, so the model is locally but not globally identifiable. `exact` means
-proven by a map of the states. The fundamental domain $k_{01} < k_{12}$ keeps one of the two
-points; a fit restricted to it has a unique optimum. A model with directions is reduced first,
-and the maps are stated in the coordinates of the reduced model.
+There are `r inWords(discrete$info$discrete$count)` values with the output of a generic one; the
+map exchanges the degradation rates of the A20 transcript and of A20, `exact` means proven by the
+map of the states. The map moves no coordinate of the scalings and holds in the original
+coordinates as well.
+
+The publication does not name the swap and reports both rates with the same 95 % interval,
+$-5.97$ to $-3.32$ on log scale [@oppelt2018model, Table S7], the union of the two images.
+`symmetryReduction(branch = )` gives a chart of the fundamental domain
+`degrad_A20 < degrad_RnaA20`:
+
+```{r fundamental, eval = FALSE}
+```
+
+```{r}
+fundamental <- saved$fundamental
+fundamental$trafo[c("degrad_A20", "degrad_RnaA20")]
+```
+
+`delta` is the positive difference of the two rates; in this chart a fit has one optimum instead
+of two
+([Profile likelihood > Profiles in the fundamental domain](guide-profiles.html#profiles-in-the-fundamental-domain)).
 
 Reference: `symmetryDetection()`, `symmetryReduction()`, `discreteSymmetries()`
 

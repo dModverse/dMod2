@@ -29,8 +29,8 @@ chain_params <- function(plan, values, deriv, deriv2, threads, tangents) {
     .Call(`_dMod2_chain_params`, plan, values, deriv, deriv2, threads, tangents)
 }
 
-chain_data <- function(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse = FALSE) {
-    .Call(`_dMod2_chain_data`, plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse)
+chain_data <- function(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse = FALSE, want_rows = FALSE) {
+    .Call(`_dMod2_chain_data`, plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse, want_rows)
 }
 
 chain_frames <- function(plan, pre, raw, deriv2, threads) {
@@ -61,24 +61,24 @@ datapointL2_kernel <- function(pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_a
     .Call(`_dMod2_datapointL2_kernel`, pouter, fixed_opt, prdf, dpred_attr_opt, d2pred_attr_opt, obs_name, t, sigma, value_par, deriv, build_hessian)
 }
 
-focei_inner_trust <- function(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb = NULL) {
-    .Call(`_dMod2_focei_inner_trust`, model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb)
+focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode = "none", correction_cb = NULL, predict_cb = NULL, eta_init = NULL) {
+    .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb, eta_init)
 }
 
-focei_run <- function(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode = "none", correction_cb = NULL, predict_cb = NULL) {
-    .Call(`_dMod2_focei_run`, model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb)
-}
-
-focei_run_sparse <- function(trial, complete, init, N, K, outer_ctrl, inner_rinit) {
-    .Call(`_dMod2_focei_run_sparse`, trial, complete, init, N, K, outer_ctrl, inner_rinit)
+focei_run_sparse <- function(trial, complete, init, N, K, outer_ctrl, inner_rinit, eta_init = NULL) {
+    .Call(`_dMod2_focei_run_sparse`, trial, complete, init, N, K, outer_ctrl, inner_rinit, eta_init)
 }
 
 release_heap <- function() {
     invisible(.Call(`_dMod2_release_heap`))
 }
 
-normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE, local_blocks = FALSE, t_df = 0) {
-    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks, t_df)
+nlme_group_kernel <- function(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb = NULL) {
+    .Call(`_dMod2_nlme_group_kernel`, model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb)
+}
+
+normL2_kernel <- function(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode = "M3", build_hessian = TRUE, want_seed = FALSE, local_blocks = FALSE, t_df = 0, expected = FALSE, want_rows = FALSE) {
+    .Call(`_dMod2_normL2_kernel`, prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks, t_df, expected, want_rows)
 }
 
 parvec_attach <- function(out, deriv, deriv2) {
@@ -137,8 +137,8 @@ trustL1_impl <- function(objfun, parinit, mu, lambda, one_sided, rinit, rmax, pa
     .Call(`_dMod2_trustL1_impl`, objfun, parinit, mu, lambda, one_sided, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, minimize, blather, parupper, parlower, printIter, traceFile, gate, fuse)
 }
 
-trust_impl <- function(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches = 0L, nonmonotone = 0.0, sparse = FALSE, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
-    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches, nonmonotone, sparse, minimize, blather, parupper, parlower, printIter, traceFile)
+trust_impl <- function(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseRadiusStall, phaseReverse, phaseKeepRadius, phaseStopEnds, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, phaseScaled, phaseHybridTol, phaseHybridShift, switches = 0L, nonmonotone = 0.0, sparse = FALSE, minimize = TRUE, blather = FALSE, parupper = NULL, parlower = NULL, printIter = FALSE, traceFile = NULL) {
+    .Call(`_dMod2_trust_impl`, objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseRadiusStall, phaseReverse, phaseKeepRadius, phaseStopEnds, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, phaseScaled, phaseHybridTol, phaseHybridShift, switches, nonmonotone, sparse, minimize, blather, parupper, parlower, printIter, traceFile)
 }
 
 sparse_factor_cost <- function(p, i, n) {

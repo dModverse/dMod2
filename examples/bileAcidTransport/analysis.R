@@ -98,8 +98,8 @@ ggplot(.optima, aes(time, value, color = factor(round(.value, 1)),
                 inherit.aes = FALSE, width = 0) +
   geom_point(data = attr(.optima, "data"), color = "black") +
   facet_grid(name ~ condition, scales = "free_y") +
-  theme_dMod() +
-  scale_color_dMod() +
+  theme_dMod2() +
+  scale_color_dMod2() +
   labs(color = "objective value")
 
 bestfit <- as.parvec(fits)
@@ -224,5 +224,5 @@ ggplot(.pred, aes(time, value)) +
   geom_line() +
   geom_point(data = .band, aes(y = lower), shape = 4) +
   geom_point(data = .band, aes(y = upper), shape = 4) +
-  theme_dMod() +
+  theme_dMod2() +
   labs(x = "time", y = "cellular bile acid", title = "closed junctions: prediction band")

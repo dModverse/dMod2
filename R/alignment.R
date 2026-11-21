@@ -397,11 +397,9 @@ print.alignmentmodel <- function(x, ...) {
   local
 }
 
-## Outputs (prediction, sigma) of the readings `rows` with first and second derivatives in the
-## parameters the rows depend on: the compiled derivatives in the predictors times their
-## coefficients, per pair of symbols over the parameters of their predictors only. `local` is
-## the description of the rows by .alignmentLocal(); the values alone come from the sparse
-## coefficients without it.
+## Prediction and sigma of the readings `rows` with first and second derivatives in the parameters they
+## depend on, from the compiled derivatives in the predictors times their coefficients; `local` describes the
+## rows (.alignmentLocal()), without it the values alone come from the sparse coefficients.
 .alignmentEval <- function(m, rows, pars, deriv = TRUE, deriv2 = FALSE, local = NULL) {
   sym <- m$symbols$symbol
   n <- length(rows)
@@ -594,10 +592,9 @@ print.alignmentmodel <- function(x, ...) {
 
 ## ---- objective --------------------------------------------------------------------
 
-## Prediction and error model of the readings of one condition. The model sits in `shared`, an
-## environment common to all conditions, which serialize() writes once. One evaluation gives
-## both outputs: the prediction frame holds the frame of the error model, which the error model
-## returns when it is asked at the same parameters, split the same way, for no higher derivatives.
+## Prediction and error model of the readings of one condition, the model in `shared`, an environment of all
+## conditions that serialize() writes once. The prediction frame holds the error-model frame, which the error
+## model returns when asked at the same parameters, split the same way, for no higher derivatives.
 .alignmentOutputs <- function(shared, rows, condition, times, pars, fixed, deriv, deriv2) {
   m <- shared$m
   local <- shared$local[[condition]]
@@ -899,10 +896,9 @@ print.alignmentmodel <- function(x, ...) {
   })
 }
 
-## The vjps of output `o` (1 prediction, 2 sigma) of many conditions, per condition [free x K]:
-## one evaluation at all their rows where the times of every condition are the condition rows, shared by the
-## two outputs of a sweep as in .alignmentVjp(), else one by one. With `seeds` every column is a
-## first-order seed.
+## The vjps of output `o` (1 prediction, 2 sigma) of many conditions, [free x K] each: one evaluation at all
+## rows where the times of a condition are the condition rows, shared by both outputs as in .alignmentVjp(), else one by
+## one. With `seeds` every column is a first-order seed.
 .alignmentVjpMany <- function(shared, times, parsList, fixedList, cotangentList, o, cores, seeds = FALSE,
                               conditions = NULL) {
   conds <- .alignmentRowConditions(shared, times, conditions)
@@ -965,12 +961,9 @@ print.alignmentmodel <- function(x, ...) {
   out
 }
 
-## The condition of every reading: the experiment of the reading, the combination of the columns of the fixed
-## parts of the scaling formulas, within the connected component of the reading of the groups of the random
-## terms, in parts of few biological values, so the Hessian is sparse over them and every condition
-## depends on few parameters.
-## The name joins the parts that are set and not repeated, "absolute" for a reading without
-## any, where these names tell the conditions apart.
+## The condition of every reading: the experiment, the columns of the fixed parts of the scaling formulas and
+## the component of the random-term groups, cut so that each condition depends on few parameters. The name
+## joins the parts set and not repeated, "absolute" for a reading without any.
 .alignmentConditions <- function(m) {
   scaling <- m$symbols$symbol[m$symbols$role == "scaling"]
   cols <- unique(unlist(lapply(scaling, function(s) m$design[[s]]$columns)))
@@ -1210,7 +1203,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
     stop("align: no start value for ", paste(names(st)[is.na(st)], collapse = ", "),
          ", whose symbols never reach the readings on their scale; give `init`.", call. = FALSE)
   if (!is.null(re)) {
-    ctrl <- list(sd = 1, trustControl = c(list(iterlim = iterlim), tc), innerControl = tc[c("ftol", "mtol")],
+    ctrl <- list(sd = 1, trustControl = c(list(iterlim = iterlim), tc), innerControl = tc["mtol"],
                  quadrature = list(cm1Control = list(tolControl = tc)),
                  sparseFit = list(maxOuter = iterlim, trustControl = list(tolControl = tc)))
     best <- if (fits > 1L) msem(obj, re, st, method = method, control = ctrl, fits = fits, cores = cores, sd = sd)
@@ -1500,10 +1493,9 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
 }
 
 
-## Start values: biological intercepts where the symbol is the median reading, or the median
-## positive one where the scale of the symbol does not reach that, the other intercepts where their symbol
-## is 1, the rest 0. The coefficients of the first scaling symbol then start where the predictor
-## is per experiment the median of the predictors that meet the relative readings.
+## Start values: biological intercepts at the median reading (the median positive one where the scale cannot
+## reach it), other intercepts where their symbol is 1, the rest 0; the coefficients of the first scaling
+## symbol where the predictor per experiment is the median of those meeting the relative readings.
 .alignmentStart <- function(m, free) {
   y <- m$y[is.finite(m$y)]
   st <- setNames(numeric(length(free)), free)
@@ -1623,7 +1615,7 @@ plotAligned <- function(x, ...) {
     ggplot2::geom_errorbar(ggplot2::aes(ymin = .data$value - .data$sigma, ymax = .data$value + .data$sigma),
                            width = 0) +
     ggplot2::labs(x = xv, y = "aligned value", color = NULL) +
-    scale_color_dMod(guide = if (length(grp)) "legend" else "none") + theme_dMod()
+    scale_color_dMod2(guide = if (length(grp)) "legend" else "none") + theme_dMod2()
 }
 
 #' @rdname plotValues
@@ -1646,9 +1638,9 @@ plotScaled <- function(x, ...) {
   }
   ggplot2::ggplot(s, ggplot2::aes(x = .data[[xv]], y = .data$scaled)) +
     ggplot2::geom_point(alpha = 0.6) +
-    ggplot2::geom_point(data = bio, ggplot2::aes(x = .data[[xv]], y = .data$value), color = dMod_colors[2]) +
+    ggplot2::geom_point(data = bio, ggplot2::aes(x = .data[[xv]], y = .data$value), color = dMod2_colors[2]) +
     ggplot2::labs(x = xv, y = "reading on the scale of the values") +
-    theme_dMod()
+    theme_dMod2()
 }
 
 #' @rdname plotAligned
@@ -1659,14 +1651,13 @@ plotResiduals.alignment <- function(parframe, ...) {
   ggplot2::ggplot(s, ggplot2::aes(x = .data$prediction, y = .data$residual)) +
     ggplot2::geom_point() + ggplot2::geom_hline(yintercept = 0, linetype = 2) +
     ggplot2::labs(x = "prediction", y = "standardized residual") +
-    theme_dMod()
+    theme_dMod2()
 }
 
 
-## The variances x' V x of linear combinations of the estimates, the rows x of a matrix with
-## parameter columns, V the inverse of half the Hessian of -2 log L, the sparse H plus the low-rank
-## part `lowrank`: by a sparse Cholesky solve and Woodbury for a sparse Hessian, else by
-## eigendecomposition. Inf along the null space of a singular one.
+## The variances x' V x of the rows x of a matrix over the parameters, V the inverse of half the Hessian of
+## -2 log L plus `lowrank`: sparse Cholesky and Woodbury for a sparse Hessian, else the eigendecomposition;
+## Inf along the null space of a singular one.
 .alignmentVariance <- function(H, free, lowrank = NULL) {
   if (is.null(H) || !length(free)) return(NULL)
   H <- H[free, free, drop = FALSE] / 2

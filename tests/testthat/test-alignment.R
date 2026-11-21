@@ -292,7 +292,7 @@ test_that("a random background per gel fits through EM, censored readings by M3"
   expect_true(all(is.na(fit$aligned$lloq[fit$aligned$time != "0"])))
   # FOCEI on the sparse Hessian: the same marginal, gradient and Hessian, and standard errors
   # beside the optimum, where the gradient is not of the size of the convergence of the modes
-  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
+  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(mtol = 1e-12, iterlim = 200))
   point <- fit$fit$argument + 0.05
   at <- function(sparse) em(fit$objfn, fit$randomEffects, point, fixed = fit$fit$fixed, control = ctl,
                             verbose = FALSE, sparse = sparse)
@@ -430,7 +430,7 @@ test_that("censored readings without random terms have the exact Hessian of M3",
 
 .foceiAt <- function(fit, p, iterlim = 0) {
   ctrl <- list(trustControl = list(iterlim = iterlim),
-               innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
+               innerControl = list(mtol = 1e-12, iterlim = 200))
   em(fit$objfn, fit$randomEffects, p, method = "focei", verbose = FALSE, control = ctrl)
 }
 
@@ -731,7 +731,7 @@ test_that("the restricted likelihood through FOCEI: sigma near the drawn noise, 
   expect_equal(term(point)$value, ee(V) - sum(vapply(V[-seq_along(mean)], ee, 0)) - length(mean) * log(4 * pi),
                tolerance = 1e-10)
   expect_equal(unname(term(point)$gradient[setdiff(names(point), theta)]), rep(0, length(mean)))
-  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
+  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(mtol = 1e-12, iterlim = 200))
   at <- function(p, sparse = FALSE)
     suppressMessages(em(re$objfn + term, re$randomEffects, p, control = ctl, verbose = FALSE, sparse = sparse))
   r0 <- at(point)
@@ -811,7 +811,7 @@ test_that("a fit reports the modes at the fit parameters, a positive definite He
                       prior = constraintL2(mu = c(omega_bj_bj = log(0.3), b = -2), sigma = c(omega_bj_bj = 0.3, b = 1)))
   fit <- suppressMessages(align(m, fits = 1, reml = FALSE))
   # the modes the fit reports are those at the fit parameters, and the Hessian there is positive definite
-  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
+  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(mtol = 1e-12, iterlim = 200))
   at <- suppressMessages(em(fit$objfn, fit$randomEffects, fit$fit$argument, control = ctl, verbose = FALSE))
   expect_equal(fit$fit$etaModes, at$etaModes, tolerance = 1e-4)
   H <- .fullHessian(fit$fit)

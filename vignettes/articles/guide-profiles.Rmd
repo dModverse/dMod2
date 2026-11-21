@@ -15,12 +15,12 @@ knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/profiles.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/refit.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/fundamental.R")
 ```
 
-The profile likelihood [@raue2009structural] determines how well the data constrain each
-parameter. This chapter profiles all parameters of the full model at the best fit of
-[Optimization](guide-optimization.html), tests the core model of the publication, and fits a
-reduced model, by `profiles.R`, `variants.R`, `reduced.R` and `refit.R`.
+The profile likelihood [@raue2009structural] shows how well the data constrain each parameter.
+This chapter profiles the full model at the best fit of [Optimization](guide-optimization.html),
+tests the core model of the publication and fits a reduced model.
 
 ```{r setup, echo = FALSE}
 ```
@@ -60,21 +60,18 @@ reduced model, by `profiles.R`, `variants.R`, `reduced.R` and `refit.R`.
 
 ## Profile likelihood and confidence intervals
 
-The profile likelihood of a parameter is the data term along the path on which the other
-parameters minimize an objective with that parameter fixed. Here that objective is the one of the
-multistart with the prior replaced by a prior of standard deviation 20 on the log scale at the best
-fit, so that the data term, not the prior, shapes the profiles; the optimum of that objective is
-the lowest point of every profile. Values of the data term
-within the 95 % quantile of $\chi^2_1$, 3.84, of the minimum form the 95 % confidence interval
+The profile of a parameter is the data term along the path on which the other parameters minimize
+the objective with that parameter fixed. Here the objective has a prior of standard deviation 20
+on the log scale at the best fit, so that the data term shapes the profiles. Data terms within
+3.84, the 95 % quantile of $\chi^2_1$, of the minimum form the 95 % confidence interval
 ([Methods > Profile likelihood](methods-profiles.html)). `stepControl = list(stop = "data")` ends a
-profile there, `confint(val.column = "data")` reads the interval off, and `profileThreshold()`
-gives other levels. A profile open towards $-\infty$ on the log scale means the
-process can be switched off, towards $+\infty$ that it can be instantaneous
-([Methods > Shapes](methods-profiles.html#shapes)).
+profile there, `confint(val.column = "data")` reads the interval, `profileThreshold()` gives other
+levels. A profile open towards $-\infty$ means the process can be switched off, towards
+$+\infty$ that it can be instantaneous ([Methods > Shapes](methods-profiles.html#shapes)).
 
 `method = "integrate"` (default) follows the constrained optimum as a curve, with
-`algoControl = list(reoptimize = TRUE)` corrected at every step by a `trust()` fit with the
-settings of `optControl`; `method = "optimize"` refits at every step.
+`algoControl = list(reoptimize = TRUE)` corrected by `trust()`; `method = "optimize"` refits at
+every step.
 
 | entry of `stepControl` | `"integrate"` | `"optimize"` | controls |
 |---|---|---|---|
@@ -84,18 +81,17 @@ settings of `optControl`; `method = "optimize"` refits at every step.
 | `limit` | `500` | `100` | steps per side |
 | `stop` | `"value"` | `"value"` | part of the objective compared with the threshold |
 
-`limits` bounds the profiled parameter relative to the optimum, `side` profiles one side, `cores`
-profiles parameters in parallel ([Remote computing](guide-remote-computing.html#threads-and-processes)).
+`limits` bounds the profiled parameter, `side` profiles one side, `cores` profiles in parallel
+([Remote computing](guide-remote-computing.html#threads-and-processes)).
 
 ## Profiles of the full model
 
-`profiles.R` refits the best fit of the multistart to the tolerances of the profiles:
+`profiles.R` refits the best fit of the multistart to the tolerances of the profiles,
 
 ```{r refit, eval = FALSE}
 ```
 
-and fits the objective of the profiles from there, the best of 20 fits from starts about the refit,
-since a single fit can stop short of the floor of a flat valley:
+fits the objective of the profiles once,
 
 ```{r profileprior, eval = FALSE}
 ```
@@ -105,9 +101,8 @@ invisible(stored("results/fits.rds", "fit.R"))
 invisible(stored("results/profiles.rds", "profiles.R"))
 ```
 
-Each side runs until the data term has risen by the threshold or the parameter has moved by 7 on
-the log scale; a profile below the fit restarts the 20 fits about its lowest point. `helix.R` runs
-one parameter per cluster task.
+and profiles each side until the data term has risen by the threshold or the parameter has moved
+by 7. The profiles are loaded from `results/profiles.rds`:
 
 ```{r profiles, eval = FALSE}
 ```
@@ -127,15 +122,12 @@ c(refit = dataTerm(refit$argument), profiles = dataTerm(fitProfile$argument))
 ```
 
 Without the prior of `model.R` the data term falls by
-`r round(dataTerm(refit$argument) - dataTerm(fitProfile$argument), 2)`.
-
-No profile lies more than 0.01 below the fit, so the profiles start at the optimum:
+`r round(dataTerm(refit$argument) - dataTerm(fitProfile$argument), 2)`. No profile lies below the
+fit:
 
 ```{r}
 c(fit = fitProfile$value, lowest = min(profiles$value))
 ```
-
-The intervals and their shapes:
 
 ```{r}
 intervals <- confint(profiles, level = 0.95, val.column = "data")
@@ -158,8 +150,7 @@ priorRise <- max(mapply(function(name, shape) {
 }, openSides$name, openSides$shape))
 ```
 
-The open profiles, data term and prior separately; on an open side the data term stays below
-3.84, and the prior rises by up to `r ceiling(10 * priorRise) / 10`:
+The open profiles; on an open side the prior rises by up to `r ceiling(10 * priorRise) / 10`:
 
 ```{r}
 # panels wide enough for the parameter names, few ticks and the legend below
@@ -178,10 +169,8 @@ plotProfile(profiles, mode %in% c("data", "prior"), name %in% open, ncol = 4) + 
 ## Parameter paths
 
 `plotPaths()` shows how the other parameters compensate along a profile. Along `act_Ikb_Base`,
-`eta_act_Ikb_Base_c_pNfkIkb` rises by the same amount: the data determine the product, the
-phosphorylation of IκBα in the complex with pNFκB. `int_Nfk` trades in the same way against the
-import factors of IκBα and pNFκB. Parameters with an open profile, such as `act_Ikk_Base`, drift
-along without changing the data term. Shown are the parameters that move by more than 1:
+`eta_act_Ikb_Base_c_pNfkIkb` rises by the same amount: the data determine the product. Shown are
+the parameters that move by more than 1:
 
 ```{r, fig.height = 4}
 # the parameters that move along the profile of `par` by more than `by` on the log scale
@@ -200,13 +189,9 @@ for (par in c("act_Ikb_Base", "int_Nfk"))
 
 ## Predictions along a profile
 
-`plotArray()` predicts the model at points along one side of a profile, from the optimum to the
-end, colored by the profiled parameter; `fixed` adds the gauge the profiles held fixed. Within the
-threshold the measured readouts stay within the noise of the data, so the states show what a
-profile leaves open. Along the upper side of `degrad_RnaA20`, which ends where the data term has
-risen by the threshold, the last stage of the A20 transcript, `RnaA20`, falls by two orders of
-magnitude and the delay stages before it rise, while A20, the protein that A20GFP reads out, stays
-nearly the same:
+`plotArray()` predicts along one side of a profile, colored by the profiled parameter; `fixed`
+adds the gauge. Along the upper side of `degrad_RnaA20`, `RnaA20` falls by two orders of magnitude
+while A20 stays nearly the same:
 
 ```{r, fig.height = 5}
 states <- x * pSS * p
@@ -216,9 +201,8 @@ plotArray("degrad_RnaA20", profiles, states, minutes, name %in% chain, condition
           direction = "up", nSim = 5, fixed = gauge)
 ```
 
-Along the lower side of `ext_nNfkIkb`, a slower export of the complex of NFκB and IκBα from the
-nucleus, the complex builds up to a few percent of total NFκB at the expense of free and
-phosphorylated nuclear NFκB, so that their sum, which nucNFkB reads out, stays the same:
+Along the lower side of `ext_nNfkIkb` the nuclear complex builds up at the expense of free and
+phosphorylated nuclear NFκB; their sum, read out by nucNFkB, stays the same:
 
 ```{r, fig.height = 5}
 plotArray("ext_nNfkIkb", profiles, states, minutes, name %in% c("nNfk", "pnNfk", "nNfkIkb"),
@@ -227,8 +211,8 @@ plotArray("ext_nNfkIkb", profiles, states, minutes, name %in% c("nNfk", "pnNfk",
 
 ## Core model of the publication
 
-The publication reduced the full model to a core model of 29 reactions [@oppelt2018model,
-Table S5] with fixed values (Tables S8 and S9). The settings on the log scale:
+The core model of the publication has 29 reactions [@oppelt2018model, Table S5] and fixed values
+(Tables S8 and S9), on the log scale:
 
 | setting of the core model | parameter of the full model | value |
 |---|---|---|
@@ -268,9 +252,9 @@ deact <- settings[settings$name == "deact_pnNfk", ]
 
 Every setting but one lies in the 95 % interval; the data bound `deact_pnNfk` to
 `r signif(exp(deact$lower), 2)` to `r signif(exp(deact$upper), 2)` per minute, below the fixed
-1000. A profile tests one setting with all others free; the likelihood ratio test takes them
-together. `variants.R` fits the core model and the variants that release one setting, each with the
-prior of `model.R`, and compares the data terms with the full model:
+1000. No profile tests the single delay step, and the publication gives no reason for it. The
+likelihood ratio test takes all settings together: `variants.R` fits the core model and the variants that release one setting, loaded from
+`results/variants.rds`:
 
 ```{r, echo = FALSE}
 invisible(stored("results/variants.rds", "variants.R"))
@@ -297,18 +281,14 @@ knitr::kable(data.frame(released = released[rownames(shown)],
 The core model lies `r round(variants["core", "difference"], 2)` above the full model, against
 the threshold `r round(variants["core", "threshold"], 2)` for
 `r variants["core", "removed"]` removed parameters, and is
-`r if (variants["core", "difference"] < variants["core", "threshold"]) "accepted" else "rejected"`. A negative decrease means that the prior on
-the released parameter costs more than the data gain. The two delay steps and the separate factor
-lower the data term most; together they lower it by `r round(bothLower, 2)` at one added
-parameter, more than the threshold 3.84 of one degree of freedom. `reduced.R` takes these two
-deviations from the publication. In that model the scale `s_ipNFkB_ibNFkB` of the NFκB blot
-after NFκB precipitation has a profile open below, compensated only by the offset; `reduced.R`
-sets the scale to 0.
+`r if (variants["core", "difference"] < variants["core", "threshold"]) "accepted" else "rejected"`.
+The two delay steps and the separate factor together lower the data term by
+`r round(bothLower, 2)` at one added parameter, more than 3.84; `reduced.R` takes both and sets the
+scale `s_ipNFkB_ibNFkB`, whose profile is open below, to 0.
 
 ## Reduced model
 
-The core model with the two delay steps and the separate factor for the release of pNFκB, and
-the NFκB blot after NFκB precipitation reading the offset alone:
+The core model with two delay steps, the separate factor and the scale `s_ipNFkB_ibNFkB` at 0:
 
 ```{r reducedreactions, eval = FALSE}
 ```
@@ -316,9 +296,8 @@ the NFκB blot after NFκB precipitation reading the offset alone:
 ```{r reducedobservables, eval = FALSE}
 ```
 
-Without basal activation the resting states form a continuum. As in the publication, all NFκB
-rests in the complex with IκBα and all IKK is inactive, a steady state for every parameter value;
-the reduced model needs neither `Pimpl()` nor a stability term:
+As in the publication, all NFκB rests in the complex with IκBα and all IKK is inactive, a steady
+state for every parameter value, so neither `Pimpl()` nor a stability term is needed:
 
 ```{r reducedmodel, eval = FALSE}
 ```
@@ -331,8 +310,8 @@ The prior of the full model on the remaining parameters:
 ```{r reducedobjective, eval = FALSE}
 ```
 
-`refit.R` fits from the full model and from 50 starts around that fit, then compares the data
-terms:
+`refit.R` fits from the full model and from 50 starts around that fit; the result is loaded from
+`results/reduced.rds`:
 
 ```{r reducedfit, eval = FALSE}
 ```
@@ -351,12 +330,11 @@ saved$ratio
 
 With `r round(saved$ratio[["removed"]])` fewer parameters the data term is higher by
 `r signif(saved$ratio[["difference"]], 4)`, below the threshold
-`r signif(saved$ratio[["threshold"]], 4)`: the reduced model is accepted.
+`r signif(saved$ratio[["threshold"]], 4)`.
 
 ## Profiles of the reduced model
 
-With the prior and the settings of the profiles of the full model, from the optimum of that
-objective:
+With the prior and settings of the profiles of the full model:
 
 ```{r reducedprofileprior, eval = FALSE}
 ```
@@ -385,8 +363,7 @@ fcLower <- intervalsReduced$lower[intervalsReduced$name == "form_complex"] / log
 All parameters are identifiable except `form_complex`, bounded below at
 `r signif(fcLower, 2)` on the log10 scale and open above on a plateau `r round(plateau, 2)` above
 the optimum; the publication reports (-0.21, 3.03). The profiles of `degrad_A20`,
-`degrad_RnaA20` and `shuttle_RnaA20` have a second minimum inside the interval. The rate
-constants:
+`degrad_RnaA20` and `shuttle_RnaA20` have a second minimum inside the interval. The rate constants:
 
 ```{r}
 rates <- setdiff(intervalsReduced$name, grep("^(s|off|sigma|tau)_", intervalsReduced$name, value = TRUE))
@@ -396,6 +373,113 @@ intervalsReduced[intervalsReduced$name %in% rates, c("name", "value", "lower", "
 ```{r, fig.height = 11}
 plotProfile(saved$profiles, mode %in% c("data", "prior"), name %in% rates, ncol = 4) + readable
 ```
+
+```{r, include = FALSE}
+along <- as.data.frame(saved$profiles)
+optimum <- saved$fitProfile$argument
+# the fits of the multistart within 0.001 of the best, by side of the fixed set of the swap
+fits <- as.data.frame(saved$fits)
+best <- fits[fits$value < min(fits$value) + 1e-3, ]
+below <- sum(best$degrad_A20 < best$degrad_RnaA20)
+# the point of the profile of degrad_RnaA20 at the mirror image of the optimum
+rna <- along[along$whichPar == "degrad_RnaA20", ]
+mirror <- rna[which.min(abs(rna$degrad_RnaA20 - optimum[["degrad_A20"]])), ]
+# the first local minimum of the lower side of the profile of shuttle_RnaA20, away from the optimum
+shuttle <- along[along$whichPar == "shuttle_RnaA20" &
+                   along$shuttle_RnaA20 < optimum[["shuttle_RnaA20"]] - 0.5, ]
+shuttle <- shuttle[order(shuttle$shuttle_RnaA20), ]
+second <- shuttle[which(diff(sign(diff(shuttle$data))) > 0)[1] + 1, ]
+# the fits of the multistart at that point
+atSecond <- sum(abs(fits$shuttle_RnaA20 - second$shuttle_RnaA20) < 0.1 &
+                  abs(fits$degrad_A20 - fits$degrad_RnaA20) < 0.1)
+```
+
+Exchanging `degrad_A20` and `degrad_RnaA20` leaves every readout and the prior unchanged, a
+discrete symmetry ([Symmetries > Discrete symmetries](guide-symmetries.html#discrete-symmetries)).
+Of the `r nrow(best)` best fits of the multistart, `r below` lie on the side
+`degrad_A20 < degrad_RnaA20` and `r nrow(best) - below` at the mirror image. The profile of
+`degrad_RnaA20` passes through the mirror image of the optimum, within
+`r format(signif(mirror$data - min(along$data), 1), scientific = FALSE)`
+of the data term at the optimum.
+
+The second minimum of `shuttle_RnaA20` is another local optimum, close to the fixed set of the
+swap: at `shuttle_RnaA20` = `r round(second$shuttle_RnaA20, 2)` the degradation rates are
+`r round(second$degrad_A20, 2)` and `r round(second$degrad_RnaA20, 2)`, the data term
+`r round(second$data - min(along$data), 2)` above the optimum, reached by `r atSecond` fits of the
+multistart. The estimates of the publication, $-4.72$ and $-4.46$ [@oppelt2018model, Table S7],
+also lie close to the fixed set.
+
+## Profiles in the fundamental domain
+
+The fundamental domain `degrad_A20 < degrad_RnaA20` holds the optimum and removes the swap.
+`fundamental.R` fits the reduced model in the chart that
+`symmetryReduction(branch = "degrad_A20 < degrad_RnaA20")` returns, with
+`define("degrad_RnaA20 <- degrad_A20 + delta_RnaA20")` before `insert("x <- exp(x)")`; the fixed
+set lies at `delta_RnaA20` $\to -\infty$. Only the parameter transformation is new:
+
+```{r fundamentaltrafo, eval = FALSE}
+```
+
+`delta_RnaA20` has the prior of `degrad_RnaA20`, mean $\log(1/60)$ and standard deviation 2:
+
+```{r fundamentalobjective, eval = FALSE}
+```
+
+One fit from the best fit of `refit.R`, loaded with the profiles from `results/fundamental.rds`:
+
+```{r fundamentalfit, eval = FALSE}
+```
+
+```{r, echo = FALSE}
+invisible(stored("results/fundamental.rds", "fundamental.R"))
+```
+
+```{r}
+fundamental <- readRDS("results/fundamental.rds")
+fundamental$dataTerms
+```
+
+Profiles with the prior and settings of the reduced model:
+
+```{r fundamentalprofileprior, eval = FALSE}
+```
+
+```{r fundamentalprofiles, eval = FALSE}
+```
+
+```{r}
+c(reduced = saved$fitProfile$value, fundamental = fundamental$fitProfile$value)
+intervalsFundamental <- confint(fundamental$profiles, level = 0.95, val.column = "data")
+rownames(intervalsFundamental) <- NULL
+swapped <- c("degrad_A20", "delta_RnaA20", "shuttle_RnaA20")
+intervalsFundamental[intervalsFundamental$name %in% swapped, c("name", "value", "lower", "upper")]
+```
+
+```{r, include = FALSE}
+alongFundamental <- as.data.frame(fundamental$profiles)
+# the data term at the lower end of the profile of delta_RnaA20, against the optimum
+delta <- alongFundamental[alongFundamental$whichPar == "delta_RnaA20", ]
+edge <- delta[which.min(delta$delta_RnaA20), ]
+plateauDelta <- edge$data - min(alongFundamental$data)
+upperA20 <- intervalsFundamental$upper[intervalsFundamental$name == "degrad_A20"]
+upperA20Reduced <- intervalsReduced$upper[intervalsReduced$name == "degrad_A20"]
+# the largest change of an interval bound of another parameter
+both <- merge(intervalsFundamental, intervalsReduced, by = "name")
+both <- both[!both$name %in% swapped, ]
+moved <- max(abs(c(both$lower.x - both$lower.y, both$upper.x - both$upper.y)), na.rm = TRUE)
+```
+
+```{r, fig.height = 11}
+ratesFundamental <- setdiff(intervalsFundamental$name,
+                            grep("^(s|off|sigma|tau)_", intervalsFundamental$name, value = TRUE))
+plotProfile(fundamental$profiles, mode %in% c("data", "prior"), name %in% ratesFundamental,
+            ncol = 4) + readable
+```
+
+No profile crosses into the mirror image. The profile of `delta_RnaA20` is open below, leveling
+off `r round(plateauDelta, 2)` above the optimum at the fixed set. The upper bound of `degrad_A20`
+falls from `r round(upperA20Reduced, 2)` to `r round(upperA20, 2)`; the other intervals change by
+at most `r format(signif(moved, 1), scientific = FALSE)`.
 
 Reference: `profile()`, `profileThreshold()`, `confint()`, `plotProfile()`, `plotPaths()`,
 `plotArray()`

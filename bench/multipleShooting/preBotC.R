@@ -239,7 +239,7 @@ ggplot(traj, aes(time, value)) +
   facet_wrap(~run, ncol = 1) +
   labs(x = "time [ms]", y = "V [mV]",
        title = sprintf("start %d at %.2f decades", pick$start, pick$scale)) +
-  theme_dMod(base_size = 9)
+  theme_dMod2(base_size = 9)
 
 # The curves are stored to 0.01 mV, far below the noise, which keeps the file
 # small.

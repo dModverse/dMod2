@@ -402,7 +402,7 @@ pair with $s^\top y \le 0$, or an update that would make the model indefinite, d
 correction. Far from the optimum a step is an
 EM step in the hyperparameters and a Gauss-Newton step in the fixed parameters, at one marginal
 evaluation; near it the model approaches the marginal Hessian and convergence is superlinear.
-Gradient and bounded Hessian suffice for convergence [@conn2000trust], and no number of EM
+Gradient and bounded Hessian suffice for convergence [@nocedal2006numerical], and no number of EM
 iterations is chosen.
 
 The trust region stops at a predicted reduction below `mtol`; a run ending short of it restarts with
@@ -454,7 +454,8 @@ coordinate depends on which others are free and, for coupled coordinates, on the
 An L1 penalty $\lambda \sum \lvert \eta \rvert$ [@tibshirani1996regression], as in `trustL1()`, sets
 small deviations to 0, shrinks every selected one by the same amount, and compensates by selecting
 more small ones. Of coordinates the data tie together it keeps one, unstably, since the lasso
-condition for the right set fails for such correlations. It gives no probability of a deviation.
+condition for the right set fails for such correlations. It gives no probability of a deviation. Both on
+one data set: [Sparse deviations > L1 scan](guide-sparse-deviations.html#l1-scan).
 
 The spike and slab separates decision and size: a deviation is 0 or from the slab, which shrinks
 little, and (7) weighs every structure by the marginal likelihood, with $\rho$ and $\tau$ estimated
@@ -503,7 +504,7 @@ clusters for deviations. The guide compounds are fitted without it.
 ### Ewens prior
 
 The partitions $\mathcal{C}$ of the $G$ groups and the anchor follow the Ewens distribution
-[@ewens1972sampling] of the Chinese restaurant process, anchor seated first: a group joins a
+[@pitman2006combinatorial] of the Chinese restaurant process, anchor seated first: a group joins a
 cluster with probability proportional to the size, anchor counted, or opens one with probability
 proportional to $\alpha$,
 

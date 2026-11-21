@@ -164,7 +164,7 @@ truthO[isLog] <- log10(truthO[isLog])
 times <- seq(0, 10000, by = 0.5)
 pred0 <- as.data.frame(prd(times, truthO, deriv = FALSE))
 ggplot(pred0, aes(time, value)) + geom_line() +
-  facet_wrap(~ name, scales = "free_y", ncol = 1) + theme_dMod(base_size = 9)
+  facet_wrap(~ name, scales = "free_y", ncol = 1) + theme_dMod2(base_size = 9)
 
 # reduced truth: each outer parameter of the reduction evaluated as the invariant it stands for
 meaning   <- unlist(lapply(red$blocks, `[[`, "survivorMeaning"))
@@ -253,26 +253,26 @@ orbitPred <- lapply(orbitPred, function(q) {
 ggplot(orbitPred[[1]], aes(time, value, group = eps, color = eps)) +
   geom_line(linewidth = 0.3) +
   facet_wrap(~ name, scales = "free_y", ncol = 2) +
-  scale_color_dMod_div(name = expression(epsilon)) +
+  scale_color_dMod2_div(name = expression(epsilon)) +
   labs(title = sprintf("pre-Boetzinger, X1 (%s)", res$symmetries[[1]]$type),
        x = "time [ms]", y = NULL) +
-  theme_dMod(base_size = 9)
+  theme_dMod2(base_size = 9)
 
 ggplot(orbitPred[[2]], aes(time, value, group = eps, color = eps)) +
   geom_line(linewidth = 0.3) +
   facet_wrap(~ name, scales = "free_y", ncol = 2) +
-  scale_color_dMod_div(name = expression(epsilon)) +
+  scale_color_dMod2_div(name = expression(epsilon)) +
   labs(title = sprintf("pre-Boetzinger, X2 (%s)", res$symmetries[[2]]$type),
        x = "time [ms]", y = NULL) +
-  theme_dMod(base_size = 9)
+  theme_dMod2(base_size = 9)
 
 ggplot(orbitPred[[3]], aes(time, value, group = eps, color = eps)) +
   geom_line(linewidth = 0.3) +
   facet_wrap(~ name, scales = "free_y", ncol = 2) +
-  scale_color_dMod_div(name = expression(epsilon)) +
+  scale_color_dMod2_div(name = expression(epsilon)) +
   labs(title = sprintf("pre-Boetzinger, X3 (%s)", res$symmetries[[3]]$type),
        x = "time [ms]", y = NULL) +
-  theme_dMod(base_size = 9)
+  theme_dMod2(base_size = 9)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

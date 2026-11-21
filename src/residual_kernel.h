@@ -11,6 +11,8 @@
 //     grad  += 2 * (wr * dwr/dtheta + 1/sigma * dsigma/dtheta)
 //     hess  += 2 * outer(dwr/dtheta, dwr/dtheta)              -- Part0 (GN)
 //            + ALOQ_part1 + ALOQ_part2 + ALOQ_part3            -- toggleable
+//       or, with expected_information, the Fisher information
+//            2/sigma^2 outer(dpred, dpred) + 4/sigma^2 outer(dsigma, dsigma)
 //            + (if use_deriv2_exact) 2 * wr/sigma * d2pred/dtheta^2
 //            +                       (2/sigma) (1 - wr^2) * d2sigma/dtheta^2
 //
@@ -38,7 +40,8 @@
 //     M3:   obj += -2 log F_nu(-wr)
 //     grad and hess from the derivatives of the loss in (pred, sigma), the
 //     Hessian J' L J with L the exact 2 x 2 Hessian of the loss, plus the
-//     deriv2-exact terms weighted by the first derivatives of the loss.
+//     deriv2-exact terms weighted by the first derivatives of the loss; with
+//     expected_information on ALOQ rows L = diag(2 (nu + 1), 4 nu) / ((nu + 3) sigma^2).
 //
 // Conventions:
 //   - dpred is stored row-major: dpred[row*n_par + p] = d pred_row / d par_p.
@@ -92,6 +95,11 @@ struct AccumOpts {
   // If true, dsigma must be non-null and the kernel accounts for sigma's
   // dependence on parameters in gradient and Hessian (Parts 1/2/3).
   bool sigma_depends_on_par = false;
+
+  // If true and use_deriv2_exact is false, the curvature of an uncensored row in (pred, sigma) is
+  // the expected (Fisher) information of the row likelihood, positive semidefinite, in place of the
+  // exact Hessian of the row loss, which is indefinite where sigma depends on the parameters.
+  bool expected_information = false;
 
   // If true, d2sigma must be non-null. Activates the d2sigma exact-Hessian
   // term in accumulate_aloq / accumulate_bloq (gated also by use_deriv2_exact

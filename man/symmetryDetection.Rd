@@ -121,7 +121,7 @@ models without \code{equilibrate} and later events).}
 first, reduces the directions found and then counts the values of the coordinates with the
 output of a generic one and reconstructs the maps between them, as \code{\link[=discreteSymmetries]{discreteSymmetries()}}
 (needs msolve, implies \code{reconstruct = TRUE}). A model the global analysis does not handle
-gets the reason in \code{info$discrete$unsupported} and a warning. Needs symident 0.15.0.}
+gets the reason in \code{info$discrete$unsupported} and a warning.}
 
 \item{globalOptions}{A list of arguments of the global analysis: \code{order}, \code{points},
 \code{timeout} and \code{budget} as in \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}

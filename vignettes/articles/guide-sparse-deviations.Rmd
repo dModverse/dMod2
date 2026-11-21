@@ -13,79 +13,28 @@ knitr::opts_knit$set(root.dir = project)
 source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/reduced.R")
-knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/compounds.R")
+knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/dcf.R")
 # "a", "a and b", "a, b and c"
 enumerate <- function(x) if (length(x) < 2) paste(x) else
   paste(paste(x[-length(x)], collapse = ", "), "and", x[length(x)])
 ```
 
-Oppelt et al. [@oppelt2018model] also measured the TNFα response under drugs causing liver
-injury: diclofenac (DCF) with the imaging and blots of the first chapters, and amiodarone (AMD),
-paracetamol (APAP), fialuridine (FIAU) and ximelagatran (XIM) with four blots. Which pathway
-processes does each compound change? The publication answered this for DCF with an L1 penalty on
-the differences of all rate constants between treated and untreated cells, scanned over the
-penalty strength. Here all five compounds are the groups of a spike-and-slab random effect: a
-compound leaves a rate constant unchanged or changes it by a normal draw, with probability and
-spread of changes estimated from all compounds together. Code: `compounds.R`, on the reduced model
-of [Profile likelihood](guide-profiles.html); random effects and `em()` are introduced in
-[Nonlinear mixed-effects models](guide-nlme.html).
+Oppelt et al. [@oppelt2018model] also measured the TNFα response of HepG2 cells under diclofenac
+(DCF). Which rate constants does DCF change? The publication selected differences by an L1 scan and
+a likelihood ratio test [@steiert2016l1]. This chapter repeats the scan and answers the same
+question with spike-and-slab random effects. Model: the reduced model of
+[Profile likelihood](guide-profiles.html); random effects and `em()`:
+[Nonlinear mixed-effects models](guide-nlme.html). `dcf.R` computed the fits; the chapter loads
+them.
 
-The second part lists the sparse random-effect distributions (spike-and-slab, Dirichlet-process)
-and what their fits report; derivations are in [Methods > Sparsity priors](methods-sparsity-priors.html).
+The second part lists the sparse random-effect distributions and what their fits report;
+derivations: [Methods > Sparsity priors](methods-sparsity-priors.html).
 
 ```{r setup, echo = FALSE}
 ```
 
 ```{r data, echo = FALSE}
 ```
-
-```{r reducedreactions, echo = FALSE}
-```
-
-## Compound data
-
-Each compound has a separate control: DCF on the blots and imaging of the first chapters, the other
-four on a third blot set with their own untreated, stimulated control. A condition without compound
-belongs to no group (`NA` in column `compound`).
-
-```{r compounddata}
-```
-
-```{r}
-covariates(dataCompounds)
-```
-
-## Spike-and-slab random effects
-
-With $\theta_k$ the log rate constant $k$ and $\eta_{ik}$ the change by compound $i$, a condition
-with compound $i$ uses $\theta_k + \eta_{ik}$, one without uses $\theta_k$. The spike-and-slab
-distribution [@mitchell1988bayesian; @george1993variable] of a change is
-
-$$p(\eta_{ik}) = (1 - \rho)\, \delta(\eta_{ik}) + \rho\, \mathcal{N}(\eta_{ik};\, 0, \tau^2),$$
-
-a spike at 0 with weight $1 - \rho$ and a normal slab of standard deviation $\tau$ with weight
-$\rho$. Changes are independent across compounds and rate constants; $\rho$, $\tau$ are shared.
-`em()` estimates $\theta$, $\rho$ and $\tau$ from the likelihood with the changes integrated out, a
-sum over the subsets of changed rate constants
-([Methods > Sparsity priors](methods-sparsity-priors.html#approximate-marginal)). The
-posterior spike probability $p_0 = \Pr(\eta_{ik} = 0 \mid y)$ near 0 means a change, near the prior
-$1 - \rho$ no evidence, above it evidence against a change.
-
-```{r, include = FALSE}
-fit <- stored("results/compounds.rds", "compounds.R", envir = new.env())
-rateConstants <- length(unique(fit$random$eta))
-```
-
-Each compound has `r rateConstants` candidate rate constants, and the subset sum is exact; beyond
-a term budget `em()` uses the expectation consistent (EC) approximation
-([Methods > Spike and slab](methods-sparsity-priors.html#spike-and-slab)). Comparison with the
-L1 penalty: [Methods > Selection of deviations](methods-sparsity-priors.html#selection-of-deviations).
-
-## Compound model
-
-The reduced model of [Profile likelihood](guide-profiles.html) with second derivatives for `em()`.
-The resting state of the reduced model (all NFκB bound to IκBα, all IKK inactive) holds for all
-rate constants, so a compound changes the dynamics only from TNFα on:
 
 ```{r reactions, include = FALSE}
 ```
@@ -102,219 +51,435 @@ rate constants, so a compound changes the dynamics only from TNFα on:
 ```{r gauge, include = FALSE}
 ```
 
+```{r reducedreactions, include = FALSE}
+```
+
 ```{r reducedobservables, include = FALSE}
 ```
 
 ```{r reducedmodel, include = FALSE}
 ```
 
-```{r compoundmodel}
+## Data and model
+
+TNFα-stimulated cells of the first blot scale, without (`TNF_none`) and with DCF (`TNF_DCF`).
+
+```{r dcfdata}
 ```
 
-`x ~ 1 + (1 | gr(compound, dist = spikeSlab()))` in `insert()` replaces rate constant `x` by a
-fixed effect plus a compound random effect. Candidates are the rate constants the reduced model
-estimates, all but gauge and fixed values of the publication. Scales and offsets of the third blot
-set are separate parameters, except `off_IkBa`, fixed at 0 by the reduced model.
+With DCF an estimated rate constant $k$ becomes $\log k + \Delta_k$. `insert()` with
+`x ~ 1 + (1 | gr(compound, dist = spikeSlab()))` writes each $\Delta_k$ as a random effect
+`eta_<k>_DCF`, 0 without compound; the L1 scan treats the same symbols as parameters. 24
+differences, as in the publication:
 
-```{r compoundeffects, warning = FALSE}
-```
-
-## Joint fit of all compounds
-
-`em()` estimates fixed effects, change modes, $\rho$ and $\tau$ together. `compounds.R` runs 200
-starts, the reduced optimum with changes at 0 and 199 around it, redrawing failed starts; `helix.R`
-splits them into `distributedComputing()` tasks by `msem(which = )`
-([Remote computing](guide-remote-computing.html)):
-
-```{r compoundfit, eval = FALSE}
-```
-
-The best fit is saved with a table of all starts:
-
-```{r compoundsave, eval = FALSE}
-```
-
-```{r}
-fit <- readRDS("results/compounds.rds")
-c(value = fit$value, converged = fit$converged, iterations = fit$iterations)
-fit$argument[c("prob_compound", "tau_compound")]
-fit$coupling
+```{r dcfmodel, results = "hide"}
 ```
 
 ```{r, include = FALSE}
-couplingText <- switch(fit$coupling %||% "none",
-  expectationConsistent = "the expectation consistent (EC) approximation",
-  none = "none: every compound is integrated exactly")
+# the fixed values of the reduced model on the parameters of the DCF model
+fixedDCF <- gauge[intersect(names(gauge), getParameters(prdDCF))]
+changesDCF <- unique(na.omit(unlist(randomEffects(pDCF)$etas)))
+# the prediction of both conditions at `pars`, the changes not in `pars` at 0, as a data frame
+predictionOf <- function(prd, pars, changes) {
+  off <- setdiff(changes, names(pars))
+  data <- as.data.frame(dataDCF)
+  times <- sort(unique(c(seq(0, max(data$time), length.out = 200), data$time)))
+  as.data.frame(prd(times, pars, fixed = c(fixedDCF, setNames(numeric(length(off)), off))))
+}
+dataFrameDCF <- as.data.frame(dataDCF)
+onceDCF <- names(which(tapply(dataFrameDCF$time, dataFrameDCF$name, function(t) length(unique(t))) == 1L))
+# against the data, each observable up to the last time it was measured, without those measured once
+fitPlot <- function(prd, pars, changes) {
+  pred <- predictionOf(prd, pars, changes)
+  data <- dataFrameDCF[!dataFrameDCF$name %in% onceDCF, ]
+  last <- tapply(data$time, data$name, max)
+  pred <- pred[pred$name %in% names(last), ]
+  pred <- pred[pred$time <= last[as.character(pred$name)], ]
+  ggplot2::ggplot(data, ggplot2::aes(time, value, color = condition)) +
+    ggplot2::geom_line(data = pred) +
+    ggplot2::geom_errorbar(ggplot2::aes(ymin = value - sigma, ymax = value + sigma), width = 0,
+                           na.rm = TRUE) +
+    ggplot2::geom_point(size = 1.2) +
+    ggplot2::facet_wrap(~ name, scales = "free") +
+    scale_color_dMod2() +
+    ggplot2::labs(x = "time [min]", y = "log signal", color = NULL) +
+    theme_dMod2()
+}
+# the observables measured at one time: data and prediction per condition
+fitOnce <- function(prd, pars, changes) {
+  pred <- predictionOf(prd, pars, changes)
+  data <- dataFrameDCF[dataFrameDCF$name %in% onceDCF, c("name", "time", "condition", "value", "sigma")]
+  pred <- unique(merge(pred[pred$name %in% onceDCF, c("name", "time", "condition", "value")],
+                       unique(data[c("name", "time")])))
+  names(pred)[names(pred) == "value"] <- "prediction"
+  out <- merge(pred, data)
+  out[c("prediction", "value", "sigma")] <- lapply(out[c("prediction", "value", "sigma")], round, 2)
+  out
+}
 ```
 
-`value` is $-2 \log L$ of the approximate marginal, `iterations` the steps of the joint trust
-region of fixed effects and hyperparameters, `coupling` the integral over coupled changes, here
-`r couplingText`.
+## L1 scan
 
-## Multistart optimization
+The penalty $\lambda \sum_k \lvert \Delta_k \rvert$ [@tibshirani1996regression; @steiert2016l1] is
+added to $-2 \log L$; `trustL1()` sets differences exactly to 0
+([L1 penalties](guide-optimization.html#l1-penalties)).
 
-The objective has local optima. `msem()` redraws a start whose fit fails, e.g. where EC does not
-converge. `$multistart` has per start `value`, `converged`, `iterations`, attempts (`tries`) and the
-`error` of a start that failed every attempt. The waterfall shows the best 100 starts; a plateau is
-one optimum.
+Four rate constants enter the data only as a product with a partner: `uptake` with
+`act_Ikk_by_TNF`, `prod_Ikb` with `prod_mIkb_by_nNfk`, `build_RnaA20` with `build_A20`, and
+`split_NfkIkb` with `eta_split_pNfkpIkb`. The reduced model fixes the four as gauge
+([Symmetries](guide-symmetries.html)), so their differences are 0, and both methods share the
+other 20 candidates. The publication penalized all 24 and set partners aside after the scan.
+
+Each $\lambda$, 0 and 31 values from $10^{-2}$ to $10^4$ evenly on the log scale, runs 1000 starts
+around the reduced fit, then starts from the best fits of the other $\lambda$ until none improves.
+`dcf.R` runs the fits through `fitTasks()` ([Remote computing](guide-remote-computing.html)):
+
+```{r dcfL1, eval = FALSE}
+```
+
+```{r dcfL1continue, eval = FALSE}
+```
+
+```{r}
+dcfL1 <- stored("results/dcfL1.rds", "dcf.R", envir = new.env())
+```
+
+Waterfall of the best 200 values of $-2 \log L$ of the data, without the penalty, per $\lambda$,
+the y axis shared within a row:
+
+```{r, fig.width = 11, fig.height = 13}
+objectiveL1 <- dcfL1$penalized
+lambdaL1 <- sort(unique(objectiveL1$lambda))
+# the best 200 fits per lambda, six lambdas per row, the y axis shared within a row
+best200 <- function(x) {
+  x <- head(x[order(x$value), ], 200)
+  x$rank <- seq_len(nrow(x))
+  x
+}
+waterL1 <- do.call(rbind, lapply(seq_along(lambdaL1), function(i)
+  cbind(best200(objectiveL1[objectiveL1$lambda == lambdaL1[i], ]), row = (i - 1) %/% 6,
+        col = (i - 1) %% 6, label = sprintf("lambda == %s", format(signif(lambdaL1[i], 3))))))
+ggplot2::ggplot(waterL1, ggplot2::aes(rank, value)) +
+  ggplot2::geom_point(ggplot2::aes(color = converged), size = 0.8) +
+  ggplot2::geom_text(data = unique(waterL1[c("row", "col", "label")]),
+                     ggplot2::aes(x = 100, y = Inf, label = label), parse = TRUE, vjust = 1.4,
+                     inherit.aes = FALSE) +
+  ggplot2::facet_grid(row ~ col, scales = "free_y") +
+  ggplot2::scale_color_manual(values = c(`TRUE` = "black", `FALSE` = dMod2_colors[2]),
+                              labels = c(`TRUE` = "converged", `FALSE` = "not converged"),
+                              name = NULL) +
+  ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.25))) +
+  ggplot2::labs(x = "fit rank", y = "-2 log L of the data") +
+  theme_dMod2() +
+  ggplot2::theme(strip.text = ggplot2::element_blank(), legend.position = "bottom")
+```
+
+```{r, include = FALSE}
+penalizedAll <- dcfL1$penalized
+penalizedAll$objective <- penalizedAll$value + penalizedAll$lambda * penalizedAll$L1
+reachedL1 <- tapply(penalizedAll$objective, penalizedAll$lambda, function(v) sum(v < min(v) + 0.1))
+waterText <- sprintf(paste(
+  "Of at least %d fits per $\\lambda$, %d to %d reach the best penalized value within 0.1, a median %.0f; most",
+  "others end at local optima or crawl and stop short."),
+  min(table(penalizedAll$lambda)), min(reachedL1), max(reachedL1), median(reachedL1))
+```
+
+`r waterText`
+
+Differences over $\lambda$ (Fig. 2a of the publication), in color those kept at the selected
+$\lambda$ (dashed):
+
+```{r, fig.width = 8, fig.height = 4.5}
+paths <- data.frame(lambda = rep(as.numeric(rownames(dcfL1$path)), ncol(dcfL1$path)),
+                    difference = rep(sub("^eta_(.*)_DCF$", "\\1", colnames(dcfL1$path)),
+                                     each = nrow(dcfL1$path)),
+                    value = as.vector(dcfL1$path))
+paths <- paths[paths$lambda > 0, ]
+kept <- sub("^eta_(.*)_DCF$", "\\1", dcfL1$selected)
+ggplot2::ggplot(paths, ggplot2::aes(lambda, value, group = difference)) +
+  ggplot2::geom_vline(xintercept = dcfL1$lambda, linetype = 2, color = "gray50") +
+  ggplot2::geom_line(data = paths[!paths$difference %in% kept, ], color = "gray75") +
+  ggplot2::geom_line(data = paths[paths$difference %in% kept, ], ggplot2::aes(color = difference)) +
+  ggplot2::scale_x_log10(breaks = 10^(-2:4), labels = trimws(format(10^(-2:4), scientific = FALSE, drop0trailing = TRUE))) +
+  ggplot2::labs(x = expression(lambda), y = expression(Delta ~ "[log]"), color = NULL) +
+  theme_dMod2()
+```
+
+Over $\lambda$ (Fig. 2b): $-2 \log L$ of the data (black), plus penalty (red, penalty gray), and
+the number of nonzero differences:
+
+```{r, fig.width = 8, fig.height = 5}
+scan <- dcfL1$scan[dcfL1$scan$lambda > 0, ]
+curves <- rbind(data.frame(lambda = scan$lambda, value = scan$data, panel = "-2 log L", curve = "data"),
+                data.frame(lambda = scan$lambda, value = scan$data + scan$penalty, panel = "-2 log L",
+                           curve = "data + penalty"),
+                data.frame(lambda = scan$lambda, value = scan$changes, panel = "nonzero differences",
+                           curve = "count"))
+ggplot2::ggplot(curves, ggplot2::aes(lambda, value)) +
+  ggplot2::geom_ribbon(data = data.frame(lambda = scan$lambda, lo = scan$data,
+                                         hi = scan$data + scan$penalty, panel = "-2 log L"),
+                       ggplot2::aes(x = lambda, ymin = lo, ymax = hi), inherit.aes = FALSE,
+                       fill = "gray85") +
+  ggplot2::geom_vline(xintercept = dcfL1$lambda, linetype = 2, color = "gray50") +
+  ggplot2::geom_line(ggplot2::aes(color = curve)) +
+  ggplot2::scale_color_manual(values = c(data = "black", `data + penalty` = "#b2182b",
+                                         count = "#2166ac"), guide = "none") +
+  ggplot2::scale_x_log10(breaks = 10^(-2:4), labels = trimws(format(10^(-2:4), scientific = FALSE, drop0trailing = TRUE))) +
+  ggplot2::facet_wrap(~ panel, ncol = 1, scales = "free_y") +
+  ggplot2::labs(x = expression(lambda), y = NULL) +
+  theme_dMod2()
+```
+
+The differences kept at each $\lambda$ are refitted without penalty, the others at 0, from the
+best penalized fits and from 300 or more starts around the reduced fit. Selected is the largest
+$\lambda$ whose refit the likelihood ratio test against all 20 candidates does not reject at
+$p < 0.001$, as in the publication:
+
+```{r dcfL1select, eval = FALSE}
+```
+
+```{r, include = FALSE}
+fullScan <- dcfL1$scan
+rejected <- fullScan[!is.na(fullScan$p) & fullScan$p < 0.001 & fullScan$lambda > dcfL1$lambda, ][1, ]
+selectedRow <- fullScan[fullScan$lambda == dcfL1$lambda, ]
+scanText <- sprintf(paste(
+  "The test rejects from $\\lambda = %.3g$ on, with %d differences and %.0f in $-2 \\log L$",
+  "above the refit with all 20; the publication, with 24 candidates, rejected from $\\lambda = 10$",
+  "on, with 11 differences and 34. Kept at $\\lambda = %.3g$ are %d differences: %s."),
+  rejected$lambda, rejected$changes, rejected$refit - dcfL1$all$value, dcfL1$lambda,
+  selectedRow$changes, enumerate(paste0("`", sort(kept), "`")))
+```
+
+`r scanText`
+
+Of the 11 differences at $\lambda = 10$ the publication kept seven as independent
+[@oppelt2018model]: it dropped `uptake`, `prod_Ikb`, `eta_int_pNfk` and `act_Nfk_by_Ikk` and took
+`shuttle_RnaA20` in place of `build_A20`. The seven refitted alone, against the estimates and 95 %
+intervals of the publication:
+
+```{r}
+publicationDCF <- dcfL1$publication
+publicationDCF$refit <- unname(dcfL1$refitPublication$argument[paste0("eta_", publicationDCF$rate, "_DCF")])
+publicationDCF
+```
+
+```{r, include = FALSE}
+inside <- with(publicationDCF, refit >= lower & refit <= upper)
+candidates <- ncol(dcfL1$path)
+inSelected <- all(paste0("eta_", publicationDCF$rate, "_DCF") %in% dcfL1$selected)
+publicationText <- sprintf(paste(
+  "%s lie in the intervals of the publication. Against the refit with all %d candidates the seven",
+  "give %.0f more in $-2 \\log L$ with %d fewer parameters, $p = %.2f$.%s"),
+  if (all(inside)) "All seven estimates" else sprintf("%d of the seven estimates, all but %s,",
+    sum(inside), enumerate(sprintf("`%s` (%.2f)", publicationDCF$rate[!inside], publicationDCF$refit[!inside]))),
+  candidates, dcfL1$refitPublication$value - dcfL1$all$value, candidates - nrow(publicationDCF),
+  pchisq(dcfL1$refitPublication$value - dcfL1$all$value, candidates - nrow(publicationDCF), lower.tail = FALSE),
+  if (!inSelected) "" else sprintf(paste(
+    " All seven are among the %d kept by the scan, against which they give %.0f more with %d fewer",
+    "parameters, $p = %.2f$."), length(dcfL1$selected),
+    dcfL1$refitPublication$value - dcfL1$refitSelected$value, length(dcfL1$selected) - nrow(publicationDCF),
+    pchisq(dcfL1$refitPublication$value - dcfL1$refitSelected$value,
+           length(dcfL1$selected) - nrow(publicationDCF), lower.tail = FALSE)))
+```
+
+`r publicationText` The model with the seven differences against the data (Fig. 2c); observables
+measured once in the table:
+
+```{r, fig.width = 10, fig.height = 8}
+fitPlot(prdDCF, dcfL1$refitPublication$argument, changesDCF)
+fitOnce(prdDCF, dcfL1$refitPublication$argument, changesDCF)
+```
+
+## Spike and slab
+
+With $\theta_k$ the log rate constant $k$, cells with DCF use $\theta_k + \Delta_k$. The
+spike-and-slab distribution [@mitchell1988bayesian; @george1993variable] of a difference is
+
+$$p(\Delta_k) = (1 - \rho)\, \delta(\Delta_k) + \rho\, \mathcal{N}(\Delta_k;\, 0, \tau^2),$$
+
+with inclusion probability $\rho$ (`prob_compound`) and slab standard deviation $\tau$
+(`tau_compound`, log scale). `em()` estimates $\theta$, $\rho$ and $\tau$ from the likelihood with
+the differences integrated out, a sum over subsets
+([Methods > Sparsity priors](methods-sparsity-priors.html#approximate-marginal)).
+$p_0 = \Pr(\Delta_k = 0 \mid y)$ is the posterior spike probability.
+
+The candidates are the same 20 as in the L1 scan; with both partners of a product as candidates,
+neither would reach a probability of one half. `dcf.R` runs 1000 starts of `msem()` around the
+reduced fit, then 200 around the best. Waterfall of the 200:
+
+```{r dcfspikeslab, eval = FALSE}
+```
+
+```{r dcfspikeslabmore, eval = FALSE}
+```
 
 ```{r, fig.height = 3.5}
-plotValues(fit, rank(value, ties.method = "first") <= 100)
+dcfSS <- stored("results/dcf.rds", "dcf.R", envir = new.env())
+plotValues(dcfSS, round == 2)
+dcfSS$argument[c("prob_compound", "tau_compound")]
 ```
 
 ```{r, include = FALSE}
-ms <- fit$multistart
-best <- min(ms$value, na.rm = TRUE)
-multistartText <- sprintf(
-  "Of the %d starts, %d end within 1 of the best -2 log L, %d did not converge and %d failed.",
-  nrow(ms), sum(ms$value < best + 1, na.rm = TRUE), sum(!ms$converged & !is.na(ms$value)),
-  sum(is.na(ms$value)))
-retriedText <- if (is.null(ms$tries) || !any(ms$tries > 1)) "" else
-  sprintf("%d of the starts were drawn again, %d times in all.", sum(ms$tries > 1), sum(ms$tries - 1))
+first <- dcfSS$multistart[dcfSS$multistart$round == 1, ]
+second <- dcfSS$multistart[dcfSS$multistart$round == 2, ]
+plateau <- c(sum(first$value < dcfSS$value + 0.1), sum(second$value < dcfSS$value + 0.1))
+hyperText <- sprintf(
+  "%d of the %d starts around the reduced fit and %d of the %d around the best end within 0.1 of the best value. With $\\rho = %.2f$ a difference is expected for %.0f of the 20 rate constants; with $\\tau = %.2f$ a difference is typically a factor of %.1f.",
+  plateau[1], nrow(first), plateau[2], nrow(second), dcfSS$argument[["prob_compound"]],
+  20 * dcfSS$argument[["prob_compound"]], dcfSS$argument[["tau_compound"]],
+  exp(dcfSS$argument[["tau_compound"]]))
 ```
 
-`r multistartText` `r retriedText`
+`r hyperText` Probability of a difference, $1 - p_0$, labeled with the difference in the most
+probable subset; crosses mark the seven of the publication:
 
-## Changes by compound
-
-Changes with $p_0 < 0.05$, with log-scale modes:
-
-```{r}
-changes <- fit$random[fit$random$p0 < 0.05, c("group", "eta", "mode", "se", "p0")]
-changes <- changes[order(changes$group, changes$p0), ]
-rownames(changes) <- NULL
-changes
+```{r, fig.width = 8, fig.height = 5}
+probability <- dcfSS$random[, c("eta", "mode", "p0")]
+probability$eta <- factor(probability$eta, levels = rev(probability$eta))
+probability$publication <- probability$eta %in% publicationDCF$rate
+ggplot2::ggplot(probability, ggplot2::aes(1 - p0, eta)) +
+  ggplot2::geom_col(fill = "#2166ac") +
+  ggplot2::geom_vline(xintercept = 0.5, linetype = 2, color = "gray50") +
+  ggplot2::geom_text(data = probability[probability$mode != 0, ],
+                     ggplot2::aes(label = sprintf("%.2f", mode)), hjust = -0.2, size = 3) +
+  ggplot2::geom_point(data = probability[probability$publication, ], ggplot2::aes(x = -0.04),
+                      shape = 4, size = 2.5) +
+  ggplot2::scale_x_continuous(limits = c(-0.06, 1.15), breaks = seq(0, 1, 0.25)) +
+  ggplot2::labs(x = "probability of a difference", y = NULL) +
+  theme_dMod2()
 ```
 
 ```{r, include = FALSE}
-compounds <- sort(unique(fit$random$group))
-rates <- unique(fit$random$eta)
-counts <- table(factor(changes$group, levels = compounds))
-others <- setdiff(compounds, "DCF")
-changesText <- sprintf(
-  "DCF changes %d of the %d rate constants, %s. The probability of a change is %.2f, and a change has a spread of %.2f on the log scale, a factor of about %.1f.",
-  counts[["DCF"]], length(rates), enumerate(sprintf("%s %d", others, counts[others])),
-  fit$argument[["prob_compound"]], fit$argument[["tau_compound"]], exp(fit$argument[["tau_compound"]]))
-# the seven rate constants the L1 scan of the publication selected for DCF, by reaction
-publication <- c(act_Ikk_by_TNF = "IKK activation by TNFα", trigger_iIkk = "IKK recovery",
-                 act_pIkk = "IKK phosphorylation", act_Ikb_by_Ikk = "IκBα phosphorylation by pIKK",
-                 prod_mIkb_by_nNfk = "IκBα transcription", degrad_mIkb = "IκBα transcript degradation",
-                 build_A20 = "A20 translation")
-reactions <- c(publication, shuttle_RnaA20 = "the delay of the A20 transcript")
-named <- function(x) ifelse(x %in% names(reactions), paste0(reactions[x], " (`", x, "`)"), paste0("`", x, "`"))
-dcf <- changes$eta[changes$group == "DCF"]
-shared <- intersect(names(publication), dcf)
-publicationText <- paste0(
-  sprintf("Of the %d rate constants the L1 scan of the publication selected for DCF, the spike and slab finds %d: %s",
-          length(publication), length(shared), enumerate(named(shared))),
-  if (length(setdiff(names(publication), dcf)))
-    sprintf("; not %s", enumerate(named(setdiff(names(publication), dcf)))),
-  if (length(setdiff(dcf, names(publication))))
-    sprintf(", but %s", enumerate(named(setdiff(dcf, names(publication))))),
-  ".")
+ssSet <- as.character(probability$eta[probability$mode != 0])
+sharedSS <- intersect(ssSet, publicationDCF$rate)
+sameSign <- all(sign(dcfSS$random$mode[match(sharedSS, dcfSS$random$eta)]) ==
+                sign(publicationDCF$value[match(sharedSS, publicationDCF$rate)]))
+missing <- setdiff(publicationDCF$rate, ssSet)
+extra <- setdiff(ssSet, publicationDCF$rate)
+ssText <- sprintf(paste(
+  "The most probable subset holds %d differences, %d of them among the seven of the publication,",
+  if (sameSign) "with the same signs." else "not all with the same signs.", "%s%s",
+  "Refitted without the slab, the subset gives %.0f more in $-2 \\log L$ than all 20 candidates,",
+  "the seven of the publication %.0f."),
+  length(ssSet), length(sharedSS),
+  if (length(missing)) sprintf("Not in it: %s. ", enumerate(sprintf("`%s` ($p_0 = %.2f$)", missing,
+    dcfSS$random$p0[match(missing, dcfSS$random$eta)]))) else "",
+  if (length(extra)) sprintf("In addition: %s. ", enumerate(sprintf("`%s`", extra))) else "",
+  dcfL1$refitSpikeSlab$value - dcfL1$all$value, dcfL1$refitPublication$value - dcfL1$all$value)
+# the likelihood ratio test of the subset against the seven of the publication, where it lies in them
+if (all(ssSet %in% publicationDCF$rate)) {
+  gainPub <- dcfL1$refitSpikeSlab$value - dcfL1$refitPublication$value
+  dfPub <- nrow(publicationDCF) - length(ssSet)
+  ssText <- paste(ssText, sprintf(paste(
+    "Against the seven, the subset gives %.2f more in $-2 \\log L$ with %d %s fewer, $p = %.2f$."),
+    gainPub, dfPub, if (dfPub == 1L) "parameter" else "parameters",
+    pchisq(gainPub, dfPub, lower.tail = FALSE)))
+}
 ```
 
-`r changesText` `r publicationText` [@oppelt2018model]
+`r ssText` The 20 differences are exchangeable under the model: the nonzero ones against the slab
+density $\rho\, \mathcal{N}(0, \tau^2)$ (line), the count at 0 against the expected
+$20 (1 - \rho)$ (bar). With `r length(ssSet)` nonzero differences the figure shows gross departures
+from the slab, an outlier or separate clusters, but is no test of its shape:
 
-```{r, fig.height = 5.5}
-shown <- fit$random
-shown$eta <- factor(shown$eta, levels = unique(shown$eta))
-shown$evidence <- -log10(pmax(shown$p0, 1e-6))
-ggplot2::ggplot(shown, ggplot2::aes(group, eta)) +
-  ggplot2::geom_tile(ggplot2::aes(fill = mode, alpha = evidence), color = "white") +
-  ggplot2::geom_point(data = shown[shown$p0 < 0.05, ], ggplot2::aes(shape = "p0 < 0.05"),
-                      fill = "white") +
-  ggplot2::scale_y_discrete(limits = rev) +
-  ggplot2::scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b") +
-  ggplot2::scale_alpha(range = c(0.1, 1), limits = c(0, 6), breaks = 1:3,
-                       labels = c("1, p0 = 0.1", "2, p0 = 0.01", "3, p0 = 0.001"),
-                       guide = ggplot2::guide_legend(override.aes = list(fill = "gray30"))) +
-  ggplot2::scale_shape_manual(values = 21) +
-  ggplot2::labs(x = NULL, y = NULL, fill = "change [log]", alpha = "evidence, -log10 p0", shape = NULL) +
-  theme_dMod()
+```{r, fig.width = 8, fig.height = 3}
+rho <- dcfSS$argument[["prob_compound"]]
+tau <- dcfSS$argument[["tau_compound"]]
+nonzero <- dcfSS$random$mode[dcfSS$random$mode != 0]
+slab <- data.frame(x = seq(-4, 4, length.out = 401))
+slab$density <- 20 * rho * dnorm(slab$x, 0, tau)
+ggplot2::ggplot() +
+  ggplot2::geom_line(data = slab, ggplot2::aes(x, density)) +
+  ggplot2::geom_rug(data = data.frame(x = nonzero), ggplot2::aes(x), sides = "b", linewidth = 0.8,
+                    length = grid::unit(0.08, "npc")) +
+  ggplot2::geom_segment(ggplot2::aes(x = 0, xend = 0, y = 0, yend = sum(dcfSS$random$mode == 0)),
+                        linewidth = 2, color = dMod2_colors[2]) +
+  ggplot2::geom_point(ggplot2::aes(x = 0, y = 20 * (1 - rho)), shape = 4, size = 3) +
+  ggplot2::labs(x = expression(Delta ~ "[log]"), y = "differences per unit") +
+  theme_dMod2()
 ```
 
-Each tile is one $\eta_{ik}$; rate constants follow the pathway from IKK (top) to A20 (bottom).
-Color is the log-scale mode of the most probable structure: red increase, blue decrease, white no
-change (wherever the spike is more probable than the slab); $-0.7$ halves a rate constant. Opacity
-is the evidence $-\log_{10} p_0$, full from 6 on ($p_0 < 10^{-6}$). A pale tile is a small change,
-or $p_0$ near or above $1 - \rho$; circles mark $p_0 < 0.05$, the table above. A colored tile without
-circle has $p_0$ between 0.05 and 0.5.
+The model at the spike-and-slab estimates against the data:
 
-## Data and fit by compound
-
-Prediction per compound at the estimated fixed effects and changes against the compound data, each
-point with the measured standard deviation, which the blots have in place of an error model; gray:
-the untreated, stimulated control of the same blots at the fixed effects alone. DCF blots span six
-hours, the others 50 minutes:
-
-::: {.wide}
-```{r, fig.width = 12, fig.height = 8.5}
-outer <- getParameters(prdCompounds)
-estimates <- c(fit$argument, fit$fixed, setNames(fit$random$mode, fit$random$parameter))
-pars <- setNames(numeric(length(outer)), outer)
-pars[intersect(outer, names(estimates))] <- estimates[intersect(outer, names(estimates))]
-
-treated <- grep("^TNF_[A-Z]", names(dataCompounds), value = TRUE)
-controls <- sub("^TNF_[A-Z]+_", "TNF_none_", treated)
-observed <- as.data.frame(dataCompounds)
-times <- sort(unique(c(seq(0, 60, length.out = 200), seq(0, max(observed$time), length.out = 200))))
-prediction <- as.data.frame(prdCompounds(times, pars, deriv = FALSE, conditions = union(treated, controls)))
-
-# every compound with the untreated control on the same blots
-blots <- c("IkBa", "pIkBa", "pIKK", "pNFkB")
-byCompound <- function(frame) do.call(rbind, Map(function(cond, ctl) {
-  rows <- frame[frame$condition %in% c(cond, ctl) & frame$name %in% blots,
-                c("time", "name", "value", "sigma", "condition")]
-  rows$compound <- sub("^TNF_([A-Z]+)_.*", "\\1", cond)
-  rows$treatment <- ifelse(rows$condition == cond, "compound", "control")
-  rows
-}, treated, controls))
-points <- byCompound(observed)
-# the curves over the time range of the data of the compound
-curves <- byCompound(prediction)
-curves <- curves[curves$time <= tapply(points$time, points$compound, max)[curves$compound], ]
-colors <- c(compound = "#b2182b", control = "gray55")
-ggplot2::ggplot(mapping = ggplot2::aes(time, value, color = treatment)) +
-  ggplot2::geom_line(data = curves) +
-  ggplot2::geom_errorbar(data = points, ggplot2::aes(ymin = value - sigma, ymax = value + sigma),
-                         width = 0) +
-  ggplot2::geom_point(data = points) +
-  ggplot2::facet_grid(name ~ compound, scales = "free") +
-  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
-  ggplot2::scale_color_manual(values = colors) +
-  ggplot2::labs(x = "time [min]", y = "log signal [a.u.]", color = NULL) +
-  theme_dMod() +
-  ggplot2::theme(legend.position = "bottom")
+```{r, fig.width = 10, fig.height = 8}
+parsSS <- c(dcfSS$argument[setdiff(names(dcfSS$argument), c("prob_compound", "tau_compound"))],
+            setNames(dcfSS$random$mode, paste0("eta_", dcfSS$random$eta, "_DCF")))
+fitPlot(gDCF * xDCF * pSS, parsSS, unique(na.omit(unlist(randomEffects(pSS)$etas))))
+fitOnce(gDCF * xDCF * pSS, parsSS, unique(na.omit(unlist(randomEffects(pSS)$etas))))
 ```
-:::
+
+```{r, include = FALSE}
+# bias: the kept differences at the penalized estimates against their refit without penalty, and
+# the spike-and-slab values against the refit of the same subset
+keptNames <- dcfL1$selected
+shrinkL1 <- abs(dcfL1$refitSelected$argument[keptNames]) - abs(dcfL1$penalizedSelected[keptNames])
+ssNames <- paste0("eta_", ssSet, "_DCF")
+shiftSS <- abs(dcfSS$random$mode[match(ssSet, dcfSS$random$eta)]) - abs(dcfL1$refitSpikeSlab$argument[ssNames])
+ssInL1 <- all(ssNames %in% dcfL1$selected)
+compareText <- sprintf(paste(
+  "It needs one multistart, no scan over $\\lambda$ and no refits. The penalty shrinks every kept",
+  "difference toward 0, at the selected $\\lambda$ by a median %.2f on the log scale against the",
+  "refit without the penalty, more at larger $\\lambda$; the spike and slab leaves the size of a",
+  "difference to the slab, and the spike-and-slab differences lie a median %.2f from the refit of",
+  "the same subset.%s"),
+  median(shrinkL1), median(abs(shiftSS)),
+  if (!ssInL1) "" else sprintf(paste(
+    " The most probable subset lies within the %d differences the scan keeps and fits the data",
+    "not worse than they do, $p = %.2f$ for the %d others."), length(dcfL1$selected),
+    pchisq(dcfL1$refitSpikeSlab$value - dcfL1$refitSelected$value,
+           length(dcfL1$selected) - length(ssNames), lower.tail = FALSE),
+    length(dcfL1$selected) - length(ssNames)))
+```
+
+## L1 scan and spike and slab
+
+Both methods see the same data, model, prior and 20 candidates:
+
+```{r, echo = FALSE}
+allValue <- dcfL1$all$value
+row <- function(method, set, value) data.frame(method = method, differences = length(set),
+  `-2 log L` = round(value, 2), `p against all 20` = signif(pchisq(value - allValue, 20 - length(set),
+  lower.tail = FALSE), 2), check.names = FALSE)
+knitr::kable(rbind(row("L1 scan and test", dcfL1$selected, dcfL1$refitSelected$value),
+                   row("spike and slab", ssNames, dcfL1$refitSpikeSlab$value),
+                   row("publication", publicationDCF$rate, dcfL1$refitPublication$value),
+                   row("all candidates", seq_len(20), allValue)))
+```
+
+The spike and slab is faster and free of shrinkage. `r compareText` The L1 scan
+only tests subsets that are the penalized optimum at some $\lambda$; the spike and slab weighs every
+subset ([Methods > Selection of deviations](methods-sparsity-priors.html#selection-of-deviations)).
+The fit reports the most probable subset; the differences with $p_0 < 0.5$, the median probability
+model, which predicts best under broad conditions [@barbieri2004optimal],
+`r medianSS <- as.character(dcfSS$random$eta[dcfSS$random$p0 < 0.5]); if (setequal(medianSS, ssSet)) "are the same here" else sprintf("are %s here", enumerate(paste0("\x60", sort(medianSS), "\x60")))`.
+
+```{r, include = FALSE}
+seText <- if (is.null(tryCatch(vcov(dcfSS), error = function(e) NULL)))
+  "has one group, too few for the empirical information, and the intervals are missing" else
+  "the conditions without DCF and the prior complete the one group"
+```
 
 ## Sparse random-effect distributions
 
-`gr(group, dist = )` sets the random-effect distribution of a term. Besides `normal()`, two have
-deviations exactly zero unless the data need them:
+`gr(group, dist = )` sets the random-effect distribution. Besides `normal()`, two give deviations
+exactly zero unless the data need them:
 
 | distribution | a deviation $\eta$ of a group | hyperparameters |
 |---|---|---|
 | `spikeSlab()` | $0$ with probability $1 - \rho$, else $\mathcal{N}(0, \tau^2)$ | `prob_<grouping>`, `tau_<grouping>` |
 | `dirichletProcess()` | cluster value: $0$ for the population cluster, else one $\mathcal{N}(0, \tau^2)$ draw | `concentration_<grouping>`, `tau_<grouping>` |
 
-Hyperparameters are shared by the symbols of a term, numbered `_1`, `_2`, ... for several terms
-of one grouping, and estimated with the fixed effects unless given, as in `spikeSlab(tau = 0.5)`.
-A spike-and-slab deviation is zero with a probability reported per group. Under the Dirichlet process groups share deviations in clusters with the population
-value, see [Dirichlet-process random effects](#dirichlet-process-random-effects). Normal and sparse
-random effects of one grouping combine; `em(method = "focei")` fits all, Dirichlet-process ones
-also `method = "saem"`.
+Hyperparameters are shared by the symbols of a term (`_1`, `_2`, ... for several terms of one
+grouping) and estimated unless given, as in `spikeSlab(tau = 0.5)`. Normal and sparse random
+effects of one grouping combine; `em(method = "focei")` fits all.
 
 ## Fitting sparse random effects
 
-`em(method = "focei")` integrates sparse random effects on the Laplace approximation of the data
-term at the joint mode of a group, exactly where possible, the spike-and-slab effects of a group
-jointly even where the data couple them, and by EC where the data link a Dirichlet-process effect
-to another factor or the subset sum leaves the budget. Fixed
-effects and hyperparameters move in one trust region: no EM iteration count, no random numbers.
-`fit$coupling` is `"expectationConsistent"` if a group needed EC, `NULL` if all are exact. Integral,
-gradient and hyperparameter steps:
+`em(method = "focei")` integrates sparse random effects by the Laplace approximation at the joint
+mode of a group, exactly where possible, and by expectation consistent (EC) approximation where the
+data link a Dirichlet-process effect to another factor or the subset sum exceeds the budget. Fixed
+effects and hyperparameters move in one trust region. `fit$coupling` is `"expectationConsistent"`
+if a group needed EC, else `NULL`. Methods:
 [Methods > Approximate marginal](methods-sparsity-priors.html#approximate-marginal),
 [Methods > Expectation consistent
 approximation](methods-sparsity-priors.html#expectation-consistent-approximation) and
@@ -325,16 +490,16 @@ approximation](methods-sparsity-priors.html#expectation-consistent-approximation
 | `maxOuter` | `200` | joint trust-region iterations, all runs |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as `trust()` |
 
-Other entries are an error. The compound fit passes the `tolerances` of
-[Setting up models](guide-model.html) in `trustControl`, above the solver error in value and gradient. A run stopping
-short of `mtol` restarts while runs lower $-2 \log L$ by more than `mtol`. `msem()` perturbs
-concentrations and slab standard deviations on log scale, slab probabilities on logit scale.
+Other entries are an error. The DCF fit passes the `tolerances` of
+[Setting up models](guide-model.html) in `trustControl`. A run stopping short of `mtol` restarts
+while runs lower $-2 \log L$ by more than `mtol`. `msem()` perturbs concentrations and slab
+standard deviations on log scale, probabilities on logit scale.
 
 ## Reported structure
 
-The fit reports the most probable structure: subset of deviations (spike and slab) or partition
-(Dirichlet process). Spike deviations are exactly zero, slab deviations the posterior mean given
-the structure ([Methods > Reported structure](methods-sparsity-priors.html#reported-structure)).
+The fit reports the most probable subset (spike and slab) or partition (Dirichlet process): spike
+deviations exactly zero, slab deviations the posterior mean given the structure
+([Methods > Reported structure](methods-sparsity-priors.html#reported-structure)).
 `fit$random` has a row per group and random effect:
 
 - `mode`, this value;
@@ -343,40 +508,38 @@ the structure ([Methods > Reported structure](methods-sparsity-priors.html#repor
   deviating groups or clusters in group order, and `p0`, posterior probability of zero deviation;
 - `data`, whether the random effect reaches data of the group, where some do not.
 
-A sparse random effect reaching no data of the group (through transformations, ODE, observables,
-error model) rests at 0 with the prior standard deviation and, for spike and slab,
-$p_0 = 1 - \rho$. `fit$slab` lists probabilities, concentrations and slab standard deviations,
-each with term symbols, estimate and whether fixed.
+A sparse random effect reaching no data of the group rests at 0 with the prior standard deviation
+and, for spike and slab, $p_0 = 1 - \rho$. `fit$slab` lists probabilities, concentrations and slab
+standard deviations, each with term symbols, estimate and whether fixed.
 
 ## Standard errors
 
-With spike-and-slab random effects `fit$hessian` is `NULL`; `vcov()` inverts
-`fit$information`, the empirical information from the group scores. It needs more groups than
-parameters, or conditions without random effects plus priors for the other directions; otherwise
-`vcov()` is an error and standard errors are `NA`. In the compound fit the conditions without
-compound and the prior complete the five compounds. `dirichletProcess()` fits have neither;
-`confint(method = "profile")` gives intervals. Details: [Methods > Standard errors](methods-sparsity-priors.html#standard-errors).
+With spike-and-slab random effects `fit$hessian` is `NULL`; `vcov()` inverts `fit$information`,
+the empirical information of the group scores plus the expected information of the conditions
+without random effects and the priors (`hessian = "expected"`). It needs more groups than
+parameters, or those terms for the other directions; otherwise `vcov()` is an error and standard
+errors are `NA`. `fit$information` is not a Hessian of the marginal and does not detect saddle
+points. The DCF fit `r seText`. `dirichletProcess()` fits have neither;
+`confint(method = "profile")` gives intervals.
+Details: [Methods > Standard errors](methods-sparsity-priors.html#standard-errors).
 
 ## Dirichlet-process random effects
 
 With `gr(group, dist = dirichletProcess())` groups and population value form clusters; the
 concentration $\alpha$ sets how readily a group opens a new one. The population cluster has
-deviation zero, every other cluster one common deviation from $\mathcal{N}(0, \tau^2)$. $\alpha$ and
-$\tau$ are estimated by marginal maximum likelihood in one fit, with no penalty to scan. The
-reported structure is that of spike and slab with clusters in place of single deviations; the
-compounds here are fitted without it.
+deviation zero, every other cluster one common deviation from $\mathcal{N}(0, \tau^2)$. $\alpha$
+and $\tau$ are estimated by marginal maximum likelihood in one fit.
 
 `method = "focei"` sums exactly over partitions of up to 14 groups. `method = "saem"` draws
-partitions, allowing normal random effects alongside but no other sparse ones, and reports the most
-frequent partition of the late draws, from `window` iterations after burn-in, with standard error
-`valueSE` of $-2 \log L$.
-`control$saem$particles` sets the importance-sampling particles, default 500; `converged` says
-whether burn-in ended by the drift test. An SAEM fit has no gradient, Hessian or empirical
-information. Details:
+partitions, allows normal but no other sparse random effects alongside, and reports the most
+frequent partition of the last `window` iterations after burn-in, with standard error `valueSE` of
+$-2 \log L$. `control$saem$particles` sets the importance-sampling particles, default 500;
+`converged` says whether burn-in ended by the drift test. An SAEM fit has no gradient, Hessian or
+empirical information. Details:
 [Methods > Sparsity priors](methods-sparsity-priors.html#dirichlet-process-random-effects).
 
 Reference: `randomEffects()`, `spikeSlab()`, `dirichletProcess()`, `em()`, `msem()`,
-`plotValues()`
+`plotValues()`, `plotTrace()`, `plotRandomEffects()`, `plotPars()`
 
 [← 7. Nonlinear mixed-effects models](guide-nlme.html) | [9. Alignment of relative data measurements →](guide-alignment.html)
 

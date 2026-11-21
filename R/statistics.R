@@ -981,7 +981,6 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
 .mstrustRoute <- function(given, optfun, samplefun, samplerName) {
   accepts <- function(f) intersect(setdiff(names(formals(f)), "..."), names(given))
   toOptimizer <- accepts(optfun)
-  .trustRejectMoved(setdiff(names(given), toOptimizer), "mstrust")
   toSampler <- accepts(samplefun)
   if (length(intersect(toOptimizer, toSampler)))
     stop("Argument names of the optimizer and ", samplerName, "() clash.")
@@ -1317,7 +1316,7 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
             geom_ribbon(aes(ymin = cbLower95, ymax = cbUpper95), alpha = 0.3) +
             geom_ribbon(aes(ymin = cbLower68, ymax = cbUpper68), alpha = 0.3) +
             facet_wrap("condidnt", scales = "free") +
-            scale_y_log10() + ylab("variance") + theme_dMod())
+            scale_y_log10() + ylab("variance") + theme_dMod2())
   }
 
   result$sigma <- result$sigma / sqrt(data$n)

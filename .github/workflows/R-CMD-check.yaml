@@ -1,13 +1,32 @@
 # Workflow derived from https://github.com/r-lib/actions/tree/v2/examples
 # Need help debugging build failures? Start at https://github.com/r-lib/actions#where-to-find-help
+# Runs on push to master and on every pull request; docs-only changes run no check.
 on:
   push:
     branches: [main, master]
+    paths-ignore:
+      - 'vignettes/articles/**'
+      - 'examples/**'
+      - 'dev/**'
+      - 'bench/**'
+      - '**.md'
+      - '_pkgdown.yml'
+      - 'pkgdown/**'
   pull_request:
-  # the other devel branches are not push-triggered: a full matrix run on every
-  # commit of a port in progress is not worth the minutes. Dispatch one when
-  # a layer is ready to be judged.
+    paths-ignore:
+      - 'vignettes/articles/**'
+      - 'examples/**'
+      - 'dev/**'
+      - 'bench/**'
+      - '**.md'
+      - '_pkgdown.yml'
+      - 'pkgdown/**'
   workflow_dispatch:
+
+# a new push cancels the outdated run of the same branch or pull request
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 name: R-CMD-check
 
@@ -27,12 +46,10 @@ jobs:
           - {os: windows-latest, r: 'release'}
           - {os: ubuntu-latest,   r: 'devel', http-user-agent: 'release'}
           - {os: ubuntu-latest,   r: 'release'}
+          # no oldrel-1: DESCRIPTION requires R >= 4.5.0
 
     env:
-      # cppDE is a private repo in the same org and GITHUB_TOKEN is scoped to
-      # this repo alone, so pak cannot resolve the Remote with it. DMODVERSE_PAT
-      # grants Contents:read on dModverse/cppDE. The fallback keeps outside
-      # forks running as far as they can get.
+      # cppDE is a private repo in the same org: DMODVERSE_PAT reads it for the Remote
       GITHUB_PAT: ${{ secrets.DMODVERSE_PAT || secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       # skip_on_cran() guards 13 test files; our own jobs opt in.
@@ -80,16 +97,10 @@ jobs:
 
       - uses: r-lib/actions/check-r-package@v2
         with:
-          # --as-cran dropped: dMod depends on cppDE via Remotes (GitHub-only),
-          # so CRAN-submission feasibility checks would always WARN.
-          # --ignore-vignettes: the vignettes ship pre-rendered as static PDFs
-          # and are not rebuilt here; --no-build-vignettes alone leaves a
-          # "Directory 'inst/doc' does not exist" WARNING that --ignore-vignettes
-          # silences cleanly.
-          args: 'c("--no-manual", "--ignore-vignettes")'
+          # without --as-cran: cppDE is a GitHub Remote, not on CRAN
+          args: 'c("--no-manual")'
           upload-snapshots: true
-          build_args: 'c("--no-manual","--no-build-vignettes","--compact-vignettes=gs+qpdf")'
-          error-on: '"warning"'
+          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'
 
   # Fedora is not a hosted runner, hence a container with the distro's own R:
   # gcc, FlexiBLAS and the hardening flags differ from Ubuntu's. No RSPM binaries
@@ -137,7 +148,6 @@ jobs:
 
       - uses: r-lib/actions/check-r-package@v2
         with:
-          args: 'c("--no-manual", "--ignore-vignettes")'
+          args: 'c("--no-manual")'
           upload-snapshots: true
-          build_args: 'c("--no-manual","--no-build-vignettes","--compact-vignettes=gs+qpdf")'
-          error-on: '"warning"'
+          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'

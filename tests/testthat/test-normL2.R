@@ -267,6 +267,30 @@ test_that("normL2 gradient with proportional errmodel follows the analytic close
 })
 
 
+test_that("hessian = \"expected\" gives the expected information, positive semidefinite with an error model", {
+  skip_if_no_compile()
+  ec <- .nl2_fx()$prop
+  data <- fx_decay_data(pars = c(A = 1.0, k = 0.5), sigma = 0.05)
+  data$C1$sigma <- NA_real_
+  pars <- c(A = 1.2, k = 0.45, srel = 0.08)
+  t <- data$C1$time
+  A <- pars[["A"]]; k <- pars[["k"]]; srel <- pars[["srel"]]
+  pred <- A * exp(-k * t)
+  sigma <- srel * pred
+  dpred <- cbind(A = exp(-k * t), k = -t * A * exp(-k * t), srel = 0)
+  dsigma <- srel * dpred
+  dsigma[, "srel"] <- pred
+  h_ref <- crossprod(dpred, 2 / sigma^2 * dpred) + crossprod(dsigma, 4 / sigma^2 * dsigma)
+  obj <- normL2(data, ec$prd, errmodel = ec$e)
+  h <- obj(pars, hessian = "expected")$hessian[colnames(h_ref), colnames(h_ref)]
+  expect_equal(unname(h), unname(h_ref), tolerance = 1e-4)
+  expect_gt(min(eigen(h, symmetric = TRUE, only.values = TRUE)$values), 0)
+  # the Gauss-Newton Hessian keeps the exact curvature of the loss, value and gradient are shared
+  expect_equal(obj(pars, hessian = "expected")$gradient, obj(pars)$gradient)
+  expect_false(isTRUE(all.equal(obj(pars)$hessian, obj(pars, hessian = "expected")$hessian)))
+})
+
+
 test_that("rows with explicit sigma keep it; NA rows fall through to errmodel", {
   skip_if_no_compile()
   bench <- fx_decay_compiled()
@@ -586,7 +610,7 @@ test_that("evalConditionResidual keeps fixed error parameters without sensitivit
   pars <- bench$outerpars_id
   fixed <- c(sigma_y = 0.1)
   pr <- ec$prd(times = data$C1$time, pars = pars, fixed = fixed, deriv = FALSE)[["C1"]]
-  r <- evalConditionResidual(data$C1, pr, pars, errfn = ec$e, fixed = fixed, cn = "C1",
+  r <- evalConditionResidual(data$C1, pr, errfn = ec$e, fixed = fixed, cn = "C1",
                              deriv = FALSE)
   ref <- normL2(data, ec$prd, errmodel = ec$e)(pars, fixed = fixed, deriv = FALSE)
   expect_equal(r$value, ref$value, tolerance = 1e-10)
@@ -609,7 +633,7 @@ test_that("an error parameter outside the prediction's derivatives has a gradien
   num <- numDeriv::grad(function(q) obj(setNames(q, names(pars)), deriv = FALSE)$value, unname(pars))
   expect_equal(unname(obj(pars)$gradient[names(pars)]), num, tolerance = 1e-6)
   pr <- x(times = 0:3, pars = pars, conditions = "C1")[["C1"]]
-  r <- evalConditionResidual(data$C1, pr, pars, errfn = e, cn = "C1")
+  r <- evalConditionResidual(data$C1, pr, errfn = e, cn = "C1")
   expect_equal(unname(r$gradient[names(pars)]), num, tolerance = 1e-6)
 })
 

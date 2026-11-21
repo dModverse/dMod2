@@ -1,4 +1,4 @@
-// dMod FOCEI kernel.
+// dMod FOCEI kernel: the outer problem on the group kernel of nlme_kernel.h.
 //
 // Math anchors (load-bearing, do not change without re-deriving):
 //   - Envelope theorem: at eta = eta*(theta), d/dtheta f(theta, eta*) =
@@ -18,136 +18,16 @@
 #include <algorithm>
 #include <limits>
 #include <cstddef>
-
-#include <R_ext/RS.h>
-#include <R_ext/BLAS.h>
-#include <R_ext/Lapack.h>
-
-#include "residual_kernel.h"
-#include "trust_subproblem.h"
-#include "trust_model.h"
 #include <functional>
+
+#include "nlme_kernel.h"
+#include "trust_model.h"
 #include "trust_driver.h"
 
 using namespace Rcpp;
+using dmod::nlme::ctrl_tol;
+using dmod::nlme::shrunk_radius;
 
-// R >= 3.6.2 appends hidden Fortran string lengths to BLAS/LAPACK char args.
-#ifndef FCONE
-#define FCONE
-#endif
-
-// Tolerance from a control list, accepting the deprecated trust() alias.
-static double ctrl_tol(const List& ctrl, const char* key, const char* legacy,
-                       double dflt) {
-  if (ctrl.containsElementNamed(key))    return as<double>(ctrl[key]);
-  if (ctrl.containsElementNamed(legacy)) return as<double>(ctrl[legacy]);
-  return dflt;
-}
-
-
-// Whether a trial is accepted: by the ratio of the actual to the predicted decrease, and near the
-// modes, where a Newton step predicts less than 1e-6 of the value, also by a smaller gradient: the
-// solver's error in the value there exceeds what the step gains, the gradient is still measured.
-static bool accept_trial(double rho, bool is_newton, double predicted_red, double val, const std::vector<double>& grad,
-                         const std::vector<double>& grad_try) {
-  if (rho >= 0.25) return true;
-  if (!is_newton || predicted_red > 1e-6 * std::max(1.0, std::fabs(val))) return false;
-  double g0 = 0.0, g1 = 0.0;
-  for (std::size_t k = 0; k < grad.size(); ++k) { g0 += grad[k] * grad[k]; g1 += grad_try[k] * grad_try[k]; }
-  return g1 < g0;
-}
-
-// The modes are found where the Gauss-Newton step H^-1 g, on H and not on the secant model, is below
-// `steptol`, as the volume term is linear in their error; or where a step on the boundary gains less
-// than `mtol` of the value `val`, the region shrunk below the distance to the modes.
-static bool modes_found(int K, const std::vector<double>& grad, const std::vector<double>& eigvals,
-                        const std::vector<double>& eigvecs, double predicted_red, bool is_newton, double steptol,
-                        double mtol, double val) {
-  if (!is_newton) return std::fabs(predicted_red) <= mtol * std::max(1.0, std::fabs(val));
-  double tr = 0.0;
-  for (int k = 0; k < K; ++k) tr += std::fabs(eigvals[k]);
-  const double floor = 1e-10 * tr / std::max(K, 1);
-  double s2 = 0.0;
-  for (int k = 0; k < K; ++k) {
-    double c = 0.0;
-    for (int j = 0; j < K; ++j) c += eigvecs[j + (std::size_t) K * k] * grad[j];
-    const double step = c / std::max(eigvals[k], floor);
-    s2 += step * step;
-  }
-  return std::sqrt(s2) <= steptol;
-}
-
-
-// Thin wrappers over the Moré-Sorensen subproblem and eigendecomposition in
-// trust_subproblem.h, shared with trust_kernel.cpp and covering the hard case.
-// A Hessian that is not finite stops the evaluation: LAPACK does not return on NaN input.
-static inline void eigen_sym(double* A, int K, double* vals, double* vecs) {
-  for (std::size_t i = 0; i < (std::size_t) K * K; ++i)
-    if (!std::isfinite(A[i])) throw std::runtime_error("FOCEI: the Hessian is not finite.");
-  dmod::trust_internal::eigen_sym_local(A, K, vals, vecs);
-}
-
-// The inner trust steps on the Gauss-Newton Hessian H plus S, the curvature of the prediction
-// in the etas that Gauss-Newton drops, learned by SR1 from the gradients of accepted steps:
-// (H_new + S) step = g_new - g_old after the update.
-static void secant_update(int K, std::vector<double>& S, const std::vector<double>& step,
-                          const std::vector<double>& g_old, const std::vector<double>& g_new,
-                          const std::vector<double>& H_new) {
-  std::vector<double> v(K);
-  double vs = 0.0, vv = 0.0, ss = 0.0;
-  for (int r = 0; r < K; ++r) {
-    double hs = 0.0;
-    for (int c = 0; c < K; ++c) hs += (H_new[r + c * K] + S[r + c * K]) * step[c];
-    v[r] = g_new[r] - g_old[r] - hs;
-  }
-  for (int r = 0; r < K; ++r) { vs += v[r] * step[r]; vv += v[r] * v[r]; ss += step[r] * step[r]; }
-  if (!(std::fabs(vs) > 1e-8 * std::sqrt(vv * ss))) return;
-  for (int c = 0; c < K; ++c)
-    for (int r = 0; r < K; ++r) S[r + c * K] += v[r] * v[c] / vs;
-}
-
-// The radius after a rejected step: a quarter of the radius or of the step, whichever is
-// shorter, so that a rejected Newton step well inside the region is not tried again.
-static double shrunk_radius(double r, const double* step, int n) {
-  double ss = 0.0;
-  for (int k = 0; k < n; ++k) ss += step[k] * step[k];
-  return 0.25 * std::min(r, std::sqrt(ss));
-}
-
-// Eigen decomposition of the step model H + S, or of H where H + S is not positive definite.
-static void model_eigen(int K, const std::vector<double>& H, const std::vector<double>& S,
-                        std::vector<double>& vals, std::vector<double>& vecs) {
-  std::vector<double> B(H);
-  for (std::size_t q = 0; q < B.size(); ++q) B[q] += S[q];
-  eigen_sym(B.data(), K, vals.data(), vecs.data());
-  if (vals[0] <= 0.0) {
-    B = H;
-    eigen_sym(B.data(), K, vals.data(), vecs.data());
-  }
-}
-
-static inline void trust_subproblem(int K, const double* g,
-                                    const double* vals, const double* vecs,
-                                    double r, double* p, double* predicted_red,
-                                    bool* is_newton) {
-  bool is_hard = false, is_easy = false;
-  dmod::trust_internal::trust_sub(K, g, vals, vecs, r, p, predicted_red,
-                                  is_newton, &is_hard, &is_easy);
-}
-
-
-// Result of one subject's inner trust loop.
-struct InnerResult {
-  std::vector<double> eta;        // K
-  std::vector<double> grad;       // K (analytical gradient at the final eta)
-  std::vector<double> H_GN;       // K*K column-major
-  std::vector<double> H_inv;      // K*K column-major (Moore-Penrose with eigen floor)
-  std::vector<double> eigvals;    // K (last-iter eigenvalues, ascending)
-  double              log_det_H;
-  double              value;
-  int                 iterations;
-  bool                converged;
-};
 
 
 // Build 0-based indices into `haystack` for each name in `needles`; throws if
@@ -170,754 +50,19 @@ static std::vector<int> name_indices(const CharacterVector& haystack,
 }
 
 
-
-
-// Parameter names of a [time, observable, parameter] deriv array.
-static CharacterVector deriv_par_names(const NumericVector& d) {
-  const List dn = d.attr("dimnames");
-  return as<CharacterVector>(dn[2]);
-}
-
-// The derivative of sum_i log|H_i| in theta comes from R (`.foceiVolume`) through
-// `correction_cb`, at the start, at accepted trials and at the final point; the
-// trust ratio of a trial needs the trial value only.
-
-
-// Inner objective for one subject from one model_cb and one err_cb call, without
-// the normL2 / constraintL2 stack. Gauss-Newton: second derivatives of pred and
-// sigma are dropped, first-order cross terms of an eta-dependent sigma kept.
-struct EvalResult {
-  double value;
-  std::vector<double> grad;  // K
-  std::vector<double> hess;  // K*K column-major
-};
-
-static inline bool all_finite(const EvalResult& e) {
-  if (!std::isfinite(e.value)) return false;
-  for (double v : e.grad) if (!std::isfinite(v)) return false;
-  for (double v : e.hess) if (!std::isfinite(v)) return false;
-  return true;
-}
-
-// The prediction and error-model frames of a subject, one per condition block;
-// `failed` where the prediction of one of the subject blocks failed.
-struct SubjectFrames {
-  std::vector<NumericMatrix> pred, err;
-  bool failed = false;
-};
-
-// Split in two so the lock-step driver can batch the callbacks: this half
-// runs them for the condition blocks of one subject, `eval_one_subject_from`
-// is the pure math.
-static void predict_one_subject(
-    Function& model_cb, Function& err_cb, NumericVector& pars,
-    Nullable<NumericVector> fixed, const List& meta_i, const double* eta_block,
-    SubjectFrames* out) {
-  IntegerVector eta_idx_in_pars = meta_i["eta_idx_in_pars"];
-  const int K = static_cast<int>(eta_idx_in_pars.size());
-  for (int k = 0; k < K; ++k) pars[eta_idx_in_pars[k] - 1] = eta_block[k];
-
-  List blocks = meta_i["blocks"];
-  out->pred.assign(blocks.size(), NumericMatrix());
-  out->err.assign(blocks.size(), NumericMatrix());
-  for (int b = 0; b < blocks.size(); ++b) {
-    List block = blocks[b];
-    NumericVector model_times = block["times"];
-    CharacterVector condition = block["condition"];
-    List pred_list = as<List>(model_cb(
-        Rcpp::Named("times")      = model_times,
-        Rcpp::Named("pars")       = pars,
-        Rcpp::Named("fixed")      = fixed,
-        Rcpp::Named("deriv")      = true,
-        Rcpp::Named("conditions") = condition));
-    out->pred[b] = as<NumericMatrix>(pred_list[0]);
-    NumericVector pinner = out->pred[b].attr("parameters");
-    List err_list = as<List>(err_cb(
-        Rcpp::Named("out")        = out->pred[b],
-        Rcpp::Named("pars")       = pinner,
-        Rcpp::Named("conditions") = condition));
-    out->err[b] = as<NumericMatrix>(err_list[0]);
-  }
-}
-
-// Data term of one condition block of a subject in the K subject etas, Gauss-Newton,
-// added to value, grad and hess.
-static void accumulate_block(
-    NumericMatrix& pred_i,
-    NumericMatrix& err_i,
-    const List& meta_i,
-    const CharacterVector& eta_names,
-    int K,
-    double& value,
-    std::vector<double>& grad,
-    std::vector<double>& hess) {
-  IntegerVector t_idx_in_pred        = meta_i["t_idx_in_pred"];
-  NumericVector y_data               = meta_i["y_data"];
-  IntegerVector o_idx_in_pred        = meta_i["o_idx_in_pred"];
-  IntegerVector o_idx_in_deriv       = meta_i["o_idx_in_deriv"];
-  IntegerVector t_idx_in_err         = meta_i["t_idx_in_err"];
-  IntegerVector o_idx_in_err         = meta_i["o_idx_in_err"];
-  IntegerVector o_idx_in_err_deriv   = meta_i["o_idx_in_err_deriv"];
-  // a recorded sigma replaces the error model of the row, NA where the model applies
-  const bool have_sigma_data = meta_i.containsElementNamed("sigma_data");
-  NumericVector sigma_data = have_sigma_data ? as<NumericVector>(meta_i["sigma_data"]) : NumericVector(0);
-
-  const int T = y_data.size();
-
-  NumericVector deriv_attr = as<NumericVector>(pred_i.attr("deriv"));
-  IntegerVector deriv_dim  = deriv_attr.attr("dim");
-  const int Dp0 = deriv_dim[0];  // model deriv: time
-  const int Dp1 = deriv_dim[1];  // model deriv: observable
-  // eta columns by name: the parameter axis depends on `fixed` and on the call; an eta
-  // without a column enters only the error model
-  std::vector<int> eta_col(K, -1);
-  {
-    const CharacterVector dpn = deriv_par_names(deriv_attr);
-    for (int k = 0; k < K; ++k)
-      for (int j = 0; j < dpn.size(); ++j)
-        if (as<std::string>(dpn[j]) == as<std::string>(eta_names[k])) { eta_col[k] = j; break; }
-  }
-
-  // The err deriv attribute is read only where it exists, the row has an
-  // err-deriv observable and the eta has a column in it (indices > 0).
-  Nullable<NumericVector> err_deriv_attr_opt = err_i.attr("deriv");
-  const bool         have_err_deriv = err_deriv_attr_opt.isNotNull();
-  NumericVector      err_deriv_attr;
-  int                De0 = 0, De1 = 0;
-  if (have_err_deriv) {
-    err_deriv_attr = as<NumericVector>(err_deriv_attr_opt);
-    IntegerVector dim_e = err_deriv_attr.attr("dim");
-    De0 = dim_e[0];  // err deriv: time
-    De1 = dim_e[1];  // err deriv: observable
-  }
-  // an eta without a column in the err deriv does not enter sigma
-  std::vector<int> eta_col_err(K, -1);
-  if (have_err_deriv) {
-    const CharacterVector epn = deriv_par_names(err_deriv_attr);
-    for (int k = 0; k < K; ++k)
-      for (int j = 0; j < epn.size(); ++j)
-        if (as<std::string>(epn[j]) == as<std::string>(eta_names[k])) { eta_col_err[k] = j; break; }
-  }
-
-  // Per-row predictions, sigmas and Jacobian rows in packed row-major buffers
-  // of stride K, the layout the shared residual kernel reads.
-  std::vector<double> pred_row(T);
-  std::vector<double> sigma_row(T);
-  std::vector<double> y_row(T);
-  std::vector<double> dpred_row((std::size_t) T * (std::size_t) K, 0.0);
-  std::vector<double> dsigma_row;
-  bool sigma_has_eta = false;  // any row with non-trivial err-deriv slice?
-
-  for (int row = 0; row < T; ++row) {
-    const int tp = t_idx_in_pred [row] - 1;
-    const int op = o_idx_in_pred [row] - 1;
-    const int od = o_idx_in_deriv[row] - 1;
-    const int te = t_idx_in_err  [row] - 1;
-    const int oe = o_idx_in_err  [row] - 1;
-
-    const bool recorded = have_sigma_data && !ISNAN(sigma_data[row]);
-    pred_row [row] = pred_i(tp, op);
-    sigma_row[row] = recorded ? sigma_data[row] : err_i(te, oe);
-    y_row    [row] = y_data[row];
-
-    double* dpred_i = dpred_row.data() + (std::size_t) row * (std::size_t) K;
-    for (int k = 0; k < K; ++k) {
-      const int p = eta_col[k];
-      dpred_i[k] = p < 0 ? 0.0 : deriv_attr[tp + od * Dp0 + p * Dp0 * Dp1];
-    }
-
-    // dsigma row: populated lazily on first eta-dependent row.
-    const int oed_one = o_idx_in_err_deriv[row];
-    if (!recorded && have_err_deriv && oed_one > 0) {
-      if (!sigma_has_eta) {
-        dsigma_row.assign((std::size_t) T * (std::size_t) K, 0.0);
-        sigma_has_eta = true;
-      }
-      double* dsigma_i = dsigma_row.data() + (std::size_t) row * (std::size_t) K;
-      const int oed = oed_one - 1;
-      for (int k = 0; k < K; ++k) {
-        const int pe = eta_col_err[k];
-        if (pe >= 0) {
-          dsigma_i[k] = err_deriv_attr[te + oed * De0 + pe * De0 * De1];
-        }
-      }
-    }
-  }
-
-  // Shared residual kernel, Gauss-Newton in eta: the rows above the limit, then the
-  // censored rows (M3), which the meta orders last. The plain sum of squares of these rows is not reported.
-  const int n_aloq = meta_i.containsElementNamed("n_aloq") ? as<int>(meta_i["n_aloq"]) : T;
-  double chi2_unused = 0.0;
-  dmod::AccumOpts opts;
-  opts.use_deriv2_exact    = false;
-  opts.bloq_mode           = dmod::BloqMode::M3;
-  if (meta_i.containsElementNamed("t_df")) opts.t_df = as<double>(meta_i["t_df"]);
-  opts.sigma_depends_on_par = sigma_has_eta;
-  // All first-order Hessian parts.
-  opts.aloq_part1 = opts.aloq_part2 = opts.aloq_part3 = true;
-
-  dmod::accumulate_aloq_residual(
-      /*n_obs =*/ n_aloq,
-      /*n_par =*/ K,
-      pred_row.data(),
-      dpred_row.data(),
-      /*d2pred =*/ nullptr,
-      y_row.data(),
-      sigma_row.data(),
-      sigma_has_eta ? dsigma_row.data() : nullptr,
-      /*d2sigma=*/ nullptr,
-      /*lloq   =*/ nullptr,
-      opts,
-      value,
-      chi2_unused,
-      grad.data(),
-      hess.data());
-  if (n_aloq < T) {
-    NumericVector lloq = meta_i["lloq"];
-    const std::size_t off = (std::size_t) n_aloq * (std::size_t) K;
-    dmod::accumulate_bloq_residual(
-        T - n_aloq, K,
-        pred_row.data() + n_aloq,
-        dpred_row.data() + off,
-        /*d2pred =*/ nullptr,
-        y_row.data() + n_aloq,
-        sigma_row.data() + n_aloq,
-        sigma_has_eta ? dsigma_row.data() + off : nullptr,
-        /*d2sigma=*/ nullptr,
-        lloq.begin() + n_aloq,
-        opts,
-        value,
-        grad.data(),
-        hess.data());
-  }
-}
-
-// Inner objective of one subject: the data terms of the subject condition blocks plus
-// the MVN prior of the subject etas.
-static EvalResult eval_one_subject_from(
-    SubjectFrames& frames,
-    NumericVector& pars,
-    const List& meta_i,
-    const double* eta_block,
-    const double* Omega_inv,
-    double Omega_log_det) {
-  IntegerVector eta_idx_in_pars = meta_i["eta_idx_in_pars"];
-  CharacterVector eta_names     = meta_i["eta_names"];
-  const int K = static_cast<int>(eta_idx_in_pars.size());
-  for (int k = 0; k < K; ++k) pars[eta_idx_in_pars[k] - 1] = eta_block[k];
-
-  double value = 0.0;
-  std::vector<double> grad(K, 0.0);
-  std::vector<double> hess(K * K, 0.0);
-  List blocks = meta_i["blocks"];
-  for (int b = 0; b < blocks.size(); ++b)
-    accumulate_block(frames.pred[b], frames.err[b], as<List>(blocks[b]), eta_names, K,
-                     value, grad, hess);
-
-  // MVN prior: quadratic + log|Omega| per subject; the constraintL2_mvn
-  // convention drops the 2*pi factor (joint sums log|Omega| N times overall).
-  std::vector<double> Oeta(K, 0.0);
-  for (int j = 0; j < K; ++j)
-    for (int k = 0; k < K; ++k)
-      Oeta[k] += Omega_inv[k + j * K] * eta_block[j];
-  for (int k = 0; k < K; ++k) value += eta_block[k] * Oeta[k];
-  value += Omega_log_det;
-  for (int k = 0; k < K; ++k) grad[k] += 2.0 * Oeta[k];
-  for (int j = 0; j < K; ++j)
-    for (int k = 0; k < K; ++k)
-      hess[k + j * K] += 2.0 * Omega_inv[k + j * K];
-
-  EvalResult out;
-  out.value = value;
-  out.grad  = std::move(grad);
-  out.hess  = std::move(hess);
-  return out;
-}
-
-
-static EvalResult eval_one_subject(
-    Function& model_cb, Function& err_cb, NumericVector& pars,
-    Nullable<NumericVector> fixed, const List& meta_i, const double* eta_block,
-    const double* Omega_inv, double Omega_log_det) {
-  SubjectFrames frames;
-  predict_one_subject(model_cb, err_cb, pars, fixed, meta_i, eta_block, &frames);
-  return eval_one_subject_from(frames, pars, meta_i, eta_block, Omega_inv, Omega_log_det);
-}
-
-
-// Eigen-floored log|H| and H_inv, shared by the serial and lock-step drivers.
-static InnerResult finish_inner(int K, const std::vector<double>& eta_curr,
-                                const std::vector<double>& grad,
-                                const std::vector<double>& hess,
-                                const std::vector<double>& eigvals,
-                                const std::vector<double>& eigvecs,
-                                double val_curr, int iter, bool converged,
-                                double eigen_floor_relative) {
-  double tr_H = 0.0;
-  for (int j = 0; j < K; ++j) tr_H += eigvals[j];
-  double eps_floor = eigen_floor_relative * std::fabs(tr_H) / K;
-  std::vector<double> lam_floor(K);
-  for (int j = 0; j < K; ++j) lam_floor[j] = std::max(eigvals[j], eps_floor);
-  double log_det = 0.0;
-  for (int j = 0; j < K; ++j) log_det += std::log(lam_floor[j]);
-  std::vector<double> H_inv(K * K, 0.0);
-  for (int i = 0; i < K; ++i)
-    for (int j = 0; j < K; ++j) {
-      double s = 0.0;
-      for (int q = 0; q < K; ++q)
-        s += eigvecs[i + q * K] * eigvecs[j + q * K] / lam_floor[q];
-      H_inv[i + j * K] = s;
-    }
-
-  InnerResult res;
-  res.eta        = eta_curr;
-  res.grad       = grad;
-  res.H_GN       = hess;
-  res.H_inv      = H_inv;
-  res.eigvals    = eigvals;
-  res.log_det_H  = log_det;
-  res.value      = val_curr;
-  res.iterations = iter;
-  res.converged  = converged;
-  return res;
-}
-
-
-// Inner trust for one subject on eval_one_subject; writes the final eta into `pars`.
-static InnerResult inner_trust_one_subject(
-    Function& model_cb,
-    Function& err_cb,
-    NumericVector& pars,
-    const Nullable<NumericVector>& fixed,
-    const List& meta_i,
-    const NumericVector& eta_init,
-    const double* Omega_inv,
-    double Omega_log_det,
-    double rinit, double rmax,
-    int    iterlim,
-    double steptol, double mtol,
-    double eigen_floor_relative) {
-  const int K = eta_init.size();
-
-  std::vector<double> eta_curr(eta_init.begin(), eta_init.end());
-  EvalResult fr = eval_one_subject(
-      model_cb, err_cb, pars, fixed, meta_i,
-      eta_curr.data(), Omega_inv, Omega_log_det);
-  double val_curr = fr.value;
-  std::vector<double> grad(fr.grad), hess(fr.hess);
-
-  // Eigen on current hessian
-  std::vector<double> eigvals(K), eigvecs(K * K);
-  eigen_sym(hess.data(), K, eigvals.data(), eigvecs.data());
-
-  double r = rinit;
-  bool   converged = false;
-  int    iter = 0;
-  std::vector<double> eta_try(K), p_step(K);
-  std::vector<double> S((std::size_t) K * K, 0.0), mvals(eigvals), mvecs(eigvecs);
-
-  for (iter = 1; iter <= iterlim; ++iter) {
-    bool   is_newton    = false;
-    double predicted_red = 0.0;
-    trust_subproblem(K, grad.data(), mvals.data(), mvecs.data(),
-                     r, p_step.data(), &predicted_red, &is_newton);
-    if (modes_found(K, grad, eigvals, eigvecs, predicted_red, is_newton, steptol, mtol, val_curr)) {
-      converged = true;
-      break;
-    }
-    for (int k = 0; k < K; ++k) eta_try[k] = eta_curr[k] + p_step[k];
-
-    EvalResult ft = eval_one_subject(
-        model_cb, err_cb, pars, fixed, meta_i,
-        eta_try.data(), Omega_inv, Omega_log_det);
-    // a trial whose value or derivatives are not finite is rejected like one that does not decrease
-    if (!all_finite(ft)) {
-      r = shrunk_radius(r, p_step.data(), K);
-      std::fill(S.begin(), S.end(), 0.0);
-      model_eigen(K, hess, S, mvals, mvecs);
-      continue;
-    }
-    double val_try = ft.value;
-    std::vector<double> grad_try(ft.grad), hess_try(ft.hess);
-    std::vector<double> eigvals_try(K), eigvecs_try(K * K);
-    eigen_sym(hess_try.data(), K, eigvals_try.data(), eigvecs_try.data());
-
-    double actual_red = val_curr - val_try;
-    double rho = (predicted_red > 0.0 && std::isfinite(val_try))
-                   ? actual_red / predicted_red
-                   : -std::numeric_limits<double>::infinity();
-
-    const bool accept = std::isfinite(val_try) && accept_trial(rho, is_newton, predicted_red, val_curr, grad, grad_try);
-    if (!accept) r = shrunk_radius(r, p_step.data(), K);
-    else if (rho > 0.75 && !is_newton) r = std::min(2.0 * r, rmax);
-
-    if (accept) {
-      secant_update(K, S, p_step, grad, grad_try, hess_try);
-      eta_curr = eta_try;
-      val_curr = val_try;
-      grad     = grad_try;
-      hess     = hess_try;
-      eigvals  = eigvals_try;
-      eigvecs  = eigvecs_try;
-    } else {
-      std::fill(S.begin(), S.end(), 0.0);
-    }
-    model_eigen(K, hess, S, mvals, mvecs);
-  }
-
-  // Final eta into pars for the joint call at the modes.
-  IntegerVector eta_idx_in_pars = meta_i["eta_idx_in_pars"];
-  for (int k = 0; k < K; ++k) {
-    pars[eta_idx_in_pars[k] - 1] = eta_curr[k];
-  }
-
-  // a loop that reaches iterlim leaves iter one past it
-  return finish_inner(K, eta_curr, grad, hess, eigvals, eigvecs,
-                     val_curr, std::min(iter, iterlim), converged, eigen_floor_relative);
-}
-
-
-// Lock-step inner trust: every active subject takes one step per round and the
-// round's predictions go out as one batched callback. Subjects are independent,
-// so this is exact; converged ones drop out.
-static List inner_trust_lockstep(
-    Function& predict_cb, NumericVector& pars_full, NumericMatrix& eta_warmstart,
-    List& subject_meta_fast, CharacterVector& subjects,
-    const std::vector<double>& Omega_inv, double Omega_log_det,
-    Nullable<NumericVector> fixed, int K, int N,
-    double rinit, double rmax, int iterlim, double steptol, double mtol,
-    double eflr) {
-
-  struct LS {
-    std::vector<double> eta, grad, hess, eigvals, eigvecs, eta_try, p_step, S, mvals, mvecs;
-    double val = 0.0, r = 0.0, predicted_red = 0.0;
-    int iter = 0;
-    bool converged = false, done = false, is_newton = false;
-    NumericVector pars;
-  };
-  std::vector<LS> st(N);
-
-  // One batched callback for the condition blocks of a set of subjects at given
-  // etas; the frames come back per subject.
-  auto run_round = [&](const std::vector<int>& idx,
-                       const std::vector<const double*>& etas) {
-    const int M = static_cast<int>(idx.size());
-    int n_req = 0;
-    for (int j = 0; j < M; ++j)
-      n_req += as<List>(as<List>(subject_meta_fast[idx[j]])["blocks"]).size();
-    List timesL(n_req), parsL(n_req);
-    CharacterVector conds(n_req);
-    int q = 0;
-    for (int j = 0; j < M; ++j) {
-      const int i = idx[j];
-      List meta_i = as<List>(subject_meta_fast[i]);
-      IntegerVector eip = meta_i["eta_idx_in_pars"];
-      NumericVector pj = clone(st[i].pars);
-      for (int k = 0; k < K; ++k) pj[eip[k] - 1] = etas[j][k];
-      st[i].pars = pj;
-      List blocks = meta_i["blocks"];
-      for (int b = 0; b < blocks.size(); ++b, ++q) {
-        List block = blocks[b];
-        parsL[q]  = pj;
-        timesL[q] = block["times"];
-        conds[q]  = as<CharacterVector>(block["condition"])[0];
-      }
-    }
-    List got = as<List>(predict_cb(Rcpp::Named("timesList")  = timesL,
-                                   Rcpp::Named("parsList")   = parsL,
-                                   Rcpp::Named("conditions") = conds,
-                                   Rcpp::Named("fixed")      = fixed));
-    List preds = as<List>(got["pred"]), errs = as<List>(got["err"]);
-    std::vector<SubjectFrames> frames(M);
-    q = 0;
-    for (int j = 0; j < M; ++j) {
-      const int nb = as<List>(as<List>(subject_meta_fast[idx[j]])["blocks"]).size();
-      for (int b = 0; b < nb; ++b, ++q) {
-        SEXP pq = preds[q], eq = errs[q];
-        if (TYPEOF(pq) != REALSXP || TYPEOF(eq) != REALSXP) { frames[j].failed = true; continue; }
-        frames[j].pred.push_back(as<NumericMatrix>(pq));
-        frames[j].err.push_back(as<NumericMatrix>(eq));
-      }
-    }
-    return frames;
-  };
-
-  for (int i = 0; i < N; ++i) {
-    st[i].pars = clone(pars_full);
-    st[i].eta.assign(K, 0.0);
-    for (int k = 0; k < K; ++k) st[i].eta[k] = eta_warmstart(i, k);
-    st[i].eta_try.assign(K, 0.0);
-    st[i].p_step.assign(K, 0.0);
-    st[i].r = rinit;
-  }
-
-  {
-    std::vector<int> idx(N);
-    std::vector<const double*> etas(N);
-    for (int i = 0; i < N; ++i) { idx[i] = i; etas[i] = st[i].eta.data(); }
-    std::vector<SubjectFrames> frames = run_round(idx, etas);
-    for (int i = 0; i < N; ++i) {
-      if (frames[i].failed)
-        Rcpp::stop("FOCEI: the prediction fails at the modes the inner search starts from.");
-      List meta_i = as<List>(subject_meta_fast[i]);
-      EvalResult fr = eval_one_subject_from(frames[i], st[i].pars, meta_i,
-                                            st[i].eta.data(), Omega_inv.data(),
-                                            Omega_log_det);
-      st[i].val = fr.value; st[i].grad = fr.grad; st[i].hess = fr.hess;
-      st[i].eigvals.assign(K, 0.0); st[i].eigvecs.assign((size_t)K * K, 0.0);
-      eigen_sym(st[i].hess.data(), K, st[i].eigvals.data(), st[i].eigvecs.data());
-      st[i].S.assign((size_t)K * K, 0.0);
-      st[i].mvals = st[i].eigvals; st[i].mvecs = st[i].eigvecs;
-    }
-  }
-
-  for (int round = 1; round <= iterlim; ++round) {
-    std::vector<int> idx;
-    std::vector<const double*> etas;
-    for (int i = 0; i < N; ++i) {
-      if (st[i].done) continue;
-      st[i].iter = round;
-      trust_subproblem(K, st[i].grad.data(), st[i].mvals.data(),
-                       st[i].mvecs.data(), st[i].r, st[i].p_step.data(),
-                       &st[i].predicted_red, &st[i].is_newton);
-      if (modes_found(K, st[i].grad, st[i].eigvals, st[i].eigvecs, st[i].predicted_red, st[i].is_newton, steptol,
-                      mtol, st[i].val)) {
-        st[i].converged = true; st[i].done = true; continue;
-      }
-      for (int k = 0; k < K; ++k) st[i].eta_try[k] = st[i].eta[k] + st[i].p_step[k];
-      idx.push_back(i);
-      etas.push_back(st[i].eta_try.data());
-    }
-    if (idx.empty()) break;
-
-    std::vector<SubjectFrames> frames = run_round(idx, etas);
-
-    for (size_t j = 0; j < idx.size(); ++j) {
-      const int i = idx[j];
-      // a trial where the prediction fails, or whose value or derivatives are not finite, is
-      // rejected like one that does not decrease
-      auto reject = [&]() {
-        st[i].r = shrunk_radius(st[i].r, st[i].p_step.data(), K);
-        std::fill(st[i].S.begin(), st[i].S.end(), 0.0);
-        model_eigen(K, st[i].hess, st[i].S, st[i].mvals, st[i].mvecs);
-      };
-      if (frames[j].failed) { reject(); continue; }
-      List meta_i = as<List>(subject_meta_fast[i]);
-      EvalResult ft = eval_one_subject_from(frames[j], st[i].pars, meta_i,
-                                            st[i].eta_try.data(),
-                                            Omega_inv.data(), Omega_log_det);
-      if (!all_finite(ft)) { reject(); continue; }
-      std::vector<double> eigvals_try(K), eigvecs_try((size_t)K * K);
-      eigen_sym(ft.hess.data(), K, eigvals_try.data(), eigvecs_try.data());
-
-      const double actual_red = st[i].val - ft.value;
-      const double rho = (st[i].predicted_red > 0.0 && std::isfinite(ft.value))
-                           ? actual_red / st[i].predicted_red
-                           : -std::numeric_limits<double>::infinity();
-      const bool accept = std::isfinite(ft.value) &&
-                          accept_trial(rho, st[i].is_newton, st[i].predicted_red, st[i].val, st[i].grad, ft.grad);
-      if (!accept) st[i].r = shrunk_radius(st[i].r, st[i].p_step.data(), K);
-      else if (rho > 0.75 && !st[i].is_newton) st[i].r = std::min(2.0 * st[i].r, rmax);
-      if (accept) {
-        secant_update(K, st[i].S, st[i].p_step, st[i].grad, ft.grad, ft.hess);
-        st[i].eta = st[i].eta_try; st[i].val = ft.value;
-        st[i].grad = ft.grad; st[i].hess = ft.hess;
-        st[i].eigvals = eigvals_try; st[i].eigvecs = eigvecs_try;
-      } else {
-        std::fill(st[i].S.begin(), st[i].S.end(), 0.0);
-      }
-      model_eigen(K, st[i].hess, st[i].S, st[i].mvals, st[i].mvecs);
-    }
-  }
-
-  NumericMatrix eta_modes(N, K), grad_mat(N, K), eigvals_mat(N, K);
-  NumericVector log_det_H(N), value(N);
-  IntegerVector iterations(N);
-  LogicalVector converged(N);
-  List H_GN_list(N), H_inv_list(N);
-  for (int i = 0; i < N; ++i) {
-    IntegerVector eip = as<List>(subject_meta_fast[i])["eta_idx_in_pars"];
-    for (int k = 0; k < K; ++k) pars_full[eip[k] - 1] = st[i].eta[k];
-    InnerResult r = finish_inner(K, st[i].eta, st[i].grad, st[i].hess,
-                                 st[i].eigvals, st[i].eigvecs, st[i].val,
-                                 st[i].iter, st[i].converged, eflr);
-    for (int k = 0; k < K; ++k) {
-      eta_modes(i, k) = r.eta[k]; grad_mat(i, k) = r.grad[k];
-      eigvals_mat(i, k) = r.eigvals[k];
-    }
-    NumericMatrix hg(K, K), hi(K, K);
-    for (int c = 0; c < K; ++c) for (int rr = 0; rr < K; ++rr) {
-      hg(rr, c) = r.H_GN[rr + c * K]; hi(rr, c) = r.H_inv[rr + c * K];
-    }
-    CharacterVector eta_nm =
-      as<CharacterVector>(as<List>(subject_meta_fast[i])["eta_names"]);
-    List dn = List::create(eta_nm, eta_nm);
-    hg.attr("dimnames") = dn;
-    hi.attr("dimnames") = dn;
-    H_GN_list[i] = hg; H_inv_list[i] = hi;
-    log_det_H[i] = r.log_det_H; value[i] = r.value;
-    iterations[i] = r.iterations; converged[i] = r.converged;
-  }
-  rownames(eta_modes)   = subjects;
-  rownames(grad_mat)    = subjects;
-  rownames(eigvals_mat) = subjects;
-  log_det_H .names() = subjects;
-  value     .names() = subjects;
-  iterations.names() = subjects;
-  converged .names() = subjects;
-  H_GN_list .names() = subjects;
-  H_inv_list.names() = subjects;
-
-  return List::create(
-    Rcpp::Named("eta_modes")  = eta_modes,
-    Rcpp::Named("gradient")   = grad_mat,
-    Rcpp::Named("H_GN")       = H_GN_list,
-    Rcpp::Named("H_inv")      = H_inv_list,
-    Rcpp::Named("eigvals")    = eigvals_mat,
-    Rcpp::Named("log_det_H")  = log_det_H,
-    Rcpp::Named("value")      = value,
-    Rcpp::Named("iterations") = iterations,
-    Rcpp::Named("converged")  = converged);
-}
-
-
-// Inner trust for all subjects on the fast objective. Omega_inv is fixed during
-// the inner loop, so R computes it once per outer iteration.
-// [[Rcpp::export]]
-List focei_inner_trust(Function model_cb,
-                            Function err_cb,
-                            NumericVector pars_full,
-                            NumericMatrix eta_warmstart,
-                            List subject_meta,
-                            NumericMatrix Omega_inv_mat,
-                            double Omega_log_det,
-                            Nullable<NumericVector> fixed,
-                            List control,
-                            Nullable<Function> predict_cb = R_NilValue) {
-  CharacterVector subjects = subject_meta["subjects"];
-  List subject_meta_fast   = subject_meta["fast_meta"];
-  const int K = as<int>(subject_meta["K"]);
-  const int N = subjects.size();
-  if (eta_warmstart.nrow() != N || eta_warmstart.ncol() != K)
-    throw std::runtime_error("focei_inner_trust: eta_warmstart shape mismatch.");
-  if (Omega_inv_mat.nrow() != K || Omega_inv_mat.ncol() != K)
-    throw std::runtime_error("focei_inner_trust: Omega_inv_mat shape mismatch.");
-
-  std::vector<double> Omega_inv(K * K);
-  for (int c = 0; c < K; ++c)
-    for (int r = 0; r < K; ++r)
-      Omega_inv[r + c * K] = Omega_inv_mat(r, c);
-
-  double rinit   = control.containsElementNamed("rinit") ?
-                     as<double>(control["rinit"]) : 1.0;
-  double rmax    = control.containsElementNamed("rmax") ?
-                     as<double>(control["rmax"]) : 10.0;
-  int    iterlim = control.containsElementNamed("iterlim") ?
-                     as<int>(control["iterlim"]) : 30;
-  double steptol = ctrl_tol(control, "steptol", "steptol", 1e-8);
-  double mtol    = ctrl_tol(control, "mtol", "mterm", 1e-12);
-  double eflr    = control.containsElementNamed("eigen_floor_relative") ?
-                     as<double>(control["eigen_floor_relative"]) : 1e-10;
-
-  if (predict_cb.isNotNull()) {
-    Function pcb(predict_cb);
-    return inner_trust_lockstep(pcb, pars_full, eta_warmstart, subject_meta_fast,
-                                subjects, Omega_inv, Omega_log_det, fixed, K, N,
-                                rinit, rmax, iterlim, steptol, mtol, eflr);
-  }
-
-  // Other subjects' etas stay at their warmstart: working copy per subject.
-  std::vector<double> base_pars(pars_full.begin(), pars_full.end());
-
-  NumericMatrix eta_modes(N, K);
-  NumericMatrix grad_mat(N, K);
-  NumericMatrix eigvals_mat(N, K);
-  NumericVector log_det_H(N);
-  NumericVector value(N);
-  IntegerVector iterations(N);
-  LogicalVector converged(N);
-  List H_GN_list(N);
-  List H_inv_list(N);
-
-  for (int i = 0; i < N; ++i) {
-    NumericVector eta_init(K);
-    for (int k = 0; k < K; ++k) eta_init[k] = eta_warmstart(i, k);
-
-    NumericVector working_pars(base_pars.begin(), base_pars.end());
-    working_pars.attr("names") = pars_full.attr("names");
-
-    List meta_i = as<List>(subject_meta_fast[i]);
-
-    InnerResult r = inner_trust_one_subject(
-        model_cb, err_cb, working_pars, fixed, meta_i, eta_init,
-        Omega_inv.data(), Omega_log_det,
-        rinit, rmax, iterlim, steptol, mtol, eflr);
-
-    for (int k = 0; k < K; ++k) {
-      eta_modes  (i, k) = r.eta[k];
-      grad_mat   (i, k) = r.grad[k];
-      eigvals_mat(i, k) = r.eigvals[k];
-    }
-    NumericMatrix H_GN_i (K, K);
-    NumericMatrix H_inv_i(K, K);
-    for (int c = 0; c < K; ++c)
-      for (int rw = 0; rw < K; ++rw) {
-        H_GN_i (rw, c) = r.H_GN [rw + c * K];
-        H_inv_i(rw, c) = r.H_inv[rw + c * K];
-      }
-    CharacterVector eta_nm = as<CharacterVector>(as<List>(meta_i)["eta_names"]);
-    List dn = List::create(eta_nm, eta_nm);
-    H_GN_i .attr("dimnames") = dn;
-    H_inv_i.attr("dimnames") = dn;
-    H_GN_list [i] = H_GN_i;
-    H_inv_list[i] = H_inv_i;
-    log_det_H [i] = r.log_det_H;
-    value     [i] = r.value;
-    iterations[i] = r.iterations;
-    converged [i] = r.converged;
-  }
-
-  // Write the converged modes into pars_full (caller-visible side effect)
-  IntegerMatrix eta_idx_global = subject_meta["eta_idx_global"];
-  for (int i = 0; i < N; ++i)
-    for (int k = 0; k < K; ++k)
-      pars_full[eta_idx_global(i, k) - 1] = eta_modes(i, k);
-
-  rownames(eta_modes)   = subjects;
-  rownames(grad_mat)    = subjects;
-  rownames(eigvals_mat) = subjects;
-  log_det_H .names() = subjects;
-  value     .names() = subjects;
-  iterations.names() = subjects;
-  converged .names() = subjects;
-  H_GN_list .names() = subjects;
-  H_inv_list.names() = subjects;
-
-  return List::create(
-    Rcpp::Named("eta_modes")  = eta_modes,
-    Rcpp::Named("gradient")   = grad_mat,
-    Rcpp::Named("H_GN")       = H_GN_list,
-    Rcpp::Named("H_inv")      = H_inv_list,
-    Rcpp::Named("eigvals")    = eigvals_mat,
-    Rcpp::Named("log_det_H")  = log_det_H,
-    Rcpp::Named("value")      = value,
-    Rcpp::Named("iterations") = iterations,
-    Rcpp::Named("converged")  = converged);
-}
-
-
 // Adds the volume derivatives of `correction_cb`, a list of the gradient named by
 // outer parameter and an optional Hessian with outer dimnames, to the outer model;
 // the callback gets the outer gradient without them as `data_gradient`. Returns the
 // `eta_shift`, d eta*/d theta per subject (K x n_outer), or an empty list.
 static List add_correction(Function& correction_cb, const CharacterVector& outer_names,
                            const NumericVector& pars_full, const NumericMatrix& H_full,
-                           const List& H_inv_list, NumericVector& grad_outer,
+                           const List& H_inv_list, const List& weight_list, NumericVector& grad_outer,
                            NumericMatrix& Hess) {
   List corr = as<List>(correction_cb(
       Rcpp::Named("full_pars")     = pars_full,
       Rcpp::Named("joint_hessian") = H_full,
       Rcpp::Named("H_inv_list")    = H_inv_list,
+      Rcpp::Named("weight_list")   = weight_list,
       Rcpp::Named("data_gradient") = clone(grad_outer)));
   NumericVector g = as<NumericVector>(corr["gradient"]);
   std::vector<int> at = name_indices(outer_names, CharacterVector(g.names()), "correction/gradient");
@@ -972,15 +117,14 @@ List focei_outer_objfn(Function model_cb,
                             std::string correction_mode = "none",
                             Nullable<Function> correction_cb_opt = R_NilValue,
                        Nullable<Function> predict_cb = R_NilValue,
-                       bool apply_correction = true) {
+                       bool apply_correction = true,
+                       bool newton_value = false) {
   CharacterVector subjects        = subject_meta["subjects"];
-  IntegerMatrix   eta_idx_global  = subject_meta["eta_idx_global"];
   List            eta_names_list  = subject_meta["eta_names"];
   CharacterVector outer_names     = subject_meta["outer_names"];
   IntegerVector   outer_idx_full  = subject_meta["outer_idx_in_full"];
   NumericVector   other_etas_init = subject_meta["other_etas_init"];
   CharacterVector pars_full_names = subject_meta["pars_full_names"];
-  const int K = as<int>(subject_meta["K"]);
   const int N = subjects.size();
   const int n_outer = outer_names.size();
 
@@ -999,21 +143,25 @@ List focei_outer_objfn(Function model_cb,
   for (int i = 0; i < n_outer; ++i)
     pars_full[outer_idx_full[i] - 1] = outer_pars[i];
 
-  // Fast inner trust (mutates pars_full to hold the modes)
-  List inner_res = focei_inner_trust(
-      model_cb, err_cb, pars_full, eta_warmstart,
-      subject_meta, Omega_inv_mat, Omega_log_det, fixed, inner_ctrl, predict_cb);
-  NumericMatrix eta_modes  = as<NumericMatrix>(inner_res["eta_modes"]);
-  List          H_GN_list  = as<List>(inner_res["H_GN"]);
-  List          H_inv_list = as<List>(inner_res["H_inv"]);
-  NumericVector log_det_H  = as<NumericVector>(inner_res["log_det_H"]);
-  IntegerVector iterations = as<IntegerVector>(inner_res["iterations"]);
-  LogicalVector converged  = as<LogicalVector>(inner_res["converged"]);
+  // the group kernel with Laplace on the normal block; the modes go into pars_full
+  dmod::nlme::GroupProblem prob;
+  prob.model_cb = &model_cb;
+  prob.err_cb = &err_cb;
+  Function pcb = predict_cb.isNotNull() ? Function(predict_cb) : model_cb;
+  if (predict_cb.isNotNull()) prob.predict_cb = &pcb;
+  prob.fixed = fixed;
+  prob.meta = subject_meta;
+  prob.Omega_inv.assign(Omega_inv_mat.begin(), Omega_inv_mat.end());
+  prob.Omega_log_det = Omega_log_det;
+  prob.control = dmod::nlme::inner_control(inner_ctrl);
+  const dmod::nlme::LaplaceNormal laplace;
+  const dmod::nlme::Groups groups = dmod::nlme::evaluate_groups(prob, pars_full, eta_warmstart, laplace);
+  List inner_res = dmod::nlme::groups_list(groups, subject_meta);
 
-  double sum_logdetH = 0.0;
-  for (int i = 0; i < N; ++i) sum_logdetH += log_det_H[i];
+  double sum_terms = 0.0;
+  for (int i = 0; i < N; ++i) sum_terms += groups.integrals[i].term;
 
-  // Gauss-Newton joint Hessian: H_inv_list and log|H| use the GN inner block,
+  // Gauss-Newton joint Hessian: the local models use the GN inner block,
   // and the stage-2 implicit chain must differentiate the same matrix it inverts.
   const bool want_deriv2 = false;
   List out_mode = as<List>(joint_cb(
@@ -1024,8 +172,7 @@ List focei_outer_objfn(Function model_cb,
       Rcpp::Named("conditions") = subject_meta["conditions"]));
   // the joint objective at the modes: the inner values of the subjects plus the data of
   // the conditions that belong to no subject
-  const double OFV = as<double>(out_mode["value"]) + sum_logdetH
-                    - (double)N * (double)K * std::log(2.0);
+  const double OFV = as<double>(out_mode["value"]) + sum_terms + groups.constant;
   NumericVector grad_full = as<NumericVector>(out_mode["gradient"]);
   NumericMatrix H_full    = as<NumericMatrix>(out_mode["hessian"]);
   CharacterVector grad_names = grad_full.names();
@@ -1036,83 +183,60 @@ List focei_outer_objfn(Function model_cb,
                                                  "fast_outer/grad");
   std::vector<int> outer_idx_hess = name_indices(H_rownames, outer_names,
                                                  "fast_outer/hess");
-  std::vector<std::vector<int> > eta_idx_hess(N);
-  for (int i = 0; i < N; ++i) {
-    CharacterVector eta_nm_i = as<CharacterVector>(eta_names_list[i]);
-    eta_idx_hess[i] = name_indices(H_rownames, eta_nm_i,
-                                   "fast_outer/eta_hess");
-  }
-
   NumericVector grad_outer(n_outer);
   for (int i = 0; i < n_outer; ++i) grad_outer[i] = grad_full[outer_idx_grad[i]];
   grad_outer.attr("names") = outer_names;
 
-  // Schur Hessian. Per subject:
-  //   tmp  = H_oi * H_inv_i              (n_outer x K)       via dgemm "N", "N"
-  //   Hess = Hess - tmp * H_oi^T          (n_outer x n_outer) via dgemm "N", "T"
-  NumericMatrix Hess(n_outer, n_outer);
-  for (int c = 0; c < n_outer; ++c)
-    for (int r = 0; r < n_outer; ++r)
-      Hess(r, c) = H_full(outer_idx_hess[r], outer_idx_hess[c]);
-  std::vector<double> H_oi(n_outer * K), tmp(n_outer * K);
-  std::vector<double> H_inv_col(K * K);
+  // the outer model: the normal block of every group eliminated from the joint Gauss-Newton Hessian,
+  // and the eta gradient g_i the inner search leaves taken through the coupling, grad -= H_oi H_i^-1 g_i,
+  // the gradient at the exact modes to first order
   std::vector<double> Hess_col(n_outer * n_outer);
-  std::vector<std::vector<int> > eta_idx_grad(N);
-  for (int i = 0; i < N; ++i)
-    eta_idx_grad[i] = name_indices(grad_names, as<CharacterVector>(eta_names_list[i]),
-                                   "fast_outer/eta_grad");
   for (int c = 0; c < n_outer; ++c)
-    for (int r = 0; r < n_outer; ++r) Hess_col[r + c * n_outer] = Hess(r, c);
-  const double one = 1.0, m_one = -1.0, zero = 0.0;
+    for (int r = 0; r < n_outer; ++r) Hess_col[r + c * n_outer] = H_full(outer_idx_hess[r], outer_idx_hess[c]);
+  std::vector<double> H_oi, g_N;
+  // with `newton_value` the value at the exact modes to second order in the eta gradient of the joint
+  // objective, OFV - g_N' H_NN^-1 g_N / 2; the volume term stays that at the modes found
+  double decrement = 0.0;
   for (int i = 0; i < N; ++i) {
-    NumericMatrix H_inv_i = as<NumericMatrix>(H_inv_list[i]);
-    // Pack H_inv_i to column-major buffer (it already is, but force layout)
-    for (int c = 0; c < K; ++c)
-      for (int r = 0; r < K; ++r) H_inv_col[r + c * K] = H_inv_i(r, c);
-    // Pack H_oi from H_full
-    for (int k = 0; k < K; ++k)
-      for (int r = 0; r < n_outer; ++r)
-        H_oi[r + k * n_outer] = H_full(outer_idx_hess[r], eta_idx_hess[i][k]);
-    // tmp = H_oi * H_inv_i  (n_outer x K)
-    F77_CALL(dgemm)("N", "N", &n_outer, &K, &K, &one,
-                    H_oi.data(),     &n_outer,
-                    H_inv_col.data(), &K,
-                    &zero, tmp.data(), &n_outer FCONE FCONE);
-    // Hess -= tmp * H_oi^T  (n_outer x n_outer)
-    F77_CALL(dgemm)("N", "T", &n_outer, &n_outer, &K, &m_one,
-                    tmp.data(),  &n_outer,
-                    H_oi.data(), &n_outer,
-                    &one, Hess_col.data(), &n_outer FCONE FCONE);
-    // the gradient at the exact modes to first order: the eta gradient g_i the inner search leaves
-    // enters through the coupling, grad -= H_oi H_i^-1 g_i
-    for (int r = 0; r < n_outer; ++r) {
-      double d = 0.0;
-      for (int k = 0; k < K; ++k) d += tmp[r + k * n_outer] * grad_full[eta_idx_grad[i][k]];
-      grad_outer[r] -= d;
+    const dmod::nlme::LocalModel& m = groups.models[i];
+    CharacterVector eta_nm_i = as<CharacterVector>(eta_names_list[i]);
+    std::vector<int> eh = name_indices(H_rownames, eta_nm_i, "fast_outer/eta_hess");
+    std::vector<int> eg = name_indices(grad_names, eta_nm_i, "fast_outer/eta_grad");
+    const int n = m.normal.size();
+    H_oi.assign((std::size_t) n_outer * n, 0.0);
+    g_N.assign(n, 0.0);
+    for (int k = 0; k < n; ++k) {
+      g_N[k] = grad_full[eg[m.normal[k]]];
+      for (int r = 0; r < n_outer; ++r) H_oi[r + k * n_outer] = H_full(outer_idx_hess[r], eh[m.normal[k]]);
     }
+    dmod::nlme::eliminate_normal(n_outer, m, H_oi.data(), Hess_col.data(), grad_outer.begin(), g_N.data());
+    if (newton_value) dmod::nlme::eliminate_normal(1, m, g_N.data(), &decrement, nullptr, g_N.data());
   }
+  NumericMatrix Hess(n_outer, n_outer);
   for (int c = 0; c < n_outer; ++c)
     for (int r = 0; r < n_outer; ++r) Hess(r, c) = Hess_col[r + c * n_outer];
   Hess.attr("dimnames") = List::create(outer_names, outer_names);
+  List H_inv_list = inner_res["H_inv"], weight_list = inner_res["weight"];
 
   List eta_shift;
   if (apply_correction && correction_mode != "none" && correction_cb_opt.isNotNull()) {
     Function correction_cb(correction_cb_opt);
-    eta_shift = add_correction(correction_cb, outer_names, pars_full, H_full, H_inv_list,
+    eta_shift = add_correction(correction_cb, outer_names, pars_full, H_full, H_inv_list, weight_list,
                                grad_outer, Hess);
   }
 
   return List::create(
-    Rcpp::Named("value")       = OFV,
+    Rcpp::Named("value")       = OFV + decrement / 2.0,
     Rcpp::Named("gradient")    = grad_outer,
     Rcpp::Named("hessian")     = Hess,
-    Rcpp::Named("eta_modes")   = eta_modes,
-    Rcpp::Named("H_GN")        = H_GN_list,
+    Rcpp::Named("eta_modes")   = inner_res["eta_modes"],
+    Rcpp::Named("H_GN")        = inner_res["H_GN"],
     Rcpp::Named("H_inv")       = H_inv_list,
-    Rcpp::Named("log_det_H")   = log_det_H,
-    Rcpp::Named("sum_logdetH") = sum_logdetH,
-    Rcpp::Named("iterations")  = iterations,
-    Rcpp::Named("converged")   = converged,
+    Rcpp::Named("weight")      = weight_list,
+    Rcpp::Named("log_det_H")   = inner_res["log_det_H"],
+    Rcpp::Named("sum_logdetH") = sum_terms,
+    Rcpp::Named("iterations")  = inner_res["iterations"],
+    Rcpp::Named("converged")   = inner_res["converged"],
     Rcpp::Named("pars_full")   = pars_full,
     Rcpp::Named("H_full")      = H_full,
     Rcpp::Named("eta_shift")   = eta_shift);
@@ -1134,22 +258,30 @@ struct OuterEval {
 // gains less than mtol in the region rmax or five rejected trials leave the value flat within ftol.
 template <class Model>
 List focei_outer_loop(OuterEval<Model>& ev, NumericVector init, CharacterVector outer_names,
-                      List outer_ctrl, double inner_rinit, int N, int K) {
+                      List outer_ctrl, double inner_rinit, int N, int K, NumericMatrix eta_init) {
   const int n_outer = init.size();
   double rinit   = outer_ctrl.containsElementNamed("rinit") ? as<double>(outer_ctrl["rinit"]) : 1.0;
   double rmax    = outer_ctrl.containsElementNamed("rmax") ? as<double>(outer_ctrl["rmax"]) : 10.0;
   int    iterlim = outer_ctrl.containsElementNamed("iterlim") ? as<int>(outer_ctrl["iterlim"]) : 100;
-  double ftol    = ctrl_tol(outer_ctrl, "ftol", "fterm", 1e-6);
-  double mtol    = ctrl_tol(outer_ctrl, "mtol", "mterm", 1e-6);
+  double ftol    = ctrl_tol(outer_ctrl, "ftol", 1e-6);
+  double mtol    = ctrl_tol(outer_ctrl, "mtol", 1e-6);
 
   NumericVector theta(clone(init));
   theta.attr("names") = outer_names;
-  NumericMatrix eta_warm(N, K);
+  NumericMatrix eta_warm = eta_init.nrow() == N && eta_init.ncol() == K ? clone(eta_init) : NumericMatrix(N, K);
   Model model(n_outer);
+  // the inner iterations of all trials, summed over the groups
+  int inner_iter = 0;
+  auto count = [&](const RObject& T) {
+    if (T.isNULL()) return;
+    List out(T);
+    if (out.containsElementNamed("iterations")) for (int it : as<IntegerVector>(out["iterations"])) inner_iter += it;
+  };
   const std::vector<double> ones(n_outer, 1.0), zeros(n_outer, 0.0);
 
   RObject keep;
   double f_curr = ev.trial(theta, eta_warm, keep);
+  count(keep);
   std::vector<double> g_curr;
   typename Model::Hess H_curr;
   List shift_curr;
@@ -1190,6 +322,7 @@ List focei_outer_loop(OuterEval<Model>& ev, NumericVector init, CharacterVector 
     bool eval_ok = true;
     try {
       f_try = ev.trial(theta_try, eta_warm, T);
+      count(T);
     } catch (std::exception&) { eval_ok = false; }
 
     double actual_red = f_curr - f_try;
@@ -1257,6 +390,7 @@ List focei_outer_loop(OuterEval<Model>& ev, NumericVector init, CharacterVector 
       Rcpp::Named("value")      = f_curr,
       Rcpp::Named("keep")       = keep,
       Rcpp::Named("iterations") = iter,
+      Rcpp::Named("innerIterations") = inner_iter,
       Rcpp::Named("converged")  = converged,
       Rcpp::Named("trace")      = trace);
 }
@@ -1274,7 +408,8 @@ List focei_run(Function model_cb,
                     List control,
                     std::string correction_mode = "none",
                     Nullable<Function> correction_cb = R_NilValue,
-                       Nullable<Function> predict_cb = R_NilValue) {
+                       Nullable<Function> predict_cb = R_NilValue,
+                       Nullable<NumericMatrix> eta_init = R_NilValue) {
   CharacterVector subjects   = subject_meta["subjects"];
   CharacterVector outer_names = subject_meta["outer_names"];
   const int N = subjects.size();
@@ -1340,13 +475,14 @@ List focei_run(Function model_cb,
   const double inner_rinit = inner_ctrl.containsElementNamed("rinit") ? as<double>(inner_ctrl["rinit"]) : 1.0;
   List outer_ctrl = control.containsElementNamed("outer") ?
                       as<List>(control["outer"]) : List();
+  const bool newton_value = control.containsElementNamed("newtonValue") && as<bool>(control["newtonValue"]);
 
   auto eval_outer = [&](NumericVector& th, NumericMatrix& warm, bool correct) -> List {
     auto OL = build_Omega_inv_and_logdet(th);
     return focei_outer_objfn(
         model_cb, err_cb, joint_cb, th, warm,
         subject_meta, OL.first, OL.second, fixed, inner_ctrl,
-        correction_mode, correction_cb, predict_cb, correct);
+        correction_mode, correction_cb, predict_cb, correct, newton_value);
   };
   const bool corrected = correction_mode != "none" && correction_cb.isNotNull();
   // the trial point by the inner search with the outer gradient and Schur Hessian; at an accepted
@@ -1364,7 +500,7 @@ List focei_run(Function model_cb,
     if (corrected) {
       Function cb(correction_cb);
       shift = add_correction(cb, outer_names, as<NumericVector>(out["pars_full"]),
-                             as<NumericMatrix>(out["H_full"]), as<List>(out["H_inv"]), gt, Ht);
+                             as<NumericMatrix>(out["H_full"]), as<List>(out["H_inv"]), as<List>(out["weight"]), gt, Ht);
     }
     out["gradient"] = gt;
     out["hessian"] = Ht;
@@ -1373,7 +509,8 @@ List focei_run(Function model_cb,
     T = out;
   };
   ev.modes = [](const RObject& T) { return NumericMatrix(as<List>(T)["eta_modes"]); };
-  List res = focei_outer_loop(ev, init, outer_names, outer_ctrl, inner_rinit, N, K);
+  List res = focei_outer_loop(ev, init, outer_names, outer_ctrl, inner_rinit, N, K,
+                              eta_init.isNotNull() ? NumericMatrix(eta_init) : NumericMatrix(0, 0));
 
   List out_final = as<List>(res["keep"]);
   return List::create(
@@ -1384,9 +521,11 @@ List focei_run(Function model_cb,
       Rcpp::Named("etaModes")   = as<NumericMatrix>(out_final["eta_modes"]),
       Rcpp::Named("H_GN")       = as<List>(out_final["H_GN"]),
       Rcpp::Named("H_inv")      = as<List>(out_final["H_inv"]),
+      Rcpp::Named("weight")     = as<List>(out_final["weight"]),
       Rcpp::Named("log_det_H")  = as<NumericVector>(out_final["log_det_H"]),
       Rcpp::Named("sum_logdetH")= as<double>(out_final["sum_logdetH"]),
       Rcpp::Named("iterations") = res["iterations"],
+      Rcpp::Named("innerIterations") = res["innerIterations"],
       Rcpp::Named("converged")  = res["converged"],
       Rcpp::Named("trace")      = res["trace"]);
 }
@@ -1396,7 +535,7 @@ List focei_run(Function model_cb,
 // `lowrank` and `shift`, the mode shifts with their outer columns in "idx".
 // [[Rcpp::export]]
 List focei_run_sparse(Function trial, Function complete, NumericVector init, int N, int K,
-                      List outer_ctrl, double inner_rinit) {
+                      List outer_ctrl, double inner_rinit, Nullable<NumericMatrix> eta_init = R_NilValue) {
   CharacterVector outer_names = init.names();
   const int n_outer = init.size();
   OuterEval<dmod::trust_model::SparseModel> ev;
@@ -1416,5 +555,6 @@ List focei_run_sparse(Function trial, Function complete, NumericVector init, int
     T = out;
   };
   ev.modes = [](const RObject& T) { return NumericMatrix(as<List>(T)["eta_modes"]); };
-  return focei_outer_loop(ev, init, outer_names, outer_ctrl, inner_rinit, N, K);
+  return focei_outer_loop(ev, init, outer_names, outer_ctrl, inner_rinit, N, K,
+                          eta_init.isNotNull() ? NumericMatrix(eta_init) : NumericMatrix(0, 0));
 }

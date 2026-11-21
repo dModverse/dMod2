@@ -140,7 +140,7 @@ test_that("FOCEI reproduces the Theoph reference fit and agrees with nlmixr2", {
   map <- c(Ka = "tka", V = "tv", Cl = "tcl", sigma_add = "log_sigma_add",
            omega_Ka_Ka = "omega_Ka_Ka", omega_V_V = "omega_V_V", omega_Cl_Cl = "omega_Cl_Cl")
   fit <- em(obj, randomEffects(mods$p), init = setNames(ref$init[map], names(map)), verbose = FALSE,
-            control = list(innerControl = list(iterlim = 30, ftol = 1e-7, mtol = 1e-7),
+            control = list(innerControl = list(iterlim = 30, mtol = 1e-7),
                            trustControl = list(iterlim = 100)))
   expect_true(fit$converged)
   expect_lt(abs(fit$value - ref$value), 1e-2)
@@ -149,6 +149,41 @@ test_that("FOCEI reproduces the Theoph reference fit and agrees with nlmixr2", {
   inv <- setNames(names(map), map)
   expect_true(all(abs(fit$argument[inv[names(nl)]] - nl) < 0.25 * ref$se[names(nl)]))
   expect_lt(abs(fit$value - ref$nlmixr2Value), 0.5)
+})
+
+test_that("FOCEI on inexact modes ends at the nested optimum, dense and sparse, and counts the inner iterations", {
+  skip_on_cran()
+  ref <- readRDS("fixtures/focei_theoph_reference.rds")
+  oldwd <- setwd(tempdir()); on.exit(setwd(oldwd))
+  mods <- .focei_models()$theoph
+  obj <- normL2(mods$data, mods$g * mods$x * mods$p, errmodel = mods$err)
+  map <- c(Ka = "tka", V = "tv", Cl = "tcl", sigma_add = "log_sigma_add",
+           omega_Ka_Ka = "omega_Ka_Ka", omega_V_V = "omega_V_V", omega_Cl_Cl = "omega_Cl_Cl")
+  init <- setNames(ref$init[map], names(map))
+  for (sp in c(FALSE, TRUE)) {
+    nested <- em(obj, randomEffects(mods$p), init, verbose = FALSE, sparse = sp)
+    for (k in 1:2) {
+      sqp <- em(obj, randomEffects(mods$p), init, verbose = FALSE, sparse = sp,
+                control = list(inner = "sqp", innerControl = list(sqpIterlim = k)))
+      expect_true(sqp$converged)
+      expect_equal(sqp$value, nested$value, tolerance = 1e-6)
+      expect_lt(max(abs(sqp$argument - nested$argument)), 1e-3)
+      expect_lt(max(abs(sqp$gradient)), 1e-2)
+      expect_true(is.integer(sqp$innerIterations) && sqp$innerIterations > 0L)
+      expect_true(sqp$sqpIterations >= 1L && sqp$sqpIterations <= sqp$iterations)
+      expect_length(sqp$trace$value, sqp$iterations + 1L)
+    }
+    expect_true(is.integer(nested$innerIterations) && nested$innerIterations > 0L)
+    expect_null(nested$sqpIterations)
+  }
+  # without outer iterations the inexact search is skipped: the nested marginal at the start
+  at <- em(obj, randomEffects(mods$p), init, verbose = FALSE, control = list(trustControl = list(iterlim = 0)))
+  sq <- em(obj, randomEffects(mods$p), init, verbose = FALSE,
+           control = list(inner = "sqp", trustControl = list(iterlim = 0)))
+  expect_identical(sq$value, at$value)
+  expect_error(em(obj, randomEffects(mods$p), init, control = list(inner = "exact")), "nested")
+  expect_error(em(obj, randomEffects(mods$p), init, control = list(inner = "sqp", innerControl = list(sqpIterlim = 0))),
+               "sqpIterlim")
 })
 
 test_that("the FOCEI gradient with a random effect in the error model is the slope of the objective", {
@@ -167,7 +202,7 @@ test_that("the FOCEI gradient with a random effect in the error model is the slo
   obj <- normL2(data, model, errmodel = mods$err)
   init <- c(truth + 0.05, omega_V_V = log(0.3))
   ctl <- list(trustControl = list(iterlim = 0),
-              innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
+              innerControl = list(mtol = 1e-12, iterlim = 200))
   run <- function(p) em(obj, randomEffects(mods$p), setNames(p, names(init)), control = ctl, verbose = FALSE)
   at <- run(init)
   slope <- numDeriv::grad(function(p) run(p)$value, unname(init),
@@ -265,7 +300,7 @@ test_that("the volume rows give the exact joint blocks and d eta*/d theta is the
     sigma = NA_real_, condition = s))))
   obj <- normL2(data, model, errmodel = mods$err)
   theta <- c(truth + 0.05, omega_V_V = log(0.3))
-  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(ftol = 1e-12, mtol = 1e-12, iterlim = 200))
+  ctl <- list(trustControl = list(iterlim = 0), innerControl = list(mtol = 1e-12, iterlim = 200))
   modes <- function(th) em(obj, randomEffects(mods$p), setNames(th, names(theta)), control = ctl,
                            verbose = FALSE)$etaModes[, 1]
   design <- dMod2:::.emDesign(obj, randomEffects(mods$p))
@@ -368,7 +403,7 @@ test_that("the inner kernel has the value, gradient and Gauss-Newton Hessian of 
   km <- .kernelMeta(obj, mods$p, outer, eta_vals)
   Omega_inv <- matrix(1 / 0.3^2)
   Omega_log_det <- log(0.3^2)
-  res <- dMod2:::focei_inner_trust(
+  res <- dMod2:::nlme_group_kernel(
     model_cb = model, err_cb = err, pars_full = km$full,
     eta_warmstart = matrix(eta_vals, ncol = 1), subject_meta = km$meta,
     Omega_inv_mat = Omega_inv, Omega_log_det = Omega_log_det, fixed = NULL,
@@ -393,7 +428,7 @@ test_that("the inner kernel has the value, gradient and Gauss-Newton Hessian of 
     list(value = value, grad = grad, hess = hess)
   }
   # the batched predictor of the lock-step trust
-  batched <- dMod2:::focei_inner_trust(
+  batched <- dMod2:::nlme_group_kernel(
     model_cb = model, err_cb = err, pars_full = km$full,
     eta_warmstart = matrix(eta_vals, ncol = 1), subject_meta = km$meta,
     Omega_inv_mat = Omega_inv, Omega_log_det = Omega_log_det, fixed = NULL,
@@ -438,7 +473,7 @@ test_that("a failed prediction at an inner trial point rejects the trial of that
     }
     predict(timesList, parsList, conditions, fixed)
   }
-  modes <- function(cb) dMod2:::focei_inner_trust(
+  modes <- function(cb) dMod2:::nlme_group_kernel(
     model_cb = model, err_cb = mods$err, pars_full = km$full, eta_warmstart = matrix(0, 3, 1),
     subject_meta = km$meta, Omega_inv_mat = matrix(1 / 0.3^2), Omega_log_det = log(0.3^2), fixed = NULL,
     control = list(iterlim = 50, ftol = 1e-12, mtol = 1e-12), predict_cb = cb)
@@ -482,7 +517,7 @@ test_that("an inner trial point whose derivatives are not finite rejects the tri
     }
     out
   }
-  modes <- function(cb) dMod2:::focei_inner_trust(
+  modes <- function(cb) dMod2:::nlme_group_kernel(
     model_cb = model, err_cb = mods$err, pars_full = km$full, eta_warmstart = matrix(0, 3, 1),
     subject_meta = km$meta, Omega_inv_mat = matrix(1 / 0.3^2), Omega_log_det = log(0.3^2), fixed = NULL,
     control = list(iterlim = 50, ftol = 1e-12, mtol = 1e-12), predict_cb = cb)
@@ -524,7 +559,7 @@ test_that("the inner kernel matches the R replica for two observables per subjec
   K <- 2L
   Omega_inv <- diag(1 / 0.3^2, K)
   Omega_log_det <- 2 * log(0.3^2)
-  res <- dMod2:::focei_inner_trust(
+  res <- dMod2:::nlme_group_kernel(
     model_cb = model, err_cb = err, pars_full = km$full,
     eta_warmstart = matrix(eta_vals, ncol = K), subject_meta = km$meta,
     Omega_inv_mat = Omega_inv, Omega_log_det = Omega_log_det, fixed = NULL,
@@ -562,6 +597,24 @@ test_that("the inner kernel matches the R replica for two observables per subjec
     expect_equal(as.numeric(res$gradient[s, ]), unname(R$grad), tolerance = 1e-10)
     expect_equal(as.numeric(res$H_GN[[s]]), as.numeric(R$hess), tolerance = 1e-10)
   }
+  # Laplace on all coordinates: the term log|H|, the weight H^-1, the constant -G K log 2
+  expect_identical(res$term, res$log_det_H)
+  expect_identical(res$weight, res$H_inv)
+  expect_identical(res$constant, -length(subjects) * K * log(2))
+  # the first coordinate normal: H_NN alone is integrated, the second has the Schur complement
+  part <- dMod2:::nlme_group_kernel(
+    model_cb = model, err_cb = err, pars_full = km$full,
+    eta_warmstart = matrix(eta_vals, ncol = K), subject_meta = km$meta,
+    Omega_inv_mat = Omega_inv, Omega_log_det = Omega_log_det, fixed = NULL,
+    control = list(iterlim = 0, normal = 1L))
+  for (s in subjects) {
+    H <- res$H_GN[[s]]; g <- res$gradient[s, ]
+    expect_equal(unname(part$term[[s]]), log(H[1, 1]), tolerance = 1e-12)
+    expect_equal(unname(part$weight[[s]]), matrix(c(1 / H[1, 1], 0, 0, 0), 2), tolerance = 1e-12)
+    expect_equal(unname(part$S[[s]]), matrix(H[2, 2] - H[2, 1] * H[1, 2] / H[1, 1]), tolerance = 1e-12)
+    expect_equal(unname(part$r[[s]]), unname(g[2] - H[2, 1] * g[1] / H[1, 1]), tolerance = 1e-12)
+  }
+  expect_identical(part$constant, -length(subjects) * log(2))
 })
 
 test_that("an eta block with a vanishing variance is solved on the unit diagonal", {

@@ -95,6 +95,14 @@ as a sparse \code{Matrix}, assembled from the blocks of the conditions; \code{\l
 factorizes it where the argument \code{sparse} takes the sparse path, and \code{\link[=vcov.objlist]{vcov()}}
 solves it for the columns of \code{which}.
 
+\code{hessian = "expected"} returns, in place of the Gauss-Newton Hessian of the
+forward sweep, the expected (Fisher) information of the likelihood:
+\code{2 / sigma^2} in the prediction and \code{4 / sigma^2} in sigma per data point,
+positive semidefinite also where an error model depends on the parameters.
+The Gauss-Newton Hessian keeps the exact curvature of the loss in the
+prediction and sigma, which is indefinite there and shows the optimizer a
+saddle.
+
 With \code{deriv = FALSE} it returns the value alone.
 }
 

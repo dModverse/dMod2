@@ -153,7 +153,7 @@ z[, "time"] <- c(-rev(zb[, "time"]), zf[-1, "time"])
 ggplot(wide2long(z), aes(time, value)) +
   geom_line() + geom_vline(xintercept = 0, linetype = 3) +
   facet_wrap(~ name, scales = "free_y") +
-  labs(x = expression(epsilon), y = NULL) + theme_dMod(base_size = 9)
+  labs(x = expression(epsilon), y = NULL) + theme_dMod2(base_size = 9)
 
 theta <- lapply(seq_len(nrow(z)), function(j) replace(truthL, mvL, z[j, mvL]))
 pred  <- lapply(theta, function(th) as.data.frame(prd(times, th, deriv = FALSE)))
@@ -175,9 +175,9 @@ long$name <- factor(long$name, levels(long$name)[order(lev %in% names(observable
 ggplot(long, aes(time, value, group = eps, color = eps)) +
   geom_line() +
   facet_wrap(~ name, scales = "free_y") +
-  scale_color_dMod_div(name = expression(epsilon)) +
+  scale_color_dMod2_div(name = expression(epsilon)) +
   labs(title = paste0("A <-> B, X", direction), x = "time", y = NULL) +
-  theme_dMod(base_size = 9)
+  theme_dMod2(base_size = 9)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

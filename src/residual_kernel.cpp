@@ -117,8 +117,13 @@ static void accumulate_t_rows(int n_obs, int n_par, const double* pred, const do
     }
     // derivatives of the loss in pred and sigma
     const double lp = m1 * inv_s, ls = (two - w * m1) * inv_s;
-    const double lpp = m2 * inv_s2, lps = -(m1 + w * m2) * inv_s2;
-    const double lss = (2.0 * w * m1 + w * w * m2 - two) * inv_s2;
+    double lpp = m2 * inv_s2, lps = -(m1 + w * m2) * inv_s2;
+    double lss = (2.0 * w * m1 + w * w * m2 - two) * inv_s2;
+    if (!censored && opts.expected_information && !opts.use_deriv2_exact) {
+      lpp = 2.0 * (nu + 1.0) / (nu + 3.0) * inv_s2;
+      lps = 0.0;
+      lss = 4.0 * nu / (nu + 3.0) * inv_s2;
+    }
     const double* dp = dpred + (std::size_t) i * n_par;
     const double* ds = has_dsig ? dsigma + (std::size_t) i * n_par : nullptr;
     for (int k = 0; k < n_par; ++k)
@@ -261,7 +266,11 @@ void accumulate_aloq_residual(
     double coef_cross = 0.0;
     double coef_dsig2 = 0.0;
     double coef_dw02  = 0.0;
-    if (has_dsig) {
+    if (has_dsig && opts.expected_information && !opts.use_deriv2_exact && !m4beal_aloq) {
+      // with Part0 2/sigma^2 (dpred - wr dsigma)^2 this gives 2/sigma^2 dpred^2 + 4/sigma^2 dsigma^2
+      coef_cross = 2.0 * wr * inv_s2;
+      coef_dsig2 = (4.0 - 2.0 * wr * wr) * inv_s2;
+    } else if (has_dsig) {
       if (opts.aloq_part1) coef_cross += -2.0 * wr * inv_s2;
       if (opts.aloq_part2) coef_dsig2 += 4.0 * wr * wr * inv_s2;
       if (opts.aloq_part3) coef_dsig2 += -2.0 * inv_s2;

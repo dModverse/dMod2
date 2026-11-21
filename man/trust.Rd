@@ -11,7 +11,7 @@ trust(
   rinit = 0.1,
   rmax = 10,
   iterlim = 1000L,
-  hessianMethod = c("gn", "bfgs", "sr1", "exact"),
+  hessianMethod = c("gn", "bfgs", "sr1", "exact", "sbfgs", "ssr1", "gnsbfgs", "gnssr1"),
   phases = NULL,
   switches = NULL,
   parupper = NULL,
@@ -72,22 +72,35 @@ outside \code{[parlower, parupper]} are clipped with a warning; with
 Default \code{1000}.}
 
 \item{hessianMethod}{Source of the model Hessian of a run without
-\code{phases}: \code{"gn"} (default) the Gauss-Newton Hessian of the
+\code{phases}: \code{"gn"} the Gauss-Newton Hessian of the
 objective, \code{"bfgs"} or \code{"sr1"} a quasi-Newton update seeded as
 \code{qnControl$hessianInit} says, \code{"exact"} the true Hessian at
 every iterate, which needs an objective that takes \code{deriv2}.
-\code{"bfgs"}, \code{"sr1"} and \code{"exact"} require
-\code{boundary = "reflective"}.
+The structured methods take the Gauss-Newton Hessian at every iterate and
+add a correction learned from the steps, starting at zero:
+\code{"sbfgs"} by a BFGS update, \code{"ssr1"} by an SR1 update, which may
+be indefinite; \code{"gnsbfgs"} and \code{"gnssr1"} switch at every
+accepted step between the Gauss-Newton Hessian alone and the structured
+BFGS or SR1 model. They count as quasi-Newton phases for the stops and
+\code{qnEval}. The correction is learned from the secant of Dennis,
+Martínez and Tapia on the data rows that an objective of class
+\code{objfn} returns with \code{hessian = "structured"}, see \code{\link[=objlist]{objlist()}};
+without them from the gradient and the Gauss-Newton Hessian. The formulas
+are in the methods article.
+All but \code{"gn"} require \code{boundary = "reflective"}.
 Also selects the control defaults below. With \code{phases}, each phase
-names a method, and this argument is an error.}
+names a method, and this argument is an error. Not given: the hybrid of
+section Default method.}
 
 \item{phases}{List of phases, each a list of settings, run one after the
 other and from the first again after the last. The run hands over to the
-next phase at a value, model, step or stagnation stop and when a phase
-uses up the \code{iterlim} of that phase. A handover restarts the trust region at
-\code{rinit} and discards the quasi-Newton pairs. Default \code{NULL}: one
-phase from \code{hessianMethod} and \code{qnControl}, evaluated with the
-\code{sweep} in \code{...}. Names of the list label the phases in the
+next phase at a value, model, step or stagnation stop, when a phase
+uses up the \code{iterlim} of that phase and when the radius stayed the same
+for \code{radiusStall} iterations. A handover restarts the trust region at
+\code{rinit}, unless \code{keepRadius}, and discards the quasi-Newton
+pairs. Default \code{NULL}: one phase from \code{hessianMethod} and
+\code{qnControl}, evaluated with the \code{sweep} in \code{...}, or the
+phases of section Default method. Names of the list label the phases in the
 result, the Hessian source does otherwise. Not available with multiple
 shooting and \code{boundary = "clip"}.
 \describe{
@@ -95,20 +108,40 @@ shooting and \code{boundary = "clip"}.
 \code{hessianMethod}. Required.}
 \item{\code{iterlim}}{Maximum number of iterations of one run of the
 phase. Default \code{NULL}: only the total \code{iterlim}.}
+\item{\code{radiusStall}}{Number of consecutive iterations that leave
+the trust radius unchanged after which the phase hands over, the
+switch of the hybrid method of Fides (Fröhlich and Sorger 2022), which
+takes 20 for a Gauss-Newton phase followed by BFGS. The count starts
+anew with every change of the radius and at a handover; without a
+handover left it ends nothing. Default \code{NULL}: no such handover.}
 \item{\code{sweep}}{\code{"forward"} or \code{"reverse"}, the
 \code{sweep} the objective is evaluated with in the phase; a
 \code{sweep} in \code{...} is an error with \code{phases}. Default
 \code{NULL}: for \code{"bfgs"} and \code{"sr1"} reverse if the
 objective can be evaluated backwards at \code{parinit}, as with
 \code{derivMode = c("forward", "reverse")} throughout the chain,
-forward otherwise. A Gauss-Newton Hessian is always computed forward.
+forward otherwise. A Gauss-Newton Hessian is always computed forward,
+also in the structured methods.
 A handover between phases of different sweep evaluates the current
 iterate once more. The result reports the sweeps as
 \code{phaseSweep}.}
+\item{\code{keepRadius}}{\code{TRUE} starts the phase at the trust
+radius of the handover instead of \code{rinit}. Default
+\code{FALSE}.}
+\item{\code{onStop}}{What a value, model, step or stagnation stop does
+in the phase: \code{"handover"} (default) hands over while
+\code{switches} remain, \code{"end"} ends the run. A phase that ends
+on stops hands over at \code{iterlim} and \code{radiusStall} only.}
 \item{\code{qnControl}}{Quasi-Newton settings of the phase, merged
 over \code{qnControl}; see there. \code{hessianInit} defaults to
 \code{"gn"} in every phase but the first: a quasi-Newton phase starts
-from the Gauss-Newton Hessian at the iterate of the handover.}
+from the Gauss-Newton Hessian at the iterate of the handover.
+\code{"tracked"}, for a \code{"bfgs"} phase after the first with
+\code{qnMemory = 0}, starts it from a BFGS matrix kept over the whole
+run instead: the Hessian at \code{parinit} of the first phase, made
+positive definite as a BFGS seed is, updated with the accepted steps of
+the phases before, under the \code{qnCautious} test of the phase, and
+updated on in the phase itself. Not available on the sparse path.}
 }}
 
 \item{switches}{Number of handovers allowed. Default \code{NULL}: one
@@ -143,8 +176,9 @@ before. Default \code{1e-6}.}
 and \code{rmin}.}
 
 \item{qnControl}{List of quasi-Newton settings, merged into the defaults and
-read in a \code{"bfgs"} or \code{"sr1"} phase; \code{hessianInit} also in
-a first phase of source \code{"gn"}.
+read in a quasi-Newton or structured phase; \code{hessianInit} also in
+a first phase of source \code{"gn"}. A structured phase takes
+\code{hessianInit = "gn"} and \code{qnMemory = 0} only.
 \describe{
 \item{\code{hessianInit}}{Seed of the approximation: \code{"gn"}
 (default) the Gauss-Newton Hessian at \code{parinit};
@@ -163,14 +197,31 @@ reseed. The result reports the count as \code{nReseed}.}
 \item{\code{qnMemory}}{Number of \code{(s, y)} pairs kept. Default
 \code{0}: every update accumulates onto the seed. A positive value
 rebuilds the approximation in each iteration from the last
-\code{qnMemory} pairs, without the seed.}
+\code{qnMemory} pairs, without the seed. On the sparse path, see
+\code{sparse}, BFGS keeps the last \code{qnMemory} pairs, 10 where it
+is \code{0}, on top of the seed.}
 \item{\code{qnCautious}}{A BFGS pair is used only when
 \eqn{s^\top y > c\,|s|\,|y|} with \eqn{c} = \code{qnCautious}. Default
-\code{1e-8}, \code{0} disables the test; \code{"sr1"} is exempt. The
-result reports the rejected pairs as \code{qnSkipped}.}
-\item{\code{qnRejected}}{Whether \code{"sr1"} also updates from a
+\code{1e-8}, \code{0} disables the test; also read by \code{"sbfgs"},
+the SR1 methods are exempt. The result reports the rejected pairs as
+\code{qnSkipped}.}
+\item{\code{qnRejected}}{Whether an SR1 method also updates from a
 rejected trial point. Default \code{TRUE} for a phase whose source is
-\code{"sr1"}, \code{FALSE} otherwise.}
+\code{"sr1"}, \code{"ssr1"} or \code{"gnssr1"}, \code{FALSE}
+otherwise.}
+\item{\code{qnScaling}}{\code{"none"} (default) or \code{"residual"}:
+\code{"sbfgs"} and \code{"ssr1"} scale the correction with the
+residual norm, the norm of the derivatives of the value in the
+predictions and sigmas of the data, or the square root of the value
+for an objective without data rows, so it vanishes with the residuals
+(Huschens). Read by these two methods only.}
+\item{\code{qnHybridTol}}{Threshold of the switch of \code{"gnsbfgs"}
+and \code{"gnssr1"}: below it the model is the Gauss-Newton Hessian.
+Default \code{1e-6}.}
+\item{\code{qnHybridShift}}{\code{TRUE} adds the residual norm times
+the identity to the Gauss-Newton Hessian on the Gauss-Newton branch
+of \code{"gnsbfgs"} and \code{"gnssr1"}, as Zhou and Chen; default
+\code{FALSE}.}
 }}
 
 \item{stepControl}{List of step and acceptance settings, merged into the
@@ -225,11 +276,17 @@ and parameters. Default \code{NULL}, no file.}
 \item{sparse}{\code{"auto"} (default), \code{TRUE} or \code{FALSE}.
 \code{TRUE} calls \code{objfun} with \code{hessian = "sparse"} and solves
 every subproblem on sparse Cholesky factors of the returned \code{Matrix},
-a low-rank part \code{lowrank} (see \code{\link[=objlist]{objlist()}}) included; the steps equal
-those of the dense path to rounding. It needs \code{hessianMethod}
-\code{"gn"} or \code{"exact"} and \code{boundary = "reflective"}.
-\code{"auto"} takes the sparse path where it applies, outside multiple
-shooting, for at least \code{parameters} entries of \code{parinit} and a
+a low-rank part \code{lowrank} (see \code{\link[=objlist]{objlist()}}) included; on the Hessian
+of the objective the steps equal those of the dense path to rounding. It
+needs \code{hessianMethod}
+\code{"gn"} or \code{"exact"}, or \code{"bfgs"} with
+\code{qnControl$hessianInit = "gn"}, in every phase, and
+\code{boundary = "reflective"}. A BFGS phase there is limited-memory BFGS:
+the Hessian of the objective at the start of the phase plus the compact
+correction of the last \code{qnMemory} pairs (Byrd, Nocedal and Schnabel
+1994), a low-rank part of rank twice the number of pairs.
+\code{"auto"} takes the sparse path where every phase takes the Hessian of
+the objective, outside multiple shooting, for at least \code{parameters} entries of \code{parinit} and a
 step cheaper than the dense one at \code{parinit}; the settings come from
 \code{getOption("dMod2.sparseAuto")}, see \link{dMod2-package}.}
 
@@ -275,7 +332,8 @@ gradient and model Hessian at \code{argument}.}
 \item{\code{iterations}}{Number of iterations.}
 \item{\code{neval}}{Number of objective evaluations.}
 \item{\code{qnEval}}{Evaluations spent in a quasi-Newton phase.}
-\item{\code{qnSkipped}}{Pairs rejected by the cautious test.}
+\item{\code{qnSkipped}}{Pairs rejected by the cautious test, and in a
+structured phase pairs that left the correction unchanged.}
 \item{\code{nSwitch}}{Number of handovers between phases.}
 \item{\code{phaseIterations}}{Named integer, the iterations of each
 phase run, in run order and named after the phase. The sum is
@@ -283,10 +341,14 @@ phase run, in run order and named after the phase. The sum is
 evaluations and without the iterations that reseed instead of
 taking a step.}
 \item{\code{phaseSweep}}{Named character, the sweep of each element
-of \code{phases}, present when \code{phases} is set.}
+of \code{phases}, present when \code{phases} is set and in the
+default hybrid.}
 \item{\code{nReseed}}{Number of reseeds by
 \code{qnControl$hessianReseed = "stall"}, which allows each run of a
 phase the same number.}
+\item{\code{hybridGN}}{Accepted steps of a \code{"gnsbfgs"} or
+\code{"gnssr1"} phase after which the model is the Gauss-Newton
+Hessian.}
 \item{\code{evalBySource}}{Named integer, evaluations per Hessian
 source.}
 \item{\code{converged}}{Logical.}
@@ -300,15 +362,18 @@ row per iteration, and the per-iteration vectors \code{steptype},
 \code{stepback}, \code{accept}, \code{r} (radius), \code{rho} (ratio of
 actual to predicted reduction), \code{valpath}, \code{valtry},
 \code{preddiff}, \code{stepnorm} and, with
-\code{boundary = "reflective"}, \code{hessianSource}.
+\code{boundary = "reflective"}, \code{hessianSource}, which is
+\code{"gn"} for an iteration of a hybrid method on the Gauss-Newton
+Hessian.
 
 \code{boundary = "clip"} returns only \code{argument}, \code{value},
 \code{gradient}, \code{hessian}, \code{iterations}, \code{converged},
 \code{atBound} and \code{stopReason}, plus the trace.
 
 On the sparse path, see \code{sparse}, \code{hessian} is a sparse
-\code{Matrix}, and \code{lowrank} where the objective returns one: the
-Hessian is then \code{hessian} plus that part.
+\code{Matrix}, and \code{lowrank} where the objective returns one or a
+BFGS phase adds the correction: the Hessian is then \code{hessian} plus
+that part.
 
 \code{trustL1} returns a list without class with \code{argument},
 \code{value}, \code{gradient}, \code{hessian}, \code{iterations},
@@ -335,6 +400,24 @@ value, gradient and Hessian are available. It solves a Moré-Sorensen
 trust-region subproblem exactly, via the full eigendecomposition of the
 Hessian.
 }
+\section{Default method}{
+
+Without \code{hessianMethod}, \code{phases}, \code{switches} and a
+\code{sweep} in \code{...}, \code{trust} runs the hybrid method of Fides
+(Fröhlich and Sorger 2022): Gauss-Newton until the trust radius stayed the
+same for 20 consecutive iterations, then BFGS for the rest of the run. The
+BFGS approximation starts from the Gauss-Newton Hessian at \code{parinit},
+made positive definite, takes every accepted step of the Gauss-Newton phase
+as an update, and the trust radius stays at the switch. These are the
+phases
+\preformatted{list(gn = list(hessianMethod = "gn", radiusStall = 20, onStop = "end"),
+     bfgs = list(hessianMethod = "bfgs", sweep = "forward", keepRadius = TRUE,
+                 qnControl = list(hessianInit = "tracked")))}
+The run is Gauss-Newton alone, as with \code{hessianMethod = "gn"}, where
+phases are not available (multiple shooting, \code{boundary = "clip"}) and
+on the sparse path, see \code{sparse}.
+}
+
 \section{Box bounds}{
 
 \code{boundary = "reflective"} (default) uses the interior
@@ -382,14 +465,18 @@ from the factorization of \eqn{H} where \eqn{H} is positive definite and
 from the dense eigendecomposition elsewhere. \code{trustL1} applies the
 same condition to the model of the coordinates not held at a kink. Without
 the condition the run goes on, within \code{iterlim}; \code{mtol = 0}
-drops the condition.
+drops the condition. A run that goes on this way and then ends on the
+radius without an accepted step that changes the value by \code{ftol} or
+more ends on the stop held back, with \code{converged = TRUE}: the decrease
+the model predicts is below the resolution of the objective.
 
 \code{stopReason} in the result names the test that fired:
 \code{"gradient"}, \code{"fvalue"}, \code{"preddiff"}, \code{"step"},
 \code{"stagnation"}, \code{"radius"}, \code{"objfun"} (three failed
 evaluations in a row, ten with multiple shooting) or \code{"iterlim"}.
-Stagnation reports
-\code{converged = TRUE}.
+Stagnation reports \code{converged = TRUE} where the full Newton step
+predicts a decrease of at most \code{mtol} or a stop was held back as
+above, and \code{converged = FALSE} otherwise.
 
 Only \code{gtol} tests first-order optimality. While \code{switches}
 remain, see \code{phases}, an \code{"fvalue"}, \code{"preddiff"},
@@ -410,13 +497,17 @@ the last accepted one when \code{stepControl$nonmonotone = 0}.
 
 An objective built by \code{\link{normL2}(..., multipleShootingControl = )},
 alone or in a sum, is optimized by multiple shooting with the same controls.
-Not available then: \code{hessianMethod = "exact"}, more than one phase,
+Not available then: \code{hessianMethod = "exact"} and the structured
+methods, more than one phase,
 \code{switches}, \code{qnControl$hessianInit = "exact"},
 \code{qnControl$hessianReseed}, \code{qnControl$qnMemory},
 \code{stepControl$nonmonotone},
 \code{boundary = "clip"}, \code{minimize = FALSE} and \code{traceFile}.
 The run reports \code{converged = TRUE} only when the scaled gaps between
-the segments are below \code{tolControl$ctol}. The method is described in
+the segments are below \code{tolControl$ctol}. The stops follow section
+Convergence, with the full step of the condensed model as the Newton step;
+stagnation also needs the gaps flat within \code{ctol}. The method is
+described in
 the methods article
 \href{https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.html}{Multiple shooting}.
 }
@@ -451,6 +542,10 @@ fit$evalBySource
 
 }
 \references{
+Byrd, R. H., Nocedal, J. and Schnabel, R. B. (1994).
+Representations of quasi-Newton matrices and their use in limited memory
+methods. \emph{Mathematical Programming} 63, 129-156.
+
 Coleman, T. F. and Li, Y. (1996). An interior trust region
 approach for nonlinear minimization subject to bounds.
 \emph{SIAM Journal on Optimization} 6(2), 418-445.
@@ -473,6 +568,19 @@ nonlinear delayed feedback systems from noisy data.
 Voss, H. U., Timmer, J. and Kurths, J. (2004). Nonlinear dynamical system
 identification from uncertain and indirect measurements.
 \emph{International Journal of Bifurcation and Chaos} 14(6), 1905-1933.
+
+Dennis, J. E., Martínez, H. J. and Tapia, R. A. (1989). Convergence theory
+for the structured BFGS secant method with an application to nonlinear
+least squares. \emph{Journal of Optimization Theory and Applications}
+61(2), 161-178.
+
+Huschens, J. (1994). On the use of product structure in secant methods
+for nonlinear least squares problems. \emph{SIAM Journal on Optimization}
+4(1), 108-129.
+
+Zhou, W. and Chen, X. (2010). Global convergence of a new hybrid
+Gauss-Newton structured BFGS method for nonlinear least squares problems.
+\emph{SIAM Journal on Optimization} 20(5), 2422-2441.
 
 Peifer, M. and Timmer, J. (2007). Parameter estimation in ordinary
 differential equations for biochemical processes using the method of

@@ -353,7 +353,9 @@ List normL2_kernel(
     bool build_hessian = true,
     bool want_seed = false,
     bool local_blocks = false,
-    double t_df = 0) {
+    double t_df = 0,
+    bool expected = false,
+    bool want_rows = false) {
 
   const int n_cond = prediction.size();
   if ((int) meta_list.size() != n_cond)
@@ -416,6 +418,7 @@ List normL2_kernel(
   // Student-t with t_df degrees of freedom; 0 or infinite is the normal likelihood
   if (t_df > 0) base_opts.t_df = t_df;
   base_opts.build_hessian    = build_hessian;
+  base_opts.expected_information = expected;
 
   // One slot per condition in the condition local parameter space, allocated here so the
   // workers neither allocate nor share; merged serially after the region.
@@ -426,11 +429,12 @@ List normL2_kernel(
   // built: ALOQ rows first, then BLOQ. The caller scatters them back onto
   // times and observables.
   std::vector<std::vector<double> > seedp_c(n_cond), seeds_c(n_cond), chip_c(n_cond), chis_c(n_cond);
+  const bool seeds_on = want_seed || want_rows;
   for (int c = 0; c < n_cond; ++c) {
     const int npl = conds[c].n_par_local;
     grad_c[c].assign(npl, 0.0);
     if (build_hessian) hess_c[c].assign((std::size_t) npl * npl, 0.0);
-    if (want_seed) {
+    if (seeds_on) {
       const int nrow = conds[c].n_aloq + conds[c].n_bloq;
       seedp_c[c].assign(nrow, 0.0);
       seeds_c[c].assign(nrow, 0.0);
@@ -471,8 +475,8 @@ List normL2_kernel(
             C.lloq.data(),
             opts,
             value_cond, chi2_cond, grad_cond, hess_cond,
-            want_seed ? seedp_c[c].data() : nullptr,
-            want_seed ? seeds_c[c].data() : nullptr);
+            seeds_on ? seedp_c[c].data() : nullptr,
+            seeds_on ? seeds_c[c].data() : nullptr);
         if (want_seed)
           dmod::chi2_seeds(C.n_aloq, C.pred.data(), C.y_data.data(), C.sigma.data(),
                            chip_c[c].data(), chis_c[c].data());
@@ -494,8 +498,8 @@ List normL2_kernel(
             C.lloq.data()   + off_n,
             opts,
             value_cond, grad_cond, hess_cond,
-            want_seed ? (seedp_c[c].data() + off_n) : nullptr,
-            want_seed ? (seeds_c[c].data() + off_n) : nullptr);
+            seeds_on ? (seedp_c[c].data() + off_n) : nullptr,
+            seeds_on ? (seeds_c[c].data() + off_n) : nullptr);
       }
 
       value_c[c] = value_cond;
@@ -560,6 +564,37 @@ List normL2_kernel(
                           Named("chi2_sigma") = cs);
   }
 
+  // The data rows of all conditions, stacked in condition order: the rows of the predictions, then
+  // those of the sigmas that depend on parameters, with the derivatives of the value in them.
+  RObject rows_R = R_NilValue;
+  if (want_rows) {
+    int n_rows = 0;
+    for (int c = 0; c < n_cond; ++c)
+      n_rows += conds[c].n_par_local > 0 ? conds[c].n_data * (conds[c].has_dsigma ? 2 : 1) : 0;
+    NumericMatrix J(n_rows, n_par_global);
+    NumericVector u(n_rows);
+    int r0 = 0;
+    for (int c = 0; c < n_cond; ++c) {
+      const CondInputs& C = conds[c];
+      const int npl = C.n_par_local;
+      if (npl == 0) continue;
+      const int nb = C.has_dsigma ? 2 : 1;
+      for (int b = 0; b < nb; ++b) {
+        const std::vector<double>& D = b == 0 ? C.dpred : C.dsigma;
+        const std::vector<double>& U = b == 0 ? seedp_c[c] : seeds_c[c];
+        for (int j = 0; j < C.n_data; ++j) {
+          u[r0 + j] = U[j];
+          for (int p = 0; p < npl; ++p) {
+            const int g = C.par_idx_global[p] - 1;
+            if (g >= 0) J(r0 + j, g) = D[(std::size_t) j * npl + p];
+          }
+        }
+        r0 += C.n_data;
+      }
+    }
+    rows_R = List::create(Named("jacobian") = J, Named("seeds") = u);
+  }
+
   // Each condition in the condition parameter space, named after the columns of the
   // sensitivity block.
   RObject local_R = R_NilValue;
@@ -599,5 +634,6 @@ List normL2_kernel(
       Named("gradient") = grad_R,
       Named("hessian")  = hess_R,
       Named("seed")     = seed_R,
-      Named("local")    = local_R);
+      Named("local")    = local_R,
+      Named("rows")     = rows_R);
 }

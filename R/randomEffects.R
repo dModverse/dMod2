@@ -280,10 +280,9 @@ print.redist <- function(x, ...) {
        sub("^\\+\\s*", "", deparse1(pf$fixed[[2]])), "\".", call. = FALSE)
 }
 
-## The design of one formula over the rows of `tree`: the fixed-effect matrix with the names of
-## the parameters, and per random-effect column the stem, the eta and coefficient of every row.
-## A stem already taken by a term of another grouping gets the grouping appended. With `sparse`
-## the fixed-effect matrix is a sparse Matrix.
+## The design of one formula over the rows of `tree`: the fixed-effect matrix (a sparse Matrix with `sparse`)
+## and per random-effect column the stem, eta and coefficient of every row; a stem taken by another grouping
+## gets the grouping appended.
 .effectMatrices <- function(pf, tree, taken = NULL, sparse = FALSE) {
   .checkEffectColumns(pf, tree)
   sym <- pf$symbol

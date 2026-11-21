@@ -504,3 +504,216 @@ test_that("steadyStates writes nothing without file and writes the RDS with it",
   expect_identical(readRDS("ss.rds"), ss2)
   expect_identical(ss2, ss)
 })
+
+
+# Evaluates every steady-state definition at random positive values of the free
+# symbols and returns the definitions and the right-hand side there.
+.ssResidual <- function(model, ss, seed = 7) {
+  odes <- as.eqnvec(model)
+  symbolsOf <- function(x) unique(unlist(lapply(x, function(e) all.vars(parse(text = e)))))
+  defs <- ss[trimws(ss) != names(ss)]
+  set.seed(seed)
+  free <- setdiff(symbolsOf(c(as.character(odes), defs)), names(defs))
+  env <- as.list(setNames(stats::runif(length(free), 0.3, 2), free))
+  for (n in names(defs)) env[[n]] <- eval(parse(text = defs[[n]]), env)
+  list(values = unlist(env[names(defs)]),
+       residual = vapply(odes, function(e) eval(parse(text = e), env), numeric(1)))
+}
+
+test_that("a conserved quantity across compartments is a dependent balance", {
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    assignCompartment(nIkb = "nucleus", nNfk = "nucleus", nNfkIkb = "nucleus", volume = "Vnuc") |>
+    addReaction("NfkIkb", "NfkpIkb", "k_phos * NfkIkb") |>
+    addReaction("NfkpIkb", "Nfk + pIkb", "k_split * NfkpIkb") |>
+    addReaction("pIkb", "", "k_dg * pIkb") |>
+    addReaction("Nfk + Ikb", "NfkIkb", "k_on * Nfk * Ikb") |>
+    addReaction("", "mIkb", "k_tx * nNfk") |>
+    addReaction("mIkb", "", "k_dgm * mIkb") |>
+    addReaction("", "Ikb", "k_tl * mIkb") |>
+    addReaction("Ikb", "nIkb", "k_in * eta_in * Ikb") |>
+    addReaction("Nfk", "nNfk", "k_in * Nfk") |>
+    addReaction("nIkb + nNfk", "nNfkIkb", "k_on * eta_on * nNfk * nIkb") |>
+    addReaction("nNfkIkb", "NfkIkb", "k_ex * nNfkIkb")
+  ss <- steadyStates(r)
+  expect_false(identical(ss, 0))
+  # 9 states, 8 independent balances
+  expect_equal(sum(ss != names(ss)), 8)
+  chk <- .ssResidual(r, ss)
+  expect_true(all(chk$values > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})
+
+test_that("the cycles of the state graph are cut where the greedy runs fail", {
+  # the full NFkB model of Oppelt et al. (2018), npj Syst Biol Appl 4:23
+  withr::local_dir(tempdir())
+  reactions <- eqnlist() |>
+    assignCompartment(nIkb = "nucleus", pnNfk = "nucleus", nNfk = "nucleus", nNfkIkb = "nucleus",
+                      volume = "Vnuc") |>
+    addReaction("TNF", "TNF + TNFR", "uptake * TNF", "receptor activation") |>
+    addReaction("TNFR", "", "deact_TNFR * TNFR", "receptor deactivation") |>
+    addReaction("Ikk", "pIkk", "act_Ikk_by_TNF / (1 + A20 / inh_Ikk) * TNFR * Ikk", "IKK activation") |>
+    addReaction("Ikk", "pIkk", "act_Ikk_Base * Ikk", "basal IKK activation") |>
+    addReaction("pIkk", "ppIkk", "act_pIkk * pIkk", "IKK phosphorylation") |>
+    addReaction("ppIkk", "iIkk", "deact_ppIkk * ppIkk", "IKK inactivation") |>
+    addReaction("iIkk", "Ikk", "trigger_iIkk * iIkk", "IKK recovery") |>
+    addReaction("NfkIkb", "NfkpIkb", "act_Ikb_Base * NfkIkb", "basal IkBa phosphorylation") |>
+    addReaction("NfkIkb", "NfkpIkb", "act_Ikb_by_Ikk * pIkk * NfkIkb", "IkBa phosphorylation by pIKK") |>
+    addReaction("NfkIkb", "NfkpIkb", "act_Ikb_by_Ikk * eta_s_ppIkk * ppIkk * NfkIkb",
+                "IkBa phosphorylation by ppIKK") |>
+    addReaction("NfkIkb", "pNfkIkb", "act_Nfk_Base * NfkIkb", "basal NFkB phosphorylation") |>
+    addReaction("NfkIkb", "pNfkIkb", "act_Nfk_by_Ikk * pIkk * NfkIkb", "NFkB phosphorylation by pIKK") |>
+    addReaction("NfkIkb", "pNfkIkb", "act_Nfk_by_Ikk * eta_s_ppIkk * ppIkk * NfkIkb",
+                "NFkB phosphorylation by ppIKK") |>
+    addReaction("pNfkIkb", "pNfkpIkb", "act_Ikb_Base * eta_act_Ikb_Base_c_pNfkIkb * pNfkIkb",
+                "basal IkBa phosphorylation, pNFkB complex") |>
+    addReaction("pNfkIkb", "pNfkpIkb", "act_Ikb_by_Ikk * eta_act_Ikb_c_pNfkIkb * pIkk * pNfkIkb",
+                "IkBa phosphorylation by pIKK, pNFkB complex") |>
+    addReaction("pNfkIkb", "pNfkpIkb",
+                "act_Ikb_by_Ikk * eta_s_ppIkk * eta_act_Ikb_c_pNfkIkb * ppIkk * pNfkIkb",
+                "IkBa phosphorylation by ppIKK, pNFkB complex") |>
+    addReaction("NfkpIkb", "pNfkpIkb", "act_Nfk_Base * eta_act_Nfk_Base_c_NfkpIkb * NfkpIkb",
+                "basal NFkB phosphorylation, pIkBa complex") |>
+    addReaction("NfkpIkb", "pNfkpIkb", "act_Nfk_by_Ikk * eta_act_Nfk_c_NfkpIkb * pIkk * NfkpIkb",
+                "NFkB phosphorylation by pIKK, pIkBa complex") |>
+    addReaction("NfkpIkb", "pNfkpIkb",
+                "act_Nfk_by_Ikk * eta_s_ppIkk * eta_act_Nfk_c_NfkpIkb * ppIkk * NfkpIkb",
+                "NFkB phosphorylation by ppIKK, pIkBa complex") |>
+    addReaction("NfkpIkb", "Nfk + pIkb", "split_NfkpIkb * NfkpIkb", "release of NFkB") |>
+    addReaction("pNfkpIkb", "pNfk + pIkb", "split_NfkIkb * eta_split_pNfkpIkb * pNfkpIkb",
+                "release of pNFkB") |>
+    addReaction("Nfk + Ikb", "NfkIkb", "form_complex * Nfk * Ikb", "complex formation") |>
+    addReaction("", "mIkb", "prod_mIkb_by_nNfk * nNfk", "IkBa transcription") |>
+    addReaction("mIkb", "", "degrad_mIkb * mIkb", "IkBa transcript degradation") |>
+    addReaction("", "Ikb", "prod_Ikb * mIkb", "IkBa translation") |>
+    addReaction("pIkb", "", "degrad_Ikb * pIkb", "pIkBa degradation") |>
+    addReaction("Ikb", "nIkb", "int_Nfk * eta_int_Ikb * Ikb", "IkBa import") |>
+    addReaction("pNfk", "pnNfk", "int_Nfk * eta_int_pNfk * pNfk", "pNFkB import") |>
+    addReaction("Nfk", "nNfk", "int_Nfk * Nfk", "NFkB import") |>
+    addReaction("pnNfk", "nNfk", "deact_pnNfk * pnNfk", "nuclear pNFkB dephosphorylation") |>
+    addReaction("nIkb + nNfk", "nNfkIkb", "form_complex * eta_form_complex_nuc * nNfk * nIkb",
+                "nuclear complex formation") |>
+    addReaction("nNfkIkb", "NfkIkb", "ext_nNfkIkb * nNfkIkb", "complex export") |>
+    addReaction("", "RnaA20_1", "build_RnaA20 * nNfk", "A20 transcription") |>
+    addReaction("RnaA20_1", "RnaA20_2", "shuttle_RnaA20 * RnaA20_1", "A20 transcript, delay 1") |>
+    addReaction("RnaA20_2", "RnaA20", "shuttle_RnaA20 * RnaA20_2", "A20 transcript, delay 2") |>
+    addReaction("RnaA20", "", "degrad_RnaA20 * RnaA20", "A20 transcript degradation") |>
+    addReaction("", "A20", "build_A20 * RnaA20", "A20 translation") |>
+    addReaction("A20", "", "degrad_A20 * A20", "A20 degradation")
+
+  ss <- steadyStates(reactions, forcings = c("TNF", "TNFR"))
+  expect_false(identical(ss, 0))
+  expect_setequal(names(ss)[ss == names(ss)], c("Ikk", "NfkIkb", "Ikb", "nIkb"))
+  expect_true(all(c("eta_int_Ikb", "prod_Ikb") %in% names(ss)))
+  expect_false(any(grepl("-", ss, fixed = TRUE)))
+  chk <- .ssResidual(reactions, ss)
+  expect_true(all(chk$values[!names(chk$values) %in% c("TNF", "TNFR")] > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+
+  # given conserved quantities keep their first states free
+  cq <- c("Ikk + pIkk + ppIkk + iIkk",
+          "NfkIkb + NfkpIkb + pNfkIkb + pNfkpIkb + Nfk + pNfk + Vnuc*(nNfk + pnNfk + nNfkIkb)")
+  ss <- steadyStates(reactions, forcings = c("TNF", "TNFR"), givenCQs = cq)
+  expect_false(identical(ss, 0))
+  expect_true(all(c("Ikk", "NfkIkb") %in% names(ss)[ss == names(ss)]))
+  chk <- .ssResidual(reactions, ss)
+  expect_true(all(chk$values[!names(chk$values) %in% c("TNF", "TNFR")] > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})
+
+test_that("a side with separate rate constants is cut with free flux ratios", {
+  # no cut by one rate constant and no greedy choice of unknowns solves this network
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("A", "", "kd_A*A") |>
+    addReaction("", "B", "ks_B") |>
+    addReaction("B", "", "kd_B*B") |>
+    addReaction("A", "B", "k_ab*A") |>
+    addReaction("B", "A", "k_ba*B") |>
+    addReaction("A", "B", "k_ab_ind*A") |>
+    addReaction("", "B", "k_cat*A") |>
+    addReaction("B", "A", "k_ba_ind*B")
+  ss <- steadyStates(r, verbose = FALSE)
+  expect_false(identical(ss, 0))
+  if (identical(ss, 0)) return()
+  ratios <- grep("^r_", getSymbols(ss), value = TRUE)
+  expect_setequal(ratios, c("r_A_1", "r_B_1", "r_B_2", "r_B_3"))
+  expect_false(any(ratios %in% names(ss)))
+  expect_false(any(grepl("-", ss, fixed = TRUE)))
+  chk <- .ssResidual(r, ss)
+  expect_true(all(chk$values > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})
+
+test_that("a state whose balance gives a ratio of positive sums is solved from it", {
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("", "A", "ka") |> addReaction("A", "B", "kab*A") |>
+    addReaction("B", "C", "kbc*B") |> addReaction("C", "A", "kca*C") |>
+    addReaction("A", "", "kda*A") |> addReaction("B", "", "kdb*B") |>
+    addReaction("C", "", "kdc*C") |> addReaction("B", "A", "kba*B")
+  ss <- steadyStates(r, verbose = FALSE)
+  expect_false(identical(ss, 0))
+  expect_setequal(names(ss)[ss == names(ss)], c("A", "B"))
+  # C from the balance of C, not kept free with kbc solved instead
+  expect_false("kbc" %in% names(ss))
+  env <- list(B = 0.7, kbc = 1.3, kca = 0.4, kdc = 0.9)
+  expect_equal(eval(parse(text = ss[["C"]]), env), with(env, kbc * B / (kca + kdc)))
+  chk <- .ssResidual(r, ss)
+  expect_true(all(chk$values > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})
+
+test_that("cuts are ranked as in v1.3", {
+  reticulate::py_require(c("numpy", "sympy", "scipy"))
+  ap <- reticulate::import_from_path("AlyssaPetit",
+                                     path = system.file("code", package = "dMod2"))
+  py <- reticulate::py_run_string("
+def first_cut(ap, f, ratios, priority):
+    states, fluxes, stoich = ap._read_model(f, [])
+    atoms, B = ap._atoms(states, fluxes, stoich, {})
+    cands, nonlin = ap._candidates(states, atoms, set(), set())
+    cqs = ap._derived_cqs(states, B, len(atoms))
+    prio = {p: i for i, p in enumerate(priority)}
+    cut = ap._cut_cycles(states, atoms, B, cands, cqs, prio, False, ratios=ratios)
+    if cut[4] is not None:
+        return [str(cut[4][0]), 'ratio'] + [str(p) for p in cut[4][1]]
+    s, kind, x = cut[2][0]
+    return [str(s), kind] + ([] if kind == 'cq' else [str(x)])
+", convert = TRUE)
+  firstCut <- function(model, ratios = TRUE, priority = character(0)) {
+    f <- tempfile(fileext = ".csv")
+    on.exit(unlink(f))
+    utils::write.csv(dMod2:::.volumeScaledReactions(model), f, row.names = FALSE, na = "")
+    unlist(py$first_cut(ap, f, ratios, as.list(priority)))
+  }
+
+  # a conserved quantity first
+  closed <- eqnlist() |> addReaction("A", "B", "k_ab*A") |> addReaction("B", "A", "k_ba*B") |>
+    addReaction("B", "C", "k_bc*B") |> addReaction("C", "A", "k_ca*C")
+  expect_identical(firstCut(closed), c("A", "cq"))
+  # a side whose flux terms occur in no other balance before one that rewires others
+  feedback <- eqnlist() |> addReaction("", "B", "k_s*A") |> addReaction("B", "A", "k_x*B") |>
+    addReaction("A", "", "k_d*A")
+  expect_identical(firstCut(feedback), c("A", "pivot", "k_d"))
+  # several flux terms with ratios before a single term that rewires another balance
+  twoway <- eqnlist() |> addReaction("", "A", "k1") |> addReaction("A", "B", "k3*A") |>
+    addReaction("B", "A", "k2*B") |> addReaction("A", "", "k4*A") |> addReaction("B", "", "k5*B")
+  expect_identical(firstCut(twoway), c("A", "ratio", "k1", "k2"))
+  expect_identical(firstCut(twoway, ratios = FALSE), c("B", "pivot", "k3"))
+  # a side with a rate constant named in priority before all
+  expect_identical(firstCut(twoway, priority = "k5"), c("B", "ratio", "k2", "k5"))
+})
+
+test_that("a cut does not link to a state cut before", {
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("", "B", "ks_B") |> addReaction("B", "", "kd_B*B") |>
+    addReaction("A + C", "B", "k_on*A*C") |> addReaction("", "A", "k_A*B") |>
+    addReaction("B", "C", "k_C*B")
+  ss <- steadyStates(r, verbose = FALSE)
+  expect_false(identical(ss, 0))
+  chk <- .ssResidual(r, ss)
+  expect_true(all(chk$values > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})

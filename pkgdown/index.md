@@ -7,7 +7,7 @@ and estimates their parameters from data.
 remotes::install_github("dModverse/dMod2")
 ```
 
-## Where to go
+## Documentation
 
 - [Get started](articles/dMod2.html): a model of bile acid transport from reactions to profile
   likelihoods.

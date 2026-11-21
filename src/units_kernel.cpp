@@ -71,7 +71,8 @@ bool newtonStep(const Unit& u, std::vector<double>& s) {
 // `data_cb(idx, etas)`: per component idx (1-based) at the component etas, list(value, gradient, hessian) of the
 // data terms in the order of the etas, NULL where the prediction fails. `warm` holds the etas the
 // search starts from, `P` the prior precisions, `control` rinit, rmax, iterlim, steptol and mtol.
-// Returns the etas at the modes per component.
+// Returns the etas at the modes per component, with the evaluated steps per component in attribute
+// "iterations".
 // [[Rcpp::export]]
 List focei_units_lockstep(Function data_cb, List warm, List P, List control) {
   const int U = warm.size();
@@ -105,6 +106,7 @@ List focei_units_lockstep(Function data_cb, List warm, List P, List control) {
   for (const Unit& u : cur)
     if (!u.ok) stop("FOCEI: the prediction fails at the modes the inner search starts from.");
   std::vector<double> r(U, rinit);
+  IntegerVector iterations(U);
 
   for (int it = 1; it <= iterlim && !active.empty(); ++it) {
     std::vector<int> moving;
@@ -146,6 +148,7 @@ List focei_units_lockstep(Function data_cb, List warm, List P, List control) {
     }
     active = moving;
     if (active.empty()) break;
+    for (int i : active) ++iterations[i];
     std::vector<Unit> trial = evaluate(active, trials);
     for (std::size_t j = 0; j < active.size(); ++j) {
       const int i = active[j];
@@ -172,5 +175,6 @@ List focei_units_lockstep(Function data_cb, List warm, List P, List control) {
   }
   List out(U);
   for (int i = 0; i < U; ++i) out[i] = NumericVector(w[i].begin(), w[i].end());
+  out.attr("iterations") = iterations;
   return out;
 }

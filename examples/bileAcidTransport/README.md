@@ -153,6 +153,6 @@ ggplot(.pred, aes(time, value)) +
   geom_line() +
   geom_point(data = .band, aes(y = lower), shape = 4) +
   geom_point(data = .band, aes(y = upper), shape = 4) +
-  theme_dMod() +
+  theme_dMod2() +
   labs(x = "time", y = "cellular bile acid", title = "closed junctions: prediction band")
 ```

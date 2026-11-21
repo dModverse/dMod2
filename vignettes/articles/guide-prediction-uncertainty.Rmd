@@ -18,11 +18,9 @@ inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
-The prediction profile likelihood [@kreutz2012likelihood] gives the confidence band of a model
-prediction directly, without parameter intervals. This chapter computes the band of nuclear IκBα
-after TNFα in the reduced model of [Profile likelihood](guide-profiles.html); nuclear IκBα is not
-measured and decides when NFκB leaves the nucleus [@oppelt2018model, Fig. 5]. The code is
-`prediction.R`.
+The prediction profile likelihood [@kreutz2012likelihood] gives the confidence band of a
+prediction, here of unmeasured nuclear IκBα after TNFα [@oppelt2018model, Fig. 5] in the reduced
+model of [Profile likelihood](guide-profiles.html). Code: `prediction.R`.
 
 ```{r setup, echo = FALSE}
 ```
@@ -78,12 +76,10 @@ prdReduced <- gReduced * xReduced * pReduced
 
 ## Prediction profiles and validation data points
 
-The prediction profile is the objective minimized over all parameters with the prediction held
-at a value; the values within the $\chi^2_1$ threshold form the confidence interval. `datapointL2()`
-turns the prediction into a parameter `v`, tied to the model by a validation data point of small
-standard deviation; the profile of `v` is the prediction profile. `normL2()` predicts at the time
-of the point (`times = t`); `attrName = "data"` adds the validation term to the data term, so
-`stop = "data"` and `confint(val.column = "data")` leave the prior out
+`datapointL2()` ties a parameter `v` to the prediction by a validation data point of small
+standard deviation; the profile of `v` is the prediction profile, and the values within the
+$\chi^2_1$ threshold form the confidence interval. `attrName = "data"` adds the validation term to
+the data term, so `stop = "data"` and `confint(val.column = "data")` leave the prior out
 ([Methods > Prediction profiles](methods-profiles.html#prediction-profiles)).
 
 ## Prediction band
@@ -99,19 +95,17 @@ band <- readRDS("results/prediction.rds")$band
 decades <- log10(range(band$value[band$value > 0]))
 ```
 
-`prediction.R` computes the profile in the stimulated condition at `r nrow(band)` times, densest
-at the flanks of the pulse. The prediction spans `r inWords(floor(diff(decades)))` orders of
-magnitude, so the validation point has standard deviation $0.01\,\hat v(t)$ and the steps are
-fractions of $\hat v(t)$. The profiles run on the linear scale since the resting state holds no
-nuclear IκBα; the times start at 2 minutes.
+`prediction.R` computes the profile at `r nrow(band)` times of the stimulated condition, from 2
+minutes on; the results are loaded from `results/prediction.rds`. The prediction spans
+`r inWords(floor(diff(decades)))` orders of magnitude, so the validation point has standard
+deviation $0.01\,\hat v(t)$. The profiles run on linear scale, since the resting state holds no
+nuclear IκBα.
 
 ```{r predictionsetup, eval = FALSE}
 ```
 
 ```{r predictionprofiles, eval = FALSE}
 ```
-
-`confint()` reads the interval from the data term:
 
 ```{r predictionband, eval = FALSE}
 ```
@@ -134,8 +128,7 @@ if (length(short))
               paste(short, collapse = ", ")))
 ```
 
-Prediction profiles at three times; all times are in
-[All prediction profiles](#all-prediction-profiles):
+Profiles at three times, all in [All prediction profiles](#all-prediction-profiles):
 
 ```{r, fig.height = 3.5}
 times <- c(10, 70, 240)
@@ -148,7 +141,7 @@ plotProfile(shown, mode == "data") +
   ggplot2::labs(x = "nuclear IκBα [total NFκB]")
 ```
 
-The band around the prediction of the best fit:
+Band and prediction of the best fit:
 
 ```{r}
 controls(gReduced, name = "attachInput") <- TRUE
@@ -165,14 +158,14 @@ ggplot2::ggplot(course, ggplot2::aes(time, value)) +
   ggplot2::scale_x_continuous(breaks = seq(0, 360, 60)) +
   ggplot2::scale_y_log10() +
   ggplot2::labs(x = "time [min]", y = "nuclear IκBα [total NFκB]") +
-  theme_dMod()
+  theme_dMod2()
 ```
 
-Concentrations are in units of total NFκB, set by the gauge of [Symmetries](guide-symmetries.html).
+Units of total NFκB follow from the gauge of [Symmetries](guide-symmetries.html).
 
 ## All prediction profiles
 
-The axis is in units of the prediction $\hat v(t)$ of the best fit:
+In units of the prediction $\hat v(t)$ of the best fit:
 
 ```{r, fig.height = 16}
 relative <- Map(function(pr, v) { pr$v <- pr$v / v; pr }, saved$profiles, band$value)

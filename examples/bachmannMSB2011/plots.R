@@ -49,8 +49,8 @@ plotCombined(pred, data[perturbed], paste(condition, name) %in% recorded, name %
              aesthetics = list(color = "perturbation", group = "condition"), errfn = e) +
   facet_grid(rows = vars(name), cols = vars(factor(experiment, names(perturbations), perturbations)),
              scales = "free_y", labeller = labeller(name = observable)) +
-  scale_color_dMod(limits = c("control", unname(perturbations))) +
-  scale_fill_dMod(limits = c("control", unname(perturbations))) +
+  scale_color_dMod2(limits = c("control", unname(perturbations))) +
+  scale_fill_dMod2(limits = c("control", unname(perturbations))) +
   scale_x_continuous(breaks = c(0, 120, 240)) +
   labs(x = "time [min]", y = "log10 signal [a.u.]", color = NULL) +
   theme(legend.position = "bottom", panel.spacing.x = unit(1, "lines"))
@@ -84,7 +84,7 @@ ggplot(dosePred, aes(epo_level, value, color = measured, fill = measured)) +
   geom_point(data = doseData) +
   facet_wrap(~name, scales = "free_y", labeller = observable) +
   scale_x_log10(breaks = 10^(-9:-5), labels = scales::label_log()) +
-  scale_color_dMod() +
-  scale_fill_dMod() +
-  theme_dMod() +
+  scale_color_dMod2() +
+  scale_fill_dMod2() +
+  theme_dMod2() +
   labs(x = "Epo [units/cell]", y = "log10 signal [a.u.]", color = "measured at", fill = "measured at")

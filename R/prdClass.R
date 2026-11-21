@@ -179,7 +179,7 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
     p <- p + geom_ribbon(band, data = prediction[!is.na(prediction$sigma), ], alpha = 0.25,
                          linetype = 0, show.legend = FALSE)
     # the bands in the colors of the lines
-    if (!is.null(colorBy) && !is.numeric(rlang::eval_tidy(colorBy, prediction))) p <- p + scale_fill_dMod()
+    if (!is.null(colorBy) && !is.numeric(rlang::eval_tidy(colorBy, prediction))) p <- p + scale_fill_dMod2()
   }
   if (!is.null(prediction)) p <- p + geom_line(data = prediction)
   if (is.null(data)) return(p)
@@ -215,7 +215,7 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
   band <- if (!is.null(errfn))
     list(geom_ribbon(aes(ymin = value - sigma, ymax = value + sigma, fill = condition),
                      data = frame[!is.na(frame$sigma), ], linetype = 0, alpha = 0.3),
-         scale_fill_dMod())
+         scale_fill_dMod2())
   p <- p + list(band, geom_line())
   attr(p, "data") <- frame
   p

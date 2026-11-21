@@ -63,6 +63,14 @@
 #' factorizes it where the argument `sparse` takes the sparse path, and [`vcov()`][vcov.objlist]
 #' solves it for the columns of `which`.
 #'
+#' `hessian = "expected"` returns, in place of the Gauss-Newton Hessian of the
+#' forward sweep, the expected (Fisher) information of the likelihood:
+#' `2 / sigma^2` in the prediction and `4 / sigma^2` in sigma per data point,
+#' positive semidefinite also where an error model depends on the parameters.
+#' The Gauss-Newton Hessian keeps the exact curvature of the loss in the
+#' prediction and sigma, which is indefinite there and shows the optimizer a
+#' saddle.
+#'
 #' With `deriv = FALSE` it returns the value alone.
 #'
 #' @seealso [controls()] to change the settings of a function after it is
@@ -514,10 +522,8 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   }
   reverseOpts()
 
-  # Checkpoints of the value pass, matched on times and parameters, for the
-  # backward sweeps over the same trajectory. A lookup keeps the store; the
-  # cache holds twice the widest batch, at least 4, and evicts the least
-  # recent, since a store far from the optimum holds many steps.
+  # checkpoints of the value pass by times and parameters for backward sweeps on the same trajectory: twice
+  # the widest batch, at least 4, the least recent evicted, since a store far from the optimum holds many steps
   scache <- new.env(parent = emptyenv())
   scache$items <- list()
   scache$width <- 0L
@@ -788,11 +794,9 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 
   }
   attr(P2X, "batchfn") <- P2Xbatch
-  # The prepared solve of the native chain (.chainPlan()): one condition per entry of `timesL`,
-  # `dirsL` the directions of the condition tangent. With `seeds` the backward solve of forward over
-  # reverse with that many seeds per condition instead. With `adjoint` the first order: the
-  # forward solve keeping the checkpoints, or with `seeds` the backward one, which the caller
-  # hands them. NULL where the leaf cannot take part.
+  # the prepared solve of the native chain (.chainPlan()), a condition per entry of `timesL` along `dirsL`;
+  # with `seeds` the backward solve of forward over reverse, with `adjoint` first order with checkpoints
+  # (backward with `seeds`). NULL where the leaf cannot take part.
   attr(P2X, "chainSolve") <- function(timesL, dirsL, deriv, deriv2, seeds = 0L, adjoint = FALSE) {
     if (adjoint) {
       if (!has_store) return(NULL)

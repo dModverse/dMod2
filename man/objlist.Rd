@@ -27,6 +27,15 @@ along when two objective lists are added with \code{+}, see \link{sumobjlist}.
 Asked for \code{hessian = "sparse"}, an objective may return part of
 the Hessian in an entry \code{lowrank}, a list of a matrix \code{U} with parameter
 rows and a vector \code{d}: the Hessian is then \verb{hessian + U diag(d) U'}.
+
+Asked for \code{hessian = "structured"}, a data term such as \code{\link[=normL2]{normL2()}}
+returns the Gauss-Newton Hessian and an entry \code{structure}, a list of the
+matrix \code{jacobian}, one row per data point with the derivatives of the
+prediction, and one more for a sigma that depends on parameters, the
+vector \code{seeds} of the derivatives of the value in these predictions and
+sigmas, and the Gauss-Newton Hessian \code{hessian} of the data term. \code{+} stacks
+the rows and adds the Hessians; a term without data rows has none.
+The structured methods of \code{\link[=trust]{trust()}} read it.
 }
 \examples{
 a <- objlist(1, c(a = 1, b = 2),

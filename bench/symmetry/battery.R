@@ -136,7 +136,7 @@ times  <- seq(0, 4000, len = 400)
 pred0  <- as.data.frame(prd(times, truthL, deriv = FALSE))
 
 ggplot(pred0, aes(time, value)) + geom_line() +
-  facet_wrap(~ name, scales = "free_y") + theme_dMod(base_size = 9)
+  facet_wrap(~ name, scales = "free_y") + theme_dMod2(base_size = 9)
 
 
 # ---- Every direction, both ways ---------------------------------------------

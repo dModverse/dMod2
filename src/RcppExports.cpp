@@ -123,8 +123,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // chain_data
-SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local, int threads, std::string bloq_mode, double t_df, bool want_seed, bool sparse);
-RcppExport SEXP _dMod2_chain_data(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP build_hessianSEXP, SEXP localSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP t_dfSEXP, SEXP want_seedSEXP, SEXP sparseSEXP) {
+SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local, int threads, std::string bloq_mode, double t_df, bool want_seed, bool sparse, bool want_rows);
+RcppExport SEXP _dMod2_chain_data(SEXP planSEXP, SEXP preSEXP, SEXP rawSEXP, SEXP derivSEXP, SEXP deriv2SEXP, SEXP build_hessianSEXP, SEXP localSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP t_dfSEXP, SEXP want_seedSEXP, SEXP sparseSEXP, SEXP want_rowsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -140,7 +140,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< double >::type t_df(t_dfSEXP);
     Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
     Rcpp::traits::input_parameter< bool >::type sparse(sparseSEXP);
-    rcpp_result_gen = Rcpp::wrap(chain_data(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse));
+    Rcpp::traits::input_parameter< bool >::type want_rows(want_rowsSEXP);
+    rcpp_result_gen = Rcpp::wrap(chain_data(plan, pre, raw, deriv, deriv2, build_hessian, local, threads, bloq_mode, t_df, want_seed, sparse, want_rows));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -266,29 +267,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// focei_inner_trust
-List focei_inner_trust(Function model_cb, Function err_cb, NumericVector pars_full, NumericMatrix eta_warmstart, List subject_meta, NumericMatrix Omega_inv_mat, double Omega_log_det, Nullable<NumericVector> fixed, List control, Nullable<Function> predict_cb);
-RcppExport SEXP _dMod2_focei_inner_trust(SEXP model_cbSEXP, SEXP err_cbSEXP, SEXP pars_fullSEXP, SEXP eta_warmstartSEXP, SEXP subject_metaSEXP, SEXP Omega_inv_matSEXP, SEXP Omega_log_detSEXP, SEXP fixedSEXP, SEXP controlSEXP, SEXP predict_cbSEXP) {
-BEGIN_RCPP
-    Rcpp::RObject rcpp_result_gen;
-    Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Function >::type model_cb(model_cbSEXP);
-    Rcpp::traits::input_parameter< Function >::type err_cb(err_cbSEXP);
-    Rcpp::traits::input_parameter< NumericVector >::type pars_full(pars_fullSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type eta_warmstart(eta_warmstartSEXP);
-    Rcpp::traits::input_parameter< List >::type subject_meta(subject_metaSEXP);
-    Rcpp::traits::input_parameter< NumericMatrix >::type Omega_inv_mat(Omega_inv_matSEXP);
-    Rcpp::traits::input_parameter< double >::type Omega_log_det(Omega_log_detSEXP);
-    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type fixed(fixedSEXP);
-    Rcpp::traits::input_parameter< List >::type control(controlSEXP);
-    Rcpp::traits::input_parameter< Nullable<Function> >::type predict_cb(predict_cbSEXP);
-    rcpp_result_gen = Rcpp::wrap(focei_inner_trust(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb));
-    return rcpp_result_gen;
-END_RCPP
-}
 // focei_run
-List focei_run(Function model_cb, Function err_cb, Function joint_cb, NumericVector init, List subject_meta, Nullable<NumericVector> fixed, List control, std::string correction_mode, Nullable<Function> correction_cb, Nullable<Function> predict_cb);
-RcppExport SEXP _dMod2_focei_run(SEXP model_cbSEXP, SEXP err_cbSEXP, SEXP joint_cbSEXP, SEXP initSEXP, SEXP subject_metaSEXP, SEXP fixedSEXP, SEXP controlSEXP, SEXP correction_modeSEXP, SEXP correction_cbSEXP, SEXP predict_cbSEXP) {
+List focei_run(Function model_cb, Function err_cb, Function joint_cb, NumericVector init, List subject_meta, Nullable<NumericVector> fixed, List control, std::string correction_mode, Nullable<Function> correction_cb, Nullable<Function> predict_cb, Nullable<NumericMatrix> eta_init);
+RcppExport SEXP _dMod2_focei_run(SEXP model_cbSEXP, SEXP err_cbSEXP, SEXP joint_cbSEXP, SEXP initSEXP, SEXP subject_metaSEXP, SEXP fixedSEXP, SEXP controlSEXP, SEXP correction_modeSEXP, SEXP correction_cbSEXP, SEXP predict_cbSEXP, SEXP eta_initSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -302,13 +283,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type correction_mode(correction_modeSEXP);
     Rcpp::traits::input_parameter< Nullable<Function> >::type correction_cb(correction_cbSEXP);
     Rcpp::traits::input_parameter< Nullable<Function> >::type predict_cb(predict_cbSEXP);
-    rcpp_result_gen = Rcpp::wrap(focei_run(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb));
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type eta_init(eta_initSEXP);
+    rcpp_result_gen = Rcpp::wrap(focei_run(model_cb, err_cb, joint_cb, init, subject_meta, fixed, control, correction_mode, correction_cb, predict_cb, eta_init));
     return rcpp_result_gen;
 END_RCPP
 }
 // focei_run_sparse
-List focei_run_sparse(Function trial, Function complete, NumericVector init, int N, int K, List outer_ctrl, double inner_rinit);
-RcppExport SEXP _dMod2_focei_run_sparse(SEXP trialSEXP, SEXP completeSEXP, SEXP initSEXP, SEXP NSEXP, SEXP KSEXP, SEXP outer_ctrlSEXP, SEXP inner_rinitSEXP) {
+List focei_run_sparse(Function trial, Function complete, NumericVector init, int N, int K, List outer_ctrl, double inner_rinit, Nullable<NumericMatrix> eta_init);
+RcppExport SEXP _dMod2_focei_run_sparse(SEXP trialSEXP, SEXP completeSEXP, SEXP initSEXP, SEXP NSEXP, SEXP KSEXP, SEXP outer_ctrlSEXP, SEXP inner_rinitSEXP, SEXP eta_initSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -319,7 +301,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< int >::type K(KSEXP);
     Rcpp::traits::input_parameter< List >::type outer_ctrl(outer_ctrlSEXP);
     Rcpp::traits::input_parameter< double >::type inner_rinit(inner_rinitSEXP);
-    rcpp_result_gen = Rcpp::wrap(focei_run_sparse(trial, complete, init, N, K, outer_ctrl, inner_rinit));
+    Rcpp::traits::input_parameter< Nullable<NumericMatrix> >::type eta_init(eta_initSEXP);
+    rcpp_result_gen = Rcpp::wrap(focei_run_sparse(trial, complete, init, N, K, outer_ctrl, inner_rinit, eta_init));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -332,9 +315,29 @@ BEGIN_RCPP
     return R_NilValue;
 END_RCPP
 }
+// nlme_group_kernel
+List nlme_group_kernel(Function model_cb, Function err_cb, NumericVector pars_full, NumericMatrix eta_warmstart, List subject_meta, NumericMatrix Omega_inv_mat, double Omega_log_det, Nullable<NumericVector> fixed, List control, Nullable<Function> predict_cb);
+RcppExport SEXP _dMod2_nlme_group_kernel(SEXP model_cbSEXP, SEXP err_cbSEXP, SEXP pars_fullSEXP, SEXP eta_warmstartSEXP, SEXP subject_metaSEXP, SEXP Omega_inv_matSEXP, SEXP Omega_log_detSEXP, SEXP fixedSEXP, SEXP controlSEXP, SEXP predict_cbSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< Function >::type model_cb(model_cbSEXP);
+    Rcpp::traits::input_parameter< Function >::type err_cb(err_cbSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type pars_full(pars_fullSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type eta_warmstart(eta_warmstartSEXP);
+    Rcpp::traits::input_parameter< List >::type subject_meta(subject_metaSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type Omega_inv_mat(Omega_inv_matSEXP);
+    Rcpp::traits::input_parameter< double >::type Omega_log_det(Omega_log_detSEXP);
+    Rcpp::traits::input_parameter< Nullable<NumericVector> >::type fixed(fixedSEXP);
+    Rcpp::traits::input_parameter< List >::type control(controlSEXP);
+    Rcpp::traits::input_parameter< Nullable<Function> >::type predict_cb(predict_cbSEXP);
+    rcpp_result_gen = Rcpp::wrap(nlme_group_kernel(model_cb, err_cb, pars_full, eta_warmstart, subject_meta, Omega_inv_mat, Omega_log_det, fixed, control, predict_cb));
+    return rcpp_result_gen;
+END_RCPP
+}
 // normL2_kernel
-List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed, bool local_blocks, double t_df);
-RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP, SEXP local_blocksSEXP, SEXP t_dfSEXP) {
+List normL2_kernel(List prediction, Nullable<List> err_list_opt, List meta_list, CharacterVector par_names_global, bool deriv2_requested, int threads, std::string bloq_mode, bool build_hessian, bool want_seed, bool local_blocks, double t_df, bool expected, bool want_rows);
+RcppExport SEXP _dMod2_normL2_kernel(SEXP predictionSEXP, SEXP err_list_optSEXP, SEXP meta_listSEXP, SEXP par_names_globalSEXP, SEXP deriv2_requestedSEXP, SEXP threadsSEXP, SEXP bloq_modeSEXP, SEXP build_hessianSEXP, SEXP want_seedSEXP, SEXP local_blocksSEXP, SEXP t_dfSEXP, SEXP expectedSEXP, SEXP want_rowsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -349,7 +352,9 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< bool >::type want_seed(want_seedSEXP);
     Rcpp::traits::input_parameter< bool >::type local_blocks(local_blocksSEXP);
     Rcpp::traits::input_parameter< double >::type t_df(t_dfSEXP);
-    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks, t_df));
+    Rcpp::traits::input_parameter< bool >::type expected(expectedSEXP);
+    Rcpp::traits::input_parameter< bool >::type want_rows(want_rowsSEXP);
+    rcpp_result_gen = Rcpp::wrap(normL2_kernel(prediction, err_list_opt, meta_list, par_names_global, deriv2_requested, threads, bloq_mode, build_hessian, want_seed, local_blocks, t_df, expected, want_rows));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -559,8 +564,8 @@ BEGIN_RCPP
 END_RCPP
 }
 // trust_impl
-List trust_impl(Function objfun, NumericVector parinit, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, CharacterVector phaseMethod, IntegerVector phaseIterlim, LogicalVector phaseReverse, CharacterVector phaseInit, CharacterVector phaseReseed, IntegerVector phaseMemory, NumericVector phaseCautious, LogicalVector phaseRejected, int switches, double nonmonotone, bool sparse, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
-RcppExport SEXP _dMod2_trust_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP phaseMethodSEXP, SEXP phaseIterlimSEXP, SEXP phaseReverseSEXP, SEXP phaseInitSEXP, SEXP phaseReseedSEXP, SEXP phaseMemorySEXP, SEXP phaseCautiousSEXP, SEXP phaseRejectedSEXP, SEXP switchesSEXP, SEXP nonmonotoneSEXP, SEXP sparseSEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
+List trust_impl(Function objfun, NumericVector parinit, double rinit, double rmax, Nullable<NumericVector> parscale, int iterlim, double ftol, double mtol, double gtol, double xtol, double rmin, double thetamax, std::string boundary, CharacterVector phaseMethod, IntegerVector phaseIterlim, IntegerVector phaseRadiusStall, LogicalVector phaseReverse, LogicalVector phaseKeepRadius, LogicalVector phaseStopEnds, CharacterVector phaseInit, CharacterVector phaseReseed, IntegerVector phaseMemory, NumericVector phaseCautious, LogicalVector phaseRejected, LogicalVector phaseScaled, NumericVector phaseHybridTol, LogicalVector phaseHybridShift, int switches, double nonmonotone, bool sparse, bool minimize, bool blather, Nullable<NumericVector> parupper, Nullable<NumericVector> parlower, bool printIter, Nullable<CharacterVector> traceFile);
+RcppExport SEXP _dMod2_trust_impl(SEXP objfunSEXP, SEXP parinitSEXP, SEXP rinitSEXP, SEXP rmaxSEXP, SEXP parscaleSEXP, SEXP iterlimSEXP, SEXP ftolSEXP, SEXP mtolSEXP, SEXP gtolSEXP, SEXP xtolSEXP, SEXP rminSEXP, SEXP thetamaxSEXP, SEXP boundarySEXP, SEXP phaseMethodSEXP, SEXP phaseIterlimSEXP, SEXP phaseRadiusStallSEXP, SEXP phaseReverseSEXP, SEXP phaseKeepRadiusSEXP, SEXP phaseStopEndsSEXP, SEXP phaseInitSEXP, SEXP phaseReseedSEXP, SEXP phaseMemorySEXP, SEXP phaseCautiousSEXP, SEXP phaseRejectedSEXP, SEXP phaseScaledSEXP, SEXP phaseHybridTolSEXP, SEXP phaseHybridShiftSEXP, SEXP switchesSEXP, SEXP nonmonotoneSEXP, SEXP sparseSEXP, SEXP minimizeSEXP, SEXP blatherSEXP, SEXP parupperSEXP, SEXP parlowerSEXP, SEXP printIterSEXP, SEXP traceFileSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -579,12 +584,18 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< std::string >::type boundary(boundarySEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type phaseMethod(phaseMethodSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type phaseIterlim(phaseIterlimSEXP);
+    Rcpp::traits::input_parameter< IntegerVector >::type phaseRadiusStall(phaseRadiusStallSEXP);
     Rcpp::traits::input_parameter< LogicalVector >::type phaseReverse(phaseReverseSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type phaseKeepRadius(phaseKeepRadiusSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type phaseStopEnds(phaseStopEndsSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type phaseInit(phaseInitSEXP);
     Rcpp::traits::input_parameter< CharacterVector >::type phaseReseed(phaseReseedSEXP);
     Rcpp::traits::input_parameter< IntegerVector >::type phaseMemory(phaseMemorySEXP);
     Rcpp::traits::input_parameter< NumericVector >::type phaseCautious(phaseCautiousSEXP);
     Rcpp::traits::input_parameter< LogicalVector >::type phaseRejected(phaseRejectedSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type phaseScaled(phaseScaledSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type phaseHybridTol(phaseHybridTolSEXP);
+    Rcpp::traits::input_parameter< LogicalVector >::type phaseHybridShift(phaseHybridShiftSEXP);
     Rcpp::traits::input_parameter< int >::type switches(switchesSEXP);
     Rcpp::traits::input_parameter< double >::type nonmonotone(nonmonotoneSEXP);
     Rcpp::traits::input_parameter< bool >::type sparse(sparseSEXP);
@@ -594,7 +605,7 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< Nullable<NumericVector> >::type parlower(parlowerSEXP);
     Rcpp::traits::input_parameter< bool >::type printIter(printIterSEXP);
     Rcpp::traits::input_parameter< Nullable<CharacterVector> >::type traceFile(traceFileSEXP);
-    rcpp_result_gen = Rcpp::wrap(trust_impl(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseReverse, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, switches, nonmonotone, sparse, minimize, blather, parupper, parlower, printIter, traceFile));
+    rcpp_result_gen = Rcpp::wrap(trust_impl(objfun, parinit, rinit, rmax, parscale, iterlim, ftol, mtol, gtol, xtol, rmin, thetamax, boundary, phaseMethod, phaseIterlim, phaseRadiusStall, phaseReverse, phaseKeepRadius, phaseStopEnds, phaseInit, phaseReseed, phaseMemory, phaseCautious, phaseRejected, phaseScaled, phaseHybridTol, phaseHybridShift, switches, nonmonotone, sparse, minimize, blather, parupper, parlower, printIter, traceFile));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -706,7 +717,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_bmm_rb", (DL_FUNC) &_dMod2_bmm_rb, 6},
     {"_dMod2_bmm_bb", (DL_FUNC) &_dMod2_bmm_bb, 6},
     {"_dMod2_chain_params", (DL_FUNC) &_dMod2_chain_params, 6},
-    {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 12},
+    {"_dMod2_chain_data", (DL_FUNC) &_dMod2_chain_data, 13},
     {"_dMod2_chain_frames", (DL_FUNC) &_dMod2_chain_frames, 5},
     {"_dMod2_chain_rows", (DL_FUNC) &_dMod2_chain_rows, 4},
     {"_dMod2_chain_back", (DL_FUNC) &_dMod2_chain_back, 8},
@@ -714,11 +725,11 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_chain_unit_sums", (DL_FUNC) &_dMod2_chain_unit_sums, 3},
     {"_dMod2_constraintL2_scalar_kernel", (DL_FUNC) &_dMod2_constraintL2_scalar_kernel, 12},
     {"_dMod2_datapointL2_kernel", (DL_FUNC) &_dMod2_datapointL2_kernel, 11},
-    {"_dMod2_focei_inner_trust", (DL_FUNC) &_dMod2_focei_inner_trust, 10},
-    {"_dMod2_focei_run", (DL_FUNC) &_dMod2_focei_run, 10},
-    {"_dMod2_focei_run_sparse", (DL_FUNC) &_dMod2_focei_run_sparse, 7},
+    {"_dMod2_focei_run", (DL_FUNC) &_dMod2_focei_run, 11},
+    {"_dMod2_focei_run_sparse", (DL_FUNC) &_dMod2_focei_run_sparse, 8},
     {"_dMod2_release_heap", (DL_FUNC) &_dMod2_release_heap, 0},
-    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 11},
+    {"_dMod2_nlme_group_kernel", (DL_FUNC) &_dMod2_nlme_group_kernel, 10},
+    {"_dMod2_normL2_kernel", (DL_FUNC) &_dMod2_normL2_kernel, 13},
     {"_dMod2_parvec_attach", (DL_FUNC) &_dMod2_parvec_attach, 3},
     {"_dMod2_parvec_concat", (DL_FUNC) &_dMod2_parvec_concat, 1},
     {"_dMod2_pimpl_state", (DL_FUNC) &_dMod2_pimpl_state, 1},
@@ -733,7 +744,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_dMod2_sparse_factor", (DL_FUNC) &_dMod2_sparse_factor, 6},
     {"_dMod2_systemTimes", (DL_FUNC) &_dMod2_systemTimes, 0},
     {"_dMod2_trustL1_impl", (DL_FUNC) &_dMod2_trustL1_impl, 24},
-    {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 30},
+    {"_dMod2_trust_impl", (DL_FUNC) &_dMod2_trust_impl, 36},
     {"_dMod2_sparse_factor_cost", (DL_FUNC) &_dMod2_sparse_factor_cost, 3},
     {"_dMod2_trust_model_step", (DL_FUNC) &_dMod2_trust_model_step, 5},
     {"_dMod2_trust_step_impl", (DL_FUNC) &_dMod2_trust_step_impl, 8},

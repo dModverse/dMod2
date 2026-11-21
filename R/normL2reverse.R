@@ -144,10 +144,9 @@
   out
 }
 
-# The seed as one cotangent per condition aligned with `prediction`, direct and
-# through the error model, whose forward tape `err_tape` covers the conditions at
-# positions `err_idx`. Rows follow the kernel's ALOQ-then-BLOQ order; fixed-sigma
-# rows get no sigma seed.
+# The seed as one cotangent per condition of `prediction`, direct and through the error model, whose tape
+# `err_tape` covers the conditions at `err_idx`; rows in the ALOQ-then-BLOQ order of the kernel, fixed-sigma
+# rows without a sigma seed.
 .normL2SeedCt <- function(meta_list, prediction, err_list, kr, err_tape,
                           err_idx = NULL, env = NULL, cores = 1L, K = 1L) {
   n <- length(meta_list)

@@ -93,7 +93,7 @@ plotStarts <- function(runs, title) {
   seconds <- do.call(rbind, lapply(names(runs), function(m) data.frame(method = m, seconds = runs[[m]]$seconds)))
   s <- ggplot2::ggplot(seconds, ggplot2::aes(method, seconds)) + ggplot2::geom_boxplot() +
     ggplot2::scale_y_log10(labels = scales::label_log()) +
-    ggplot2::labs(x = NULL, y = "seconds per fit, one core") + theme_dMod()
+    ggplot2::labs(x = NULL, y = "seconds per fit, one core") + theme_dMod2()
   cowplot::plot_grid(w, s, nrow = 1, rel_widths = c(2, 1))
 }
 
@@ -585,7 +585,7 @@ compileSeconds
 
 ```
 #> theophylline     warfarin  mavoglurant 
-#>       26.972       38.035      152.680
+#>       27.201       33.187      100.286
 ```
 
 ## Diagnostics

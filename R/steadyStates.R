@@ -1,12 +1,18 @@
 #' Analytical Steady States
 #'
 #' Computes symbolic steady-state expressions for use in a parameter
-#' transformation, following the AlyssaPetit method \[1\], \[2\]. Each balance
-#' equation, or a combination of balances, is solved for a state or a rate
-#' constant such that the result is a ratio of sums of positive terms. A state
-#' whose equation was spent on a rate constant stays a free parameter;
-#' compartment volumes are fixed. The solver is a Python module called through
-#' \pkg{reticulate}; it needs \pkg{numpy}, \pkg{sympy} and \pkg{scipy}.
+#' transformation, following the AlyssaPetit method \[1\], \[2\]. States whose
+#' own balance gives a ratio of positive sums are solved from it first. The
+#' cycles of the graph of states left are cut then: at a state of a conserved
+#' quantity, or at a state whose balance is solved for a rate constant of one
+#' flux side instead. Each cut state stays a free parameter. The remaining
+#' states and the rate constants of the cuts are then solved, each from a
+#' balance or a combination of balances in amounts, such that the result is a
+#' ratio of sums of positive terms. Only if that fails, a flux side with
+#' separate rate constants is cut as well: the fluxes of the side keep free
+#' ratios, the new parameters `r_<state>_<j>`. Compartment volumes are fixed.
+#' The solver is a Python module called through \pkg{reticulate}; it needs
+#' \pkg{numpy}, \pkg{sympy} and \pkg{scipy}.
 #'
 #' @param model An [eqnlist], or the path of a csv file describing the model.
 #' @param file Character, path of the RDS file the result is written to with
@@ -19,7 +25,7 @@
 #'   `c("A + pA = totA", "B + pB = totB")` or as `c("A + pA", "B + pB")`.
 #'   Default `NULL`: a basis is derived, or taken from [customTotals()] when the
 #'   `eqnlist` has them. Each given quantity keeps one of the states in it free, the
-#'   first where possible.
+#'   first one on a cycle of the graph of states.
 #' @param neglect Character vector, states and rate parameters the solver must
 #'   not solve for. Default `NULL`.
 #' @param testSteady How the solution is verified: `"fast"` (default), a
@@ -32,8 +38,8 @@
 #'   in that state, may be solved for the positive root instead of for a rate constant, which
 #'   introduces `sqrt()` terms. Default `FALSE`.
 #' @param priority Character vector of state and rate-parameter names, most
-#'   preferred first: named states are solved earlier, named rate parameters
-#'   are preferred as pivots. Default `NULL`.
+#'   preferred first: named states are solved rather than kept free and solved
+#'   earlier, named rate parameters are preferred as pivots. Default `NULL`.
 #' @param resolve Logical, whether the result is passed through
 #'   [resolveRecurrence()] so that no equation refers to another. Default
 #'   `TRUE`.

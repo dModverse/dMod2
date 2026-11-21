@@ -65,8 +65,9 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   sims <- .simulatedRows(object, nsim)
   y <- pr$observed
   lloq <- .emObsLimits(design)
-  pars <- c(object$argument, .etaVector(object))
-  units <- lapply(.volumeUnits(design, c(pars, object$fixed), object$fixed), `[[`, "conditions")
+  # the conditions of a group, or of a component of several groupings, share the random effects
+  units <- if (is.null(design$groupings)) unname(design$conditions[design$groups])
+           else lapply(design$components, `[[`, "conditions")
   units <- c(units, as.list(.setdiff(names(design$data), unlist(units))))
   out <- rep(NA_real_, length(y))
   for (u in units) {
@@ -247,22 +248,22 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   p <- ggplot2::ggplot(shown, ggplot2::aes(x = time, group = percentile)) +
     ggplot2::geom_ribbon(ggplot2::aes(ymin = lo, ymax = hi, fill = percentile == "50%"), alpha = 0.3) +
     ggplot2::geom_line(ggplot2::aes(y = mid), linetype = "dashed", color = "gray40") +
-    ggplot2::geom_line(ggplot2::aes(y = observed), color = dMod_colors[2], linewidth = 0.8, na.rm = TRUE) +
-    ggplot2::geom_point(ggplot2::aes(y = observed), color = dMod_colors[2], na.rm = TRUE) +
-    ggplot2::scale_fill_manual(values = c(`TRUE` = dMod_colors[1], `FALSE` = dMod_colors[3]), guide = "none") +
+    ggplot2::geom_line(ggplot2::aes(y = observed), color = dMod2_colors[2], linewidth = 0.8, na.rm = TRUE) +
+    ggplot2::geom_point(ggplot2::aes(y = observed), color = dMod2_colors[2], na.rm = TRUE) +
+    ggplot2::scale_fill_manual(values = c(`TRUE` = dMod2_colors[1], `FALSE` = dMod2_colors[3]), guide = "none") +
     facet + ggplot2::labs(x = "Time", y = if (pc) "Prediction-corrected value" else "Value",
                           title = sprintf("%sVPC, %d simulations: 5, 50, 95%% of the data and their 95%% intervals",
                                           if (pc) "Prediction-corrected " else "", nsim)) +
-    theme_dMod(base_size = 11)
+    theme_dMod2(base_size = 11)
   attr(p, "vpc") <- table
   if (!any(is.finite(lloq))) return(p)
   bt <- table[table$percentile == "50%" & table$limited, , drop = FALSE]
   blq <- ggplot2::ggplot(bt, ggplot2::aes(x = time)) +
-    ggplot2::geom_ribbon(ggplot2::aes(ymin = blqLo, ymax = blqHi), fill = dMod_colors[3], alpha = 0.3) +
+    ggplot2::geom_ribbon(ggplot2::aes(ymin = blqLo, ymax = blqHi), fill = dMod2_colors[3], alpha = 0.3) +
     ggplot2::geom_line(ggplot2::aes(y = blqMid), linetype = "dashed", color = "gray40") +
-    ggplot2::geom_line(ggplot2::aes(y = blq), color = dMod_colors[2], linewidth = 0.8) +
-    ggplot2::geom_point(ggplot2::aes(y = blq), color = dMod_colors[2]) +
-    facet + ggplot2::labs(x = "Time", y = "Fraction censored") + theme_dMod(base_size = 11)
+    ggplot2::geom_line(ggplot2::aes(y = blq), color = dMod2_colors[2], linewidth = 0.8) +
+    ggplot2::geom_point(ggplot2::aes(y = blq), color = dMod2_colors[2]) +
+    facet + ggplot2::labs(x = "Time", y = "Fraction censored") + theme_dMod2(base_size = 11)
   out <- if (requireNamespace("cowplot", quietly = TRUE)) cowplot::plot_grid(p, blq, ncol = 1, rel_heights = c(2, 1))
          else list(vpc = p, blq = blq)
   attr(out, "vpc") <- table
@@ -301,12 +302,12 @@ plotVPC.em <- function(x, nsim = 200L, bins = 8L, pc = FALSE, logScale = FALSE, 
   plots <- lapply(split(long, factor(long$covariate, cols)), function(d) {
     p <- ggplot2::ggplot(d, ggplot2::aes(y = mode)) + ggplot2::geom_hline(yintercept = 0, linetype = "dashed", color = "gray50")
     p <- if (d$numeric[1]) p + ggplot2::geom_point(ggplot2::aes(x = x), alpha = 0.7) +
-      ggplot2::geom_smooth(ggplot2::aes(x = x), method = "loess", formula = y ~ x, se = FALSE, color = dMod_colors[2],
+      ggplot2::geom_smooth(ggplot2::aes(x = x), method = "loess", formula = y ~ x, se = FALSE, color = dMod2_colors[2],
                            linewidth = 0.7)
     else p + ggplot2::geom_boxplot(ggplot2::aes(x = value), outlier.shape = NA) +
       ggplot2::geom_jitter(ggplot2::aes(x = value), width = 0.15, height = 0, alpha = 0.5)
     p + ggplot2::facet_wrap(~ eta, scales = "free_y", nrow = 1) +
-      ggplot2::labs(x = d$covariate[1], y = "mode of the random effect") + theme_dMod(base_size = 11)
+      ggplot2::labs(x = d$covariate[1], y = "mode of the random effect") + theme_dMod2(base_size = 11)
   })
   if (length(plots) == 1L) return(plots[[1]])
   if (requireNamespace("cowplot", quietly = TRUE)) cowplot::plot_grid(plotlist = plots, ncol = 1) else plots

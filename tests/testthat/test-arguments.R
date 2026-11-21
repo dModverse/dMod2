@@ -4,8 +4,7 @@ test_that("an argument a function does not take is an error", {
   expect_error(constraintGamma(c(a = 1), bogus = 1), "unused argument")
   expect_error(normL2(NULL, NULL, attr.name = "p"), "unused argument")
   expect_error(dMod2:::.pimplPTC(list(rtol = 1e-9)), "unknown controlsPTC entry rtol")
-  expect_error(trust(constraintL2(c(a = 0)), c(a = 1), ftol = 1e-3),
-               "tolControl\\$ftol")
+  expect_error(trust(constraintL2(c(a = 0)), c(a = 1), ftol = 1e-3), "unknown argument ftol")
 })
 
 test_that("the snake-case names of the symmetry controls are derived", {

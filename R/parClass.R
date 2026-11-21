@@ -279,7 +279,7 @@ plotPars.parframe <- function(x, ..., tol = 1) {
   parOut <- .wide2long.data.frame(out = x[, c("step", "value", parNames)], keep = 1:2)
   names(parOut) <- c("step", "value", "name", "parvalue")
   plot <- ggplot2::ggplot(parOut, aes(x = name, y = parvalue, color = step)) +
-    geom_boxplot(outlier.alpha = 0) + theme_dMod() + scale_color_dMod() +
+    geom_boxplot(outlier.alpha = 0) + theme_dMod2() + scale_color_dMod2() +
     guides(x = guide_axis(angle = 90))
 
   attr(plot, "data") <- parOut
@@ -313,14 +313,14 @@ plotPars.parframe <- function(x, ..., tol = 1) {
 }
 
 
-# Plain numbers below 10^4, powers of ten from there, so that a wide axis keeps short labels.
+# Powers of ten as 10^k on every tick when all nonzero breaks are powers of ten, plain numbers
+# on every tick otherwise.
 .decadeLabels <- function(breaks) {
   labels <- format(breaks, trim = TRUE, scientific = FALSE, drop0trailing = TRUE)
-  big <- is.finite(breaks) & abs(breaks) >= 1e4
-  k <- floor(log10(abs(breaks[big])) + 1e-9)
-  m <- round(breaks[big] / 10^k)
-  labels[big] <- ifelse(m == 1, paste0("10^", k),
-                        ifelse(m == -1, paste0("-10^", k), paste0(m, " %*% 10^", k)))
+  nz <- is.finite(breaks) & breaks != 0
+  k <- round(log10(abs(breaks[nz])))
+  if (!all(abs(abs(breaks[nz]) / 10^k - 1) < 1e-9)) return(labels)
+  labels[nz] <- paste0(ifelse(breaks[nz] < 0, "-", ""), "10^", k)
   parse(text = labels)
 }
 
@@ -404,11 +404,11 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
   # entry for it
   conv <- pars$converged %in% TRUE
   unconverged <- if (!all(conv)) list(
-    geom_point(data = pars[!conv, ], aes(shape = "not converged"), color = dMod_colors[2]),
+    geom_point(data = pars[!conv, ], aes(shape = "not converged"), color = dMod2_colors[2]),
     scale_shape_manual(values = c(`not converged` = 19),
-                       guide = guide_legend(override.aes = list(color = dMod_colors[2]),
+                       guide = guide_legend(override.aes = list(color = dMod2_colors[2]),
                                             order = 1)))
-  converged <- if (iterations) list(geom_point(data = pars[conv, ], aes(color = iterations)), scale_color_dMod_c())
+  converged <- if (iterations) list(geom_point(data = pars[conv, ], aes(color = iterations)), scale_color_dMod2_c())
                else geom_point(data = pars[conv, ])
 
   P <- ggplot2::ggplot(pars, aes(x = index, y = shown)) +
@@ -420,7 +420,7 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
                               scale_x_continuous(breaks = scales::breaks_pretty(n = 3)))) +
     labs(x = "Fit rank", y = if (!is.null(ref) || relative) "Objective value above the best" else "Objective value",
          color = "Iterations", shape = NULL) +
-    theme_dMod() +
+    theme_dMod2() +
     (if (!is.null(sets)) theme(panel.spacing.x = ggplot2::unit(1, "lines")))
 
   structure(P, data = pars, jumps = if (is.null(sets)) jumps[[1]] else stats::setNames(jumps, sets))
@@ -831,6 +831,15 @@ print.parvec <- function(x, ...) {
 #'
 #' @export
 c.parvec <- function(...) {
+
+  # An operand without names takes the argument name, numbered for several values.
+  an <- ...names()
+  if (any(nzchar(an))) {
+    args <- list(...)
+    for (i in which(nzchar(an) & vapply(args, function(z) is.null(names(z)) && length(z) > 0L, TRUE)))
+      names(args[[i]]) <- if (length(args[[i]]) == 1L) an[i] else paste0(an[i], seq_along(args[[i]]))
+    return(do.call(c.parvec, unname(args)))
+  }
 
   # One operand, alone or beside NULL or an empty one, as
   # prdframe(parameters = c(pars, fixed)) has it for every condition: the same

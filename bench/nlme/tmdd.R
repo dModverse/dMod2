@@ -149,7 +149,7 @@ summary <- do.call(rbind, lapply(split(res, list(res$method, res$parameter), dro
              coverage = mean(r$covered))))
 summary[order(summary$parameter, summary$method), ]
 ggplot2::ggplot(res, ggplot2::aes(method, error)) + ggplot2::geom_hline(yintercept = 0, linetype = 2) +
-  ggplot2::geom_boxplot() + ggplot2::facet_wrap(~ parameter, scales = "free_y") + theme_dMod() +
+  ggplot2::geom_boxplot() + ggplot2::facet_wrap(~ parameter, scales = "free_y") + theme_dMod2() +
   ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1))
 
 ## Single fits on 10 cores ---------------------------------------------------------------

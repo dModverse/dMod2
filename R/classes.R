@@ -963,10 +963,8 @@ match.fnargs <- function(arglist, choices) {
                       else hessian,
             conditions = conds, env = e, cores = cores)
       }
-      # A term without conditions is evaluated once with the caller's env, any
-      # other on the term share of `conditions` and skipped when that is empty,
-      # unless it holds an unconditioned term. The second term reuses the env
-      # the first returned.
+      # a term without conditions once with the caller's env, any other on the term share of `conditions`,
+      # skipped where that is empty and it holds no unconditioned term; the second reuses the first env
       .term <- function(f, own, e) {
         if (is.null(own)) return(.call(f, NULL, env))
         mine <- .intersect(conditions, own)
@@ -1046,6 +1044,10 @@ match.fnargs <- function(arglist, choices) {
     # An absent gradient or Hessian stays absent.
     out <- lapply(unclass(x2), function(x) if (is.null(x) || is.list(x)) x else x1 * x)
     if (!is.null(x2$lowrank)) out$lowrank$d <- x1 * x2$lowrank$d
+    if (!is.null(x2$structure)) {
+      out$structure$seeds <- x1 * x2$structure$seeds
+      out$structure$hessian <- x1 * x2$structure$hessian
+    }
     numericAttrs <- names(Filter(is.numeric, attributes(x2)))
     attributes(out) <- attributes(x2)
     for (n in numericAttrs) attr(out, n) <- x1 * attr(x2, n)

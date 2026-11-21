@@ -655,6 +655,22 @@ test_that("the lock-step search of the modes stops on the Newton step, not on a 
   expect_lt(max(abs(step)), 1e-8)
 })
 
+test_that("FOCEI over several groupings on inexact modes ends at the nested optimum", {
+  m <- .crossed()
+  re <- randomEffects(m$pn)
+  init <- c(a = 0.5, s = log(0.3))
+  for (sp in c(FALSE, TRUE)) {
+    nested <- em(m$objn, re, init, verbose = FALSE, sparse = sp)
+    sqp <- em(m$objn, re, init, verbose = FALSE, sparse = sp, control = list(inner = "sqp"))
+    expect_true(sqp$converged)
+    expect_equal(sqp$value, nested$value, tolerance = 1e-6)
+    expect_lt(max(abs(sqp$argument - nested$argument[names(sqp$argument)])), 1e-3)
+    expect_equal(sqp$eta, nested$eta, tolerance = 1e-3)
+    expect_true(is.integer(sqp$innerIterations) && sqp$innerIterations > 0L)
+    expect_true(sqp$sqpIterations >= 1L && sqp$sqpIterations <= sqp$iterations)
+  }
+})
+
 test_that("one grouping through the component path equals the kernel path", {
   m <- .lin()
   fit <- em(m$obj, randomEffects(m$p), c(a = 0.5, b = 0.2), verbose = FALSE)
@@ -665,6 +681,26 @@ test_that("one grouping through the component path equals the kernel path", {
   at <- dMod2:::.fitFoceiJoint(d, joint, fit$argument, control = list(trustControl = list(iterlim = 0)))
   expect_equal(at$value, fit$value, tolerance = 1e-8)
   expect_equal(unname(at$hessian), unname(fit$hessian), tolerance = 1e-6)
+})
+
+test_that("the outer search over several groupings takes the arguments of trust(), others are an error", {
+  m <- .crossed()
+  re <- randomEffects(m$p)
+  ph <- list(list(hessianMethod = "gn", iterlim = 1), list(hessianMethod = "bfgs"))
+  tight <- list(mtol = 1e-10, ftol = 1e-12)
+  gn <- em(m$obj, re, c(a = 0.5), verbose = FALSE, sparse = FALSE, control = list(trustControl = tight))
+  for (sp in c(FALSE, TRUE)) {
+    fit <- em(m$obj, re, c(a = 0.5), verbose = FALSE, sparse = sp,
+              control = list(trustControl = c(tight, list(phases = ph))))
+    expect_identical(names(fit$phaseIterations), c("gn", "bfgs"))
+    expect_identical(fit$phaseIterations[["gn"]], 1L)
+    expect_equal(fit$value, gn$value, tolerance = 1e-6)
+  }
+  expect_error(em(m$obj, re, c(a = 0.5), verbose = FALSE, control = list(trustControl = list(nope = 1))),
+               "unknown entries nope")
+  l <- .lin()
+  expect_error(em(l$obj, randomEffects(l$p), c(a = 0.5, b = 0.2), verbose = FALSE,
+                  control = list(trustControl = list(phases = ph))), "several groupings only")
 })
 
 test_that("sparse FOCEI equals the dense fit, for one grouping and for crossed groupings", {

@@ -142,7 +142,7 @@ aggregate(cbind(hits = hit, sec, neval) ~ method, out,
 ggplot(out, aes(rank(ss, ties.method = "first"), pmin(ss - best, 1e4), color = method)) +
   geom_point(size = 0.8) + facet_wrap(~method) +
   scale_y_continuous(trans = "log1p") +
-  labs(x = "fit rank", y = "objective - best") + theme_dMod(base_size = 9)
+  labs(x = "fit rank", y = "objective - best") + theme_dMod2(base_size = 9)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

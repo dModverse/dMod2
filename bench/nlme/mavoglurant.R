@@ -165,7 +165,7 @@ best <- tapply(runs$value, runs$method, min, na.rm = TRUE)
 runs <- runs[order(runs$fit, runs$value), ]
 runs$rank <- stats::ave(seq_along(runs$value), runs$fit, FUN = seq_along)
 ggplot2::ggplot(runs[is.finite(runs$value), ], ggplot2::aes(rank, value - best[method] + 1e-3, color = fit)) +
-  ggplot2::geom_point() + ggplot2::scale_y_log10() + scale_color_dMod() + theme_dMod()
+  ggplot2::geom_point() + ggplot2::scale_y_log10() + scale_color_dMod2() + theme_dMod2()
 bestStart <- function(r, m) r$start[r$method == m][which.min(r$value[r$method == m])]
 seconds <- c(
   dMod2focei = min(vapply(seq_len(reps), function(i)

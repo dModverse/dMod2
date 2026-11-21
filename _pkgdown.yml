@@ -360,14 +360,14 @@ reference:
   - plotData
   - plotPrediction
   - plotCombined
-  - theme_dMod
-  - scale_color_dMod
-  - scale_color_dMod_c
-  - dMod_colors
-  - dMod_colors_cb
-  - dMod_palette
-  - dMod_palettes
-  - dMod_gradient
+  - theme_dMod2
+  - scale_color_dMod2
+  - scale_color_dMod2_c
+  - dMod2_colors
+  - dMod2_colors_cb
+  - dMod2_palette
+  - dMod2_palettes
+  - dMod2_gradient
 
 - title: Data sets
   contents:

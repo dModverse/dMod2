@@ -122,6 +122,6 @@
     Code
       ss
     Output
-            k1        A        B 
-      "B*k2/A"      "A"      "B" 
+              B         A 
+      "A*k1/k2"       "A" 
 

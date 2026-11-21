@@ -14,10 +14,9 @@ do.call(knitr::read_chunk, list(file.path("results", "guide-alignment.R")))
 saved <- stored("results/guide-alignment.rds", "results/guide-alignment.R", envir = new.env())
 ```
 
-Western blots, plate readers and similar assays read on experiment-specific scales: exposure and
-background differ between gels or plates. `alignmentModel()` and `align()` bring all experiments
-onto one common scale by maximum likelihood, before or instead of a dynamic model, with the
-reading model written as an expression, as in the R package
+Western blots, plate readers and similar assays read on experiment-specific scales.
+`alignmentModel()` and `align()` bring all experiments onto one common scale by maximum likelihood,
+with the reading model written as an expression, as in the R package
 [blotIt](https://github.com/JetiLab/blotIt).
 
 ```{r}
@@ -29,9 +28,8 @@ dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 
 ## Simulated blot data
 
-A phosphorylation at five time points after stimulation in six biological replicates, each with
-own cells, stimulation and lysates on a separate gel, every sample in three lanes (technical
-replicates). Simulated: 20 % biological variability per sample, exposure and background per gel,
+A phosphorylation at five time points, six biological replicates on six gels, every sample in
+three lanes. Simulated: 20 % biological variability per sample, exposure and background per gel,
 15 % technical noise per lane.
 
 ```{r data}
@@ -39,24 +37,21 @@ replicates). Simulated: 20 % biological variability per sample, exposure and bac
 
 ## Alignment model
 
-A reading is value `yi` times gel scale `sj` plus background `bj`, with standard deviation
-proportional to the prediction. Each symbol is a linear predictor over the data columns, one
-formula per role: a value per time point, a scale per gel, one background and one error parameter.
-All symbols are on log scale, hence positive. `technical = "lane"` replaces the three lanes of a
-sample by their mean, see [technical and biological replicates](#technical-and-biological-replicates).
+A reading is value `yi` times gel scale `sj` plus background `bj`, with relative error. Each
+symbol is a linear predictor over the data columns, on log scale. `technical = "lane"` averages
+the lanes of a sample, see
+[technical and biological replicates](#technical-and-biological-replicates).
 
 ```{r model}
 ```
 
-Doubling all values and halving all scales changes nothing; the alignment holds the geometric
-mean of the values at 1 within each block of experiments sharing values.
+The geometric mean of the values is held at 1 within each block of experiments sharing values.
 
 ## Fit by restricted likelihood
 
-`align()` fits from several perturbed starts and keeps the best. Error parameters are estimated by
-restricted maximum likelihood by default, correcting for the degrees of freedom of the prediction
-parameters: here 5 values, 6 scales and the background against 30 readings. The print names the
-likelihood of $-2 \log L$ and lists the maximum likelihood fits the restricted one starts from.
+`align()` fits from several perturbed starts and keeps the best; error parameters by restricted
+maximum likelihood. The fits of this chapter are loaded from `results/guide-alignment.rds`,
+computed by `results/guide-alignment.R`.
 
 ```{r fit, eval = FALSE}
 ```
@@ -74,8 +69,7 @@ fit$aligned
 
 ## Comparison with the simulation
 
-On the alignment scale the simulated course is `truth / exp(mean(log(truth)))`. Error (log ratio
-of aligned to simulated) against the standard error `se`:
+Error (log ratio of aligned to simulated course) against the standard error `se`:
 
 ```{r}
 simulated <- data.frame(time = times, value = truth / exp(mean(log(truth))))
@@ -93,23 +87,15 @@ ggplot(fit$aligned, aes(time, value)) +
   geom_point(aes(shape = "aligned")) +
   geom_point(data = simulated, aes(shape = "simulated")) +
   scale_shape_manual(values = c(aligned = 16, simulated = 4), name = NULL) +
-  labs(x = "time [min]", y = "value") + theme_dMod()
+  labs(x = "time [min]", y = "value") + theme_dMod2()
 ```
 
 ## Technical and biological replicates
 
-A biological replicate repeats the experiment (cells, stimulation, lysate) and differs by
-biological variability and every measurement step. A technical replicate measures the same sample
-again (lysate in another lane, cDNA in another well) and differs by the measurement steps alone.
-
-The lanes of a sample share the biological deviation of that sample, so they are not independent readings of the
-biology. `technical = "lane"` averages them before the alignment; readings agreeing in all columns
-but `value`, `lloq` and the technical columns form one sample. The mean is geometric for a
-relative error model, as here, and arithmetic for an absolute one, as for readings already on log
-scale. The error model then describes the scatter of sample means: biological variability plus
-technical noise of a three-lane mean.
-
-The same data with every lane as a separate reading:
+Technical replicates (lanes, wells) measure the same sample and share the biological deviation
+of that sample. `technical = "lane"` averages them before the alignment; readings agreeing in all
+columns but `value`, `lloq` and the technical columns form one sample. The mean is geometric for a
+relative error model, arithmetic for an absolute one. The same data with every lane as a reading:
 
 ```{r lanes, eval = FALSE}
 ```
@@ -128,19 +114,15 @@ signif(errors(fitLanes), 2)
 inSE <- function(fit) with(errors(fit), max(abs(error / se)))
 ```
 
-Both fits find nearly the same values and errors, but the lane fit reports standard errors
-smaller by about $\sqrt{3}$: it counts 90 readings, while most of the error is the biological
-deviation of 30 samples. The errors of the lane fit reach `r round(inSE(fitLanes), 1)` standard errors, those of
-the fit of means stay within `r inWords(ceiling(inSE(fit)))`.
+The lane fit reports standard errors smaller by about $\sqrt{3}$; the errors reach
+`r round(inSE(fitLanes), 1)` standard errors, those of the fit of means stay within
+`r inWords(ceiling(inSE(fit)))`.
 
 ## Random background per gel
 
-Instead of six free backgrounds, the background can be a random effect per gel around a common
-value. The role then takes a list of formulas; the fit integrates the random effects by FOCEI as
-in [Nonlinear mixed-effects models](guide-nlme.html), with their standard deviation by restricted
-likelihood. Five readings per gel say little about it, so a prior holds the standard deviation of
-the log background near 0.3: `omega_bj_bj`, the log of that standard deviation, normal around
-$\log 0.3$ with standard deviation 0.3.
+A random effect per gel around a common background, integrated by FOCEI as in
+[Nonlinear mixed-effects models](guide-nlme.html). A prior on `omega_bj_bj`, the log standard
+deviation, normal around $\log 0.3$ with standard deviation 0.3:
 
 ```{r background, eval = FALSE}
 ```
@@ -154,7 +136,7 @@ fit2
 signif(errors(fit2), 2)
 ```
 
-Background per gel, common value times the random effect at the mode, against the simulation:
+Background per gel against the simulation:
 
 ```{r}
 bg <- exp(fit2$parameters[["bj"]] + fit2$random$mode[match(gels, fit2$random$group)])
@@ -162,10 +144,9 @@ data.frame(gel = gels, simulated = round(background), common = round(exp(fit$par
            random = round(bg))
 ```
 
-Both fits have nearly the same likelihood; values change by less than their standard errors.
-The random backgrounds lie below the simulated ones with little spread, since the bands lie far
-above the background. In the [Western blots](#western-blot-and-targeted-mass-spectrometry) below,
-gels with weak lanes resolve it.
+Values change by less than their standard errors. Bands far above the background leave it
+unresolved; gels with weak lanes resolve it, see
+[Western blots](#western-blot-and-targeted-mass-spectrometry).
 
 ## Fit options
 
@@ -177,44 +158,35 @@ gels with weak lanes resolve it.
 | `method` | `"focei"` | with random terms, `"focei"` or `"quadrature"` |
 | `cores` | `1` | fits in parallel |
 
-The alignment objective needs no ODE solver and is exact up to rounding, so fits stop at
-tolerances near the square root of machine precision, about $10^{-8}$, for value change, predicted
-decrease and gradient.
-
-Absolute readings, such as targeted mass spectrometry concentrations, are marked in a column
-`absolute` and fix the scale of their block. The two sections below treat qPCR with wells below the
-detection limit, and Western blots with random background per gel plus mass spectrometry in nM.
+Fits stop at tolerances of about $10^{-8}$. Absolute readings, such as mass spectrometry
+concentrations, are marked in a column `absolute` and fix the scale of their block.
 
 ## qPCR with censored wells
 
-Target mRNA at seven time points after stimulation in four experiments (biological replicates),
-each with own cells, cDNA, plate and a subset of time points, none shared by all; every sample in
-two wells (technical duplicates). A well reports the cycle Ct at which fluorescence crosses a
-threshold above background during exponential growth. The amount doubles per cycle, so 36 - Ct is
-the log2 concentration in arbitrary units, shifted by an experiment offset. Untreated cells barely
-express the target: a well not crossing the threshold in 40 cycles reports no Ct, and the reading lies
-below 36 - 40 = -4.
+Target mRNA at seven time points in four experiments, each on a subset of time points, every
+sample in two wells. 36 - Ct is the log2 concentration in arbitrary units; a well without Ct after
+40 cycles lies below -4.
 
 ### qPCR data
 
-Column `lloq` holds the limit of each reading; an `NA` reading is censored there. Samples scatter
-around their experiment course by 0.5 cycles (standard deviation), wells of a sample by 0.25.
+Column `lloq` holds the limit of each reading; an `NA` reading is censored there. Standard
+deviation 0.5 cycles between samples, 0.25 between wells.
 
 ```{r qpcrdata}
 ```
 
 ### qPCR model
 
-A reading is `yi + sj`, log2 concentration per time point plus experiment offset, with absolute
-error. `technical = "well"` averages the wells arithmetically, since readings are already log2. A
-sample with one well below the limit is censored at the mean of the other well and the limit.
+A reading is `yi + sj`, log2 concentration plus experiment offset, with absolute error.
+`technical = "well"` averages the wells; a sample with one well below the limit is censored at the
+mean of the other well and the limit.
 
 ```{r qpcrmodel}
 ```
 
 ### qPCR fit
 
-The mean of the values is held at 0; differences to the untreated value are log2 fold changes.
+The mean of the values is held at 0; `log2fc` is relative to the untreated value.
 
 ```{r qpcrfit, eval = FALSE}
 ```
@@ -230,8 +202,7 @@ a$log2fc <- a$estimate - a$estimate[a$time == 0]
 cbind(a[c("time", "estimate", "se", "log2fc")], simulated = log2fold[match(a$time, times)])
 ```
 
-Duplicate means per experiment before and after alignment; censored samples enter by the limit
-and are not drawn.
+Sample means before and after alignment, censored samples not drawn:
 
 ```{r}
 s <- fit$scaled[!fit$scaled$bloq, ]
@@ -243,7 +214,7 @@ both$stage <- factor(both$stage, c("before", "after"))
 ggplot(both, aes(factor(time), value, color = experiment)) +
   geom_point() + facet_wrap(~ stage) +
   labs(x = "time [h]", y = "log2(conc.) [a.u.]", color = "experiment") +
-  scale_color_dMod() + theme_dMod()
+  scale_color_dMod2() + theme_dMod2()
 
 ```
 ```{r fig.height = 3.5}
@@ -261,41 +232,31 @@ as.datalist(fit)
 
 ## Western blot and targeted mass spectrometry
 
-A phosphoprotein after ligand stimulation, quantified on ten gels and by targeted mass
-spectrometry. Five gels hold a short course up to 4 h, five a long one up to 48 h, sharing only the
-untreated lane and 4 h. Each gel holds four time points of one course on a separate scale, the long
-gels far lower. Each gel adds a background (the membrane signal around the bands), scaled with the
-bands by the image; it shows on weak lanes, untreated and late, and hides under the others. With a
-background per gel, untreated level and typical background are told apart only by the variation
-between gels: a normal random effect per gel. Mass spectrometry measures nM at four time points of
-both courses, three samples each. These readings are marked in column `absolute`, predicted by the
-expression `absolute` (by default the first biological symbol), depend on no scaling parameter and
-have gel `NA`; their block is not normalized but comes out in nM.
+A phosphoprotein on ten gels, five with a short course up to 4 h and five with a long one up to
+48 h, sharing the untreated lane and 4 h, and by targeted mass spectrometry in nM at four time
+points. The background per gel is a normal random effect. Mass spectrometry readings are marked in
+column `absolute`, predicted by the expression `absolute` (by default the first biological symbol)
+and have gel `NA`; the block comes out in nM.
 
 ### Blot and mass spectrometry data
 
-One row per reading: log2 of the band in arbitrary units or of the concentration in nM. Short
-course gels S1 to S5, long course L1 to L5.
+Log2 band in arbitrary units or log2 concentration in nM; gels S1 to S5 short, L1 to L5 long.
 
 ```{r wbdata}
 ```
 
 ### Blot and mass spectrometry model
 
-A band reads `log2(2^yi + 2^(b + bj)) + sj`: log2 concentration `yi` in nM per time point plus
-background, shifted by `sj` per gel. The log2 background is the common fixed `b` plus `bj`, a
-normal random effect around 0 per gel. A mass spectrometry reading is `yi`. Errors are absolute,
-one per method. The data say little about the background (small spread, hidden by bands), so a
-prior holds the standard deviation of `bj` near 0.3 (`omega_bj_bj`, the log of that standard
-deviation, normal around $\log 0.3$ with standard deviation 0.3), and a weak prior puts `b` around 1 nM (normal around 0, standard
-deviation 2).
+A band reads `log2(2^yi + 2^(b + bj)) + sj`, a mass spectrometry reading `yi`, with absolute
+error per method. Priors: `omega_bj_bj` normal around $\log 0.3$ with standard deviation 0.3, `b`
+normal around 0 with standard deviation 2.
 
 ```{r wbmodel}
 ```
 
 ### Blot and mass spectrometry fit
 
-Values come out as log2 concentrations in nM, also at time points without mass spectrometry:
+Values in log2 nM, also at time points without mass spectrometry:
 
 ```{r wbfit, eval = FALSE}
 ```
@@ -318,8 +279,7 @@ round(2^p[["b"]], 2)
 c(MS = exp(p[["sigma"]]), WB = exp(p[["sigma"]] + p[["sigma_methodWB"]]))
 ```
 
-Readings per gel and of mass spectrometry before (bands in arbitrary units, mass spectrometry in
-nM) and after alignment (all in nM); absolute readings stay unchanged:
+Readings before and after alignment; absolute readings stay unchanged:
 
 ```{r}
 s <- fit$scaled
@@ -335,7 +295,7 @@ ggplot(both[is.finite(both$reading), ], aes(factor(time), reading, color = gel, 
   geom_point() + facet_wrap(~ panel, scales = "free_y") +
   guides(x = guide_axis(angle = 45)) +
   labs(x = "time [min]", y = "log2(conc.)", color = "gel", shape = "method") +
-  scale_color_dMod(palette = "dMod") + theme_dMod() + theme(legend.position = "bottom")
+  scale_color_dMod2(palette = "dMod") + theme_dMod2() + theme(legend.position = "bottom")
 
 ```
 ```{r fig.height = 3.5}
@@ -349,33 +309,27 @@ plotResiduals(fit)
 ### Random background
 
 Standard deviation of the log2 background between gels, and per gel the mode with conditional
-standard error. The standard deviation lies near the prior mean, so it comes mostly from the
-prior.
+standard error:
 
 ```{r}
 fit$omega
 fit$random
 ```
 
-The shrinkage $1 - \operatorname{SD}(\text{modes}) / \omega$ measures how much the data know about
-the random effect of one gel; where bands hide the background, the mode stays near 0. Aligned
-values, `b` and $\omega$ integrate over the random effects and do not depend on the modes; a mode
-is no measurement of the gel background, and plots of modes look too narrow.
+Shrinkage $1 - \operatorname{SD}(\text{modes}) / \omega$; aligned values, `b` and $\omega$ do
+not depend on the modes.
 
 ```{r}
 fit$fit$shrinkage
 ```
 
-Conditional draws of the random effects against the estimated normal, which they follow
-whatever the shrinkage. At high shrinkage the draws mostly repeat that normal, so the plot could
-hardly reveal a background distributed otherwise.
+Conditional draws against the estimated normal:
 
 ```{r fig.height = 5}
 plotRandomEffects(fit$fit)
 ```
 
-Readings against the individual prediction (IPRED, random effects at the modes) and the
-population prediction (PRED, every gel at the population background):
+Individual (IPRED) and population prediction (PRED):
 
 ```{r fig.height = 3.5}
 plot(fit$fit) + theme(legend.position = "right") + labs(color = "gel")

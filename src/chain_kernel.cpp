@@ -647,11 +647,15 @@ List sparseHessian(const List& conds, const std::vector<In>& in, const std::vect
 // `want_seed` also seed_pred and seed_sigma, the derivatives of the value in the prediction and
 // sigma of every data row, in the order of the conditions and of their data, and seed_chi2_pred,
 // seed_chi2_sigma those of chi2. With `sparse` the Hessian over the global parameters is
-// list(i, p, x), the 0-based slots of a column-compressed matrix without zero entries. NULL where
-// a solve or a function fails or a prediction at a data point is not finite.
+// list(i, p, x), the 0-based slots of a column-compressed matrix without zero entries. With
+// `want_rows` also rows = list(jacobian, seeds): the derivatives of the predictions, and of the sigmas
+// that depend on parameters, over the global parameters, one row per data row, and the derivatives
+// of the value in them. NULL where a solve or a function fails or a prediction at a data point is
+// not finite.
 // [[Rcpp::export]]
 SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool build_hessian, bool local,
-                int threads, std::string bloq_mode, double t_df, bool want_seed, bool sparse = false) {
+                int threads, std::string bloq_mode, double t_df, bool want_seed, bool sparse = false,
+                bool want_rows = false) {
   List conds = plan["cond"];
   const int K = conds.size();
   const int nGlobal = as<int>(plan["n_global"]);
@@ -672,6 +676,9 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
   std::vector<char> ok(K, 1);
   std::vector<double> value(K, 0.0), chi2(K, 0.0);
   std::vector<std::vector<double>> grad(K), hess(K);
+  // with `want_rows` the data rows of each condition in the condition directions and their seeds
+  const bool seeds_on = want_seed || want_rows;
+  std::vector<std::vector<double>> rowJ(K), rowU(K);
   const int nt = chainThreads(threads, K);
 #ifdef _OPENMP
 #pragma omp parallel for schedule(dynamic) num_threads(nt) if (nt > 1)
@@ -737,7 +744,7 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
     opts.sigma_depends_on_par = hasDs;
     opts.d2sigma_present = d2 && hasDs;
     double v = 0.0, ch = 0.0;
-    std::vector<double> sp(want_seed ? n : 0, 0.0), ss(want_seed ? n : 0, 0.0), cp(want_seed ? n : 0, 0.0),
+    std::vector<double> sp(seeds_on ? n : 0, 0.0), ss(seeds_on ? n : 0, 0.0), cp(want_seed ? n : 0, 0.0),
         cs(want_seed ? n : 0, 0.0);
     if (want_seed && na > 0) dmod::chi2_seeds(na, pred.data(), ydat.data(), sig.data(), cp.data(), cs.data());
     if (na > 0)
@@ -745,7 +752,7 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
                                      sig.data(), hasDs ? dsig.data() : nullptr,
                                      d2 && hasDs ? d2sig.data() : nullptr, lloq.data(), opts, v, ch,
                                      grad[c].data(), build_hessian ? hess[c].data() : nullptr,
-                                     want_seed ? sp.data() : nullptr, want_seed ? ss.data() : nullptr);
+                                     seeds_on ? sp.data() : nullptr, seeds_on ? ss.data() : nullptr);
     if (n > na) {
       const std::size_t off = na, off2 = off * nd, off3 = off * nd2;
       dmod::accumulate_bloq_residual(n - na, nd, pred.data() + off, dpred.data() + off2,
@@ -753,7 +760,18 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
                                      hasDs ? dsig.data() + off2 : nullptr,
                                      d2 && hasDs ? d2sig.data() + off3 : nullptr, lloq.data() + off, opts, v,
                                      grad[c].data(), build_hessian ? hess[c].data() : nullptr,
-                                     want_seed ? sp.data() + off : nullptr, want_seed ? ss.data() + off : nullptr);
+                                     seeds_on ? sp.data() + off : nullptr, seeds_on ? ss.data() + off : nullptr);
+    }
+    if (want_rows && nd > 0) {
+      const int nb = hasDs ? 2 : 1;
+      rowJ[c].assign((std::size_t) nb * n * nd, 0.0);
+      rowU[c].assign((std::size_t) nb * n, 0.0);
+      std::copy(dpred.begin(), dpred.end(), rowJ[c].begin());
+      std::copy(sp.begin(), sp.end(), rowU[c].begin());
+      if (hasDs) {
+        std::copy(dsig.begin(), dsig.end(), rowJ[c].begin() + (std::size_t) n * nd);
+        std::copy(ss.begin(), ss.end(), rowU[c].begin() + n);
+      }
     }
     // the seeds back in the order of the data
     for (int j = 0; j < n && want_seed; ++j) {
@@ -818,6 +836,25 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
     }
   }
   out["gradient"] = NumericVector(g.begin(), g.end());
+  if (want_rows) {
+    int nRows = 0;
+    for (int c = 0; c < K; ++c) nRows += (int) rowU[c].size();
+    NumericMatrix J(nRows, nGlobal);
+    NumericVector u(nRows);
+    int r0 = 0;
+    for (int c = 0; c < K; ++c) {
+      List pc = conds[c];
+      IntegerVector dg = pc["dir_global"];
+      const int nd = in[c].nd, m = (int) rowU[c].size();
+      for (int j = 0; j < m; ++j) {
+        u[r0 + j] = rowU[c][j];
+        for (int a = 0; a < nd; ++a)
+          if (dg[a] >= 0) J(r0 + j, dg[a]) = rowJ[c][(std::size_t) j * nd + a];
+      }
+      r0 += m;
+    }
+    out["rows"] = List::create(Named("jacobian") = J, Named("seeds") = u);
+  }
   if (build_hessian && sparse) out["hessian"] = sparseHessian(conds, in, hess, nGlobal);
   else if (build_hessian) {
     NumericMatrix Hm(nGlobal, nGlobal);

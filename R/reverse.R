@@ -1,10 +1,9 @@
 ## Reverse-mode helpers -----------------------------------------------------
 ## Copyright (C) 2026 Simon Beyer
 
-# A cotangent: `out` on the node's output matrix, `pars` on the node parameters,
-# both optional and additive. The trailing axis of extent K holds the cotangent
-# in slice 1 and the directional derivatives after it, or K seeds in seed mode.
-# `value`, per seed, is the value correction of refined sweeps below the node.
+# A cotangent, `out` on the output matrix of the node and `pars` on the node parameters, optional and additive;
+# the trailing axis holds the cotangent and the directional derivatives, or K seeds, and `value` per seed the
+# value correction of refined sweeps below the node.
 .ct <- function(out = NULL, pars = NULL, value = NULL) {
   if (!is.null(pars) && is.null(dim(pars)))
     pars <- matrix(pars, ncol = 1L, dimnames = list(names(pars), NULL))

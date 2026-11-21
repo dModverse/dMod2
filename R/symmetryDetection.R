@@ -77,7 +77,7 @@
 #'   first, reduces the directions found and then counts the values of the coordinates with the
 #'   output of a generic one and reconstructs the maps between them, as [discreteSymmetries()]
 #'   (needs msolve, implies `reconstruct = TRUE`). A model the global analysis does not handle
-#'   gets the reason in `info$discrete$unsupported` and a warning. Needs symident 0.15.0.
+#'   gets the reason in `info$discrete$unsupported` and a warning.
 #' @param globalOptions A list of arguments of the global analysis: `order`, `points`,
 #'   `timeout` and `budget` as in [discreteSymmetries()].
 #' @param discrete `FALSE` (default), `TRUE` or a list of arguments of
@@ -211,9 +211,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #' proven by a map of the states (`"exact"`). A model with directions is reduced by
 #' [symmetryReduction()] first and the reduced model is analyzed.
 #'
-#' @param object A `symmetrydetection` result from [symmetryDetection()] of a model
-#'   with one condition and no events, switches or unknown inputs, detected without
-#'   `equilibrate` and `reduceCQ`.
+#' @param object A `symmetrydetection` result from [symmetryDetection()].
 #' @param order Highest Taylor coefficient; `NULL` (default) twice the number of
 #'   coordinates.
 #' @param points Number of random points of the count in the domain, or a list of
@@ -373,7 +371,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.15.0"
+.symidentMin <- "0.17.0"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -419,7 +417,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                                         "display", "factor", "pins", "new_parameters",
                                         "solved_domain", "trafo", "totals",
                                         "state_components", "input_change", "jets", "map",
-                                        "point")) {
+                                        "point", "section", "state_maps", "fiber_coordinates")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
   for (i in seq_along(x))
@@ -633,8 +631,10 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
     d <- res$info$discrete
     for (k in c("fundamentalDomain", "limits")) d[k] <- list(chr(d[[k]]))
     if (!is.null(d$reduced))
-      d$reduced <- list(trafo = vec(d$reduced$trafo), fixed = chr(d$reduced$fixed),
-                        coordinates = chr(d$reduced$coordinates))
+      # one trafo, or one per condition
+      d$reduced <- list(trafo = if (is.null(names(d$reduced$trafo))) lapply(d$reduced$trafo, vec)
+                                else vec(d$reduced$trafo), fixed = chr(d$reduced$fixed),
+                        coordinates = chr(d$reduced$coordinates), section = vec(d$reduced$section))
     if (length(d$counts))
       d$counts <- do.call(rbind, lapply(d$counts, function(r)
         as.data.frame(lapply(r[c("complex", "real", "inDomain", "undecided")], function(v) if (is.null(v)) NA else v))))
@@ -667,9 +667,10 @@ print.symmetrydetection <- function(x, verbose = FALSE, width = getOption("width
     cat(sprintf("  %s [%s, %s]\n", paste(names(s$map), s$map, sep = " -> ", collapse = ", "), s$level, keeps))
   }
   if (length(domain)) cat("  fundamental domain:", paste(domain, collapse = ", "), "\n")
-  if (length(info$reduced$trafo))
-    cat("  on the model reduced by", paste(names(info$reduced$trafo), info$reduced$trafo, sep = " = ",
-                                         collapse = ", "), "\n")
+  # the section of the reduction: the coordinates it pins
+  pins <- info$reduced$section[as.character(info$reduced$section) != names(info$reduced$section)]
+  if (length(pins))
+    cat("  on the model reduced by", paste(names(pins), pins, sep = " = ", collapse = ", "), "\n")
   invisible()
 }
 

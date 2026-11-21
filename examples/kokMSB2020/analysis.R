@@ -360,7 +360,7 @@ table(stopReason = outframe$stopReason, converged = outframe$converged)
 ggplot(as.data.frame(outframe), aes(elapsed/60)) +
   geom_histogram(bins = 30) +
   scale_x_log10() +
-  theme_dMod() +
+  theme_dMod2() +
   labs(x = "wall time per fit [min]", y = "fits")
 
 # At the optimum the gradient is small, so the integration error at the
@@ -435,7 +435,7 @@ ggplot(.model, aes(time, value, color = ifn1, group = condition)) +
   facet_wrap(~name, scales = "free_y") +
   coord_cartesian(xlim = c(24, 30)) +
   .doses(na.value = "black") +
-  theme_dMod() +
+  theme_dMod2() +
   labs(x = "time [h]", y = "log signal [a.u.]", color = "prestimulation\n[U/ml]",
        title = "5000 U/ml at 24 h, black without prestimulation")
 
@@ -446,7 +446,7 @@ plotCombined(prediction, mydataL,
              name %in% c("USP18_Cyt", "tSTAT1_Cyt", "pSTAT1_Cyt", "pSTAT2_Cyt"),
              aesthetics = list(color = "experiment", linetype = "ifn2 > 0"), scales = "free_y") +
   geom_vline(xintercept = 24, linetype = "dotted") +
-  scale_color_dMod(limits = c("WT", "USP18kd", "USP18oe")) +
+  scale_color_dMod2(limits = c("WT", "USP18kd", "USP18oe")) +
   scale_linetype_manual(values = c(`FALSE` = "solid", `TRUE` = "dashed"), labels = c("no", "yes")) +
   labs(x = "time [h]", y = "log signal [a.u.]", color = "cell line", linetype = "dose at 24 h")
 
@@ -474,6 +474,6 @@ ggplot(sensitization, aes(dose, ratio)) +
   geom_rug(data = data.frame(dose = unique(kok$ifn1[.second(kok)])),
            aes(x = dose), inherit.aes = FALSE, sides = "b", color = "gray50") +
   scale_x_log10(breaks = 10^(-1:4), labels = scales::label_log()) +
-  theme_dMod() +
+  theme_dMod2() +
   labs(x = "prestimulation at 0 h [U/ml]",
        y = "ISRE response to 5000 U/ml at 24 h,\nrelative to no prestimulation")

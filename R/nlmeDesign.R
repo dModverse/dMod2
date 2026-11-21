@@ -49,10 +49,9 @@
             class = "emdesign")
 }
 
-## Per group, whether each sparse eta reaches the data of the group conditions, along the dependencies
-## of the parameter transformations, steady states, the ODE with events and the observables or
-## the error model to a measured name; the normal etas count as reaching. A piece without
-## equations counts as passing everything on, so that an eta is marked only where no path exists.
+## Per group whether each sparse eta reaches the data of the group, along the transformations, steady states,
+## the ODE with events, observables and error model to a measured name; normal etas reach. A piece without
+## equations passes everything on, so that an eta is marked only where no path exists.
 .etaReach <- function(design) {
   E <- design$etaNames
   sparse <- vapply(colnames(E), function(st) any(vapply(design$blocks, function(b)
@@ -68,12 +67,9 @@
   reach
 }
 
-## Which of `etas` reach the data of condition `cn`: a graph of named nodes in layers, the outer
-## parameters, the outputs of every transformation, the states, the observables and the error
-## model, searched in C++ (graph_reach) from every eta to the measured names. Every expression is
-## read with the names that are 0 in this condition set to 0 (.zeroOut()): a state that starts at 0,
-## whose right-hand side vanishes with the other zeros and that no event moves stays 0 and passes
-## nothing on. A piece without equations, such as a function written by hand, reaches all.
+## Which of `etas` reach the data of condition `cn`, by a search in C++ (graph_reach) over the layered names
+## with the names that are 0 in the condition set to 0 (.zeroOut()), so that a state held at 0 passes nothing
+## on. A piece without equations, such as a function written by hand, reaches all.
 .reachData <- function(design, cn, etas) {
   every <- setNames(rep(TRUE, length(etas)), etas)
   lv <- .fnLeaves(design$prdfn, cn)
@@ -226,11 +222,9 @@
   setNames(graph_reach(as.character(unlist(from)), as.character(unlist(to)), node(0L, etas), sinks), etas)
 }
 
-## The roots of a steady state (environment `env` of Pimpl()) each input moves: the states whose
-## equation holds the input, then every state whose equation holds a moved state and every state of
-## a conservation row with the input or a moved state. The other states solve a subsystem that holds
-## neither the input nor a moved state; where it lacks full structural column rank, the input moves
-## every root. Inputs in `zeros` are 0.
+## The roots of a steady state (`env` of Pimpl()) each input moves: the states whose equation or conservation
+## row holds it or a moved state; where the rest lacks full structural column rank, every root. Inputs in
+## `zeros` are 0.
 .pimplDepends <- function(env, zeros) {
   dep <- env$dependent
   rows <- env$all_exprs

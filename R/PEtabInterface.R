@@ -586,10 +586,9 @@ readPEtabTables <- function(yamlPath) {
 .petab_ss_time <- 1e10
 
 
-# Internal: one record list(id, dist, pars, lower, upper, scale, ...) per prior, or
-# NULL; v2 `priorDistribution` columns win over v1's. A `parameterScale*` prior
-# is on the optimized parameter; a plain one is on the linear parameter, and
-# `scale` is the scale of the optimized parameter it is evaluated through.
+# One record list(id, dist, pars, lower, upper, scale, ...) per prior, or NULL; v2 `priorDistribution`
+# columns win over v1's. A `parameterScale*` prior is on the optimized parameter, a plain one on the
+# linear parameter, evaluated through `scale`, the scale of the optimized parameter.
 .petab_parse_priors <- function(df, scales) {
 
   pick <- function(a, b)
@@ -721,12 +720,9 @@ readPEtabTables <- function(yamlPath) {
 }
 
 
-# Internal: the prior term of a PEtab objective on the -2 log scale, reported in
-# `attr(, "prior")`. A prior on the optimized parameter of a family with a dMod
-# constructor goes through it; the others and the truncation constant, which
-# leaves gradient and Hessian alone, are here. A prior on the linear parameter of
-# a log or log10 parameter is the prior density at the back-transformed value, without
-# a Jacobian term, as in other PEtab tools.
+# The prior term of a PEtab objective on the -2 log scale, in `attr(, "prior")`: a family with a dMod
+# constructor through it, the others and the truncation constant here. A prior on the linear value of a
+# log or log10 parameter is the density at the back-transformed value without a Jacobian, as in PEtab tools.
 .petab_prior_objective <- function(specs) {
 
   one <- function(sp) {

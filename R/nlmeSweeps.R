@@ -1,14 +1,11 @@
-# Second-order information of the mixed-effects objectives by forward over reverse: one forward
-# pass along the etas, several backward sweeps with seeds on the predicted values and sigmas of
-# the data rows. The etas of different units never meet in a condition, so the k-th eta of
-# every unit shares one tangent.
+# Second-order information of the mixed-effects objectives by forward over reverse: one forward pass along the
+# etas, backward sweeps seeded on the predictions and sigmas of the data rows. Etas of different units never
+# meet in a condition, so the k-th eta of every unit shares one tangent.
 
 
-## The forward pass along the colored eta directions of `units`, then a direction per parameter
-## in `along`: per condition of `conds` the prediction and error-model values with their tangents
-## and tapes, and per data row the prediction p, sigma s and their derivatives pd, sd along the
-## directions. Through the native chain where it covers the model (`native`, for a backward sweep
-## with `blocks` seed blocks), then without values and tapes.
+## The forward pass along the colored eta directions of `units` and one per parameter in `along`: per condition
+## the values with tangents and tapes, per data row p, s and their derivatives pd, sd; through the native chain
+## where it covers the model (`native`, for `blocks` seed blocks), then without values and tapes.
 .sweepForward <- function(design, full, fixed, units, cores = 1L, along = character(0),
                           conds = unique(unlist(lapply(units, `[[`, "conditions"), use.names = FALSE)),
                           blocks = 1L, chain = TRUE) {
@@ -51,10 +48,9 @@
        preds = preds, errs = errs, rows = unname(rows))
 }
 
-## The forward pass along the k-th tangent of the native full pass `fw` on the conditions `conds`,
-## for a backward sweep with `blocks` seed blocks: the parameter stages along that tangent anew,
-## the solution and the k-th tangent taken from `fw` without a solve. NULL where `fw` did not run
-## natively.
+## The forward pass along the k-th tangent of the native pass `fw` on `conds`, for `blocks` seed blocks: the
+## parameter stages anew, the solution and the k-th tangent from `fw` without a solve; NULL where `fw` did not
+## run natively.
 .sweepSlice <- function(design, full, fixed, fw, k, conds, blocks, cores) {
   nat <- fw$native
   if (is.null(nat)) return(NULL)
@@ -110,11 +106,9 @@
   rows
 }
 
-## The backward sweep of a forward pass `fw` with the seeds `seeds`, per condition a list of
-## `pred` and `sigma`, [rows, blocks (K + 1)], or these stacked over the conditions with `n` the
-## rows per condition: per block a seed and the seed derivatives along the K tangents. Per condition
-## the cotangent of the parameters it reaches, [parameters, blocks (K + 1)]: per block J' w and the
-## sum over rows of w Hess(f) v_k plus J' wdot_k.
+## The backward sweep of `fw` with `seeds` per condition, `pred` and `sigma` of [rows, blocks (K + 1)] (or
+## stacked, `n` rows per condition), each block a seed and the seed derivatives along the K tangents: per condition
+## the cotangent [parameters, blocks], per block J' w and the row sum of w Hess(f) v_k plus J' wdot_k.
 .sweepBackward <- function(fw, seeds, cores = 1L, blocks = 1L) {
   stacked <- is.matrix(seeds$pred)
   if (!is.null(fw$native)) {
@@ -251,14 +245,9 @@
 }
 
 
-## Per unit of `units` (with `eta` and `conditions`) by forward over reverse: `rows`, the exact
-## eta rows of the Hessian of the data term, and `traces`, the gradients grad tr(M H_u) of the
-## matrices in `Ms[[u]]`, H_u the Gauss-Newton Hessian of the data term in the unit's etas. All as
-## named over `reach`, the parameters the unit's conditions reach. Either one backward sweep along
-## all tangents with a seed block for the rows and one per eta direction for the traces
-## (`narrow = FALSE`), or per direction k a forward pass along it alone and a backward sweep with a
-## seed for row k and one per M (.sweepNarrow()), whose stores have two columns in place of K + 1;
-## NULL takes the narrow one where there are matrices M and few of them.
+## Per unit by forward over reverse `rows`, the exact eta rows of the data Hessian, and `traces`, grad tr(M H_u)
+## of the matrices `Ms[[u]]` with H_u the Gauss-Newton Hessian in the unit etas: one sweep along all tangents
+## (`narrow = FALSE`) or one per direction (.sweepNarrow()); NULL takes the narrow one for few matrices M.
 .sweepUnits <- function(design, full, fixed, units, Ms = NULL, cores = 1L, fw = NULL, narrow = NULL) {
   Ke <- max(1L, vapply(units, function(u) length(u$eta), 0L))
   nM <- max(0L, lengths(Ms))
@@ -274,10 +263,9 @@
   l_ <- function(i, j) lr[, i + 1L, j + 1L]
   if (narrow) return(.sweepNarrow(design, full, fixed, units, Ms, cores, fw, r, l_, unitOf))
   Ku <- rep(vapply(units, function(u) length(u$eta), 0L)[unitOf[fw$conds]], r$n)
-  # block 1, the data Hessian along every tangent: seed the loss gradient, the derivative
-  # L (pd, sd); block j + 1, for grad tr(M H_u) = sum_jk M_jk U_jk with symmetric M: seed
-  # 2 L J_j, and along tangent k the seeds of J_j' dL J_k, so that U has the derivatives
-  # through J and through L
+  # block 1, the data Hessian along every tangent: seed the loss gradient, derivative L (pd, sd); block j + 1,
+  # grad tr(M H_u) = sum_jk M_jk U_jk for symmetric M: seed 2 L J_j and along tangent k J_j' dL J_k, so that U
+  # has the derivatives through J and through L
   a <- r$pd; b <- r$sd
   sp <- ss <- matrix(0, length(r$p), B * (K + 1L))
   sp[, 1L] <- l_(1, 0); sp[, 1L + seq_len(K)] <- l_(2, 0) * a + l_(1, 1) * b
@@ -316,12 +304,9 @@
   })
 }
 
-## The rows and trace gradients of .sweepUnits() direction by direction. Along eta_k, from a
-## forward pass along it alone over the conditions whose unit has a k-th eta: row k of the Hessian
-## from the loss gradient seeded with the loss derivative L J_k along the tangent, and with M symmetric
-## sum_j M_jk U_jk from the seed 2 L J M_k with, along the tangent, J M_k' dL J_k. The rows `r` and
-## loss derivatives `l_` are those of the full pass `fw`; a matrix M that is 0 in every unit has no
-## seed.
+## The rows and trace gradients of .sweepUnits() per direction eta_k from a forward pass along it alone: row k
+## from the loss gradient seeded with L J_k, sum_j M_jk U_jk from the seed 2 L J M_k with J M_k' dL J_k along the
+## tangent. `r` and `l_` are those of `fw`; a matrix M that is 0 in every unit has no seed.
 .sweepNarrow <- function(design, full, fixed, units, Ms, cores, fw, r, l_, unitOf) {
   nM <- max(lengths(Ms))
   Msym <- lapply(Ms, function(ml) lapply(ml, function(Mm) (Mm + t(Mm)) / 2))
@@ -410,13 +395,9 @@
 }
 
 
-## The volume term sum_u log|H_u| of FOCEI by forward over reverse: the gradient in `outer` and
-## the mode shift d eta*/d theta = -H_ee^-1 H_eA per unit, H_u^-1 from `H_inv_list`, from the
-## eta rows of the joint Hessian and the trace gradient at M = H_u^-1 (`.sweepUnits()`). With
-## `curvature` also the volume Hessian from dH_u/dtheta, the trace gradients at the unit matrices:
-## -tr(H^-1 D_a H H^-1 D_b H) + tr(H^-1 d2P_ab), without the terms of the curvature of the
-## prediction in the etas. With `local` the shift and the Hessian of a unit have the columns of the
-## parameters it depends on only.
+## The volume term sum_u log|H_u| of FOCEI by forward over reverse (.sweepUnits()): the gradient in `outer`, the
+## shift -H_ee^-1 H_eA per unit and with `curvature` the Hessian -tr(H^-1 D_a H H^-1 D_b H) + tr(H^-1 d2P_ab);
+## with `local` the shift and Hessian of a unit only in the parameters it depends on.
 .volumeReverse <- function(design, full, fixed, outer, H_inv_list, cores = 1L, local = FALSE,
                            curvature = FALSE) {
   units <- .volumeUnits(design, full, fixed)

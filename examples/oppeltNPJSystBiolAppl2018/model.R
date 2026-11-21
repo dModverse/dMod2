@@ -194,8 +194,10 @@ sigma[turnover] <- 2
 mu["trigger_iIkk"] <- log(1 / 240)
 sigma["trigger_iIkk"] <- 2
 # the cells rest: a term that is zero on a stable resting state and reaches 100 where it loses
-# stability
-stability <- constraintStability(pSS, p)
+# stability, on a ramp of a tenth of the inverse time span of the data, wide enough for the model
+# of a fit step to see the boundary before the step crosses it
+rampWidth <- 0.1 / max(as.data.frame(data)$time)
+stability <- constraintStability(pSS, p, width = rampWidth)
 obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma) + stability
 
 

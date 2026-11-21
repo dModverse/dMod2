@@ -406,14 +406,9 @@ reml <- function(objfun, pars, errpars = NULL, fixed = NULL,
 
 ## Restricted likelihood of mixed-effects and alignment fits ---------------------------------
 
-## The term that integrates the parameters `mean` out of the likelihood under a flat prior by
-## Laplace, log|S / 2| - p log(2 pi) with S the Schur complement over the etas of the information
-## G = sum_r w_r a_r a_r' + C + P over the mean parameters and the etas: a_r the derivative of the
-## prediction of data row r, w_r the curvature of the row loss in the prediction with sigma held (the expected
-## one for Student-t readings), C the Hessian of the terms of the objective beside the data and P
-## the prior precision of the etas, at `full`, the outer parameters and the modes. With `deriv`
-## also the gradient of the term in the parameters `theta` of `full`, the others held:
-## sum_r q_r dw_r + tr(Gamma dP), q_r = a_r' Gamma a_r, Gamma = G^-1 minus the inverse eta blocks.
+## Laplace over `mean` under a flat prior, log|S / 2| - p log(2 pi), S the Schur complement over the etas of the
+## information G = sum_r w_r a_r a_r' + C + P at `full`; with `deriv` the gradient in `theta`, sum_r q_r dw_r +
+## tr(Gamma dP), q_r = a_r' Gamma a_r, Gamma = G^-1 minus the inverse eta blocks.
 .remlTerm <- function(design, full, fixed, mean, theta = character(0), deriv = TRUE, cores = 1L) {
   units <- if (length(.allEtas(design))) .volumeUnits(design, full, fixed) else list()
   V <- c(mean, unlist(lapply(units, `[[`, "eta")))

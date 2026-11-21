@@ -146,7 +146,7 @@ z[, "time"] <- c(-rev(zb[, "time"]), zf[-1, "time"])
 orbit <- data.frame(eps = z[, "time"], al = 10^z[, "al_l10"], gam = 10^z[, "gam_l10"])
 ggplot(orbit, aes(al, gam, color = eps)) + geom_path() + geom_point() +
   scale_x_log10() + scale_y_log10() +
-  scale_color_dMod_div(name = expression(epsilon)) + theme_dMod(base_size = 9)
+  scale_color_dMod2_div(name = expression(epsilon)) + theme_dMod2(base_size = 9)
 range(orbit$gam*orbit$al/(1 + orbit$al^2))
 
 pred0 <- as.data.frame(prd(times, truth, deriv = FALSE))
@@ -169,9 +169,9 @@ long <- do.call(rbind, pred)
 long$name <- factor(long$name, c("y", "mx", "my"), c("y [observed]", "mx", "my"))
 ggplot(long, aes(time, value, group = eps, color = eps)) +
   geom_line() + facet_wrap(~ name, ncol = 1, scales = "free_y") +
-  scale_color_dMod_div(name = expression(epsilon)) +
+  scale_color_dMod2_div(name = expression(epsilon)) +
   labs(title = "easy axis, alpha-gamma direction", x = "time [ns]", y = NULL) +
-  theme_dMod(base_size = 9)
+  theme_dMod2(base_size = 9)
 
 
 # –––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––––

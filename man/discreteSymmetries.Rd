@@ -14,9 +14,7 @@ discreteSymmetries(
 )
 }
 \arguments{
-\item{object}{A \code{symmetrydetection} result from \code{\link[=symmetryDetection]{symmetryDetection()}} of a model
-with one condition and no events, switches or unknown inputs, detected without
-\code{equilibrate} and \code{reduceCQ}.}
+\item{object}{A \code{symmetrydetection} result from \code{\link[=symmetryDetection]{symmetryDetection()}}.}
 
 \item{order}{Highest Taylor coefficient; \code{NULL} (default) twice the number of
 coordinates.}

@@ -52,10 +52,30 @@ the inner modes.}
 \describe{
 \item{\code{sd}}{start of the standard deviations of the random effects,
 default 0.3.}
-\item{\code{innerControl}}{the trust region of the modes; it stops where the
-Newton step is below \code{steptol}, default 1e-8.}
+\item{\code{inner}}{\code{"nested"} (default) solves the modes at every
+evaluation of the outer search; \code{"sqp"} takes \code{sqpIterlim} iterations of
+the inner search from the modes predicted along d eta / d theta, with
+value and gradient corrected to first order for the eta gradient left
+over, until the outer search stops, and then goes on nested from there,
+so that the estimates are those of the nested search. Applies to FOCEI
+and to spike-and-slab and Dirichlet-process random effects.}
+\item{\code{innerControl}}{the trust region of the modes: \code{rinit} and \code{rmax},
+the initial and largest radius (default 1 and 10); \code{iterlim}, default
+30 and over several groupings 100; \code{steptol}, default 1e-8, the Newton
+step at which it stops; \code{mtol}, default 1e-12, the predicted change of
+-2 log L, relative to -2 log L, at which a step on the boundary of the
+region stops it; \code{eigenFloorRelative}, default 1e-10, the floor of the
+eigenvalues of the inner Hessian relative to their mean (one grouping);
+\code{sqpIterlim}, default 2, the inner iterations per evaluation with
+\code{inner = "sqp"}. With spike-and-slab and Dirichlet-process random
+effects only \code{sqpIterlim} applies. Other entries are an error.}
 \item{\code{trustControl}}{the outer trust region; it stops where the
-predicted change of -2 log L is below \code{mtol}, default 1e-5.}
+predicted change of -2 log L is below \code{mtol}, default 1e-5. Takes
+\code{ftol}, \code{mtol}, \code{gtol} and \code{xtol} flat or in \code{tolControl}. With random
+effects over several groupings the outer search is \code{\link[=trust]{trust()}}, and
+every argument of \code{\link[=trust]{trust()}} passes, \code{hessianMethod}, \code{phases} and
+\code{qnControl} included; FOCEI of one grouping reads \code{rinit}, \code{rmax},
+\code{iterlim}, \code{ftol} and \code{mtol}. Other entries are an error.}
 \item{\code{secondOrderCorrection}}{the derivative of the volume term,
 default \code{TRUE}.}
 \item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume
@@ -71,7 +91,7 @@ standard deviation ends below 0.1 is dropped and the fit repeated from the
 estimates; where -2 log L rises by at most \code{boundary}, that fit is
 returned and names the hyperparameter in \code{boundary}.}
 \item{\code{quadrature}, \code{saem}, \code{sparseFit}}{lists of the sections
-Quadrature, SAEM and Sparse random effects.}
+Quadrature, SAEM and Sparse random effects; other entries are an error.}
 }}
 
 \item{fits}{Number of starts. Default 20.}

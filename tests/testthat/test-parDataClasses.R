@@ -174,3 +174,13 @@ test_that("covariates of a datalist are the condition grid", {
   expect_identical(covariates(dl), attr(dl, "condition.grid"))
   expect_null(covariates(structure(list(), class = c("datalist", "list"))))
 })
+
+test_that("c() of a parvec names unnamed operands by their argument names", {
+  pv <- as.parvec(c(a = 1, b = 2))
+  out <- c(pv, z = 3, w = c(4, 5))
+  expect_s3_class(out, "parvec")
+  expect_identical(names(out), c("a", "b", "z", "w1", "w2"))
+  expect_equal(unclass(out)[["z"]], 3)
+  expect_identical(names(c(pv, z = 3)), c("a", "b", "z"))
+  expect_identical(names(c(pv, d = c(d = 7))), c("a", "b", "d"))
+})

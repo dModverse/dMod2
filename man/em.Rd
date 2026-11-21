@@ -46,10 +46,30 @@ the inner modes.}
 \describe{
 \item{\code{sd}}{start of the standard deviations of the random effects,
 default 0.3.}
-\item{\code{innerControl}}{the trust region of the modes; it stops where the
-Newton step is below \code{steptol}, default 1e-8.}
+\item{\code{inner}}{\code{"nested"} (default) solves the modes at every
+evaluation of the outer search; \code{"sqp"} takes \code{sqpIterlim} iterations of
+the inner search from the modes predicted along d eta / d theta, with
+value and gradient corrected to first order for the eta gradient left
+over, until the outer search stops, and then goes on nested from there,
+so that the estimates are those of the nested search. Applies to FOCEI
+and to spike-and-slab and Dirichlet-process random effects.}
+\item{\code{innerControl}}{the trust region of the modes: \code{rinit} and \code{rmax},
+the initial and largest radius (default 1 and 10); \code{iterlim}, default
+30 and over several groupings 100; \code{steptol}, default 1e-8, the Newton
+step at which it stops; \code{mtol}, default 1e-12, the predicted change of
+-2 log L, relative to -2 log L, at which a step on the boundary of the
+region stops it; \code{eigenFloorRelative}, default 1e-10, the floor of the
+eigenvalues of the inner Hessian relative to their mean (one grouping);
+\code{sqpIterlim}, default 2, the inner iterations per evaluation with
+\code{inner = "sqp"}. With spike-and-slab and Dirichlet-process random
+effects only \code{sqpIterlim} applies. Other entries are an error.}
 \item{\code{trustControl}}{the outer trust region; it stops where the
-predicted change of -2 log L is below \code{mtol}, default 1e-5.}
+predicted change of -2 log L is below \code{mtol}, default 1e-5. Takes
+\code{ftol}, \code{mtol}, \code{gtol} and \code{xtol} flat or in \code{tolControl}. With random
+effects over several groupings the outer search is \code{\link[=trust]{trust()}}, and
+every argument of \code{\link[=trust]{trust()}} passes, \code{hessianMethod}, \code{phases} and
+\code{qnControl} included; FOCEI of one grouping reads \code{rinit}, \code{rmax},
+\code{iterlim}, \code{ftol} and \code{mtol}. Other entries are an error.}
 \item{\code{secondOrderCorrection}}{the derivative of the volume term,
 default \code{TRUE}.}
 \item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume
@@ -65,7 +85,7 @@ standard deviation ends below 0.1 is dropped and the fit repeated from the
 estimates; where -2 log L rises by at most \code{boundary}, that fit is
 returned and names the hyperparameter in \code{boundary}.}
 \item{\code{quadrature}, \code{saem}, \code{sparseFit}}{lists of the sections
-Quadrature, SAEM and Sparse random effects.}
+Quadrature, SAEM and Sparse random effects; other entries are an error.}
 }}
 
 \item{cores}{Number of cores over the groups and conditions inside the
@@ -89,9 +109,20 @@ part of the Hessian kept apart (see \code{\link[=objlist]{objlist()}}).}
 \item{\code{information}}{with spike-and-slab random effects the
 empirical information that gives the standard errors: \code{G / (G - 1)}
 times the sum of the outer products of the centered scores of the \code{G}
-groups, plus half the Hessian of the conditions without random
-effects.}
-\item{\code{converged}, \code{iterations}}{}
+groups, of rank at most \code{G - 1}, plus half the curvature of the terms
+without random effects (conditions outside every group, priors) by
+their expected information (\code{hessian = "expected"}, see \link{dModfn}),
+positive semidefinite. It is not the Hessian of the marginal -2 log L
+and is singular where the scores and those terms span fewer directions
+than there are parameters. \link[=vcov.em]{vcov()} inverts it where it is
+positive definite.}
+\item{\code{converged}, \code{iterations}}{the convergence of the outer search
+and the iterations; with several groupings also \code{phaseIterations} of
+\code{\link[=trust]{trust()}}.}
+\item{\code{innerIterations}, \code{sqpIterations}}{with FOCEI and sparse random
+effects the iterations of the inner searches summed over the groups and
+evaluations, and with \code{control$inner = "sqp"} the outer iterations on
+inexact modes.}
 \item{\code{Omega}, \code{omega}}{the covariance of the normal random effects,
 their standard deviations and correlations with standard errors.}
 \item{\code{random}}{per group the modes with conditional standard errors;
@@ -132,14 +163,14 @@ Methods:
 \describe{
 \item{\code{"focei"}}{Laplace approximation at the conditional modes with the
 exact derivative of the volume term. The default, and the method for
-spike-and-slab and Dirichlet-process random effects (at most 14
-groups) and for several groupings.}
+several groupings; also for spike-and-slab and Dirichlet-process
+random effects (at most 14 groups).}
 \item{\code{"quadrature"}}{adaptive sparse-grid quadrature around the modes,
 started from the FOCEI fit; section Quadrature.}
 \item{\code{"laplaceEM"}}{ECM on the Laplace approximation with the
 covariance-corrected update of \code{Omega}.}
-\item{\code{"saem"}}{stochastic-approximation EM, also for Dirichlet-process
-random effects; section SAEM.}
+\item{\code{"saem"}}{stochastic-approximation EM, also for spike-and-slab and
+Dirichlet-process random effects; section SAEM.}
 }
 }
 \section{Quadrature}{
@@ -152,17 +183,27 @@ in \verb{phi = X beta + eta}. Entries of \code{control$quadrature}:
 \item{\code{tol}}{allowed change of -2 log L by the next level, default 0.1,
 split over the groups; each group takes the lowest level from the current
 stage of the group up within \code{tol / G} and never a lower one than before.
-\code{Inf} keeps the
-levels of the stages.}
+Where the next level exceeds \code{maxNodes}, the change from the level below
+is the estimate. \code{Inf} keeps the levels of the stages.}
 \item{\code{levels}}{the stages, default \code{K + 1} with \code{K} the number of random
 effects of a group; level \code{K + s} integrates polynomials of total
 degree \verb{2 s + 1} exactly.}
-\item{\code{maxLevel}}{highest level, default \code{K + 8}.}
+\item{\code{maxLevel}, \code{maxNodes}}{highest level, default \code{K + 8}, and the
+largest node count of a level per group, default 1000. A group whose
+error exceeds \code{tol / G} at the highest level within both is capped.
+Column \code{capped} of \code{stageTrace} counts the capped groups; attribute
+\code{"levels"} of \code{stageTrace} and the \code{certificate} list level, level error
+and cap per group.}
 \item{\code{tolDecrement}}{a stage ends when a Newton step on the rebuilt
-nodes would lower -2 log L by less than this, default 1e-4, or than the
-nodes resolve.}
+nodes would lower -2 log L by less than this, default 1e-4
+(\code{stopReason} \code{"decrement"}), or when -2 log L rose after a step on nodes
+of unchanged levels, so the step lies below what the levels resolve
+(\code{"resolution"}). \code{converged} means stationary at the levels reached,
+capped ones included; the fit returns the iterate of lowest -2 log L on
+the highest levels.}
 \item{\code{maxEcmPerStage}, \code{cm1Control}, \code{maxCm1Iter}}{rebuilds per stage
-(default 10), \code{\link[=trust]{trust()}} settings and iterations of a step (default 30).}
+(default 10, \code{stopReason} \code{"iterlim"} where they run out), \code{\link[=trust]{trust()}}
+settings and iterations of a step (default 30).}
 \item{\code{pruneTol}}{nodes whose weight lies this much in log below the
 largest are dropped, default \code{Inf}.}
 \item{\code{certificate}}{\code{FALSE}, or a list of \code{points} (default 256) and
@@ -186,23 +227,55 @@ models. Entries of \code{control$saem}:
 \item{\code{nBurnin}, \code{nEM}}{at most that many burn-in and averaging
 iterations, default 200 and 300.}
 \item{\code{nMcmc}, \code{nLaplace}}{random-walk and independence steps per
-iteration, default 3 each.}
+iteration, default 3 each; \code{nLaplace} with normal random effects alone.}
 \item{\code{laplaceEvery}, \code{laplaceScale}}{iterations between refreshes of the
-modes, default 5, and the factor of the proposal covariance, default
-1.5.}
+modes, default 5, with normal random effects alone, and the factor of the
+proposal covariance, default 1.5, also of the slab value of an indicator
+move.}
 \item{\code{window}, \code{mcTol}}{the burn-in ends when no parameter has a
 significant slope over the last \code{window} iterations (default 25), the
 averaging when the expected rise of -2 log L from the Monte Carlo error
 is below \code{mcTol} (default 0.05).}
-\item{\code{particles}}{with Dirichlet-process random effects the particles of
-the sequential importance sampling of -2 log L, default 500.}
+\item{\code{particles}}{the particles of the sequential importance sampling
+of -2 log L with Dirichlet-process random effects, default 500.}
 \item{\code{cm1Control}}{\code{\link[=trust]{trust()}} settings of the Newton steps of the other
 parameters, default one iteration per SAEM iteration.}
+\item{\code{nFlip}}{with spike-and-slab random effects the sweeps over the
+indicators per iteration, default 1.}
+\item{\code{nodes}}{Gauss-Hermite nodes of the slab mass of an indicator, 3
+(default) or 5.}
+\item{\code{integral}}{\code{"importance"} takes -2 log L by importance sampling
+over the partitions also where Dirichlet-process random effects beside
+spike-and-slab ones allow the exact sum.}
 }
-With Dirichlet-process random effects a Gibbs sweep draws the clusters of
-the groups (Neal 2000, algorithm 8), the averaging runs \code{nEM} iterations,
-and the reported clusters are the most frequent partition of the late
-draws.
+With normal random effects alone, -2 log L at the estimate is the
+quadrature of level \code{K + 2}, and \code{maxLevel}, \code{maxNodes} and \code{pruneTol} of
+\code{control$quadrature} apply to it.
+With spike-and-slab or Dirichlet-process random effects the averaging runs
+\code{nEM} iterations. A sweep of Metropolis-Hastings moves visits every
+indicator of a group once, in random order and for all groups at once,
+with the slab value integrated out: the other slab values of the group
+follow along the regression of the local quadratic model of the data, the
+slab mass on that line is a Gauss-Hermite sum with the exact model at the
+nodes, and the proposal draws the indicator from the resulting conditional
+inclusion probability and the slab value from the local Gaussian; the
+independence Metropolis-Hastings step keeps the posterior exact. \code{nMcmc}
+random-walk steps move the slab values of every group jointly. \code{prob} and
+\code{tau} follow in closed form from the averaged conditional inclusion
+probabilities and slab second moments of the sweeps, not from the drawn
+indicators; an estimated \code{tau} starts at least at the largest group mode
+under the slab alone. An \code{em} fit as \code{init} starts the chain at the
+selected random effects of that fit instead, the way to check a FOCEI
+optimum by SAEM. The acceptance rates of births, deaths and random-walk
+steps per iteration are columns of \code{stageTrace}. A Gibbs sweep draws
+the clusters of the Dirichlet-process random effects (Neal 2000,
+algorithm 8). The reported clusters are the most frequent partition of
+the late draws, a spike-and-slab random effect is selected where the mean
+conditional inclusion probability of the late sweeps is above 1/2, \code{p0}
+one minus that mean. -2 log L is that of \code{method = "focei"} at the
+estimate; with Dirichlet-process random effects alone, or beside
+spike-and-slab ones on more than 14 groups, by importance sampling over the
+partitions, with \code{valueSE}.
 }
 
 \section{Sparse random effects}{
@@ -215,8 +288,9 @@ nodes; else it is the expectation consistent (EC) approximation, and a
 trial point at which EC does not converge is a failed evaluation. Entries of \code{control$sparseFit}:
 \describe{
 \item{\code{maxOuter}}{iterations of the trust region, default 200.}
-\item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings; \code{ftol}, \code{mtol} and \code{gtol}
-of the \code{tolControl} there also end the search of the modes (else 1e-10).}
+\item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings of the outer search. The modes
+are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
+below 1e-8; of \code{control$innerControl} only \code{sqpIterlim} applies.}
 }
 }
 

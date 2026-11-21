@@ -103,7 +103,7 @@ By default the adjoint follows the step grid of the states without error control
 | `gradtol` | the share of each step in the gradient added to that test as absolute tolerance |
 
 A trust region converges with a gradient whose error is small relative to the gradient
-[@carter1991global; @conn2000trust]. `gradtol` bounds the error of every step in absolute terms,
+[@carter1991global; @nocedal2006numerical]. `gradtol` bounds the error of every step in absolute terms,
 and the errors of the steps add up over the sweep; near the optimum, where the gradient vanishes,
 a fixed `gradtol` does not keep the relative error small
 ([checking the sweep](https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html)).

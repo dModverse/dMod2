@@ -34,7 +34,7 @@ at zero and treated as exogenous. Default \code{NULL}.}
 \code{c("A + pA = totA", "B + pB = totB")} or as \code{c("A + pA", "B + pB")}.
 Default \code{NULL}: a basis is derived, or taken from \code{\link[=customTotals]{customTotals()}} when the
 \code{eqnlist} has them. Each given quantity keeps one of the states in it free, the
-first where possible.}
+first one on a cycle of the graph of states.}
 
 \item{neglect}{Character vector, states and rate parameters the solver must
 not solve for. Default \code{NULL}.}
@@ -53,8 +53,8 @@ in that state, may be solved for the positive root instead of for a rate constan
 introduces \code{sqrt()} terms. Default \code{FALSE}.}
 
 \item{priority}{Character vector of state and rate-parameter names, most
-preferred first: named states are solved earlier, named rate parameters
-are preferred as pivots. Default \code{NULL}.}
+preferred first: named states are solved rather than kept free and solved
+earlier, named rate parameters are preferred as pivots. Default \code{NULL}.}
 
 \item{resolve}{Logical, whether the result is passed through
 \code{\link[=resolveRecurrence]{resolveRecurrence()}} so that no equation refers to another. Default
@@ -70,12 +70,18 @@ free parameter.
 }
 \description{
 Computes symbolic steady-state expressions for use in a parameter
-transformation, following the AlyssaPetit method [1], [2]. Each balance
-equation, or a combination of balances, is solved for a state or a rate
-constant such that the result is a ratio of sums of positive terms. A state
-whose equation was spent on a rate constant stays a free parameter;
-compartment volumes are fixed. The solver is a Python module called through
-\pkg{reticulate}; it needs \pkg{numpy}, \pkg{sympy} and \pkg{scipy}.
+transformation, following the AlyssaPetit method [1], [2]. States whose
+own balance gives a ratio of positive sums are solved from it first. The
+cycles of the graph of states left are cut then: at a state of a conserved
+quantity, or at a state whose balance is solved for a rate constant of one
+flux side instead. Each cut state stays a free parameter. The remaining
+states and the rate constants of the cuts are then solved, each from a
+balance or a combination of balances in amounts, such that the result is a
+ratio of sums of positive terms. Only if that fails, a flux side with
+separate rate constants is cut as well: the fluxes of the side keep free
+ratios, the new parameters \verb{r_<state>_<j>}. Compartment volumes are fixed.
+The solver is a Python module called through \pkg{reticulate}; it needs
+\pkg{numpy}, \pkg{sympy} and \pkg{scipy}.
 }
 \examples{
 \dontshow{if (requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("sympy") && reticulate::py_module_available("scipy")) withAutoprint(\{ # examplesIf}

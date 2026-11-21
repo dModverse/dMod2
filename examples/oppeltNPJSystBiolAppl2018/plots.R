@@ -44,22 +44,22 @@ ggplot(course, aes(time, value)) +
   scale_x_continuous(breaks = seq(0, 360, 60)) +
   scale_y_log10() +
   labs(x = "time [min]", y = "nuclear IκBα [total NFκB]") +
-  theme_dMod()
+  theme_dMod2()
 
-## ---- changes
-# the changes of the rate constants by the compounds, from compounds.R: color the mode, opacity
-# the evidence against the spike, -log10 p0 cut at 6; a circle where p0 < 0.05
-changes <- readRDS("results/compounds.rds")$random
-changes$eta <- factor(changes$eta, levels = unique(changes$eta))
-changes$evidence <- -log10(pmax(changes$p0, 1e-6))
-ggplot(changes, aes(group, eta)) +
-  geom_tile(aes(fill = mode, alpha = evidence), color = "white") +
-  geom_point(data = changes[changes$p0 < 0.05, ], aes(shape = "p0 < 0.05"), size = 1.8, fill = "white") +
-  scale_y_discrete(limits = rev) +
-  scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b") +
-  scale_alpha(range = c(0.1, 1), limits = c(0, 6), breaks = 1:3,
-              labels = c("1, p0 = 0.1", "2, p0 = 0.01", "3, p0 = 0.001"),
-              guide = guide_legend(override.aes = list(fill = "gray30"))) +
-  scale_shape_manual(values = 21) +
-  labs(x = NULL, y = NULL, fill = "change [log]", alpha = "evidence, -log10 p0", shape = NULL) +
-  theme_dMod()
+## ---- dcfpaths
+# the differences by DCF over the strength of the L1 penalty, from dcf.R, in color those kept at
+# the selected strength
+dcfL1 <- readRDS("results/dcfL1.rds")
+paths <- data.frame(lambda = rep(as.numeric(rownames(dcfL1$path)), ncol(dcfL1$path)),
+                    difference = rep(sub("^eta_(.*)_DCF$", "\\1", colnames(dcfL1$path)),
+                                     each = nrow(dcfL1$path)),
+                    value = as.vector(dcfL1$path))
+paths <- paths[paths$lambda > 0, ]
+kept <- sub("^eta_(.*)_DCF$", "\\1", dcfL1$selected)
+ggplot(paths, aes(lambda, value, group = difference)) +
+  geom_vline(xintercept = dcfL1$lambda, linetype = 2, color = "gray50") +
+  geom_line(data = paths[!paths$difference %in% kept, ], color = "gray75") +
+  geom_line(data = paths[paths$difference %in% kept, ], aes(color = difference)) +
+  scale_x_log10(breaks = 10^(-2:4), labels = trimws(format(10^(-2:4), scientific = FALSE, drop0trailing = TRUE))) +
+  labs(x = expression(lambda), y = expression(Delta ~ "[log]"), color = NULL) +
+  theme_dMod2()

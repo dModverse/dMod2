@@ -7,7 +7,6 @@
 evalConditionResidual(
   dataI,
   predictionI,
-  pars,
   errfn = NULL,
   fixed = NULL,
   cn = NULL,
@@ -23,8 +22,6 @@ evalConditionResidual(
 \code{name}, \code{time}, \code{value} and \code{sigma}.}
 
 \item{predictionI}{\link{prdframe} of that condition.}
-
-\item{pars}{Named numeric parameter vector.}
 
 \item{errfn}{Optional \link{obsfn}, the error model. Default \code{NULL}.}
 

@@ -1,8 +1,6 @@
 ## ---- Native chain ---------------------------------------------------------------------------
-## normL2(data, g * x * p, errmodel = e) evaluated per condition in C++: the transformations by
-## their own compiled functions, the batch solve of the model, the observables, the error model
-## and the data term (src/chain_kernel.cpp). A plan per signature holds the indices; whatever it
-## does not cover takes the R path, as does everything under options(dMod2.evaluation = "R").
+## normL2(data, g * x * p, errmodel = e) per condition in C++ (src/chain_kernel.cpp), a plan per signature
+## holding the indices; what it does not cover, and all under options(dMod2.evaluation = "R"), takes the R path.
 
 ## Whether objectives, FOCEI and the quadrature evaluate in C++: getOption("dMod2.evaluation"),
 ## "C++" (the default) or "R".
@@ -13,11 +11,9 @@
   identical(ev, "C++")
 }
 
-## A stage of the transformation for the parfn kernel `k` on the names `prev` before it:
-## list(kind, fn, vjp, inNames, fnout, through, guessNames, state, order), a compiled function
-## (kind 0) or a steady state (kind 1) whose native `state` solves the roots, with derivatives of
-## order `order`. With `vjp` the vector-Jacobian product of the sweeps (`"_vjp_ad"`) or of the
-## adjoint (`"_vjp"`). NULL where the kernel cannot take part.
+## A stage for the parfn kernel `k` on the names `prev` before it: a compiled function (kind 0) or a steady
+## state (kind 1) with derivatives of order `order`, and with `vjp` the vector-Jacobian product of the sweeps
+## (`"_vjp_ad"`) or of the adjoint (`"_vjp"`). NULL where the kernel cannot take part.
 .chainStage <- function(k, prev, cond, deriv2, order, vjp = NULL) {
   addr <- function(name) tryCatch(getNativeSymbolInfo(name)$address, error = function(e) NULL)
   if (isTRUE(attr(k, "pexpl", exact = TRUE))) {
@@ -43,10 +39,9 @@
        order = as.integer(order))
 }
 
-## The stages of the parfn kernels `kernels`, in the order they apply, from the outer names
-## `outer`: their indices into the vector before each, with the passed entries reduced to what a
-## later stage or the names `needed` read; `o` the outer names the first one reads, `final` the
-## names after the last. NULL where a kernel cannot take part.
+## The stages of `kernels` in the order they apply from the outer names `outer`, passing only what a later
+## stage or `needed` reads; `o` the outer names the first reads, `final` the names after the last. NULL where
+## a kernel cannot take part.
 .chainStages <- function(kernels, outer, needed, cond, deriv2, order, vjp = NULL) {
   st <- vector("list", length(kernels))
   prev <- outer
@@ -72,14 +67,9 @@
   list(stages = st, o = o, final = prev)
 }
 
-## The plan for the objective of `spec` (an entry of attr(obj, "l2spec")) on `conds`: per
-## condition the free outer names `free[[i]]`, the fixed ones `fixedNames` behind them, and the
-## positions of the condition directions among `global`. With `times`, a list per condition, the plan of the
-## prediction and error model on these times, without the data. With `tangents` the plan of the
-## sweeps of forward over reverse instead: the solve on `times` along that many tangents of the
-## free names, the data rows, and the backward solve with `seeds` seeds. With `adjoint` the plan of
-## the adjoint gradient: values forward keeping the checkpoints, the backward solve of first order
-## and the raw `_vjp` entries. NULL where a piece cannot take part.
+## The plan of the objective `spec` (of attr(obj, "l2spec")) on `conds` with free names `free[[i]]`, then
+## `fixedNames`; with `times` the prediction and error model on them, with `tangents` the sweeps of forward over
+## reverse, with `adjoint` the adjoint gradient. NULL where a piece cannot take part.
 .chainPlan <- function(spec, conds, free, fixedNames, global, deriv, deriv2 = FALSE, times = NULL,
                        tangents = 0L, seeds = 0L, adjoint = FALSE) {
   prd <- spec$prdfn
@@ -245,21 +235,21 @@
 }
 
 ## The data term of `plan` at `values`, the outer values per condition or one vector for all, in
-## the order of the plan, with `sparse` the Hessian as the slots of chain_data(); NULL where the
-## chain fails, for the R path to report it.
-.chainEval <- function(plan, values, deriv, deriv2, hessian, local, cores, bloq, df, sparse = FALSE) {
+## the order of the plan, with `sparse` the Hessian as the slots of chain_data() and with `rows` the
+## data rows; NULL where the chain fails, for the R path to report it.
+.chainEval <- function(plan, values, deriv, deriv2, hessian, local, cores, bloq, df, sparse = FALSE,
+                       rows = FALSE) {
   pre <- .chainParams(plan, values, deriv, deriv2, cores)
   raw <- if (!is.null(pre)) .chainSolveRun(plan, pre$args, cores)
   if (is.null(raw)) return(NULL)
   chain_data(plan, pre, raw, deriv, deriv2, hessian, local, as.integer(cores), bloq, if (is.finite(df)) df else 0,
-             FALSE, sparse)
+             FALSE, sparse, rows)
 }
 
 
-## The data term of `ctx` per request in C++: request j on condition `conds[j]`, which may repeat,
-## at the free values `parsList[[j]]` and fixed values `fixedList[[j]]` (NULL for none, the same
-## names in every request), with value, chi2 and, with `deriv`, gradient and Hessian in the names of
-## the free values; NULL where the chain does not cover the model or fails, for the R path.
+## The data term of `ctx` in C++ per request j on condition `conds[j]` at `parsList[[j]]`, fixed values
+## `fixedList[[j]]`: value, chi2 and with `deriv` gradient and Hessian in the free names; NULL where the chain
+## does not cover the model or fails.
 .chainLocal <- function(ctx, conds, parsList, fixedList, deriv, deriv2, cores, bloq, df) {
   if (is.null(ctx) || !.evalCpp() || !length(conds)) return(NULL)
   fixedList <- fixedList %||% rep(list(NULL), length(conds))
