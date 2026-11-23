@@ -168,15 +168,15 @@ best <- as.parvec(fits)
 
 fits[1, c("value", "converged", "iterations")]
 #>      value converged iterations
-#> 1 256.0645      TRUE         48
+#> 1 256.0645      TRUE         66
 best
 #> Parameter vector:
 #>         TCA_CELL :  0.640397
 #>         TCA_CANA :  0.290498
 #>         K_IMPORT : -0.712177
-#>   K_EXPORT_SINUS : -0.860138
-#>         K_REFLUX : -0.744269
-#>    K_EXPORT_CANA : -1.01912
+#>   K_EXPORT_SINUS : -0.860144
+#>         K_REFLUX : -0.744263
+#>    K_EXPORT_CANA : -1.01911
 #>                S :  1.93089
 #>    K_REFLUX_OPEN :  1.71784
 #> 
@@ -213,14 +213,14 @@ plotProfile(profiles, mode == "data")
 
 confint(profiles, val.column = "data")
 #>                          name      value      lower      upper
-#> K_EXPORT_CANA   K_EXPORT_CANA -1.0191202 -2.2432551 -0.5640131
-#> K_EXPORT_SINUS K_EXPORT_SINUS -0.8601384       -Inf -0.6216848
-#> K_IMPORT             K_IMPORT -0.7121769 -0.8129339 -0.6231451
-#> K_REFLUX             K_REFLUX -0.7442694 -1.5463914 -0.3295158
-#> K_REFLUX_OPEN   K_REFLUX_OPEN  1.7178424  1.2327518        Inf
+#> K_EXPORT_CANA   K_EXPORT_CANA -1.0191117 -2.2432552 -0.5640135
+#> K_EXPORT_SINUS K_EXPORT_SINUS -0.8601437       -Inf -0.6216848
+#> K_IMPORT             K_IMPORT -0.7121767 -0.8129339 -0.6231449
+#> K_REFLUX             K_REFLUX -0.7442631 -1.5463901 -0.3295161
+#> K_REFLUX_OPEN   K_REFLUX_OPEN  1.7178431  1.2327520        Inf
 #> S                           S  1.9308943       -Inf        Inf
-#> TCA_CANA             TCA_CANA  0.2904978       -Inf        Inf
-#> TCA_CELL             TCA_CELL  0.6403966       -Inf        Inf
+#> TCA_CANA             TCA_CANA  0.2904975       -Inf        Inf
+#> TCA_CELL             TCA_CELL  0.6403968       -Inf        Inf
 ```
 
 `S`, `TCA_CELL` and `TCA_CANA` are flat, a structural

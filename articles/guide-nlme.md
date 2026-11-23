@@ -297,14 +297,14 @@ round(sapply(fits, function(f) c(f$argument[names(fit$argument)], minus2logL = f
 ```
 
     #>               focei quadrature    saem
-    #> Ka            0.464      0.464   0.456
-    #> V             3.460      3.460   3.452
+    #> Ka            0.464      0.458   0.456
+    #> V             3.460      3.454   3.452
     #> Cl            1.012      1.012   1.014
     #> sigma        -0.365     -0.365  -0.369
-    #> omega_Ka_Ka  -0.455     -0.455  -0.458
-    #> omega_V_V    -1.977     -1.977  -2.003
-    #> omega_Cl_Cl  -1.336     -1.336  -1.305
-    #> minus2logL  359.403    360.754 360.750
+    #> omega_Ka_Ka  -0.455     -0.456  -0.458
+    #> omega_V_V    -1.977     -2.003  -2.003
+    #> omega_Cl_Cl  -1.336     -1.327  -1.305
+    #> minus2logL  359.403    360.736 360.750
 
 ``` r
 
@@ -323,27 +323,39 @@ quadrature: Laplace’s method is no bound.
 ``` r
 
 fits$quadrature$stageTrace[, c("level", "ecmIter", "OFV", "decrement", "resolution", "maxLevel", "nodes")]
-#>   level ecmIter      OFV  decrement resolution maxLevel nodes
-#> 1     4       1 360.7537 0.02511167 0.03793249        5   216
+#>   level ecmIter      OFV    decrement resolution maxLevel nodes
+#> 1     4       1 360.7537 2.511155e-02 0.03793258        5   216
+#> 2     4       2 360.7360 2.069641e-05 0.03716135        5   216
 fits$quadrature$certificate
-#>    group level quadrature importance         se        khat   levelError  flag
-#> 1      1     5   33.03330   33.03301 0.02410581 -0.07519053 9.408602e-04 FALSE
-#> 2     10     5   28.19364   28.17603 0.01995943 -0.07414228 5.747749e-06 FALSE
-#> 3     11     5   23.58603   23.57722 0.02147607  0.11302022 6.562171e-03 FALSE
-#> 4     12     5   29.67134   29.67827 0.02298445  0.04569984 1.713038e-03 FALSE
-#> 5      2     5   38.27781   38.28608 0.02371650 -0.04000564 8.041358e-04 FALSE
-#> 6      3     5   20.48229   20.46302 0.02091582 -0.04901759 3.861348e-03 FALSE
-#> 7      4     5   31.41522   31.41893 0.02258385 -0.22256689 3.670869e-04 FALSE
-#> 8      5     5   49.67818   49.69364 0.02501296 -0.21613602 3.721449e-03 FALSE
-#> 9      6     5   27.88497   27.88237 0.02132903  0.33201224 5.527878e-03 FALSE
-#> 10     7     4   22.42612   22.41126 0.02089849 -0.11726035 6.074177e-03 FALSE
-#> 11     8     5   27.19411   27.18768 0.02047366  0.06988404 3.507729e-03 FALSE
-#> 12     9     5   28.91073   28.91295 0.02755326  0.06009504 4.846870e-03 FALSE
+#>    group level quadrature importance         se        khat   levelError capped
+#> 1      1     5   32.90385   32.90340 0.02411012 -0.07228639 0.0008212683  FALSE
+#> 2     10     5   28.07147   28.05387 0.02001133 -0.06603975 0.0001283021  FALSE
+#> 3     11     5   23.71219   23.70321 0.02139642  0.10476665 0.0065223733  FALSE
+#> 4     12     5   29.60478   29.61167 0.02302448  0.04149025 0.0016092704  FALSE
+#> 5      2     5   38.26724   38.27522 0.02364013 -0.04894503 0.0009505509  FALSE
+#> 6      3     5   20.51039   20.49096 0.02087663 -0.05571955 0.0038963377  FALSE
+#> 7      4     5   31.37884   31.38223 0.02253427 -0.22478000 0.0001964500  FALSE
+#> 8      5     5   49.61472   49.63003 0.02501056 -0.21762335 0.0036150673  FALSE
+#> 9      6     5   28.05938   28.05605 0.02098541  0.31447183 0.0057162384  FALSE
+#> 10     7     4   22.42988   22.41580 0.02083017 -0.09619858 0.0049346222  FALSE
+#> 11     8     5   27.25380   27.24710 0.02036513  0.05859222 0.0036082926  FALSE
+#> 12     9     5   28.92942   28.93133 0.02751150  0.06553239 0.0051625770  FALSE
+#>     flag
+#> 1  FALSE
+#> 2  FALSE
+#> 3  FALSE
+#> 4  FALSE
+#> 5  FALSE
+#> 6  FALSE
+#> 7  FALSE
+#> 8  FALSE
+#> 9  FALSE
+#> 10 FALSE
+#> 11 FALSE
+#> 12 FALSE
 ```
 
-Here one rebuild ends the fit: the Newton decrement on the rebuilt nodes
-lies below what the nodes resolve, so the estimate of FOCEI stands, with
-the value of the quadrature. No group is flagged.
+Here the fit takes 2 rebuilds. No group is flagged.
 
 ## Model diagnostics
 

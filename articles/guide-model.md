@@ -511,7 +511,7 @@ c(value = value$value, data = attr(value, "data"), prior = attr(value, "prior"))
 #>      value       data      prior 
 #> -488.67736 -511.16897   22.49162
 max(abs(value$gradient))
-#> [1] 0.007025491
+#> [1] 0.007024153
 ```
 
 Prediction and data, with one standard deviation of the error model as a
