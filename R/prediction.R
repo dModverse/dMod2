@@ -26,10 +26,11 @@
 #' * `fixed`: named numeric vector of parameters that enter the evaluation
 #'   without derivatives. Default `NULL`.
 #' * `deriv`: `TRUE` (default) returns first derivatives with respect to
-#'   `pars`.
+#'   `pars`. Every function of the chain has to be built with
+#'   `derivMode = "forward"`, see [odemodel()], [Y()] and [P()].
 #' * `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-#'   Every function of the chain has to be built for them, see the arguments
-#'   `deriv2` and `derivMode` of [odemodel()], [Y()] and [P()].
+#'   Every function of the chain has to be built with
+#'   `derivMode = "forward-forward"`.
 #' * `hessian`: objective functions only, see the table below. Default
 #'   `NULL`.
 #' * `sweep`: objective functions only. `"forward"` (default) propagates the
@@ -193,7 +194,7 @@ NULL
 #'   `attr(, "deriv")`, `[time, state, parameter]`, when `deriv = TRUE`, and
 #'   the second-order sensitivities in `attr(, "deriv2")`,
 #'   `[time, state, parameter, parameter]`, when `deriv2 = TRUE` (`cppDE`
-#'   backend, model built with `deriv2 = TRUE`).
+#'   backend, model built with `derivMode = "forward-forward"`).
 #'
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Xf()] for predictions without sensitivities, [controls()],
@@ -240,7 +241,7 @@ Xs.deSolve <- function(odemodel, forcings = NULL, events = NULL, names = NULL, c
   func <- odemodel$func
   extended <- odemodel$extended
   if (is.null(extended))
-    stop("Xs: the odemodel is built without sensitivities; use Xf() or odemodel(deriv = TRUE).",
+    stop("Xs: the odemodel was built without derivMode = \"forward\"; use Xf() or rebuild.",
          call. = FALSE)
   
   myforcings <- forcings
@@ -483,7 +484,6 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   extended2 <- odemodel$extended2
   reversed <- odemodel$reversed
   reversed2 <- odemodel$reversed2
-  if (is.null(extended)) warning("Element 'extended' empty. ODE model does not contain sensitivities.")
 
   # Extract metadata
   paramNames <- c(attr(func, "variables"), attr(func, "parameters"))
@@ -640,14 +640,14 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   # sensErrCon of a forward solve.
   sensSec <- function() isTRUE(sensOpts()$sensErrCon)
 
-  # Second order forward exists only where it was built, and only on cppDE.
+  # Each derivative order exists only where odemodel() built it.
   pickModel <- function(deriv, deriv2) {
     if (!deriv) return(func)
+    if (is.null(extended)) .notBuilt("Xs: the odemodel", "forward")
     if (!deriv2) return(extended)
     if (is.null(extended2))
-      stop("an exact Hessian forward needs the forward-over-forward object; ",
-           "rebuild via odemodel(..., deriv2 = TRUE), which needs ",
-           "backend = \"cppDE\". Backwards it is ",
+      stop("Xs: the odemodel was built without derivMode = \"forward-forward\", which an ",
+           "exact Hessian forward needs (backend = \"cppDE\"). Backwards it is ",
            "derivMode = \"forward-reverse\" instead.", call. = FALSE)
     extended2
   }
@@ -655,8 +655,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE,
                   keepStore = FALSE) {
 
-    if (deriv2 && !has_deriv2)
-      stop("Xs.cppDE: model was compiled without deriv2; rebuild via odemodel(..., deriv2 = TRUE).")
+    if (deriv || deriv2) pickModel(TRUE, deriv2)
     if (deriv2 && !deriv) deriv <- TRUE
     forcs <- forcsOf(controls$forcings)
 
@@ -713,8 +712,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
   P2Xbatch <- function(times, parsList, fixedList, deriv, deriv2, cores,
                        keepStore = FALSE) {
 
-    if (deriv2 && !has_deriv2)
-      stop("Xs.cppDE: model was compiled without deriv2; rebuild via odemodel(..., deriv2 = TRUE).")
+    if (deriv || deriv2) pickModel(TRUE, deriv2)
     if (deriv2 && !deriv) deriv <- TRUE
     forcs <- forcsOf(controls$forcings)
 
@@ -1393,21 +1391,20 @@ Xd <- function(data, condition = NULL) {
 #' @param cores Number of parallel jobs used to generate and compile the sources
 #' when `g` is a list, on Windows only to compile them; `NULL` auto-detects.
 #' Ignored for a single observation function, which is one source either way.
-#' @param derivMode Which derivative code to build, any of `"forward"`
-#'   (default), `"reverse"` and `"forward-reverse"`.
-#'   * `"forward"`: the Jacobian; without it the function returns no `deriv`
-#'     attribute.
-#'   * `"reverse"`: needed for `sweep = "reverse"`.
+#' @param derivMode The derivatives to build, one or more of `"forward"`
+#'   (default), `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or
+#'   `"none"`, as in [odemodel()].
+#'   * `"forward"`: the Jacobian, `attr(, "deriv")`,
+#'     `[time, observable, parameter]`.
+#'   * `"reverse"`: the vector-Jacobian product of `sweep = "reverse"`.
+#'   * `"forward-forward"`: the second derivatives, `attr(, "deriv2")`,
+#'     `[time, observable, parameter, parameter]`, for `deriv2 = TRUE`.
 #'   * `"forward-reverse"`: needed for `sweep = "reverse"` with
 #'     `deriv2 = TRUE`.
-#' @param deriv Logical. If `TRUE` (default), build the first derivatives,
-#'   returned as `attr(, "deriv")`, `[time, observable, parameter]`, when the
-#'   call has `deriv = TRUE` and `derivMode` contains `"forward"`. `FALSE`
-#'   returns none, whatever the call asks.
-#' @param deriv2 Logical. If `TRUE`, build the second derivatives, returned
-#'   as `attr(, "deriv2")`, `[time, observable, parameter, parameter]`, when
-#'   the call has `deriv2 = TRUE`; on a function built without them that call
-#'   is an error. Requires `deriv = TRUE`. Default `FALSE`.
+#'   * `"none"`: values only.
+#'
+#'   The second-order directions build `"forward"` as well. A call that asks
+#'   for a derivative not built is an error.
 #' @param outdir Character. Directory for the generated C++ source and the
 #'   shared object, default `getOption("dMod2.outdir")`, else the working
 #'   directory.
@@ -1427,10 +1424,9 @@ Xd <- function(data, condition = NULL) {
 Y <- function(g, f = NULL, states = NULL, parameters = NULL,
               condition = NULL, attachInput = FALSE,
               compile = FALSE, modelname = NULL, verbose = FALSE,
-              cores = NULL, deriv = TRUE, deriv2 = FALSE,
-              derivMode = "forward", outdir = .dmodOutdir()) {
+              cores = NULL, derivMode = "forward", outdir = .dmodOutdir()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
+  derivMode <- .matchDerivMode(derivMode)
 
   # A named list of observable sets builds one obsfn per condition, generated
   # in parallel and compiled once, the way `P()` handles a trafo list.
@@ -1443,17 +1439,15 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       Y(g[[i]], f = f, states = states, parameters = parameters,
         condition = names(g)[i], attachInput = attachInput,
         compile = FALSE, modelname = modelname, verbose = verbose,
-        deriv = deriv, deriv2 = deriv2, derivMode = derivMode, outdir = outdir),
+        derivMode = derivMode, outdir = outdir),
       mc.cores = if (.Platform$OS.type == "windows") 1L else cores))
     if (compile)
       compile(result, cores = cores, output = modelname, verbose = verbose)
     return(result)
   }
 
-  emit_d1 <- isTRUE(deriv)
-  emit_d2 <- isTRUE(deriv2)
-  if (emit_d2 && !emit_d1)
-    stop("Y(deriv2 = TRUE) requires deriv = TRUE.", call. = FALSE)
+  emit_d1 <- !identical(derivMode, "none")
+  emit_d2 <- "forward-forward" %in% derivMode
 
   if (is.null(f) && is.null(states) && is.null(parameters))
     stop("Not all three arguments f, states and parameters can be NULL")
@@ -1503,7 +1497,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
       outdir     = outdir,
       verbose    = verbose,
       convenient = FALSE,
-      derivMode  = derivMode,
+      derivMode  = .cppFUNMode(derivMode),
       deriv      = emit_d1,
       deriv2     = emit_d2
     )
@@ -1531,9 +1525,8 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
                   .ad_out = NULL, .fixedObs = NULL) {
 
     needStates(out)
-    if (deriv2 && !emit_d2)
-      stop("Y() was built with deriv2 = FALSE; rebuild Y() with deriv2 = TRUE.", call. = FALSE)
-    if (!emit_d1) deriv <- FALSE
+    if (deriv2 && !emit_d2) .notBuilt("Y()", "forward-forward")
+    if (deriv && !use_ad) .notBuilt("Y()", "forward")
     if (deriv2 && !deriv) deriv <- TRUE
 
     attachInput <- controls$attachInput
@@ -1677,9 +1670,7 @@ Y <- function(g, f = NULL, states = NULL, parameters = NULL,
     needStates(out)
     w <- .asCtOut(cotangent)
     if (is.null(gEval$vjp))
-      stop("Y(): the reverse mode needs a vector-Jacobian product; rebuild ",
-           "with Y(..., derivMode = c(\"forward\", \"reverse\"), ",
-           "compile = TRUE).", call. = FALSE)
+      .notBuilt("Y()", "reverse")
     params <- c(unclass(pars), unclass(fixed))
     fixedObsParams <- .intersectU(c(attr(pars, "fixed"), names(fixed)), obsParams)
 

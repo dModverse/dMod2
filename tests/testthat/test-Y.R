@@ -89,13 +89,13 @@ test_that("Y derivMode 'reverse' and 'forward' agree on a nonlinear observable",
 
   times <- c(0, 1, 2, 5)
   pars  <- c(A = 1.4, k = 0.3)
-  o_sym  <- prd_sym (times = times, pars = pars, deriv = TRUE)
-  o_dual <- prd_dual(times = times, pars = pars, deriv = TRUE)
+  o_sym  <- prd_sym (times = times, pars = pars, deriv = FALSE)
+  o_dual <- prd_dual(times = times, pars = pars, deriv = FALSE)
 
   expect_equal(o_sym$C1[, "y"], o_dual$C1[, "y"], tolerance = 1e-12)
   # The reverse build has no forward entries, the forward one does.
-  expect_null(attr(o_sym$C1, "deriv"))
-  expect_false(is.null(attr(o_dual$C1, "deriv")))
+  expect_error(prd_sym(times = times, pars = pars), "Y\\(\\) was built without derivMode = \"forward\"")
+  expect_false(is.null(attr(prd_dual(times = times, pars = pars)$C1, "deriv")))
 })
 
 

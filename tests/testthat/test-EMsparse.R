@@ -23,7 +23,7 @@
     dir.create(dir, showWarnings = FALSE)
     withr::local_dir(dir)
     # second derivatives forward over forward and forward over reverse
-    .dm <- c("forward", "reverse", "forward-reverse")
+    .dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
     groups <- paste0("L", 1:5)
     tab <- data.frame(ID = rep(groups, each = 2), dose = rep(c(0.5, 2), 5),
                       row.names = paste0(rep(groups, each = 2), c("a", "b")))
@@ -33,52 +33,52 @@
       insert(tr, "x <- exp(x)", x = c("k", "A", "s"))
     }
     g <- Y(c(y = "A * exp(-k * dose)"), f = NULL, parameters = c("A", "k", "dose"), compile = FALSE,
-           modelname = "sp_g", deriv2 = TRUE, derivMode = .dm)
-    err <- Y(c(y = "s"), g, attachInput = FALSE, compile = FALSE, modelname = "sp_err", deriv2 = TRUE, derivMode = .dm)
+           modelname = "sp_g", derivMode = .dm)
+    err <- Y(c(y = "s"), g, attachInput = FALSE, compile = FALSE, modelname = "sp_err", derivMode = .dm)
     pn <- P(insert(base(), A ~ 1 + (1 | ID)), method = "explicit", compile = FALSE, modelname = "sp_normal",
-            deriv2 = TRUE, derivMode = .dm)
+            derivMode = .dm)
     pks <- P(insert(base(), k ~ 1 + (1 | gr(ID, dist = spikeSlab()))), method = "explicit", compile = FALSE,
-             modelname = "sp_konly", deriv2 = TRUE, derivMode = .dm)
+             modelname = "sp_konly", derivMode = .dm)
     ps <- P(insert(base(), k + A ~ 1 + (1 | gr(ID, dist = spikeSlab()))), method = "explicit",
-            compile = FALSE, modelname = "sp_slab", deriv2 = TRUE, derivMode = .dm)
+            compile = FALSE, modelname = "sp_slab", derivMode = .dm)
     psk <- P(insert(base(), k ~ 1 + (1 | gr(ID, dist = dirichletProcess()))), method = "explicit",
-             compile = FALSE, modelname = "sp_dpcenter", deriv2 = TRUE, derivMode = .dm)
+             compile = FALSE, modelname = "sp_dpcenter", derivMode = .dm)
     psm <- P(insert(base(), k ~ 1 + (1 | gr(ID, dist = spikeSlab())), A ~ 1 + (1 | ID)), method = "explicit",
-             compile = FALSE, modelname = "sp_slabmixed", deriv2 = TRUE, derivMode = .dm)
+             compile = FALSE, modelname = "sp_slabmixed", derivMode = .dm)
     pskm <- P(insert(base(), k ~ 1 + (1 | gr(ID, dist = dirichletProcess())), A ~ 1 + (1 | ID)),
-              method = "explicit", compile = FALSE, modelname = "sp_slabclmixed", deriv2 = TRUE, derivMode = .dm)
+              method = "explicit", compile = FALSE, modelname = "sp_slabclmixed", derivMode = .dm)
     psk2 <- P(insert(base(), k + A ~ 1 + (1 | gr(ID, dist = dirichletProcess()))), method = "explicit",
-              compile = FALSE, modelname = "sp_slabcltwo", deriv2 = TRUE, derivMode = .dm)
+              compile = FALSE, modelname = "sp_slabcltwo", derivMode = .dm)
     linear <- function(dist, a = a ~ 1 + (1 | ID)) {
       tr <- branch(define(NULL, "x <- x", x = c("a", "b")), table = tab)
       tr <- define(tr, "dose <- d", d = dose)
       insert(tr, a, b ~ 1 + (1 | gr(ID, dist = dist)))
     }
     gl <- Y(c(y = "a + b * dose"), f = NULL, parameters = c("a", "b", "dose"), compile = FALSE,
-            modelname = "sp_glin", deriv2 = TRUE, derivMode = .dm)
-    pls <- P(linear(spikeSlab()), method = "explicit", compile = FALSE, modelname = "sp_linslab", deriv2 = TRUE, derivMode = .dm)
-    pld <- P(linear(dirichletProcess()), method = "explicit", compile = FALSE, modelname = "sp_lindp", deriv2 = TRUE, derivMode = .dm)
+            modelname = "sp_glin", derivMode = .dm)
+    pls <- P(linear(spikeSlab()), method = "explicit", compile = FALSE, modelname = "sp_linslab", derivMode = .dm)
+    pld <- P(linear(dirichletProcess()), method = "explicit", compile = FALSE, modelname = "sp_lindp", derivMode = .dm)
     # a second observable z = b + c that only the first two groups measure
     gz <- Y(c(y = "a + b * dose", z = "b + c"), f = NULL, parameters = c("a", "b", "c", "dose"), compile = FALSE,
-            modelname = "sp_gz", deriv2 = TRUE, derivMode = .dm)
+            modelname = "sp_gz", derivMode = .dm)
     reachP <- function(dist, name) {
       tr <- branch(define(NULL, "x <- x", x = c("a", "b", "c")), table = tab)
       tr <- define(tr, "dose <- d", d = dose)
       P(insert(tr, a ~ 1 + (1 | ID), b + c ~ 1 + (1 | gr(ID, dist = dist))), method = "explicit", compile = FALSE,
-        modelname = name, deriv2 = TRUE, derivMode = .dm)
+        modelname = name, derivMode = .dm)
     }
     pz <- list(spikeSlab = reachP(spikeSlab(), "sp_zslab"), dirichletProcess = reachP(dirichletProcess(), "sp_zdp"))
     # a state X that a stimulus u drives from 0, u = 0 in the groups L1 and L2, read with a drift w
     # that only a state at 0 multiplies
     tabu <- cbind(tab, u = ifelse(tab$ID %in% c("L1", "L2"), 0, 1))
     xu <- Xs(odemodel(eqnvec(X = "s * u - dg * X", W = "w * X - dg * W"), modelname = "sp_xu", compile = FALSE,
-                      deriv2 = TRUE, derivMode = .dm))
-    gu <- Y(c(y = "X + W + c0"), xu, compile = FALSE, modelname = "sp_gu", deriv2 = TRUE, derivMode = .dm)
+                      derivMode = .dm))
+    gu <- Y(c(y = "X + W + c0"), xu, compile = FALSE, modelname = "sp_gu", derivMode = .dm)
     tru <- branch(define(NULL, "x <- x", x = c("s", "w", "dg", "c0", "u", "X", "W")), table = tabu)
     tru <- define(tru, "u <- v", v = u)
     tru <- insert(insert(tru, "X <- 0"), "W <- 0")
     pu <- P(insert(tru, c0 ~ 1 + (1 | ID), s + w ~ 1 + (1 | gr(ID, dist = spikeSlab()))), method = "explicit",
-            compile = FALSE, modelname = "sp_pu", deriv2 = TRUE, derivMode = .dm)
+            compile = FALSE, modelname = "sp_pu", derivMode = .dm)
     compile(g, err, pn, pks, ps, psk, psm, pskm, psk2, gl, pls, pld, gz, pz$spikeSlab, pz$dirichletProcess, xu, gu,
             pu, output = "emsparse_models", cores = 2)
     set.seed(4)

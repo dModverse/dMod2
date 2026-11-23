@@ -64,20 +64,20 @@ test_that("the nodes integrate a normal of the posterior precision exactly", {
     dir.create(dir, showWarnings = FALSE, recursive = TRUE)
     withr::local_dir(dir)
     g <- Y(c(y = "intercept"), f = NULL, parameters = "intercept", compile = FALSE,
-           modelname = "quad_obs", deriv2 = TRUE)
+           modelname = "quad_obs", derivMode = "forward-forward")
     groups <- c("s1", "s2", "s3")
     tab <- data.frame(ID = rep(groups, each = 2), w = rep(c(-1, 0, 1.5), each = 2),
                       row.names = paste0(rep(groups, each = 2), c("a", "b")))
     tr <- branch(define(NULL, "intercept <- exp(mu)"), table = tab)
     tr <- insert(tr, mu ~ 1 + (1 | ID))
-    p <- P(tr, method = "explicit", compile = FALSE, modelname = "quad_p", deriv2 = TRUE)
+    p <- P(tr, method = "explicit", compile = FALSE, modelname = "quad_p", derivMode = "forward-forward")
     # a group covariate on mu and the parameter s of an error model sigma = exp(s)
     tw <- branch(define(NULL, "x <- x", x = c("intercept", "s")), table = tab)
     tw <- insert(tw, "intercept <- exp(mu)")
     tw <- insert(tw, mu ~ w + (1 | ID))
-    pw <- P(tw, method = "explicit", compile = FALSE, modelname = "quad_pw", deriv2 = TRUE)
+    pw <- P(tw, method = "explicit", compile = FALSE, modelname = "quad_pw", derivMode = "forward-forward")
     err <- Y(c(y = "exp(s)"), g, attachInput = FALSE, compile = FALSE, modelname = "quad_err",
-             deriv2 = TRUE)
+             derivMode = "forward-forward")
     compile(g, p, pw, err, output = "quadrature_models", cores = 2)
     values <- c(2.0, 2.3, 1.6, 1.5, 2.6, 2.4)
     data <- as.datalist(data.frame(name = "y", time = 0, sigma = 0.3, value = values,

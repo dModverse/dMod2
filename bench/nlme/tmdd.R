@@ -9,7 +9,7 @@ dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 nsets <- 20
 nstart <- 100
 cores <- max(1L, min(20L, parallel::detectCores() - 2L))
-dm <- c("forward", "reverse", "forward-reverse")
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
 ## Model and design ----------------------------------------------------------------------
 net <- eqnlist() |>
@@ -37,9 +37,9 @@ subjects <- sprintf("S%02d", 1:45)
 table <- data.frame(ID = subjects, dose = rep(doses, each = 9), row.names = subjects)
 # the free drug in log10 coordinates and the solver tolerances 1e-10, as in the demo
 x <- Xs(odemodel(log10Transform(as.eqnvec(net), states = "C"), modelname = "tmddBench", compile = FALSE,
-                 deriv2 = TRUE, derivMode = dm), options = list(atol = 1e-10, rtol = 1e-10))
-g <- Y(c(lcp = "log(10) * C_l10"), x, modelname = "tmddBench_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-e <- Y(c(lcp = "sigma"), g, attachInput = FALSE, modelname = "tmddBench_e", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+                 derivMode = dm), options = list(atol = 1e-10, rtol = 1e-10))
+g <- Y(c(lcp = "log(10) * C_l10"), x, modelname = "tmddBench_g", compile = FALSE, derivMode = dm)
+e <- Y(c(lcp = "sigma"), g, attachInput = FALSE, modelname = "tmddBench_e", compile = FALSE, derivMode = dm)
 trafo <- branch(define(NULL, "x <- x", x = c("CL", "V", "Q", "Vp", "kon", "koff", "kint", "ksyn", "kdeg",
                                              "C_l10", "Cp", "R", "RC", "sigma")), table = table)
 trafo <- insert(trafo, "x <- y", x = c("C_l10", "Cp", "RC"), y = c("log10(dose / V)", "0", "0"))
@@ -48,7 +48,7 @@ trafo <- insert(trafo, "ksyn <- kdeg * R0")
 trafo <- insert(trafo, "dose <- d", d = dose)
 trafo <- insert(trafo, "x <- exp(x)", x = c(names(truth), "sigma"))
 trafo <- insert(trafo, CL + V + R0 ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", modelname = "tmddBench_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", modelname = "tmddBench_p", compile = FALSE, derivMode = dm)
 compile(x, g, e, p, output = "tmddBench")
 random <- randomEffects(p)
 # second derivatives forward over forward; quadrature up to level 5

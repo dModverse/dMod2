@@ -50,7 +50,7 @@ hessianSourceSettings <- list(
   # a descent on gradients that cost a fraction of a forward one. `sweep` rides
   # in the same list and reaches the objective through trust()'s dots. Needs a
   # model built with derivMode = c("forward", "forward-reverse") and an
-  # observation and transformation chain built with deriv2 = TRUE.
+  # observation and transformation chain built with derivMode = "forward-forward".
   sr1_ex_rev  = list(hessianMethod = "sr1", sweep = "reverse",
                      qnControl = list(hessianInit = "exact")),
   # The same, and a stalled phase fetches a fresh curvature rather than ending.

@@ -11,10 +11,10 @@ reactions <- eqnlist() |>
   setCompartmentVolume(unit = "1") |>
   addReaction("Ag", "Cc", "Ka * Ag", "absorption") |>
   addReaction("Cc", "", "Cl * Cc", "elimination", rateCompartment = "unit")
-dm <- c("forward", "reverse", "forward-reverse")
-x <- Xs(odemodel(reactions, modelname = "theo", compile = FALSE, deriv2 = TRUE, derivMode = dm))
-g <- Y(c(cp = "Cc"), x, modelname = "theo_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-e <- Y(c(cp = "sigma"), g, attachInput = FALSE, modelname = "theo_e", compile = FALSE, deriv2 = TRUE,
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
+x <- Xs(odemodel(reactions, modelname = "theo", compile = FALSE, derivMode = dm))
+g <- Y(c(cp = "Cc"), x, modelname = "theo_g", compile = FALSE, derivMode = dm)
+e <- Y(c(cp = "sigma"), g, attachInput = FALSE, modelname = "theo_e", compile = FALSE,
        derivMode = dm)
 data(Theoph, package = "datasets")
 Theoph$Subject <- as.character(Theoph$Subject)
@@ -28,7 +28,7 @@ trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "Ag", "Cc", "sigma
   insert("Cc <- 0") |>
   insert("x <- exp(x)", x = c("Ka", "V", "Cl", "sigma")) |>
   insert(Ka + V + Cl ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", modelname = "theo_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", modelname = "theo_p", compile = FALSE, derivMode = dm)
 compile(x, g, e, p, output = "theo")
 random <- randomEffects(p)
 obj <- normL2(data, g * x * p, errmodel = e)

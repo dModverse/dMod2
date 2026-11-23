@@ -36,7 +36,7 @@
 #'   with other terms keeps the value only, so the attribute is read from a call
 #'   of the term itself.
 #'
-#' @param pSS A parfn of [Pimpl()], built with `deriv2 = TRUE`.
+#' @param pSS A parfn of [Pimpl()], built with `derivMode = "forward-forward"`.
 #' @param p The parfn whose output `pSS` reads, or `NULL` where `pSS` reads the
 #'   parameters of the objective.
 #' @param weight \eqn{w}, the value of the term where the real part of an

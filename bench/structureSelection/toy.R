@@ -13,8 +13,8 @@ alpha    <- 0.05
 fitsPath <- 4
 
 ## Model ----------------------------------------------------------------------------------
-x <- Xs(odemodel(eqnvec(x = "-p * x"), modelname = "toySel", compile = FALSE, deriv2 = TRUE))
-g <- Y(eqnvec(y = "x"), x, modelname = "toySel_obs", compile = FALSE, attachInput = FALSE, deriv2 = TRUE)
+x <- Xs(odemodel(eqnvec(x = "-p * x"), modelname = "toySel", compile = FALSE, derivMode = "forward-forward"))
+g <- Y(eqnvec(y = "x"), x, modelname = "toySel_obs", compile = FALSE, attachInput = FALSE, derivMode = "forward-forward")
 types <- c("c1", "c2", "c3")
 tab <- data.frame(type = types, row.names = types)
 base <- function() insert(branch(define(NULL, "x <- x", x = c("x", "p")), table = tab), "x <- 1")
@@ -22,11 +22,11 @@ base <- function() insert(branch(define(NULL, "x <- x", x = c("x", "p")), table 
 # Hauber et al.: fold changes r_c2, r_c3 to the reference c1
 trH <- insert(base(), "p <- 10^lp")
 for (ct in types[-1]) trH <- insert(trH, paste0("lp <- lp + r_", ct), conditionMatch = paste0("^", ct, "$"))
-pH <- P(trH, method = "explicit", modelname = "toySel_h", compile = FALSE, deriv2 = TRUE)
+pH <- P(trH, method = "explicit", modelname = "toySel_h", compile = FALSE, derivMode = "forward-forward")
 # EM: a deviation of lp per type, shared by clusters of types
 trS <- insert(base(), "p <- 10^lp")
 pS <- P(insert(trS, lp ~ 1 + (1 | gr(type, dist = dirichletProcess()))), method = "explicit",
-        modelname = "toySel_s", compile = FALSE, deriv2 = TRUE)
+        modelname = "toySel_s", compile = FALSE, derivMode = "forward-forward")
 compile(g, x, pH, pS, output = "toySel")
 
 truth <- c(lp = -1.5, r_c2 = 0.2, r_c3 = 0.3)

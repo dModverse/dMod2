@@ -10,7 +10,7 @@ options(dMod2.outdir = "build")
 cores <- max(1L, min(20L, parallel::detectCores() - 2L))
 nstart <- 100L
 # second derivatives forward over reverse for FOCEI, forward over forward for the reported Hessian
-dm <- c("forward", "reverse", "forward-reverse")
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
 # fits are saved in results/cache.rds under a key and read from there when present; delete the
 # file to fit everything again
@@ -112,9 +112,9 @@ theoNet <- eqnlist() |>
   addReaction("Ag", "Cc", "Ka * Ag", "absorption") |>
   addReaction("Cc", "", "Cl * Cc", "elimination", rateCompartment = "unit")
 theoNet
-theoX <- Xs(odemodel(theoNet, modelname = "pm_theoph", compile = FALSE, deriv2 = TRUE, derivMode = dm))
-theoG <- Y(c(cp = "Cc"), theoX, modelname = "pm_theoph_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-theoE <- Y(c(cp = "sigma"), theoG, attachInput = FALSE, modelname = "pm_theoph_e", compile = FALSE, deriv2 = TRUE,
+theoX <- Xs(odemodel(theoNet, modelname = "pm_theoph", compile = FALSE, derivMode = dm))
+theoG <- Y(c(cp = "Cc"), theoX, modelname = "pm_theoph_g", compile = FALSE, derivMode = dm)
+theoE <- Y(c(cp = "sigma"), theoG, attachInput = FALSE, modelname = "pm_theoph_e", compile = FALSE,
            derivMode = dm)
 subjects <- sort(unique(Theoph$Subject))
 theoTable <- data.frame(ID = subjects, dose = tapply(Theoph$Dose * Theoph$Wt, Theoph$Subject, `[`, 1)[subjects],
@@ -124,7 +124,7 @@ theoTrafo <- insert(theoTrafo, "Ag <- dose", dose = dose)
 theoTrafo <- insert(theoTrafo, "Cc <- 0")
 theoTrafo <- insert(theoTrafo, "x <- exp(x)", x = c("Ka", "V", "Cl", "sigma"))
 theoTrafo <- insert(theoTrafo, Ka + V + Cl ~ 1 + (1 | ID))
-theoP <- P(theoTrafo, method = "explicit", modelname = "pm_theoph_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+theoP <- P(theoTrafo, method = "explicit", modelname = "pm_theoph_p", compile = FALSE, derivMode = dm)
 compileSeconds <- c(theophylline = system.time(compile(theoX, theoG, theoE, theoP,
                                                        output = "pm_theoph_all"))[["elapsed"]])
 theoObj <- normL2(theoData, theoG * theoX * theoP, errmodel = theoE)
@@ -167,13 +167,13 @@ warfNet <- eqnlist() |>
   addReaction("", "PCA", "kout * pca0 * IC50 / (IC50 + Cc)", "synthesis") |>
   addReaction("PCA", "", "kout * PCA", "degradation")
 warfNet
-warfX <- Xs(odemodel(warfNet, modelname = "pm_warf", compile = FALSE, deriv2 = TRUE, derivMode = dm))
-warfG <- Y(c(cp = "Cc", pca = "PCA"), warfX, modelname = "pm_warf_g", compile = FALSE, deriv2 = TRUE,
+warfX <- Xs(odemodel(warfNet, modelname = "pm_warf", compile = FALSE, derivMode = dm))
+warfG <- Y(c(cp = "Cc", pca = "PCA"), warfX, modelname = "pm_warf_g", compile = FALSE,
            derivMode = dm)
 # the error of cp combined from an absolute and a relative part, positive also where the solver
 # leaves cp at or below 0
 warfE <- Y(c(cp = "sqrt(sigma_cp_abs^2 + (sigma_cp_rel * cp)^2)", pca = "sigma_pca"), warfG,
-           attachInput = FALSE, modelname = "pm_warf_e", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+           attachInput = FALSE, modelname = "pm_warf_e", compile = FALSE, derivMode = dm)
 warfTable <- attr(warfData, "condition.grid")
 warfTable$ID <- rownames(warfTable)
 warfTrafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "IC50", "kout", "pca0", "Ag", "Cc", "PCA",
@@ -184,7 +184,7 @@ warfTrafo <- insert(warfTrafo, "PCA <- pca0")
 warfTrafo <- insert(warfTrafo, "x <- exp(x)", x = c("Ka", "V", "Cl", "IC50", "kout", "pca0", "sigma_cp_abs",
                                                     "sigma_cp_rel", "sigma_pca"))
 warfTrafo <- insert(warfTrafo, V + Cl + pca0 + kout ~ 1 + (1 | ID))
-warfP <- P(warfTrafo, method = "explicit", modelname = "pm_warf_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+warfP <- P(warfTrafo, method = "explicit", modelname = "pm_warf_p", compile = FALSE, derivMode = dm)
 compileSeconds["warfarin"] <- system.time(compile(warfX, warfG, warfE, warfP, output = "pm_warf_all"))[["elapsed"]]
 warfObj <- normL2(warfData, warfG * warfX * warfP, errmodel = warfE)
 warfRandom <- randomEffects(warfP)
@@ -234,12 +234,12 @@ mavoNet <- eqnlist() |>
 mavoNet
 # solver tolerances 1e-10: at the defaults the solver error, absolute in mg/L, moves -2 log L by
 # about 1e-3, more than the fit resolves
-mavoX <- Xs(odemodel(mavoNet, modelname = "pm_mavo", compile = FALSE, deriv2 = TRUE, derivMode = dm),
+mavoX <- Xs(odemodel(mavoNet, modelname = "pm_mavo", compile = FALSE, derivMode = dm),
             options = list(atol = 1e-10, rtol = 1e-10))
 # the dose in mg, the concentration in ng/mL
-mavoG <- Y(c(cp = "1000 * C1"), mavoX, modelname = "pm_mavo_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+mavoG <- Y(c(cp = "1000 * C1"), mavoX, modelname = "pm_mavo_g", compile = FALSE, derivMode = dm)
 mavoE <- Y(c(cp = "sqrt(sigma_abs^2 + (sigma_rel * cp)^2)"), mavoG, attachInput = FALSE, modelname = "pm_mavo_e",
-           compile = FALSE, deriv2 = TRUE, derivMode = dm)
+           compile = FALSE, derivMode = dm)
 mavoTable <- attr(mavoData, "condition.grid")
 mavoTable$ID <- as.character(mavoTable$ID)
 mavoTrafo <- function(between) {
@@ -255,9 +255,9 @@ mavoTrafo <- function(between) {
   if (between) tr <- insert(tr, CL ~ 1 + (1 | ID) + (1 | ID:OCC)) else tr <- insert(tr, CL ~ 1 + (1 | ID))
   insert(tr, V1 + Q + V2 ~ 1 + (1 | ID))
 }
-mavoP <- P(mavoTrafo(TRUE), method = "explicit", modelname = "pm_mavo_p", compile = FALSE, deriv2 = TRUE,
+mavoP <- P(mavoTrafo(TRUE), method = "explicit", modelname = "pm_mavo_p", compile = FALSE,
            derivMode = dm)
-mavoP1 <- P(mavoTrafo(FALSE), method = "explicit", modelname = "pm_mavo_p1", compile = FALSE, deriv2 = TRUE,
+mavoP1 <- P(mavoTrafo(FALSE), method = "explicit", modelname = "pm_mavo_p1", compile = FALSE,
             derivMode = dm)
 compileSeconds["mavoglurant"] <- system.time(compile(mavoX, mavoG, mavoE, mavoP, mavoP1,
                                                      output = "pm_mavo_all"))[["elapsed"]]

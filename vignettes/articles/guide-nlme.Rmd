@@ -28,7 +28,8 @@ Depot, central compartment of volume $V$, clearance $\mathrm{Cl}$ (volume per ti
 ```{r reactions}
 ```
 
-`em()` needs second derivatives: `deriv2 = TRUE` and the forward-over-reverse derivative modes.
+`em()` needs second derivatives: `derivMode` with `"forward-forward"` and the forward-over-reverse
+directions.
 
 ```{r model}
 ```
@@ -135,7 +136,8 @@ holds `Omega`, `omega`, `random`, `etaModes`, `etaSE` and `shrinkage`. Methods: 
 | `derivMode` | `"forward-reverse"` | volume-term second derivatives, or `"forward-forward"` |
 | `secondOrderCorrection` | `TRUE` | derivative of the volume term |
 
-`"forward-forward"` needs `deriv2 = TRUE`. `secondOrderCorrection = FALSE` biases the estimates
+`"forward-forward"` needs models built with `derivMode = "forward-forward"`.
+`secondOrderCorrection = FALSE` biases the estimates
 ([Methods > Volume term](methods-nlme.html#volume-term)). `fixed` holds parameters at given values,
 `sparse = TRUE` uses sparse Hessians. The solver error must stay below the tolerances.
 `em(cores = )`: [Remote computing](guide-remote-computing.html#threads-and-processes).

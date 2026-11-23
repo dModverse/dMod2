@@ -8,7 +8,7 @@ options(dMod2.outdir = file.path(tempdir(), "derivModeBench"))
 dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 reps <- 3
 modes <- c("forward-forward", "forward-reverse")
-dm <- c("forward", "reverse", "forward-reverse")
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
 ## Theophylline ---------------------------------------------------------------------------
 data(Theoph, package = "datasets")
@@ -19,9 +19,9 @@ reactions <- eqnlist()
 reactions <- addReaction(reactions, "Ag", "", "Ka * Ag", "absorption")
 reactions <- addReaction(reactions, "", "Cc", "Ka * Ag / V", "appearance")
 reactions <- addReaction(reactions, "Cc", "", "Cl/V * Cc", "elimination")
-x   <- Xs(odemodel(reactions, modelname = "dmTheoph", compile = FALSE, deriv2 = TRUE, derivMode = dm))
-g   <- Y(c(y = "Cc"), x, modelname = "dmTheoph_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, compile = FALSE, deriv2 = TRUE, derivMode = dm,
+x   <- Xs(odemodel(reactions, modelname = "dmTheoph", compile = FALSE, derivMode = dm))
+g   <- Y(c(y = "Cc"), x, modelname = "dmTheoph_obs", compile = FALSE, derivMode = dm)
+err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, compile = FALSE, derivMode = dm,
          modelname = "dmTheoph_err")
 subjects <- sort(unique(Theoph$Subject))
 covariates <- data.frame(ID = subjects, dose = tapply(Theoph$Dose * Theoph$Wt, Theoph$Subject, `[`, 1)[subjects],
@@ -31,7 +31,7 @@ trafo <- insert(trafo, "Ag <- dose", dose = dose)
 trafo <- insert(trafo, "Cc <- 0")
 trafo <- insert(trafo, "x <- exp(x)", x = c("Ka", "V", "Cl", "sigma_add"))
 trafo <- insert(trafo, Ka + V + Cl ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", compile = FALSE, modelname = "dmTheoph_p", deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", compile = FALSE, modelname = "dmTheoph_p", derivMode = dm)
 compile(x, g, err, p, output = "dmTheoph")
 obj  <- normL2(data, g * x * p, errmodel = err)
 init <- c(Ka = 0, V = 3, Cl = 0.7, sigma_add = log(0.5))
@@ -64,15 +64,15 @@ stat5 <- eqnlist() |>
   addReaction("nucpApB", "STAT5A + STAT5B", "k_exp_hetero*nucpApB", "export AB", compartment = "nuc") |>
   addReaction("nucpBpB", "2*STAT5B", "k_exp_homo*nucpBpB", "export BB", compartment = "nuc") |>
   setCompartmentVolume(cyt = "1.4")
-sx <- Xs(odemodel(stat5, modelname = "dmStat5", compile = FALSE, deriv2 = TRUE, derivMode = dm),
+sx <- Xs(odemodel(stat5, modelname = "dmStat5", compile = FALSE, derivMode = dm),
          options = list(atol = 1e-8, rtol = 1e-6, maxattempts = 100L, maxsteps = 1e6))
 obs5 <- eqnvec(
   pSTAT5A_rel = "(100*pApB + 200*pApA*specC17)/(pApB + STAT5A*specC17 + 2*pApA*specC17)",
   pSTAT5B_rel = "-(100*pApB - 200*pBpB*(specC17 - 1))/((STAT5B*(specC17 - 1) - pApB) + 2*pBpB*(specC17 - 1))",
   rSTAT5A_rel = "(100*pApB + 100*STAT5A*specC17 + 200*pApA*specC17)/(2*pApB + STAT5A*specC17 + 2*pApA*specC17 - STAT5B*(specC17 - 1) - 2*pBpB*(specC17 - 1))")
-sg <- Y(obs5, sx, modelname = "dmStat5_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+sg <- Y(obs5, sx, modelname = "dmStat5_obs", compile = FALSE, derivMode = dm)
 serr <- Y(c(pSTAT5A_rel = "sd_pA", pSTAT5B_rel = "sd_pB", rSTAT5A_rel = "sd_rA"), sg, attachInput = FALSE,
-          compile = FALSE, deriv2 = TRUE, derivMode = dm, modelname = "dmStat5_err")
+          compile = FALSE, derivMode = dm, modelname = "dmStat5_err")
 lines <- paste0("L", 1:10)
 rates <- c("Epo_degradation_BaF3", "k_exp_hetero", "k_exp_homo", "k_imp_hetero", "k_imp_homo", "k_phos",
            "sd_pA", "sd_pB", "sd_rA", "STAT5tot")
@@ -84,7 +84,7 @@ str5 <- insert(str5, "specC17 <- 0.107")
 str5 <- insert(str5, "x <- exp10(x)", x = rates)
 str5 <- insert(str5, "ratio <- 1/(1 + exp(-ratio))")
 str5 <- insert(str5, x ~ 1 + (1 | line), x = c("STAT5tot", "ratio", "k_exp_homo", "k_imp_hetero"))
-sp <- P(str5, method = "explicit", compile = FALSE, modelname = "dmStat5_p", deriv2 = TRUE, derivMode = dm)
+sp <- P(str5, method = "explicit", compile = FALSE, modelname = "dmStat5_p", derivMode = dm)
 compile(sx, sg, serr, sp, output = "dmStat5")
 published <- c(log10(c(Epo_degradation_BaF3 = 0.02698, k_exp_hetero = 1.0007e-05, k_exp_homo = 0.006170,
                        k_imp_hetero = 0.01637, k_imp_homo = 97749, k_phos = 15767, sd_pA = 3.853,

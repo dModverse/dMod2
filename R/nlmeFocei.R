@@ -285,7 +285,7 @@
 .volumeFrames <- function(design, cn, pred, fixed, deriv2 = TRUE) {
   if (deriv2 && (is.null(attr(pred, "deriv")) || is.null(attr(pred, "deriv2"))))
     stop("em: the prediction of condition ", cn, " has no second derivatives; build the ",
-         "model with deriv2 = TRUE.", call. = FALSE)
+         "model with derivMode = \"forward-forward\".", call. = FALSE)
   if (is.null(design$errfn)) return(list(pred = pred, err = NULL))
   inner <- getParameters(pred)
   fixedInner <- as.parvec(inner[attr(inner, "fixed")], deriv = FALSE, deriv2 = FALSE)
@@ -300,7 +300,7 @@
   for (cn in conds)
     if (deriv2 && (is.null(attr(preds[[cn]], "deriv")) || is.null(attr(preds[[cn]], "deriv2"))))
       stop("em: the prediction of condition ", cn, " has no second derivatives; build the ",
-           "model with deriv2 = TRUE.", call. = FALSE)
+           "model with derivMode = \"forward-forward\".", call. = FALSE)
   node <- if (!is.null(design$errfn)) .fnNode(design$errfn)
   if (is.null(node))
     return(setNames(lapply(conds, function(cn) .volumeFrames(design, cn, preds[[cn]], fixed, deriv2)), conds))
@@ -361,7 +361,7 @@
   if (is.null(e1)) return(rows)
   if (is.null(e2) && any(eta %in% dimnames(e1)[[3]]))
     stop("FOCEI with a random effect in the error model needs the second derivatives of the error model: ",
-         "build the error model with deriv2 = TRUE.", call. = FALSE)
+         "build the error model with derivMode = \"forward-forward\".", call. = FALSE)
   # rows whose observable has no error-model derivative keep zero derivatives
   ie <- te + (match(d$name, dimnames(e1)[[2]]) - 1L) * nrow(err)
   none <- is.na(ie) | !model
@@ -759,11 +759,11 @@
     .derivModeMessage(if (!is.null(control$derivMode))
       paste0("FOCEI: the chain has no ", want, " second derivatives; it takes ", other, ".")
       else paste0("em: second derivatives forward over forward; models built with derivMode = ",
-                  "c(\"forward\", \"reverse\", \"forward-reverse\") give them forward over reverse, which is faster."))
+                  "c(\"reverse\", \"forward-reverse\") give them forward over reverse, which is faster."))
     return(other)
   }
   stop("FOCEI needs second derivatives of the prediction and the error model: build the models ",
-       "with derivMode = c(\"forward\", \"reverse\", \"forward-reverse\") or with deriv2 = TRUE, ",
+       "with derivMode = c(\"reverse\", \"forward-reverse\") or \"forward-forward\", ",
        "or set control = list(secondOrderCorrection = FALSE), which biases the estimates.", call. = FALSE)
 }
 

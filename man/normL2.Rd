@@ -127,10 +127,11 @@ The other arguments are named:
 \item \code{fixed}: named numeric vector of parameters that enter the evaluation
 without derivatives. Default \code{NULL}.
 \item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
-\code{pars}.
+\code{pars}. Every function of the chain has to be built with
+\code{derivMode = "forward"}, see \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
 \item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
-Every function of the chain has to be built for them, see the arguments
-\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+Every function of the chain has to be built with
+\code{derivMode = "forward-forward"}.
 \item \code{hessian}: objective functions only, see the table below. Default
 \code{NULL}.
 \item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the

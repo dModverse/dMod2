@@ -10,7 +10,7 @@ dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 reps <- 3
 nstart <- 100
 cores <- max(1L, min(20L, parallel::detectCores() - 2L))
-dm <- c("forward", "reverse", "forward-reverse")
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
 ## dMod2 ---------------------------------------------------------------------------------
 data(mavoglurant)
@@ -25,11 +25,11 @@ net <- eqnlist() |>
   addReaction("C1", "C2", "Q * C1", "distribution", rateCompartment = "unit") |>
   addReaction("C2", "C1", "Q * C2", "redistribution", rateCompartment = "unit")
 # solver tolerances 1e-10, as in the demo
-x <- Xs(odemodel(net, modelname = "mavoBench", compile = FALSE, deriv2 = TRUE, derivMode = dm),
+x <- Xs(odemodel(net, modelname = "mavoBench", compile = FALSE, derivMode = dm),
         options = list(atol = 1e-10, rtol = 1e-10))
-g <- Y(c(cp = "1000 * C1"), x, modelname = "mavoBench_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+g <- Y(c(cp = "1000 * C1"), x, modelname = "mavoBench_g", compile = FALSE, derivMode = dm)
 e <- Y(c(cp = "sqrt(sigma_abs^2 + (sigma_rel * cp)^2)"), g, attachInput = FALSE, modelname = "mavoBench_e",
-       compile = FALSE, deriv2 = TRUE, derivMode = dm)
+       compile = FALSE, derivMode = dm)
 table <- attr(data, "condition.grid")
 table$ID <- as.character(table$ID)
 trafo <- branch(define(NULL, "x <- x", x = c("CL", "V1", "Q", "V2", "C1", "C2", "dose", "duration", "sigma_abs",
@@ -44,8 +44,8 @@ trafo1 <- insert(trafo, CL ~ 1 + (1 | ID))
 trafo1 <- insert(trafo1, V1 + Q + V2 ~ 1 + (1 | ID))
 trafo <- insert(trafo, CL ~ 1 + (1 | ID) + (1 | ID:OCC))
 trafo <- insert(trafo, V1 + Q + V2 ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", modelname = "mavoBench_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-p1 <- P(trafo1, method = "explicit", modelname = "mavoBench_p1", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", modelname = "mavoBench_p", compile = FALSE, derivMode = dm)
+p1 <- P(trafo1, method = "explicit", modelname = "mavoBench_p1", compile = FALSE, derivMode = dm)
 compileSeconds <- system.time(compile(x, g, e, p, p1, output = "mavoBench"))[["elapsed"]]
 obj <- normL2(data, g * x * p, errmodel = e)
 obj1 <- normL2(data, g * x * p1, errmodel = e)

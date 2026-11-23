@@ -16,7 +16,7 @@
     withr::local_dir(dir)
     trafo <- function(pars, tab) branch(define(NULL, "x <- x", x = pars), table = tab)
     # second derivatives forward over forward and forward over reverse
-    dm <- c("forward", "reverse", "forward-reverse")
+    dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
     # one-compartment model with first-order absorption, dose per subject
     th <- datasets::Theoph
@@ -28,9 +28,9 @@
     reactions <- addReaction(reactions, "",   "Cc", "Ka * Ag / V", "appearance")
     reactions <- addReaction(reactions, "Cc", "",  "Cl/V * Cc",   "elimination")
     th_x <- Xs(odemodel(reactions, modelname = "theoph_cppreg", compile = FALSE,
-                        backend = "cppDE", deriv2 = TRUE, derivMode = c(dm, "forward-forward")))
-    th_g <- Y(c(y = "Cc"), th_x, modelname = "theoph_cppreg_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-    th_err <- Y(eqnvec(y = "sigma_add"), th_g, attachInput = FALSE, compile = FALSE, deriv2 = TRUE,
+                        backend = "cppDE", derivMode = dm))
+    th_g <- Y(c(y = "Cc"), th_x, modelname = "theoph_cppreg_obs", compile = FALSE, derivMode = dm)
+    th_err <- Y(eqnvec(y = "sigma_add"), th_g, attachInput = FALSE, compile = FALSE,
                 modelname = "theoph_cppreg_err", derivMode = dm)
     th_tr <- trafo(c("Ka", "V", "Cl", "Ag", "Cc", "sigma_add"),
                    data.frame(ID = th_subj, dose = doses, row.names = th_subj))
@@ -38,35 +38,35 @@
     th_tr <- insert(th_tr, "Cc <- 0")
     th_tr <- insert(th_tr, "x <- exp(x)", x = c("Ka", "V", "Cl", "sigma_add"))
     th_tr <- insert(th_tr, Ka + V + Cl ~ 1 + (1 | ID))
-    th_p <- P(th_tr, method = "explicit", compile = FALSE, modelname = "theoph_formula_p", deriv2 = TRUE,
+    th_p <- P(th_tr, method = "explicit", compile = FALSE, modelname = "theoph_formula_p",
               derivMode = dm)
 
     # one-compartment iv bolus with proportional error, three subjects
     se_subj <- c("A", "B", "C")
     reactions <- addReaction(eqnlist(), "Cc", "", "Cl/V * Cc", "elimination")
     se_ode <- odemodel(reactions, modelname = "sigeta_ode", compile = FALSE, backend = "cppDE",
-                       deriv2 = TRUE, derivMode = c(dm, "forward-forward"))
+                       derivMode = dm)
     se_x <- Xs(se_ode)
-    se_g <- Y(c(y = "Cc"), se_x, modelname = "sigeta_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+    se_g <- Y(c(y = "Cc"), se_x, modelname = "sigeta_obs", compile = FALSE, derivMode = dm)
     se_err <- Y(eqnvec(y = "sigma_prop * y"), se_g, attachInput = FALSE, compile = FALSE,
-                deriv2 = TRUE, modelname = "sigeta_err", derivMode = dm)
+                modelname = "sigeta_err", derivMode = dm)
     se_tr <- trafo(c("V", "Cl", "Cc", "sigma_prop"),
                    data.frame(ID = se_subj, dose = 100, row.names = se_subj))
     se_tr <- insert(se_tr, "Cc <- dose / V", dose = dose)
     se_tr <- insert(se_tr, "x <- exp(x)", x = c("V", "Cl", "sigma_prop"))
     se_tr <- insert(se_tr, V ~ 1 + (1 | ID))
-    se_p <- P(se_tr, method = "explicit", compile = FALSE, modelname = "sigeta_p", deriv2 = TRUE, derivMode = dm)
+    se_p <- P(se_tr, method = "explicit", compile = FALSE, modelname = "sigeta_p", derivMode = dm)
     # the same with an observable and an error model that read the time
-    se_gt <- Y(c(y = "Cc * exp(-b_t * time)"), se_x, modelname = "sigeta_obs_t", compile = FALSE, deriv2 = TRUE,
+    se_gt <- Y(c(y = "Cc * exp(-b_t * time)"), se_x, modelname = "sigeta_obs_t", compile = FALSE,
                derivMode = dm)
     se_errt <- Y(eqnvec(y = "sigma_prop * y + s_t * time"), se_gt, attachInput = FALSE, compile = FALSE,
-                 deriv2 = TRUE, modelname = "sigeta_err_t", derivMode = dm)
+                 modelname = "sigeta_err_t", derivMode = dm)
     se_trt <- trafo(c("V", "Cl", "Cc", "sigma_prop", "b_t", "s_t"),
                     data.frame(ID = se_subj, dose = 100, row.names = se_subj))
     se_trt <- insert(se_trt, "Cc <- dose / V", dose = dose)
     se_trt <- insert(se_trt, "x <- exp(x)", x = c("V", "Cl", "sigma_prop", "b_t", "s_t"))
     se_trt <- insert(se_trt, V ~ 1 + (1 | ID))
-    se_pt <- P(se_trt, method = "explicit", compile = FALSE, modelname = "sigeta_p_t", deriv2 = TRUE,
+    se_pt <- P(se_trt, method = "explicit", compile = FALSE, modelname = "sigeta_p_t",
                derivMode = dm)
 
     # parent / metabolite chain A -> B -> 0, both observed, three subjects
@@ -74,9 +74,8 @@
     reactions <- eqnlist()
     reactions <- addReaction(reactions, "A", "B", "ka * A", "absorption")
     reactions <- addReaction(reactions, "B", "",  "ke * B", "elimination")
-    mo_x <- Xs(odemodel(reactions, modelname = "mo_ode", compile = FALSE, backend = "cppDE",
-                        deriv2 = FALSE))
-    mo_g <- Y(c(yA = "A", yB = "B"), mo_x, modelname = "mo_obs", compile = FALSE, deriv2 = FALSE)
+    mo_x <- Xs(odemodel(reactions, modelname = "mo_ode", compile = FALSE, backend = "cppDE"))
+    mo_g <- Y(c(yA = "A", yB = "B"), mo_x, modelname = "mo_obs", compile = FALSE)
     mo_err <- Y(eqnvec(yA = "sigA", yB = "sigB"), mo_g, attachInput = FALSE, compile = FALSE,
                 modelname = "mo_err")
     mo_tr <- trafo(c("ka", "ke", "A", "B", "sigA", "sigB"),
@@ -85,7 +84,7 @@
     mo_tr <- insert(mo_tr, "B <- 0")
     mo_tr <- insert(mo_tr, "x <- exp(x)", x = c("ka", "ke", "sigA", "sigB"))
     mo_tr <- insert(mo_tr, ka + ke ~ 1 + (1 | ID))
-    mo_p <- P(mo_tr, method = "explicit", compile = FALSE, modelname = "mo_p", deriv2 = FALSE)
+    mo_p <- P(mo_tr, method = "explicit", compile = FALSE, modelname = "mo_p")
 
     compile(th_x, th_g, th_err, th_p, se_x, se_g, se_err, se_p, se_gt, se_errt, se_pt, mo_x, mo_g, mo_err, mo_p,
             output = "focei_models", cores = 2)

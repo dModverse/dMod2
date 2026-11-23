@@ -24,12 +24,12 @@ reactions <- addReaction(reactions, "Epo_EpoR", "Epo_EpoR_i", "Epo_EpoR * ke", "
 reactions <- addReaction(reactions, "Epo_EpoR_i", "Epo + EpoR", "Epo_EpoR_i * kex", "recycling")
 reactions <- addReaction(reactions, "Epo_EpoR_i", "dEpo_i", "Epo_EpoR_i * kdi", "intra degr.")
 reactions <- addReaction(reactions, "Epo_EpoR_i", "dEpo_e", "Epo_EpoR_i * kde", "extra degr.")
-x <- Xs(odemodel(reactions, modelname = "becker", compile = FALSE, deriv2 = TRUE))
+x <- Xs(odemodel(reactions, modelname = "becker", compile = FALSE, derivMode = "forward-forward"))
 g <- Y(eqnvec(y_ext = "log(Epo + dEpo_e + 1)", y_mem = "log(Epo_EpoR + 1)",
               y_int = "log(Epo_EpoR_i + dEpo_i + 1)"),
-       x, modelname = "becker_obs", compile = FALSE, attachInput = FALSE, deriv2 = TRUE)
+       x, modelname = "becker_obs", compile = FALSE, attachInput = FALSE, derivMode = "forward-forward")
 e <- Y(eqnvec(y_ext = "sigma", y_mem = "sigma", y_int = "sigma"), g, modelname = "becker_err",
-       compile = FALSE, attachInput = FALSE, deriv2 = TRUE)
+       compile = FALSE, attachInput = FALSE, derivMode = "forward-forward")
 
 dose  <- 1347.49
 lines <- c("A", "B", "C", "D", "E", "F")
@@ -49,11 +49,11 @@ base  <- function() {
 trH <- base()
 for (l in lines[-1]) for (pp in cand)
   trH <- insert(trH, paste0(pp, " <- ", pp, " + r_", pp, "_", l), conditionMatch = paste0("^", l, "$"))
-pH <- P(trH, method = "explicit", modelname = "becker_h", compile = FALSE, deriv2 = TRUE)
+pH <- P(trH, method = "explicit", modelname = "becker_h", compile = FALSE, derivMode = "forward-forward")
 
 # EM: per line and candidate a deviation from the population value, shared by clusters of lines
 pS <- P(insert(base(), x ~ 1 + (1 | gr(line, dist = dirichletProcess())), x = cand), method = "explicit",
-        modelname = "becker_s", compile = FALSE, deriv2 = TRUE)
+        modelname = "becker_s", compile = FALSE, derivMode = "forward-forward")
 compile(g, x, e, pH, pS, output = "becker")
 
 ## Truth and the parameters held fixed ---------------------------------------------------

@@ -185,7 +185,7 @@ a first phase of source \code{"gn"}. A structured phase takes
 \code{"identity"} the identity matrix, after which the objective is
 asked for gradients only until a reseed; \code{"exact"} the true
 Hessian at \code{parinit}, then gradients only. \code{"exact"} needs
-\code{deriv2}, see \code{derivMode} in \code{\link[=odemodel]{odemodel()}}. In a first phase
+\code{deriv2 = TRUE} in a call, see \code{derivMode} in \code{\link[=odemodel]{odemodel()}}. In a first phase
 of source \code{"gn"}, \code{"exact"} makes the first step use the
 exact Hessian at \code{parinit}.}
 \item{\code{hessianReseed}}{\code{"never"} (default): a stalled

@@ -1366,7 +1366,8 @@ readPEtabTables <- function(yamlPath) {
     #    sub-conditions with this preequilibration condition.
     eq_of[sub] <- peq
     if (is.null(eq_model[[peq]]) && length(peq_reactions$states))
-      eq_model[[peq]] <- Pimpl(peq_reactions, condition = NULL, deriv2 = stability,
+      eq_model[[peq]] <- Pimpl(peq_reactions, condition = NULL,
+                               derivMode = if (stability) "forward-forward" else "forward",
                                compile = FALSE, outdir = outdir,
                                modelname = paste(modelname,
                                                  sanitizeConditions(peq),
@@ -1545,7 +1546,7 @@ readPEtabTables <- function(yamlPath) {
                                   events = NULL,
                                   options = NULL, optionsSens = NULL,
                                   sparse = NULL,
-                                  deriv = TRUE, derivMode = "forward",
+                                  derivMode = "forward",
                                   outdir = .dmodOutdir()) {
   # No species means no dynamics: Xt() supplies the time axis and the
   # observables are evaluated from parameters alone.
@@ -1557,7 +1558,7 @@ readPEtabTables <- function(yamlPath) {
   # which would apply the initial values there instead.
   args <- list(reactions, modelname = modelname, backend = backend,
                events = events, compile = FALSE, includeTimeZero = FALSE,
-               deriv = deriv, derivMode = derivMode, outdir = outdir)
+               derivMode = derivMode, outdir = outdir)
   if (!is.null(sparse) && backend != "deSolve") args$sparse <- sparse
   m <- do.call(odemodel, args)
   opts <- list(m)
@@ -1648,7 +1649,7 @@ readPEtabTables <- function(yamlPath) {
                                       switches = NULL,
                                       options = NULL, optionsSens = NULL,
                                       sparse = NULL,
-                                      deriv = TRUE, derivMode = "forward", cores = 1L,
+                                      derivMode = "forward", cores = 1L,
                                       outdir = .dmodOutdir(), stability = TRUE) {
 
   # `importSbml` renames ids that R cannot parse or C++ reserves; the PEtab
@@ -1791,7 +1792,7 @@ readPEtabTables <- function(yamlPath) {
                                     options = options,
                                     optionsSens = optionsSens,
                                     sparse = sparse,
-                                    deriv = deriv, derivMode = derivMode,
+                                    derivMode = derivMode,
                                     outdir = outdir)
   g <- .petab_build_observation_fn(obs_meta$obs, obs_meta$obs_trafo,
                                    sbml$reactions,
@@ -1958,12 +1959,11 @@ readPEtabTables <- function(yamlPath) {
 #'   Default `1`.
 #' @param modelname Base name of the generated files. Default `NULL`, the base
 #'   name of the YAML file.
-#' @param deriv Logical. If `FALSE`, the model is built without sensitivities,
-#'   which needs `backend = "cppDE"` or `"Sundials"`; the objective then has to
-#'   be called with `deriv = FALSE`. Default `TRUE`.
-#' @param derivMode Derivative directions to build, passed to [odemodel()]:
-#'   `"forward"` (default), `"reverse"` or `c("forward", "reverse")`.
-#'   `"reverse"` needs `backend = "cppDE"` or `"Sundials"`. First order only.
+#' @param derivMode Derivative directions to build, passed to [odemodel()],
+#'   [Y()] and [P()]: `"forward"` (default), `"reverse"`,
+#'   `c("forward", "reverse")` or `"none"`. `"reverse"` and `"none"` need
+#'   `backend = "cppDE"` or `"Sundials"`; with `"none"` the objective has to be
+#'   called with `deriv = FALSE`. First order only.
 #' @param options,optionsSens Lists passed to [Xs()]: the solver options of
 #'   every solve and their overrides for the solves with sensitivities.
 #'   Default `NULL`, the backend's defaults.
@@ -2011,7 +2011,7 @@ readPEtabTables <- function(yamlPath) {
 #' @export
 importPEtab <- function(yamlPath, backend,
                         compile = TRUE, cores = 1L, modelname = NULL,
-                        deriv = TRUE, derivMode = "forward",
+                        derivMode = "forward",
                         options = NULL, optionsSens = NULL,
                         sparse = NULL, stability = TRUE, outdir = .dmodOutdir()) {
 
@@ -2025,6 +2025,8 @@ importPEtab <- function(yamlPath, backend,
          "\"Sundials\").")
   backend <- match.arg(backend, c("deSolve", "cppDE", "Sundials"))
   derivMode <- .matchDerivMode(derivMode, c("forward", "reverse"))
+  if (identical(derivMode, "none") && backend == "deSolve")
+    stop("derivMode = \"none\" needs backend = 'cppDE' or 'Sundials'.", call. = FALSE)
   if ("reverse" %in% derivMode && backend == "deSolve")
     stop("derivMode = \"reverse\" needs backend = 'cppDE' or 'Sundials'; ",
          "the deSolve backend goes forward only.", call. = FALSE)
@@ -2120,7 +2122,6 @@ importPEtab <- function(yamlPath, backend,
       options          = options,
       optionsSens      = optionsSens,
       sparse           = sparse,
-      deriv            = deriv,
       derivMode        = derivMode,
       cores            = cores,
       outdir           = outdir,

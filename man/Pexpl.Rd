@@ -12,8 +12,6 @@ Pexpl(
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
-  deriv = TRUE,
-  deriv2 = FALSE,
   derivMode = "forward",
   outdir = .dmodOutdir()
 )
@@ -42,15 +40,15 @@ is \code{"expl_parfn"}, followed by \verb{_<condition>}.}
 
 \item{verbose}{Logical. Print the compiler output, default \code{FALSE}.}
 
-\item{deriv, deriv2}{Build the first derivatives, \code{attr(, "deriv")},
-\verb{[inner, outer]}, and the second, \code{attr(, "deriv2")},
-\verb{[inner, outer, outer]}. Default \code{TRUE} and \code{FALSE}; \code{deriv2} needs
-\code{deriv = TRUE}.}
-
-\item{derivMode}{Which derivative code to build, any of \code{"forward"}
-(default), \code{"reverse"} and \code{"forward-reverse"}. \code{"reverse"} is needed for
-\code{sweep = "reverse"}, \code{"forward-reverse"} for \code{sweep = "reverse"} with
-\code{deriv2 = TRUE}.}
+\item{derivMode}{The derivatives to build, one or more of \code{"forward"}
+(default), \code{"reverse"}, \code{"forward-forward"} and \code{"forward-reverse"}, or
+\code{"none"}, as in \code{\link[=odemodel]{odemodel()}}. \code{"forward"} builds the Jacobian,
+\code{attr(, "deriv")}, \verb{[inner, outer]}, \code{"forward-forward"} the second
+derivatives, \code{attr(, "deriv2")}, \verb{[inner, outer, outer]}; \code{"reverse"} is
+needed for \code{sweep = "reverse"}, \code{"forward-reverse"} for
+\code{sweep = "reverse"} with \code{deriv2 = TRUE}. The second-order directions
+build \code{"forward"} as well. A call that asks for a derivative not built is
+an error.}
 
 \item{outdir}{Directory for the generated source and shared object,
 default \code{getOption("dMod2.outdir")}, else the working directory.}
@@ -88,10 +86,11 @@ The other arguments are named:
 \item \code{fixed}: named numeric vector of parameters that enter the evaluation
 without derivatives. Default \code{NULL}.
 \item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
-\code{pars}.
+\code{pars}. Every function of the chain has to be built with
+\code{derivMode = "forward"}, see \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
 \item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
-Every function of the chain has to be built for them, see the arguments
-\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+Every function of the chain has to be built with
+\code{derivMode = "forward-forward"}.
 \item \code{hessian}: objective functions only, see the table below. Default
 \code{NULL}.
 \item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the

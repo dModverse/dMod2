@@ -46,18 +46,41 @@ test_that("Xs and Xf on deSolve check their arguments and return the requested t
   x3 <- Xs(model, options = list(maxsteps = 3))
   expect_warning(x3(0:2, pars, deriv = FALSE), "stopped")
   expect_warning(x3(0:2, pars), "stopped")
-  m0 <- odemodel(f, modelname = "desolve_noderiv", backend = "deSolve", deriv = FALSE,
+  m0 <- odemodel(f, modelname = "desolve_noderiv", backend = "deSolve", derivMode = "none",
                  compile = FALSE)
-  expect_error(Xs(m0), "sensitivities")
+  expect_error(Xs(m0), "derivMode = \"forward\"")
 })
 
-test_that("odemodel(deriv = FALSE) builds no derivative directions", {
-  m <- odemodel(eqnvec(A = "-k*A"), deriv = FALSE, derivMode = c("forward", "reverse"),
-                modelname = "test_om_noderiv_r", compile = FALSE)
+test_that("odemodel() builds the directions derivMode names and no other", {
+  withr::local_dir(tempdir())
+  f <- eqnvec(A = "-k*A")
+  m <- odemodel(f, derivMode = "none", modelname = "test_om_none", compile = FALSE)
+  expect_null(m$extended)
+  expect_null(m$extended2)
   expect_null(m$reversed)
-  m2 <- odemodel(eqnvec(A = "-k*A"), deriv = FALSE,
-                 derivMode = c("forward", "forward-forward"),
-                 modelname = "test_om_noderiv_ff", compile = FALSE)
-  expect_null(m2$extended)
+  expect_null(m$reversed2)
+  # a second-order direction builds the first order it runs on
+  m2 <- odemodel(f, derivMode = "forward-reverse", modelname = "test_om_fr", compile = FALSE)
+  expect_false(is.null(m2$extended))
+  expect_false(is.null(m2$reversed2))
+  expect_null(m2$reversed)
   expect_null(m2$extended2)
+  expect_identical(attr(m2, "derivMode"), c("forward", "forward-reverse"))
+  m3 <- odemodel(f, derivMode = "reverse", modelname = "test_om_r", compile = FALSE)
+  expect_null(m3$extended)
+  expect_false(is.null(m3$reversed))
+})
+
+test_that("odemodel() rejects deriv, deriv2 and inconsistent derivMode", {
+  withr::local_dir(tempdir())
+  f <- eqnvec(A = "-k*A")
+  expect_error(odemodel(f, deriv = FALSE, derivMode = "forward-reverse", compile = FALSE),
+               "derivMode")
+  expect_error(odemodel(f, deriv2 = TRUE, compile = FALSE), "`deriv2` is not an argument")
+  expect_error(odemodel(f, derivMode = c("none", "forward"), compile = FALSE), "none")
+  expect_error(odemodel(f, derivMode = "backward", compile = FALSE))
+  expect_error(odemodel(f, derivMode = "forward-forward", backend = "Sundials", compile = FALSE),
+               "forward-forward")
+  expect_error(odemodel(f, derivMode = "reverse", backend = "deSolve", compile = FALSE),
+               "reverse")
 })

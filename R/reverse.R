@@ -59,7 +59,7 @@
   if (b$D == 0L) return(u)
   if (is.null(res$curvature))
     stop("a second-order cotangent needs a model built with ",
-         "derivMode = \"forward-reverse\"", call. = FALSE)
+         "derivMode = \"forward-reverse\".", call. = FALSE)
   for (s in seq_len(b$S))
     u[, b$rest[, s]] <- matrix(res$curvature[, seq_len(b$D), s], nrow = nrow(u))
   u
@@ -143,12 +143,11 @@
 # second order and needs the forward-over-reverse object.
 .requireReverse <- function(has_reverse, has_reverse2, K) {
   if (K > 1L && !has_reverse2)
-    stop("the reverse mode propagates directions here, which needs the ",
-         "forward-over-reverse object; rebuild via odemodel(..., derivMode = ",
-         "c(\"forward\", \"forward-reverse\")).", call. = FALSE)
+    stop("Xs: the odemodel was built without derivMode = \"forward-reverse\", which a ",
+         "reverse sweep with deriv2 = TRUE needs.", call. = FALSE)
   if (K == 1L && !has_reverse)
-    stop("the model has no reverse object; rebuild via odemodel(..., ",
-         "derivMode = c(\"forward\", \"reverse\")).", call. = FALSE)
+    stop("Xs: the odemodel was built without derivMode = \"reverse\", which a reverse ",
+         "sweep needs.", call. = FALSE)
   invisible(NULL)
 }
 
@@ -301,7 +300,7 @@
       H <- attr(v, "deriv2")
       if (is.null(H))
         stop("a second-order cotangent needs this transformation's own second ",
-             "derivatives, and it returned none; rebuild it with deriv2 = TRUE.",
+             "derivatives, and it returned none; build it with derivMode = \"forward-reverse\".",
              call. = FALSE)
       # w' H, the node's curvature seen through each seed, times the
       # tangents that arrived: the second half of d/dv (J' w).

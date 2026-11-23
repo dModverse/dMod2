@@ -9,7 +9,7 @@ dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 reps <- 3
 nstart <- 100
 cores <- max(1L, min(20L, parallel::detectCores() - 2L))
-dm <- c("forward", "reverse", "forward-reverse")
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
 ## dMod2 ---------------------------------------------------------------------------------
 data(warfarin)
@@ -23,10 +23,10 @@ net <- eqnlist() |>
   addReaction("Cc", "", "Cl * Cc", "elimination", rateCompartment = "unit") |>
   addReaction("", "PCA", "kout * pca0 * IC50 / (IC50 + Cc)", "synthesis") |>
   addReaction("PCA", "", "kout * PCA", "degradation")
-x <- Xs(odemodel(net, modelname = "warfBench", compile = FALSE, deriv2 = TRUE, derivMode = dm))
-g <- Y(c(cp = "Cc", pca = "PCA"), x, modelname = "warfBench_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+x <- Xs(odemodel(net, modelname = "warfBench", compile = FALSE, derivMode = dm))
+g <- Y(c(cp = "Cc", pca = "PCA"), x, modelname = "warfBench_g", compile = FALSE, derivMode = dm)
 e <- Y(c(cp = "sqrt(sigma_cp_abs^2 + (sigma_cp_rel * cp)^2)", pca = "sigma_pca"), g, attachInput = FALSE,
-       modelname = "warfBench_e", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+       modelname = "warfBench_e", compile = FALSE, derivMode = dm)
 table <- attr(data, "condition.grid")
 table$ID <- rownames(table)
 trafo <- branch(define(NULL, "x <- x", x = c("Ka", "V", "Cl", "IC50", "kout", "pca0", "Ag", "Cc", "PCA", "sigma_cp_abs",
@@ -37,7 +37,7 @@ trafo <- insert(trafo, "PCA <- pca0")
 trafo <- insert(trafo, "x <- exp(x)", x = c("Ka", "V", "Cl", "IC50", "kout", "pca0", "sigma_cp_abs", "sigma_cp_rel",
                                            "sigma_pca"))
 trafo <- insert(trafo, V + Cl + pca0 + kout ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", modelname = "warfBench_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", modelname = "warfBench_p", compile = FALSE, derivMode = dm)
 compileSeconds <- system.time(compile(x, g, e, p, output = "warfBench"))[["elapsed"]]
 obj <- normL2(data, g * x * p, errmodel = e)
 random <- randomEffects(p)

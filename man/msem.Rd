@@ -80,9 +80,9 @@ every argument of \code{\link[=trust]{trust()}} passes, \code{hessianMethod}, \c
 default \code{TRUE}.}
 \item{\code{derivMode}}{how FOCEI gets the second derivatives of the volume
 term: \code{"forward-reverse"} (default), sweeps for models built with
-\code{derivMode = c("forward", "reverse", "forward-reverse")}, or
+\code{derivMode = c("reverse", "forward-reverse")}, or
 \code{"forward-forward"}, the second-order sensitivities of models built
-with \code{deriv2 = TRUE}. Without the mode asked for the fit takes the
+with \code{derivMode = "forward-forward"}. Without the mode asked for the fit takes the
 other, with a message.}
 \item{\code{boundary}}{the largest rise of -2 log L at which a variance is
 set to 0, default 0.1, \code{FALSE} for none. With one grouping and several

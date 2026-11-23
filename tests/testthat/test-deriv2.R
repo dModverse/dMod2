@@ -19,40 +19,40 @@ d2_models <- local({
     decay <- nm("d2_decay")
     equil <- nm("d2_equil")
 
-    m <- odemodel(f, modelname = decay, backend = "cppDE", deriv2 = TRUE,
+    m <- odemodel(f, modelname = decay, backend = "cppDE", derivMode = "forward-forward",
                   verbose = FALSE, compile = FALSE)
     xdes <- Xs(odemodel(f, modelname = nm("d2_decay_des"), backend = "deSolve",
                         verbose = FALSE, compile = FALSE))
 
     yfwd <- Y(c(y = "a*x^2 + b*x"), states = "x", parameters = c("a", "b"),
-              modelname = nm("d2_obs_fwd"), deriv2 = TRUE,
-              derivMode = "forward", attachInput = FALSE)
+              modelname = nm("d2_obs_fwd"),
+              derivMode = "forward-forward", attachInput = FALSE)
     yobs <- Y(c(y = "a*x^2 + b*x"), f = f, parameters = c("a", "b"),
-              modelname = nm("d2_obs"), deriv2 = TRUE, attachInput = FALSE)
+              modelname = nm("d2_obs"), derivMode = "forward-forward", attachInput = FALSE)
 
     pabc <- Pexpl(c(a = "exp(la)", b = "la^2 + lb", c = "la*lb"),
                   parameters = NULL, modelname = nm("d2_pexpl"),
-                  deriv2 = TRUE, derivMode = "forward")
+                  derivMode = "forward-forward")
     ppass <- Pexpl(c(a = "exp(la)", b = "la^2 + lb"), parameters = c("la", "lb"),
-                   modelname = nm("d2_pexpl_pass"), deriv2 = TRUE,
-                   derivMode = "forward")
+                   modelname = nm("d2_pexpl_pass"),
+                   derivMode = "forward-forward")
     pnod2 <- Pexpl(c(a = "exp(la)"), parameters = NULL,
-                   modelname = nm("d2_pexpl_nod2"), deriv2 = FALSE,
+                   modelname = nm("d2_pexpl_nod2"),
                    derivMode = "forward")
     plog <- Pexpl(c(x = "exp(lx)", k = "exp(lk)", a = "la", b = "lb"),
                   parameters = NULL, modelname = nm("d2_pexpl_log"),
-                  deriv2 = TRUE, derivMode = "forward", condition = "C1")
+                  derivMode = "forward-forward", condition = "C1")
     pid <- Pexpl(c(x = "x", k = "k", a = "a", b = "b"), parameters = NULL,
-                 modelname = nm("d2_pexpl_id"), deriv2 = TRUE,
-                 derivMode = "forward", condition = "C1")
+                 modelname = nm("d2_pexpl_id"),
+                 derivMode = "forward-forward", condition = "C1")
     pcon <- Pexpl(c(a = "exp(la)"), parameters = NULL,
-                  modelname = nm("d2_pexpl_con"), deriv2 = TRUE,
-                  derivMode = "forward")
+                  modelname = nm("d2_pexpl_con"),
+                  derivMode = "forward-forward")
 
     peq <- Pimpl(c(x = "-k * x + s"), parameters = c("k", "s"), flow = TRUE,
-                 modelname = equil, deriv2 = TRUE, verbose = FALSE)
+                 modelname = equil, derivMode = "forward-forward", verbose = FALSE)
     peq_nod2 <- Pimpl(c(x = "-k * x + s"), parameters = c("k", "s"), flow = TRUE,
-                      modelname = nm("d2_equil_nod2"), deriv2 = FALSE, verbose = FALSE)
+                      modelname = nm("d2_equil_nod2"), verbose = FALSE)
 
     compile(m, xdes, yfwd, yobs, pabc, ppass, pnod2, plog, pid, pcon, peq,
             peq_nod2, output = nm("deriv2_models"), cores = test_cores())
@@ -94,7 +94,7 @@ test_that("Xs.cppDE deriv2 reproduces linear-decay analytical Hessian", {
   expect_equal(d2[, "x", "k", "x"], unname(ref_H_xk), tolerance = 1e-7)
 })
 
-test_that("odemodel(deriv2 = TRUE) emits <m>, <m>_s, <m>_s2 and Xs.cppDE dispatches", {
+test_that("odemodel(derivMode = \"forward-forward\") emits <m>, <m>_s, <m>_s2 and Xs.cppDE dispatches", {
   d <- d2_models()
   m <- d$m
   src <- file.path(d$dir, d$decay)
@@ -219,10 +219,10 @@ test_that("[.parvec and c.parvec propagate deriv2 attributes", {
                tolerance = 1e-12)
 })
 
-test_that("Pexpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
+test_that("Pexpl(derivMode = \"forward\") refuses deriv2 = TRUE at call time", {
   p <- d2_models()$pnod2
   expect_error(p(c(la = 0.1), deriv2 = TRUE),
-               "deriv2 = FALSE")
+               "derivMode = \"forward-forward\"")
 })
 
 
@@ -252,7 +252,7 @@ test_that("Pimpl deriv2 reproduces analytical equilibrium Hessian", {
                H_ref, tolerance = 1e-10)
 })
 
-test_that("Pimpl(deriv2 = TRUE) returns the Hessian only when asked", {
+test_that("Pimpl(derivMode = \"forward-forward\") returns the Hessian only when asked", {
   p <- d2_models()$peq
   pars <- c(k = 0.5, s = 2.0, x = 1.0)
   r1 <- p(pars, deriv = TRUE, deriv2 = FALSE)[[1]]
@@ -263,10 +263,10 @@ test_that("Pimpl(deriv2 = TRUE) returns the Hessian only when asked", {
   expect_equal(attr(r1, "deriv"), attr(r2, "deriv"), tolerance = 1e-6)
 })
 
-test_that("Pimpl(deriv2 = FALSE) refuses deriv2 = TRUE at call time", {
+test_that("Pimpl(derivMode = \"forward\") refuses deriv2 = TRUE at call time", {
   p <- d2_models()$peq_nod2
   expect_error(p(c(k = 0.5, s = 2, x = 1), deriv2 = TRUE),
-               "deriv2 = TRUE")
+               "derivMode = \"forward-forward\"")
 })
 
 

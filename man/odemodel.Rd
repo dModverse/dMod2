@@ -6,8 +6,6 @@
 \usage{
 odemodel(
   f,
-  deriv = TRUE,
-  deriv2 = FALSE,
   derivMode = "forward",
   forcings = NULL,
   events = NULL,
@@ -24,27 +22,22 @@ odemodel(
 sides; the names are the states. The functions and operators an equation
 may use are listed in \link[cppDE:expressions]{cppDE::expressions}.}
 
-\item{deriv}{logical, build first-order sensitivities. Default \code{TRUE}.
-\code{FALSE} builds the states alone, for \code{\link[=Xf]{Xf()}}, and \code{derivMode} has no
-effect.}
-
-\item{deriv2}{logical, build second-order sensitivities. Default \code{FALSE}.
-\code{TRUE} is the same as adding \code{"forward-forward"} to \code{derivMode}, needs
-\code{backend = "cppDE"} and implies \code{deriv = TRUE}.}
-
 \item{derivMode}{character, the derivative directions to build, one or
 more of:
 \itemize{
-\item \code{"forward"} (default): sensitivity equations. \code{deriv = TRUE} builds them
-also when \code{derivMode} leaves out \code{"forward"}.
+\item \code{"forward"} (default): first-order sensitivities.
 \item \code{"reverse"}: adjoint gradient, needed for \code{obj(..., sweep = "reverse")}.
 Not available on \code{backend = "deSolve"}.
-\item \code{"forward-forward"}: second-order sensitivities.
+\item \code{"forward-forward"}: second-order sensitivities, needed for
+\code{deriv2 = TRUE} in a call. \code{backend = "cppDE"} only.
 \item \code{"forward-reverse"}: adjoint Hessian, needed for
 \code{obj(..., sweep = "reverse", deriv2 = TRUE)}. \code{backend = "cppDE"} only.
+\item \code{"none"}: the states alone, for \code{\link[=Xf]{Xf()}}.
 }
 
-Each direction is compiled separately.}
+Each direction is compiled separately. The two second-order directions
+build \code{"forward"} as well. A call that asks for a derivative not built is
+an error.}
 
 \item{forcings}{character, the names of the forcings in \code{f}. Default
 \code{NULL}. Their data are given to \code{\link[=Xs]{Xs()}} or \code{\link[=Xf]{Xf()}}.}

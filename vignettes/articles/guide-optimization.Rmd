@@ -101,8 +101,11 @@ as `tolControl`.
 The default is the hybrid of Fides [@froehlich2022fides]: Gauss-Newton until the radius stayed the
 same for 20 iterations, then BFGS
 ([Methods > Hessian phases](methods-trust.html#hessian-phases)).
-The sparse path, multiple shooting and `boundary = "clip"` run Gauss-Newton. `"exact"` needs
-`deriv2 = TRUE` or `derivMode = "forward-reverse"` ([Sensitivities](guide-sensitivities.html)).
+The sparse path, multiple shooting and `boundary = "clip"` run Gauss-Newton. With an error model the
+Gauss-Newton Hessian can be indefinite
+([Methods > Gauss-Newton with an error model](methods-sensitivities.html#gauss-newton-with-an-error-model)).
+`"exact"` needs a chain built with `derivMode = "forward-forward"` or `"forward-reverse"`
+([Sensitivities](guide-sensitivities.html)).
 Quasi-Newton settings, entries of `qnControl`:
 
 | entry | default | controls |

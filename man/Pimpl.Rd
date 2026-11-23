@@ -14,8 +14,7 @@ Pimpl(
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
-  deriv = TRUE,
-  deriv2 = FALSE,
+  derivMode = "forward",
   controlsPTC = list(),
   outdir = .dmodOutdir()
 )
@@ -49,8 +48,12 @@ is \code{"impl_parfn"}, followed by \verb{_<condition>}.}
 
 \item{verbose}{Logical. Print the compiler output, default \code{FALSE}.}
 
-\item{deriv, deriv2}{Build first and second derivatives, default \code{TRUE} and
-\code{FALSE}. \code{deriv2} requires \code{deriv = TRUE}.}
+\item{derivMode}{The derivatives to build, one or more of \code{"forward"}
+(default), \code{"reverse"}, \code{"forward-forward"} and \code{"forward-reverse"}, or
+\code{"none"}, as in \code{\link[=odemodel]{odemodel()}}. The reverse directions come from the
+forward ones: \code{"reverse"} builds the Jacobian, \code{"forward-reverse"} the
+second derivatives, as \code{"forward-forward"} does. A call that asks for a
+derivative not built is an error.}
 
 \item{controlsPTC}{Named list of solver controls; an entry not given keeps
 the default, an unknown entry is an error:
@@ -133,10 +136,11 @@ The other arguments are named:
 \item \code{fixed}: named numeric vector of parameters that enter the evaluation
 without derivatives. Default \code{NULL}.
 \item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
-\code{pars}.
+\code{pars}. Every function of the chain has to be built with
+\code{derivMode = "forward"}, see \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
 \item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
-Every function of the chain has to be built for them, see the arguments
-\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+Every function of the chain has to be built with
+\code{derivMode = "forward-forward"}.
 \item \code{hessian}: objective functions only, see the table below. Default
 \code{NULL}.
 \item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the

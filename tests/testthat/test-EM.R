@@ -19,22 +19,22 @@
       define(tr, "dose <- d", d = dose)
     }
     # second derivatives forward over forward and forward over reverse
-    dm <- c("forward", "reverse", "forward-reverse")
+    dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
     g <- Y(c(y = "a + b * dose"), f = NULL, parameters = c("a", "b", "dose"), compile = FALSE,
-           modelname = "nlmefit_lin_g", deriv2 = TRUE, derivMode = dm)
-    p <- P(trafo(c("a", "b")), method = "explicit", compile = FALSE, modelname = "nlmefit_lin_p", deriv2 = TRUE,
+           modelname = "nlmefit_lin_g", derivMode = dm)
+    p <- P(trafo(c("a", "b")), method = "explicit", compile = FALSE, modelname = "nlmefit_lin_p",
            derivMode = dm)
     # with the parameter s of an error model sigma = exp(s)
     ps <- P(trafo(c("a", "b", "s")), method = "explicit", compile = FALSE, modelname = "nlmefit_lin_ps",
-            deriv2 = TRUE, derivMode = dm)
+            derivMode = dm)
     err <- Y(c(y = "exp(s)"), g, attachInput = FALSE, compile = FALSE, modelname = "nlmefit_lin_err",
-             deriv2 = TRUE, derivMode = dm)
+             derivMode = dm)
     # second derivatives forward over forward only
-    pf <- P(trafo(c("a", "b")), method = "explicit", compile = FALSE, modelname = "nlmefit_lin_pf", deriv2 = TRUE)
+    pf <- P(trafo(c("a", "b")), method = "explicit", compile = FALSE, modelname = "nlmefit_lin_pf", derivMode = "forward-forward")
     # uncorrelated random effects
     pu <- P(define(insert(branch(define(NULL, "x <- x", x = c("a", "b")), table = tab), a + b ~ 1 + (1 | ID),
                           conditionMatch = "^s"), "dose <- d", d = dose),
-            method = "explicit", compile = FALSE, modelname = "nlmefit_lin_pu", deriv2 = TRUE, derivMode = dm)
+            method = "explicit", compile = FALSE, modelname = "nlmefit_lin_pu", derivMode = dm)
     compile(g, p, ps, err, pf, pu, output = "nlmefit_lin", cores = 2)
     # random effects at quantiles and noise of mean 0 in every condition: the means of the
     # conditions, and with them the maximum likelihood of Omega, are the same for any draw and in
@@ -573,19 +573,19 @@ test_that("anova tests nested fits and simulate draws data that refit to the est
     rownames(tab) <- paste(tab$ID, tab$center, sep = "_")
     tr <- branch(define(NULL, "x <- x", x = "a"), table = tab)
     tr <- insert(tr, a ~ 1 + (1 | ID) + (1 | center))
-    dm <- c("forward", "reverse", "forward-reverse")
-    g <- Y(c(y = "a"), f = NULL, parameters = "a", compile = FALSE, modelname = "crossed_g", deriv2 = TRUE,
+    dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
+    g <- Y(c(y = "a"), f = NULL, parameters = "a", compile = FALSE, modelname = "crossed_g",
            derivMode = dm)
-    p <- P(tr, method = "explicit", compile = FALSE, modelname = "crossed_p", deriv2 = TRUE, derivMode = dm)
+    p <- P(tr, method = "explicit", compile = FALSE, modelname = "crossed_p", derivMode = dm)
     # the same groupings, nonlinear in the random effects with a proportional error
     trn <- branch(define(NULL, "x <- x", x = c("a", "s")), table = tab)
     trn <- insert(trn, "s <- exp(s)")
     trn <- insert(trn, a ~ 1 + (1 | ID) + (1 | center))
-    gn <- Y(c(y = "exp(a)"), f = NULL, parameters = "a", compile = FALSE, modelname = "crossed_gn", deriv2 = TRUE,
+    gn <- Y(c(y = "exp(a)"), f = NULL, parameters = "a", compile = FALSE, modelname = "crossed_gn",
             derivMode = dm)
-    en <- Y(c(y = "s * y"), gn, attachInput = FALSE, compile = FALSE, modelname = "crossed_en", deriv2 = TRUE,
+    en <- Y(c(y = "s * y"), gn, attachInput = FALSE, compile = FALSE, modelname = "crossed_en",
             derivMode = dm)
-    pn <- P(trn, method = "explicit", compile = FALSE, modelname = "crossed_pn", deriv2 = TRUE, derivMode = dm)
+    pn <- P(trn, method = "explicit", compile = FALSE, modelname = "crossed_pn", derivMode = dm)
     compile(g, p, gn, en, pn, output = "nlmefit_crossed", cores = 2)
     # the effects of the three centers spread by construction: three drawn ones leave the maximum
     # likelihood of their variance at 0 in about one draw of ten

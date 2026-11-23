@@ -35,7 +35,7 @@ cachedEm <- function(key, obj, random, start, control = list(), ...) {
   f
 }
 
-dm <- c("forward", "reverse", "forward-reverse")
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
 
 # Model ----
 #
@@ -94,10 +94,10 @@ ode <- log10Transform(as.eqnvec(net), states = "C")
 ode
 # solver tolerances 1e-10: at the defaults the solver error moves -2 log L by about 1e-4, more than
 # FOCEI resolves, and the fit stalls short of the optimum
-x <- Xs(odemodel(ode, modelname = "tmdd", compile = FALSE, deriv2 = TRUE, derivMode = dm),
+x <- Xs(odemodel(ode, modelname = "tmdd", compile = FALSE, derivMode = dm),
         options = list(atol = 1e-10, rtol = 1e-10))
-g <- Y(c(lcp = "log(10) * C_l10"), x, modelname = "tmdd_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-e <- Y(c(lcp = "sigma"), g, attachInput = FALSE, modelname = "tmdd_e", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+g <- Y(c(lcp = "log(10) * C_l10"), x, modelname = "tmdd_g", compile = FALSE, derivMode = dm)
+e <- Y(c(lcp = "sigma"), g, attachInput = FALSE, modelname = "tmdd_e", compile = FALSE, derivMode = dm)
 trafo <- branch(define(NULL, "x <- x", x = c("CL", "V", "Q", "Vp", "kon", "koff", "kint", "ksyn", "kdeg",
                                              "C_l10", "Cp", "R", "RC", "sigma")), table = table)
 trafo <- insert(trafo, "x <- y", x = c("C_l10", "Cp", "RC"), y = c("log10(dose / V)", "0", "0"))
@@ -106,7 +106,7 @@ trafo <- insert(trafo, "ksyn <- kdeg * R0")
 trafo <- insert(trafo, "dose <- d", d = dose)
 trafo <- insert(trafo, "x <- exp(x)", x = c(parameters, "sigma"))
 trafo <- insert(trafo, CL + V + R0 ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", modelname = "tmdd_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", modelname = "tmdd_p", compile = FALSE, derivMode = dm)
 compile(x, g, e, p, output = "tmdd_all")
 random <- randomEffects(p)
 

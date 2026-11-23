@@ -22,9 +22,10 @@
 #' @param cores Number of parallel jobs generating and compiling the sources of
 #'   a list; on Windows the sources are generated one after the other. `NULL`
 #'   (default) uses [detectFreeCores()].
-#' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
-#'   `FALSE`. `deriv2` requires `deriv = TRUE`.
-#' @param ... Further arguments of [Pexpl()] (`attachInput`, `derivMode`,
+#' @param derivMode The derivatives to build, one or more of `"forward"`
+#'   (default), `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or
+#'   `"none"`, passed to [Pexpl()] or [Pimpl()].
+#' @param ... Further arguments of [Pexpl()] (`attachInput`,
 #'   `outdir`) or [Pimpl()] (`forcings`, `keepRoot`, `flow`, `controlsPTC`,
 #'   `outdir`), as `method` selects.
 #'
@@ -38,11 +39,11 @@
 P <- function(trafo = NULL, parameters = NULL, condition = NULL,
               compile = FALSE, modelname = NULL, method = NULL,
               cores = NULL, verbose = FALSE,
-              deriv = TRUE, deriv2 = FALSE, ...) {
+              derivMode = "forward", ...) {
 
+  .rejectBuildDeriv("P", list(...))
   if (is.null(trafo)) return()
-  if (isTRUE(deriv2) && !isTRUE(deriv))
-    stop("P(deriv2 = TRUE) requires deriv = TRUE.", call. = FALSE)
+  derivMode <- .matchDerivMode(derivMode)
 
   if (!is.list(trafo) || inherits(trafo, "eqnlist") || inherits(trafo, "eqnvec")) {
     trafo_list <- list(trafo); names(trafo_list) <- condition
@@ -61,10 +62,10 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
     switch(m,
       explicit = Pexpl(as.eqnvec(tr), parameters = parameters, condition = cond,
                        compile = FALSE, modelname = modelname, verbose = verbose,
-                       deriv = deriv, deriv2 = deriv2, ...),
+                       derivMode = derivMode, ...),
       implicit = Pimpl(trafo = tr, parameters = parameters, condition = cond,
                        compile = FALSE, modelname = modelname, verbose = verbose,
-                       deriv = deriv, deriv2 = deriv2, ...))
+                       derivMode = derivMode, ...))
   }, mc.cores = if (.Platform$OS.type == "windows") 1L else cores))
 
   if (compile) compile(result, cores = cores, output = modelname, verbose = verbose)
@@ -79,9 +80,8 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 .Pexpl_p2p <- function(st, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, .ad_out = NULL,
                        attach.input = FALSE) {
 
-  if (deriv2 && !st$emit_d2)
-    stop("Pexpl was built with deriv2 = FALSE; rebuild with deriv2 = TRUE.", call. = FALSE)
-  if (!st$emit_d1) deriv <- FALSE
+  if (deriv2 && !st$emit_d2) .notBuilt("Pexpl()", "forward-forward")
+  if (deriv && !st$use_ad) .notBuilt("Pexpl()", "forward")
   if (deriv2 && !deriv) deriv <- TRUE
 
   p <- c(pars, fixed)
@@ -300,9 +300,7 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 # attach.input the passed-through outer parameters add their own cotangent.
 .Pexpl_vjp <- function(st, pars, fixed = NULL, cotangent, attach.input = FALSE) {
   if (is.null(st$vjp))
-    stop("Pexpl(): the reverse mode needs a vector-Jacobian product; rebuild ",
-         "with derivMode = c(\"forward\", \"reverse\") and compile = TRUE.",
-         call. = FALSE)
+    .notBuilt("Pexpl()", "reverse")
   w <- .asCtPars(cotangent)
   K <- .ctK(w)
   b <- .ctBlocks(K)
@@ -369,14 +367,15 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @param modelname Base name of the generated files, default `NULL`, which
 #'   is `"expl_parfn"`, followed by `_<condition>`.
 #' @param verbose Logical. Print the compiler output, default `FALSE`.
-#' @param deriv,deriv2 Build the first derivatives, `attr(, "deriv")`,
-#'   `[inner, outer]`, and the second, `attr(, "deriv2")`,
-#'   `[inner, outer, outer]`. Default `TRUE` and `FALSE`; `deriv2` needs
-#'   `deriv = TRUE`.
-#' @param derivMode Which derivative code to build, any of `"forward"`
-#'   (default), `"reverse"` and `"forward-reverse"`. `"reverse"` is needed for
-#'   `sweep = "reverse"`, `"forward-reverse"` for `sweep = "reverse"` with
-#'   `deriv2 = TRUE`.
+#' @param derivMode The derivatives to build, one or more of `"forward"`
+#'   (default), `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or
+#'   `"none"`, as in [odemodel()]. `"forward"` builds the Jacobian,
+#'   `attr(, "deriv")`, `[inner, outer]`, `"forward-forward"` the second
+#'   derivatives, `attr(, "deriv2")`, `[inner, outer, outer]`; `"reverse"` is
+#'   needed for `sweep = "reverse"`, `"forward-reverse"` for
+#'   `sweep = "reverse"` with `deriv2 = TRUE`. The second-order directions
+#'   build `"forward"` as well. A call that asks for a derivative not built is
+#'   an error.
 #' @param outdir Directory for the generated source and shared object,
 #'   default `getOption("dMod2.outdir")`, else the working directory.
 #'
@@ -389,15 +388,11 @@ P <- function(trafo = NULL, parameters = NULL, condition = NULL,
 #' @export
 Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NULL,
                   compile = FALSE, modelname = NULL, verbose = FALSE,
-                  deriv = TRUE, deriv2 = FALSE,
-                  derivMode = "forward",
-                  outdir = .dmodOutdir()) {
+                  derivMode = "forward", outdir = .dmodOutdir()) {
 
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse", "forward-reverse"))
-  emit_d1   <- isTRUE(deriv)
-  emit_d2   <- isTRUE(deriv2)
-  if (emit_d2 && !emit_d1)
-    stop("Pexpl(deriv2 = TRUE) requires deriv = TRUE.", call. = FALSE)
+  derivMode <- .matchDerivMode(derivMode)
+  emit_d1   <- !identical(derivMode, "none")
+  emit_d2   <- "forward-forward" %in% derivMode
 
   if (is.null(parameters)) {
     parameters <- getSymbols(trafo)
@@ -414,7 +409,7 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
   PEval <- suppressWarnings(cppDE::cppFUN(
     unclass(trafo), variables = NULL, parameters = parameters, fixed = NULL,
     compile = compile, modelname = modelname, outdir = outdir,
-    verbose = verbose, convenient = FALSE, derivMode = derivMode,
+    verbose = verbose, convenient = FALSE, derivMode = .cppFUNMode(derivMode),
     deriv = emit_d1, deriv2 = emit_d2))
 
   fun <- PEval$func; jac <- PEval$jac; hess <- PEval$hess; evaluate <- PEval$evaluate
@@ -807,8 +802,12 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 #' @param modelname Base name of the generated files, default `NULL`, which
 #'   is `"impl_parfn"`, followed by `_<condition>`.
 #' @param verbose Logical. Print the compiler output, default `FALSE`.
-#' @param deriv,deriv2 Build first and second derivatives, default `TRUE` and
-#'   `FALSE`. `deriv2` requires `deriv = TRUE`.
+#' @param derivMode The derivatives to build, one or more of `"forward"`
+#'   (default), `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or
+#'   `"none"`, as in [odemodel()]. The reverse directions come from the
+#'   forward ones: `"reverse"` builds the Jacobian, `"forward-reverse"` the
+#'   second derivatives, as `"forward-forward"` does. A call that asks for a
+#'   derivative not built is an error.
 #' @param controlsPTC Named list of solver controls; an entry not given keeps
 #'   the default, an unknown entry is an error:
 #'   \describe{
@@ -867,14 +866,13 @@ Pexpl <- function(trafo, parameters = NULL, attachInput = FALSE, condition = NUL
 Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
                   keepRoot = TRUE, flow = inherits(trafo, "eqnlist"),
                   compile = FALSE, modelname = NULL, verbose = FALSE,
-                  deriv = TRUE, deriv2 = FALSE, controlsPTC = list(),
+                  derivMode = "forward", controlsPTC = list(),
                   outdir = .dmodOutdir()) {
 
   flow    <- isTRUE(flow)
-  emit_d1 <- isTRUE(deriv)
-  emit_d2 <- isTRUE(deriv2)
-  if (emit_d2 && !emit_d1)
-    stop("Pimpl(deriv2 = TRUE) requires deriv = TRUE.", call. = FALSE)
+  derivMode <- .matchDerivMode(derivMode)
+  emit_d1 <- !identical(derivMode, "none")
+  emit_d2 <- any(c("forward-forward", "forward-reverse") %in% derivMode)
   .pimplPTC(controlsPTC)
 
   norm <- .normalize_ss_inputs(trafo, parameters, forcings)
@@ -998,9 +996,8 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   }
 
   p2p <- function(pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE, condition = NULL) {
-    if (deriv2 && !emit_d2)
-      stop("Pimpl was built with deriv2 = FALSE; rebuild with deriv2 = TRUE.", call. = FALSE)
-    if (!emit_d1) deriv <- FALSE
+    if (deriv2 && !emit_d2) .notBuilt("Pimpl()", "forward-forward")
+    if (deriv && !emit_d1) .notBuilt("Pimpl()", "forward")
     if (deriv2 && !deriv) deriv <- TRUE
 
     p   <- pars

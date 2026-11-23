@@ -147,7 +147,7 @@ flowEq <- lapply(res$symmetries, function(s) {
 })
 
 flow <- lapply(seq_along(flowEq), function(i)
-  Xf(odemodel(flowEq[[i]], deriv = FALSE, modelname = paste0("preBotC_flow", i),
+  Xf(odemodel(flowEq[[i]], derivMode = "none", modelname = paste0("preBotC_flow", i),
               compile = FALSE, outdir = .outdir),
      condition = "flow", options = myOptions))
 

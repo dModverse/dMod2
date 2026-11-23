@@ -10,7 +10,6 @@ importPEtab(
   compile = TRUE,
   cores = 1L,
   modelname = NULL,
-  deriv = TRUE,
   derivMode = "forward",
   options = NULL,
   optionsSens = NULL,
@@ -34,13 +33,11 @@ Default \code{1}.}
 \item{modelname}{Base name of the generated files. Default \code{NULL}, the base
 name of the YAML file.}
 
-\item{deriv}{Logical. If \code{FALSE}, the model is built without sensitivities,
-which needs \code{backend = "cppDE"} or \code{"Sundials"}; the objective then has to
-be called with \code{deriv = FALSE}. Default \code{TRUE}.}
-
-\item{derivMode}{Derivative directions to build, passed to \code{\link[=odemodel]{odemodel()}}:
-\code{"forward"} (default), \code{"reverse"} or \code{c("forward", "reverse")}.
-\code{"reverse"} needs \code{backend = "cppDE"} or \code{"Sundials"}. First order only.}
+\item{derivMode}{Derivative directions to build, passed to \code{\link[=odemodel]{odemodel()}},
+\code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}: \code{"forward"} (default), \code{"reverse"},
+\code{c("forward", "reverse")} or \code{"none"}. \code{"reverse"} and \code{"none"} need
+\code{backend = "cppDE"} or \code{"Sundials"}; with \code{"none"} the objective has to be
+called with \code{deriv = FALSE}. First order only.}
 
 \item{options, optionsSens}{Lists passed to \code{\link[=Xs]{Xs()}}: the solver options of
 every solve and their overrides for the solves with sensitivities.

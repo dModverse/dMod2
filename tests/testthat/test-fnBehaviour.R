@@ -79,7 +79,7 @@ test_that("Xs on deSolve reports events given outside the odemodel", {
 test_that("Xf on deSolve starts states missing from pars at zero", {
   withr::local_dir(tempdir())
   f <- eqnlist() |> addReaction("A", "B", "k*A") |> addReaction("", "C", "1")
-  m <- odemodel(f, modelname = "fnb_xf", backend = "deSolve", deriv = FALSE,
+  m <- odemodel(f, modelname = "fnb_xf", backend = "deSolve", derivMode = "none",
                 compile = FALSE)
   x <- Xf(m)
   compile(x)

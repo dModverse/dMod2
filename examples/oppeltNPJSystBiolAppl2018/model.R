@@ -138,8 +138,8 @@ errors <- eqnvec(nucNFkB = "sigma_nucNFkB", cytNFkB = "sigma_cytNFkB", A20GFP = 
 ## ---- steadystate
 # the cells rest before TNFα is added: a steady state with the amounts of NFκB and IKK conserved;
 # an unstable one is returned rather than refused, the objective below keeps it stable
-pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE, deriv2 = TRUE,
-             controlsPTC = list(stability = FALSE))
+pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE,
+             derivMode = "forward-forward", controlsPTC = list(stability = FALSE))
 
 
 ## ---- odemodel

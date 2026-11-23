@@ -314,7 +314,7 @@ print.summary.em <- function(x, digits = 4, ...) {
   if (identical(x$seMethod, "none")) cat("No standard errors; confint(method = \"profile\") gives intervals\n")
   if (isTRUE(x$partialCurvature))
     cat("Standard errors without the curvature of the prediction in the random effects within the volume term",
-        "(forward over reverse; deriv2 = TRUE gives the full one)\n")
+        "(forward over reverse; derivMode = \"forward-forward\" gives the full one)\n")
   if (!is.null(x$omega)) {
     cat("\nRandom effects:\n")
     om <- x$omega

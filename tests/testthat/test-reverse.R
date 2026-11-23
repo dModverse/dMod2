@@ -31,7 +31,7 @@ skip_on_cran()
     tr <- c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
             s = "exp(logs)")
 
-    m <- odemodel(re, modelname = "rv_ode", deriv = TRUE, derivMode = fr,
+    m <- odemodel(re, modelname = "rv_ode", derivMode = fr,
                   outdir = d, compile = FALSE)
     g <- Y(c(obsA = "s*A", obsB = "s*B"), re, derivMode = fr, modelname = "rv_obs",
            outdir = d)
@@ -47,15 +47,15 @@ skip_on_cran()
         modelname = paste0("rv_p2_", cn), outdir = d)))
 
     ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
-    mev <- odemodel(re, events = ev, modelname = "rv_ev", deriv = TRUE,
+    mev <- odemodel(re, events = ev, modelname = "rv_ev",
                     derivMode = fr, outdir = d, compile = FALSE)
     pev <- P(c(tr, t_dose = "3", d_amt = "exp(logdose)"), condition = "C1",
              derivMode = fr, modelname = "rv_pev", outdir = d)
-    mnr <- odemodel(re, modelname = "rv_noRev", deriv = TRUE, outdir = d,
+    mnr <- odemodel(re, modelname = "rv_noRev", outdir = d,
                     compile = FALSE)
 
     pq <- Pimpl(c(A = "k_in - k_out * A"), parameters = c("k_in", "k_out"),
-                flow = TRUE, modelname = "rv_equil", deriv = TRUE,
+                flow = TRUE, modelname = "rv_equil",
                 outdir = d, verbose = FALSE)
     pl <- P(c(k_in = "exp(logkin)", k_out = "exp(logkout)", B = "0",
               k1 = "exp(logk1)", k2 = "exp(logk2)", s = "exp(logs)"),
@@ -65,49 +65,49 @@ skip_on_cran()
              condition = "C2", derivMode = fr, modelname = "rv_pq2", outdir = d)
 
     sun <- if (isTRUE(cppDE:::cvodeConfig$available))
-      odemodel(re, modelname = "rv_sun", deriv = TRUE, backend = "Sundials",
+      odemodel(re, modelname = "rv_sun", backend = "Sundials",
                derivMode = fr, outdir = d, compile = FALSE)
     sunev <- if (isTRUE(cppDE:::cvodeConfig$available))
-      odemodel(re, events = ev, modelname = "rv_sun_ev", deriv = TRUE,
+      odemodel(re, events = ev, modelname = "rv_sun_ev",
                backend = "Sundials", derivMode = fr, outdir = d, compile = FALSE)
 
-    m2 <- odemodel(re, modelname = "rv2_ode", deriv = TRUE, deriv2 = TRUE,
+    m2 <- odemodel(re, modelname = "rv2_ode",
                    outdir = d, compile = FALSE,
                    derivMode = c(fr, "forward-forward", "forward-reverse"))
-    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+    g2 <- Y(c(obsA = "s*A", obsB = "s*B"), re, derivMode = c(fr, "forward-reverse", "forward-forward"),
             modelname = "rv2_obs", outdir = d)
-    q <- P(tr, condition = "C1", deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+    q <- P(tr, condition = "C1", derivMode = c(fr, "forward-reverse", "forward-forward"),
            modelname = "rv2_p", outdir = d)
     # A second condition on the same ODE. The batched backward path only
     # engages with more than one live condition.
-    q2 <- q + P(tr, condition = "C2", deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+    q2 <- q + P(tr, condition = "C2", derivMode = c(fr, "forward-reverse", "forward-forward"),
                 modelname = "rv2_p2", outdir = d)
     # k2 and s reach the prediction only through attach.input. qt hands them on
     # at the head of the chain. qh maps k2 per condition and hands s on, and qb
     # hands both on behind it, for two conditions in one batched call.
     tr_ab <- tr[c("A", "B", "k1")]
-    qt <- P(tr_ab, condition = "C1", attachInput = TRUE, deriv2 = TRUE,
-            derivMode = c(fr, "forward-reverse"), modelname = "rv2_pt", outdir = d)
+    qt <- P(tr_ab, condition = "C1", attachInput = TRUE,
+            derivMode = c(fr, "forward-reverse", "forward-forward"), modelname = "rv2_pt", outdir = d)
     qh <- P(list(C1 = c(k2 = "exp(logk2)"), C2 = c(k2 = "2*exp(logk2)")),
-            attachInput = TRUE, deriv2 = TRUE, derivMode = c(fr, "forward-reverse"),
+            attachInput = TRUE, derivMode = c(fr, "forward-reverse", "forward-forward"),
             modelname = "rv2_ph", outdir = d)
-    qb <- P(tr_ab, attachInput = TRUE, deriv2 = TRUE,
-            derivMode = c(fr, "forward-reverse"), modelname = "rv2_pb", outdir = d)
+    qb <- P(tr_ab, attachInput = TRUE,
+            derivMode = c(fr, "forward-reverse", "forward-forward"), modelname = "rv2_pb", outdir = d)
 
     # An estimated error model on two conditions, as one Y() and as a sum per condition.
     fr2 <- c(fr, "forward-reverse")
     errs <- c(obsA = "sd_rel*obsA + sd_abs", obsB = "sd_rel*obsB + sd_abs")
-    e2 <- Y(errs, g2, states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"), deriv2 = TRUE,
-            derivMode = fr2, modelname = "rv2_err", outdir = d)
+    e2 <- Y(errs, g2, states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"),
+            derivMode = c(fr2, "forward-forward"), modelname = "rv2_err", outdir = d)
     e2c <- Reduce("+", lapply(c("C1", "C2"), function(cn)
       Y(errs, g2, states = c("obsA", "obsB"), parameters = c("sd_rel", "sd_abs"), condition = cn,
-        deriv2 = TRUE, derivMode = fr2, modelname = paste0("rv2_err_", cn), outdir = d)))
+        derivMode = c(fr2, "forward-forward"), modelname = paste0("rv2_err_", cn), outdir = d)))
     qe <- Reduce("+", lapply(c("C1", "C2"), function(cn)
-      P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"), condition = cn, deriv2 = TRUE,
-        derivMode = fr2, modelname = paste0("rv2_pe_", cn), outdir = d)))
+      P(c(tr, sd_rel = "exp(logsdrel)", sd_abs = "exp(logsdabs)"), condition = cn,
+        derivMode = c(fr2, "forward-forward"), modelname = paste0("rv2_pe_", cn), outdir = d)))
     # observables of time alone, for Xt()
     gt <- Y(c(obsA = "s * exp(-k1 * time)", obsB = "s * k1 * time"), f = NULL, parameters = c("s", "k1"),
-            deriv2 = TRUE, derivMode = fr2, modelname = "rv2_obst", outdir = d)
+            derivMode = c(fr2, "forward-forward"), modelname = "rv2_obst", outdir = d)
 
     compile(m, g, e, p, pe, pc, mev, pev, mnr, pq, pl, pl2, sun, sunev, m2, g2, q,
             q2, qt, qh, qb, e2, e2c, qe, gt, output = "rv_all", cores = test_cores())
@@ -382,7 +382,7 @@ test_that("a model without a reverse object says so", {
   prd <- fx$g * xf * fx$p
   obj <- normL2(.rev_data(fx, fx$g * fx$x * fx$p, fx$pars), prd)
   expect_error(obj(fx$pars, deriv = TRUE, sweep = "reverse"),
-               "no reverse object")
+               "derivMode = \"reverse\"")
   expect_error(odemodel(.rev_reactions(), modelname = "rv_deSolve",
                         derivMode = c("forward", "reverse"), backend = "deSolve", outdir = d),
                "cppDE")
@@ -423,7 +423,7 @@ test_that("a quasi-Newton phase runs backwards when the chain can and forwards w
   expect_identical(trust(nobj, start, phases = list(gn, sr1))$phaseSweep[["sr1"]],
                    "forward")
   expect_error(trust(nobj, start, phases = list(gn, c(sr1, sweep = "reverse"))),
-               "no reverse object")
+               "derivMode = \"reverse\"")
 })
 
 
@@ -537,7 +537,7 @@ test_that("odemodel builds the forward-reverse object and names it", {
   expect_false(is.null(m$reversed2))
   expect_identical(attr(m$reversed2, "derivMode"), "forward-reverse")
 
-  # forward-forward is deriv2 = TRUE under a separate name.
+  # forward-forward builds the second-order sensitivities.
   m2 <- odemodel(.rev_reactions(), modelname = "rv_ffm", outdir = d,
                  derivMode = c("forward", "forward-forward"), compile = FALSE)
   expect_false(is.null(m2$extended2))

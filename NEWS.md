@@ -1,3 +1,19 @@
+# dMod2 0.16.1
+
+* `derivMode` alone selects the derivatives a constructor builds: `odemodel()`, `Y()`, `P()`,
+  `Pexpl()`, `Pimpl()` and `importPEtab()` take one or more of `"forward"` (default),
+  `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or `"none"`. The build arguments
+  `deriv` and `deriv2` are removed: `deriv2 = TRUE` is `derivMode = "forward-forward"`,
+  `deriv = FALSE` is `derivMode = "none"`. Passing `deriv` or `deriv2` is an error.
+* A second-order direction, `"forward-forward"` or `"forward-reverse"`, builds `"forward"` as
+  well. `"none"` combines with no other direction. `odemodel(derivMode = "reverse")` builds no
+  forward sensitivities. `Pimpl()` obtains the reverse directions from the forward ones.
+* `deriv`, `deriv2` and `sweep` of a call keep their meaning. A call that asks for a derivative
+  the function object was built without is an error that names the missing `derivMode`
+  direction; `Y()`, `Pexpl()` and `Pimpl()` built without first derivatives no longer return
+  values alone on `deriv = TRUE`.
+* The `odemodel` object holds the built directions in `attr(, "derivMode")`.
+
 # dMod2 0.16.0
 
 * The plotting theme and color helpers are named after the package: `theme_dMod2()`,

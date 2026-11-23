@@ -27,13 +27,13 @@ print.odemodel <- function(x, ...) {
   if (!is.null(extended)) {
     cat("  Sens1:   ", as.character(extended), "\n", sep = "")
   } else {
-    cat("  Sens1:   not compiled (deriv = FALSE)\n", sep = "")
+    cat("  Sens1:   not built (derivMode without \"forward\")\n", sep = "")
   }
   if (isCppDE) {
     if (!is.null(extended2)) {
       cat("  Sens2:   ", as.character(extended2), "\n", sep = "")
     } else {
-      cat("  Sens2:   not compiled (deriv2 = FALSE)\n", sep = "")
+      cat("  Sens2:   not built (derivMode without \"forward-forward\")\n", sep = "")
     }
     if (!is.null(reversed))
       cat("  Adjoint: ", as.character(reversed), "\n", sep = "")
@@ -68,23 +68,20 @@ print.odemodel <- function(x, ...) {
 #' @param f Named character vector, [eqnvec] or [eqnlist] with the right-hand
 #'   sides; the names are the states. The functions and operators an equation
 #'   may use are listed in [cppDE::expressions].
-#' @param deriv logical, build first-order sensitivities. Default `TRUE`.
-#'   `FALSE` builds the states alone, for [Xf()], and `derivMode` has no
-#'   effect.
-#' @param deriv2 logical, build second-order sensitivities. Default `FALSE`.
-#'   `TRUE` is the same as adding `"forward-forward"` to `derivMode`, needs
-#'   `backend = "cppDE"` and implies `deriv = TRUE`.
 #' @param derivMode character, the derivative directions to build, one or
 #'   more of:
-#'   * `"forward"` (default): sensitivity equations. `deriv = TRUE` builds them
-#'     also when `derivMode` leaves out `"forward"`.
+#'   * `"forward"` (default): first-order sensitivities.
 #'   * `"reverse"`: adjoint gradient, needed for `obj(..., sweep = "reverse")`.
 #'     Not available on `backend = "deSolve"`.
-#'   * `"forward-forward"`: second-order sensitivities.
+#'   * `"forward-forward"`: second-order sensitivities, needed for
+#'     `deriv2 = TRUE` in a call. `backend = "cppDE"` only.
 #'   * `"forward-reverse"`: adjoint Hessian, needed for
 #'     `obj(..., sweep = "reverse", deriv2 = TRUE)`. `backend = "cppDE"` only.
+#'   * `"none"`: the states alone, for [Xf()].
 #'
-#'   Each direction is compiled separately.
+#'   Each direction is compiled separately. The two second-order directions
+#'   build `"forward"` as well. A call that asks for a derivative not built is
+#'   an error.
 #' @param forcings character, the names of the forcings in `f`. Default
 #'   `NULL`. Their data are given to [Xs()] or [Xf()].
 #' @param events an [eventlist], or a `data.frame` accepted by
@@ -134,40 +131,29 @@ print.odemodel <- function(x, ...) {
 #'
 #' @example inst/examples/odemodel.R
 #' @export
-odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
+odemodel <- function(f, derivMode = "forward",
                      forcings=NULL, events = NULL,
                      fixed = NULL, modelname = "odemodel", backend = c("cppDE", "Sundials", "deSolve"),
                      verbose = FALSE, outdir = .dmodOutdir(), ...) {
 
   f <- as.eqnvec(f)
   backend <- match.arg(backend)
-  derivMode <- .matchDerivMode(derivMode, c("forward", "reverse",
-                                            "forward-forward", "forward-reverse"))
-  # without derivatives there is no direction to build
-  if (!deriv && !deriv2) derivMode <- "forward"
+  dots <- list(...)
+  .rejectBuildDeriv("odemodel", dots)
+  derivMode <- .matchDerivMode(derivMode)
+  deriv    <- "forward" %in% derivMode
+  deriv2   <- "forward-forward" %in% derivMode
   reverse  <- "reverse" %in% derivMode
   reverse2 <- "forward-reverse" %in% derivMode
-  # The two spellings of forward over forward name the same build product.
-  if ("forward-forward" %in% derivMode) deriv2 <- TRUE
   if (reverse && backend == "deSolve")
     stop("derivMode = \"reverse\" needs backend = 'cppDE' or 'Sundials'.",
          call. = FALSE)
   if (reverse2 && backend != "cppDE")
     stop("derivMode = \"forward-reverse\" needs backend = 'cppDE'.",
          call. = FALSE)
-
-  if (deriv2 && !deriv) {
-    warning("`deriv2 = TRUE` implies `deriv = TRUE`. Setting deriv = TRUE.",
-            call. = FALSE)
-    deriv <- TRUE
-  }
-
-  dots <- list(...)
-
-  if (deriv2 && backend == "deSolve")
-    stop("Second-order sensitivities require backend = 'cppDE'.")
-  if (deriv2 && backend == "Sundials")
-    stop("Second-order sensitivities are not available with CVODE; use backend = 'cppDE'.")
+  if (deriv2 && backend != "cppDE")
+    stop("derivMode = \"forward-forward\" needs backend = 'cppDE'.",
+         call. = FALSE)
 
   # cOde::funC has no outdir and always writes to the working directory, so a
   # non-default outdir would be silently ignored under the deSolve backend.
@@ -334,5 +320,6 @@ odemodel <- function(f, deriv = TRUE, deriv2 = FALSE, derivMode = "forward",
   attr(out, "compileInfo") <- .collectCompileInfo(out$func, out$extended,
                                                   out$extended2, out$reversed,
                                                   out$reversed2)
+  attr(out, "derivMode") <- derivMode
   return(out)
 }

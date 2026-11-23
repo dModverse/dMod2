@@ -68,17 +68,17 @@ pp_models <- function() {
   lin <- Pimpl(c(x = "x - a"), parameters = "a", modelname = mn("lin"), verbose = FALSE)
 
   d2 <- Pimpl(c(C = "k1*(totA - C)*(totB - C) - km*C"),
-              parameters = c("k1","km","totA","totB"), deriv2 = TRUE,
+              parameters = c("k1","km","totA","totB"), derivMode = "forward-forward",
               modelname = mn("d2"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   d2_2 <- Pimpl(c(x1 = "a*x1 - b*x2 - 1", x2 = "x1*x2 - c"),
-                parameters = c("a","b","c"), deriv2 = TRUE,
+                parameters = c("a","b","c"), derivMode = "forward-forward",
                 modelname = mn("d2_2"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   el_AB <- eqnlist() |>
     addReaction("A", "B", "k*A") |>
     addReaction("B", "A", "km*B")
-  d2_cq <- Pimpl(el_AB, parameters = c("k","km"), deriv2 = TRUE,
+  d2_cq <- Pimpl(el_AB, parameters = c("k","km"), derivMode = "forward-forward",
                  modelname = mn("d2_cq"), verbose = FALSE, controlsPTC = list(reltol = 1e-13))
 
   moiety2_im <- Pimpl(el_2moiety, modelname = mn("2moiety_im"))
@@ -93,7 +93,7 @@ pp_models <- function() {
   recycle <- Pimpl(el_recycle, modelname = mn("recycle"))
 
   sing <- Pimpl(c(x1 = "x1 + x2 - s", x2 = "x1 + x2 - s"), parameters = "s",
-                deriv2 = FALSE, modelname = mn("sing"), verbose = FALSE,
+                modelname = mn("sing"), verbose = FALSE,
                 controlsPTC = list(positive = FALSE))
 
   noroot <- Pimpl(c(x = "x*x + 1"), parameters = character(0),
@@ -114,7 +114,7 @@ pp_models <- function() {
                modelname = mn("px_same"), verbose = FALSE)
 
   # a root whose first derivative vanishes at a = 1 while the second does not
-  kink <- Pimpl(c(x = "(a-1)^2 + 1 - x"), parameters = "a", deriv2 = TRUE,
+  kink <- Pimpl(c(x = "(a-1)^2 + 1 - x"), parameters = "a", derivMode = "forward-forward",
                 modelname = mn("kink"), verbose = FALSE,
                 controlsPTC = list(positive = FALSE))
 
@@ -128,7 +128,7 @@ pp_models <- function() {
   el_vol <- eqnlist() |>
     assignCompartment(B = "nuc", volume = "V") |>
     addReaction("A", "B", "k1*A") |> addReaction("B", "A", "k2*B")
-  vol <- Pimpl(el_vol, modelname = mn("vol"), deriv2 = TRUE, verbose = FALSE)
+  vol <- Pimpl(el_vol, modelname = mn("vol"), derivMode = "forward-forward", verbose = FALSE)
 
   # a conserved cycle driven by a species that is structurally zero at the steady state
   el_rest <- eqnlist() |>
@@ -146,21 +146,21 @@ pp_models <- function() {
 
   # the Brusselator: x = a, y = b / a, with eigenvalues of real part (b - 1 - a^2) / 2 while complex
   bruss <- Pimpl(c(x = "a - (b + 1) * x + x^2 * y", y = "b * x - x^2 * y"), modelname = mn("bruss"),
-                 deriv2 = TRUE, verbose = FALSE)
+                 derivMode = "forward-forward", verbose = FALSE)
   bruss_p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = mn("bruss_p"))
   # a real eigenvalue through 0 where two roots exchange stability, next to a mode that stays
   trans <- Pimpl(c(x = "x * (q - x)", y = "x - y"), parameters = "q", modelname = mn("trans"),
-                 deriv2 = TRUE, verbose = FALSE, controlsPTC = list(positive = FALSE))
+                 derivMode = "forward-forward", verbose = FALSE, controlsPTC = list(positive = FALSE))
   # the same steady state as a flow with a stable root required, passing a parameter on, which
   # differs between two conditions
   bruss_s <- Pimpl(c(x = "a - (b + 1) * x + x^2 * y", y = "b * x - x^2 * y"), parameters = c("a", "b", "s"),
-                   flow = TRUE, modelname = mn("bruss_s"), deriv2 = TRUE, verbose = FALSE)
+                   flow = TRUE, modelname = mn("bruss_s"), derivMode = "forward-forward", verbose = FALSE)
   bruss_c <- P(list(C1 = c(a = "exp(la)", b = "exp(lb)", s = "1"), C2 = c(a = "exp(la)", b = "exp(lb)", s = "2")),
                modelname = mn("bruss_c"))
   # two states in a chain whose rates can coincide, a defective double eigenvalue, beside a fast mode
   chain <- Pimpl(c(x = "k0 - k1 * x", y = "k1 * x - k2 * y + c * z", z = "kf0 - kf * z + d * y"),
                  parameters = c("k0", "k1", "k2", "kf0", "kf", "c", "d"), modelname = mn("chain"),
-                 deriv2 = TRUE, verbose = FALSE)
+                 derivMode = "forward-forward", verbose = FALSE)
 
   compile(lin, d2, d2_2, d2_cq, moiety2_im, dimer_im, recycle, sing, noroot,
           noparam, erk_im, px, px_same, zero, pd, pd2, plasmid, bistable, unstable,
@@ -723,7 +723,7 @@ test_that("Pimpl solves a network whose R-Smad rows barely turn over", {
   fx <- readRDS(test_path("fixtures", "pimpl_smad_row.rds"))
   oldwd <- setwd(.dmod_fx_workdir()); on.exit(setwd(oldwd), add = TRUE)
   mn <- paste0("test_pp_smadrow_", as.integer(Sys.time()))
-  pf <- Pimpl(fx$reactions, forcings = fx$forcings, deriv = FALSE, modelname = mn,
+  pf <- Pimpl(fx$reactions, forcings = fx$forcings, derivMode = "none", modelname = mn,
               controlsPTC = list(nStarts = 0L))
   compile(pf, output = mn, cores = test_cores())
   out <- pf(fx$pv, deriv = FALSE)[[1]]

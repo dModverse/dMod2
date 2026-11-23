@@ -15,8 +15,6 @@ Y(
   modelname = NULL,
   verbose = FALSE,
   cores = NULL,
-  deriv = TRUE,
-  deriv2 = FALSE,
   derivMode = "forward",
   outdir = .dmodOutdir()
 )
@@ -57,25 +55,22 @@ shared object. Default \code{NULL}, which is \code{"obsfn"}, followed by
 when \code{g} is a list, on Windows only to compile them; \code{NULL} auto-detects.
 Ignored for a single observation function, which is one source either way.}
 
-\item{deriv}{Logical. If \code{TRUE} (default), build the first derivatives,
-returned as \code{attr(, "deriv")}, \verb{[time, observable, parameter]}, when the
-call has \code{deriv = TRUE} and \code{derivMode} contains \code{"forward"}. \code{FALSE}
-returns none, whatever the call asks.}
-
-\item{deriv2}{Logical. If \code{TRUE}, build the second derivatives, returned
-as \code{attr(, "deriv2")}, \verb{[time, observable, parameter, parameter]}, when
-the call has \code{deriv2 = TRUE}; on a function built without them that call
-is an error. Requires \code{deriv = TRUE}. Default \code{FALSE}.}
-
-\item{derivMode}{Which derivative code to build, any of \code{"forward"}
-(default), \code{"reverse"} and \code{"forward-reverse"}.
+\item{derivMode}{The derivatives to build, one or more of \code{"forward"}
+(default), \code{"reverse"}, \code{"forward-forward"} and \code{"forward-reverse"}, or
+\code{"none"}, as in \code{\link[=odemodel]{odemodel()}}.
 \itemize{
-\item \code{"forward"}: the Jacobian; without it the function returns no \code{deriv}
-attribute.
-\item \code{"reverse"}: needed for \code{sweep = "reverse"}.
+\item \code{"forward"}: the Jacobian, \code{attr(, "deriv")},
+\verb{[time, observable, parameter]}.
+\item \code{"reverse"}: the vector-Jacobian product of \code{sweep = "reverse"}.
+\item \code{"forward-forward"}: the second derivatives, \code{attr(, "deriv2")},
+\verb{[time, observable, parameter, parameter]}, for \code{deriv2 = TRUE}.
 \item \code{"forward-reverse"}: needed for \code{sweep = "reverse"} with
 \code{deriv2 = TRUE}.
-}}
+\item \code{"none"}: values only.
+}
+
+The second-order directions build \code{"forward"} as well. A call that asks
+for a derivative not built is an error.}
 
 \item{outdir}{Character. Directory for the generated C++ source and the
 shared object, default \code{getOption("dMod2.outdir")}, else the working
@@ -114,10 +109,11 @@ The other arguments are named:
 \item \code{fixed}: named numeric vector of parameters that enter the evaluation
 without derivatives. Default \code{NULL}.
 \item \code{deriv}: \code{TRUE} (default) returns first derivatives with respect to
-\code{pars}.
+\code{pars}. Every function of the chain has to be built with
+\code{derivMode = "forward"}, see \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
 \item \code{deriv2}: \code{TRUE} returns second derivatives as well. Default \code{FALSE}.
-Every function of the chain has to be built for them, see the arguments
-\code{deriv2} and \code{derivMode} of \code{\link[=odemodel]{odemodel()}}, \code{\link[=Y]{Y()}} and \code{\link[=P]{P()}}.
+Every function of the chain has to be built with
+\code{derivMode = "forward-forward"}.
 \item \code{hessian}: objective functions only, see the table below. Default
 \code{NULL}.
 \item \code{sweep}: objective functions only. \code{"forward"} (default) propagates the

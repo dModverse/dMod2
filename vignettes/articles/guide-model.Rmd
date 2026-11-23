@@ -219,7 +219,7 @@ and standard deviation 4 by default, narrower where the magnitude is known:
 
 `pSS` also returns unstable roots (`controlsPTC = list(stability = FALSE)`);
 `constraintStability()` is zero on a stable resting state and reaches 100 per eigenvalue at the
-stability boundary, and needs `Pimpl(deriv2 = TRUE)`
+stability boundary, and needs `Pimpl(derivMode = "forward-forward")`
 ([Methods > Steady states](methods-steady-states.html#stability)).
 
 ```{r objective}

@@ -20,7 +20,7 @@ reactions <- eqnlist() |>
 # 1. The solver alone ---------------------------------------------------------
 # One value solve with checkpoints, then one backward sweep from a cotangent on
 # the prediction to one on the model parameters; the oracle is w' S from forward.
-model <- odemodel(reactions, modelname = "rev_ode", deriv = TRUE, deriv2 = TRUE,
+model <- odemodel(reactions, modelname = "rev_ode",
                   derivMode = c("forward", "reverse", "forward-forward",
                                 "forward-reverse"),
                   outdir = .outdir, compile = TRUE)
@@ -47,11 +47,11 @@ cat("1. solver          max |difference| =",
 # 2. The whole chain, g * x * p -----------------------------------------------
 # normL2 seeds the residual cotangent and pushes it back through g, x and p in
 # one pass.
-g <- Y(c(obsA = "s*A", obsB = "s*B"), reactions, compile = TRUE, deriv2 = TRUE,
+g <- Y(c(obsA = "s*A", obsB = "s*B"), reactions, compile = TRUE, derivMode = "forward-forward",
        modelname = "rev_obs", outdir = .outdir)
 p <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
          s = "exp(logs)"),
-       condition = "C1", compile = TRUE, deriv2 = TRUE,
+       condition = "C1", compile = TRUE, derivMode = "forward-forward",
        modelname = "rev_p", outdir = .outdir)
 
 pars <- c(logA = log(2), logk1 = log(0.6), logk2 = log(0.3), logs = log(1.5))
@@ -155,7 +155,7 @@ cat("\n5. the gap tracks the tolerance over eight decades, so it is the\n",
 # applied it; the reverse pass only reads back which events fired and when.
 ev <- eventlist(var = "A", time = "t_dose", value = "d_amt", method = "add")
 model_ev <- odemodel(reactions, events = ev, modelname = "rev_ev",
-                     deriv = TRUE, derivMode = c("forward", "reverse"), outdir = .outdir,
+                     derivMode = c("forward", "reverse"), outdir = .outdir,
                      compile = TRUE)
 x_ev <- Xs(model_ev, options = tight)
 p_ev <- P(c(A = "exp(logA)", B = "0", k1 = "exp(logk1)", k2 = "exp(logk2)",
@@ -186,7 +186,7 @@ cat("   with", length(pars), "parameters. The ratio is what falls as they grow.\
 
 # 8. The exact Hessian --------------------------------------------------------
 # `sweep` picks forward over forward or forward over reverse; the model needs the
-# matching `derivMode` entries, and g and p need `deriv2 = TRUE`.
+# matching `derivMode` entries, g and p need "forward-forward".
 hf <- obj(pars, deriv2 = TRUE)
 hr <- obj(pars, sweep = "reverse", deriv2 = TRUE)
 cat(sprintf("8. exact Hessian   forward vs reverse: max|difference| %.2e\n",

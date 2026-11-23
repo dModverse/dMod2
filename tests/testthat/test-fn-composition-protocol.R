@@ -241,8 +241,8 @@ test_that("deriv2 and cores survive a sum of objectives", {
 
   # deriv2 reaches the chain, which was built without it and says so, rather
   # than the sum returning the Gauss-Newton Hessian.
-  expect_error((obj + pri)(p, deriv = TRUE, deriv2 = TRUE), "deriv2")
-  expect_error(obj(p, deriv = TRUE, deriv2 = TRUE), "deriv2")
+  expect_error((obj + pri)(p, deriv = TRUE, deriv2 = TRUE), "derivMode = \"forward-forward\"")
+  expect_error(obj(p, deriv = TRUE, deriv2 = TRUE), "derivMode = \"forward-forward\"")
 
   # cores reaches the operands the same way
   expect_equal((obj + pri)(p, cores = 2L)$value, (obj + pri)(p)$value,

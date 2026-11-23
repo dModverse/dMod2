@@ -85,9 +85,9 @@
 #'       default `TRUE`.}
 #'     \item{`derivMode`}{how FOCEI gets the second derivatives of the volume
 #'       term: `"forward-reverse"` (default), sweeps for models built with
-#'       `derivMode = c("forward", "reverse", "forward-reverse")`, or
+#'       `derivMode = c("reverse", "forward-reverse")`, or
 #'       `"forward-forward"`, the second-order sensitivities of models built
-#'       with `deriv2 = TRUE`. Without the mode asked for the fit takes the
+#'       with `derivMode = "forward-forward"`. Without the mode asked for the fit takes the
 #'       other, with a message.}
 #'     \item{`boundary`}{the largest rise of -2 log L at which a variance is
 #'       set to 0, default 0.1, `FALSE` for none. With one grouping and several

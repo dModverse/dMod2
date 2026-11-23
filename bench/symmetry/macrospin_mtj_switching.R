@@ -106,7 +106,7 @@ p <- Reduce(`+`, lapply(rownames(fields), function(cn) {
 # flow dz/deps = sgn*xi(z) along the easy-axis direction, in log10 coordinates
 fl <- log10Transform(dir.easy$completeGenerator)
 flow <- Xf(odemodel(as.eqnvec(setNames(paste0("sgn*(", fl, ")"), names(fl))),
-                    deriv = FALSE, modelname = "macrospin_flow", compile = FALSE,
+                    derivMode = "none", modelname = "macrospin_flow", compile = FALSE,
                     outdir = .outdir),
            condition = "flow", options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))
 
@@ -321,7 +321,7 @@ dirs.stt  <- res.stt$symmetries
 flows.stt <- lapply(seq_along(dirs.stt), function(i) {
   gen <- dirs.stt[[i]]$completeGenerator
   Xf(odemodel(as.eqnvec(setNames(paste0("sgn*(", gen, ")"), names(gen))),
-              deriv = FALSE, modelname = paste0("mtj_flow", i), compile = FALSE,
+              derivMode = "none", modelname = paste0("mtj_flow", i), compile = FALSE,
               outdir = .outdir),
      condition = paste0("flow", i),
      options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))

@@ -24,7 +24,7 @@ skip_if_no_compile <- function() {
                modelname = "test_P_dm_fwd", compile = FALSE)
 
     const <- c(A = "1.0", B = "2.5")
-    p_const_val <- Pexpl(const, deriv = FALSE, compile = FALSE,
+    p_const_val <- Pexpl(const, derivMode = "none", compile = FALSE,
                          modelname = "noparam_pexpl_val")
     p_const_fwd <- Pexpl(const, derivMode = "forward", compile = FALSE,
                          modelname = "noparam_pexpl_fwd")
@@ -42,13 +42,13 @@ skip_if_no_compile <- function() {
 
     # The mixed trafo again, passing every input it does not map through.
     p_thru <- P(eqnvec(A = "a^2", k = "a * b"), condition = "C1",
-                attachInput = TRUE, deriv2 = TRUE,
+                attachInput = TRUE, derivMode = "forward-forward",
                 modelname = "test_P_thru", compile = FALSE)
 
     # outputs whose first derivative vanishes at b = 0 while the second does not
-    p_kink <- Pexpl(c(a = "b^2", c = "exp(b)*d"), deriv2 = TRUE,
+    p_kink <- Pexpl(c(a = "b^2", c = "exp(b)*d"), derivMode = "forward-forward",
                     modelname = "test_P_kink", compile = FALSE)
-    p_ksum <- Pexpl(c(y = "a + c"), deriv2 = TRUE,
+    p_ksum <- Pexpl(c(y = "a + c"), derivMode = "forward-forward",
                     modelname = "test_P_ksum", compile = FALSE)
 
     compile(p_mix, p_rev, p_fwd, p_const_val, p_const_fwd, x_full, p_full, g_full,
@@ -124,9 +124,10 @@ test_that("Pexpl derivMode 'reverse' and 'forward' agree on the value", {
   pfn_fwd <- fx$p_fwd
 
   outer <- c(a = 0.3, b = -0.5)
-  i_rev <- pfn_rev(outer, deriv = TRUE)$C1
+  i_rev <- pfn_rev(outer, deriv = FALSE)$C1
   i_fwd <- pfn_fwd(outer, deriv = TRUE)$C1
   expect_equal(as.numeric(i_rev), as.numeric(i_fwd), tolerance = 1e-12)
+  expect_error(pfn_rev(outer), "Pexpl\\(\\) was built without derivMode = \"forward\"")
   J <- attr(i_fwd, "deriv")
   expect_equal(unname(J[c("A", "k"), c("a", "b")]), diag(exp(c(0.3, -0.5))),
                tolerance = 1e-12)
@@ -250,7 +251,7 @@ test_that("getParameters(Y * Xs * P) equals getParameters(P) (outer-pars view)",
 
 test_that("Pexpl with pure-numeric trafo evaluates (values and forward)", {
   fx <- .pexpl_fx()
-  out_val <- fx$p_const_val(c(dummy = 1.0))
+  out_val <- fx$p_const_val(c(dummy = 1.0), deriv = FALSE)
   expect_equal(unclass(out_val[[1]])[c("A", "B")], c(A = 1.0, B = 2.5))
 
   out_fwd <- fx$p_const_fwd(c(dummy = 1.0))

@@ -98,7 +98,7 @@ p.red <- eqnvec() |>
 flow <- lapply(seq_along(res$symmetries), function(i) {
   fl <- log10Transform(res$symmetries[[i]]$completeGenerator)
   Xf(odemodel(as.eqnvec(setNames(paste0("sgn*(", fl, ")"), names(fl))),
-              deriv = FALSE, modelname = paste0("AB_flow", i), compile = FALSE,
+              derivMode = "none", modelname = paste0("AB_flow", i), compile = FALSE,
               outdir = .outdir),
      condition = "flow",
      options = list(atol = 1e-12, rtol = 1e-12, maxsteps = 1e7))

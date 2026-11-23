@@ -8,15 +8,15 @@ if (!exists("obj")) source("model.R")
 ## ---- reversechain
 # the chain and objective of model.R once more, every function object with the reverse sweep and
 # second derivatives; Pimpl() passes the reverse sweep through the Jacobian of the root
-dm <- c("forward", "reverse", "forward-reverse")
-modelR <- odemodel(reactions, events = events, modelname = "oppelt_rev_ode", deriv2 = TRUE,
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
+modelR <- odemodel(reactions, events = events, modelname = "oppelt_rev_ode",
                    derivMode = dm, compile = FALSE)
 xR <- Xs(modelR, options = list(atol = 1e-10, rtol = 1e-8))
-gR <- Y(observables, xR, modelname = "oppelt_rev_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-eR <- Y(errors, gR, modelname = "oppelt_rev_err", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = TRUE,
-              controlsPTC = list(stability = FALSE))
-pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+gR <- Y(observables, xR, modelname = "oppelt_rev_obs", compile = FALSE, derivMode = dm)
+eR <- Y(errors, gR, modelname = "oppelt_rev_err", compile = FALSE, derivMode = dm)
+pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE,
+              derivMode = "forward-forward", controlsPTC = list(stability = FALSE))
+pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, derivMode = dm)
 compile(gR, xR, pSSR, pR, eR, output = "oppelt_rev", cores = getOption("dMod2.cores"))
 objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) +
   constraintStability(pSSR, pR, width = rampWidth)
