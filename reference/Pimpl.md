@@ -20,8 +20,7 @@ Pimpl(
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
-  deriv = TRUE,
-  deriv2 = FALSE,
+  derivMode = "forward",
   controlsPTC = list(),
   outdir = .dmodOutdir()
 )
@@ -80,10 +79,16 @@ Pimpl(
 
   Logical. Print the compiler output, default `FALSE`.
 
-- deriv, deriv2:
+- derivMode:
 
-  Build first and second derivatives, default `TRUE` and `FALSE`.
-  `deriv2` requires `deriv = TRUE`.
+  The derivatives to build, one or more of `"forward"` (default),
+  `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or `"none"`,
+  as in
+  [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md).
+  The reverse directions come from the forward ones: `"reverse"` builds
+  the Jacobian, `"forward-reverse"` the second derivatives, as
+  `"forward-forward"` does. A call that asks for a derivative not built
+  is an error.
 
 - controlsPTC:
 
@@ -210,14 +215,15 @@ The other arguments are named:
   without derivatives. Default `NULL`.
 
 - `deriv`: `TRUE` (default) returns first derivatives with respect to
-  `pars`.
-
-- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-  Every function of the chain has to be built for them, see the
-  arguments `deriv2` and `derivMode` of
+  `pars`. Every function of the chain has to be built with
+  `derivMode = "forward"`, see
   [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
   [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
   [`P()`](https://dmodverse.github.io/dMod2/reference/P.md).
+
+- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+  Every function of the chain has to be built with
+  `derivMode = "forward-forward"`.
 
 - `hessian`: objective functions only, see the table below. Default
   `NULL`.

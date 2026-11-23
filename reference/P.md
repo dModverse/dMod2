@@ -16,8 +16,7 @@ P(
   method = NULL,
   cores = NULL,
   verbose = FALSE,
-  deriv = TRUE,
-  deriv2 = FALSE,
+  derivMode = "forward",
   ...
 )
 ```
@@ -72,16 +71,19 @@ P(
 
   Logical. Print the compiler output, default `FALSE`.
 
-- deriv, deriv2:
+- derivMode:
 
-  Build first and second derivatives, default `TRUE` and `FALSE`.
-  `deriv2` requires `deriv = TRUE`.
+  The derivatives to build, one or more of `"forward"` (default),
+  `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or `"none"`,
+  passed to
+  [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md) or
+  [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md).
 
 - ...:
 
   Further arguments of
   [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md)
-  (`attachInput`, `derivMode`, `outdir`) or
+  (`attachInput`, `outdir`) or
   [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
   (`forcings`, `keepRoot`, `flow`, `controlsPTC`, `outdir`), as `method`
   selects.
@@ -128,13 +130,14 @@ The other arguments are named:
   without derivatives. Default `NULL`.
 
 - `deriv`: `TRUE` (default) returns first derivatives with respect to
-  `pars`.
-
-- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-  Every function of the chain has to be built for them, see the
-  arguments `deriv2` and `derivMode` of
+  `pars`. Every function of the chain has to be built with
+  `derivMode = "forward"`, see
   [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
   [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and `P()`.
+
+- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+  Every function of the chain has to be built with
+  `derivMode = "forward-forward"`.
 
 - `hessian`: objective functions only, see the table below. Default
   `NULL`.

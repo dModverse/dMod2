@@ -39,7 +39,7 @@ constraintStability(
 
   A parfn of
   [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md),
-  built with `deriv2 = TRUE`.
+  built with `derivMode = "forward-forward"`.
 
 - p:
 
@@ -108,7 +108,7 @@ the attribute is read from a call of the term itself.
 # The Brusselator rests at x = a, y = b / a, stable while b < 1 + a^2
 f <- c(x = "a - (b + 1) * x + x^2 * y", y = "b * x - x^2 * y")
 old <- setwd(tempdir())
-pSS <- Pimpl(f, deriv2 = TRUE, modelname = "brusselator_ss")
+pSS <- Pimpl(f, derivMode = "forward-forward", modelname = "brusselator_ss")
 p <- P(c(a = "exp(la)", b = "exp(lb)"), modelname = "brusselator_p")
 compile(pSS, p, output = "brusselator")
 #> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC]

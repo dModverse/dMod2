@@ -137,7 +137,7 @@ per condition: the states over `times`, with the sensitivities in
 `attr(, "deriv")`, `[time, state, parameter]`, when `deriv = TRUE`, and
 the second-order sensitivities in `attr(, "deriv2")`,
 `[time, state, parameter, parameter]`, when `deriv2 = TRUE` (`cppDE`
-backend, model built with `deriv2 = TRUE`).
+backend, model built with `derivMode = "forward-forward"`).
 
 ## Solver options
 
@@ -254,14 +254,15 @@ The other arguments are named:
   without derivatives. Default `NULL`.
 
 - `deriv`: `TRUE` (default) returns first derivatives with respect to
-  `pars`.
-
-- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-  Every function of the chain has to be built for them, see the
-  arguments `deriv2` and `derivMode` of
+  `pars`. Every function of the chain has to be built with
+  `derivMode = "forward"`, see
   [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
   [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
   [`P()`](https://dmodverse.github.io/dMod2/reference/P.md).
+
+- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+  Every function of the chain has to be built with
+  `derivMode = "forward-forward"`.
 
 - `hessian`: objective functions only, see the table below. Default
   `NULL`.

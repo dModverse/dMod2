@@ -47,7 +47,7 @@ derivatives, exact where they stay equal."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -158,7 +158,7 @@ derivatives, exact where they stay equal.</p>
 
 
 <dl><dt id="arg-pss">pSS<a class="anchor" aria-label="anchor" href="#arg-pss"></a></dt>
-<dd><p>A parfn of <code><a href="Pimpl.html">Pimpl()</a></code>, built with <code>deriv2 = TRUE</code>.</p></dd>
+<dd><p>A parfn of <code><a href="Pimpl.html">Pimpl()</a></code>, built with <code>derivMode = "forward-forward"</code>.</p></dd>
 
 
 <dt id="arg-p">p<a class="anchor" aria-label="anchor" href="#arg-p"></a></dt>
@@ -223,7 +223,7 @@ of the term itself.</p>
 <span class="r-in"><span><span class="co"># The Brusselator rests at x = a, y = b / a, stable while b &lt; 1 + a^2</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"a - (b + 1) * x + x^2 * y"</span>, y <span class="op">=</span> <span class="st">"b * x - x^2 * y"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">old</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/getwd.html" class="external-link">setwd</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">pSS</span> <span class="op">&lt;-</span> <span class="fu"><a href="Pimpl.html">Pimpl</a></span><span class="op">(</span><span class="va">f</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>, modelname <span class="op">=</span> <span class="st">"brusselator_ss"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">pSS</span> <span class="op">&lt;-</span> <span class="fu"><a href="Pimpl.html">Pimpl</a></span><span class="op">(</span><span class="va">f</span>, derivMode <span class="op">=</span> <span class="st">"forward-forward"</span>, modelname <span class="op">=</span> <span class="st">"brusselator_ss"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="P.html">P</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="st">"exp(la)"</span>, b <span class="op">=</span> <span class="st">"exp(lb)"</span><span class="op">)</span>, modelname <span class="op">=</span> <span class="st">"brusselator_p"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="fu"><a href="compile.html">compile</a></span><span class="op">(</span><span class="va">pSS</span>, <span class="va">p</span>, output <span class="op">=</span> <span class="st">"brusselator"</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC]</span>

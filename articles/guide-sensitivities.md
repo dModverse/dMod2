@@ -5,26 +5,35 @@ sensitivities and the chain rule through every function object. Code:
 `sensitivities.R`; details: [Methods \> Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
 
-## Forward sensitivities
-
-The default: [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)
-integrates \\\partial x / \partial \theta\\ with the states, the
-objective returns gradient and Gauss-Newton Hessian. `sensErrCon` in
-`optionsSens` sets whether sensitivities enter the error test (default
-`TRUE`). With an error model the Gauss-Newton Hessian can be indefinite
-([Methods \> Gauss-Newton with an error
-model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
-
-## Forward over forward
-
-`deriv2 = TRUE` in
+`derivMode` of
 [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
 [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md),
 [`P()`](https://dmodverse.github.io/dMod2/reference/P.md) and
-[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) gives
-the exact Hessian from second-order sensitivities. The equation count
-grows with the square of the parameters (guide model: 63); it suits
-small models such as those of [Nonlinear mixed-effects
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
+selects the derivatives a function object is built with: `"forward"`,
+`"reverse"`, `"forward-forward"`, `"forward-reverse"`, or `"none"`. The
+arguments `deriv`, `deriv2` and `sweep` of a call select what the call
+computes; a call that asks for a derivative not built is an error.
+
+## Forward sensitivities
+
+The default, `derivMode = "forward"`:
+[`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) integrates
+\\\partial x / \partial \theta\\ with the states, the objective returns
+gradient and Gauss-Newton Hessian. `sensErrCon` in `optionsSens` sets
+whether sensitivities enter the error test (default `TRUE`).
+
+## Forward over forward
+
+`derivMode = "forward-forward"` in
+[`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
+[`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md),
+[`P()`](https://dmodverse.github.io/dMod2/reference/P.md) and
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) builds
+second-order sensitivities, and a call with `deriv2 = TRUE` returns the
+exact Hessian from them. The equation count grows with the square of the
+parameters (guide model: 63); it suits small models such as those of
+[Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
 ## Reverse sweep
@@ -92,7 +101,7 @@ it for directional second derivatives.
 
 | backend | solver | forward | fwd/fwd | reverse | fwd/rev | use |
 |----|----|----|----|----|----|----|
-| `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | `deriv2` | discrete adjoint | yes | all models |
+| `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | duals | discrete adjoint | yes | all models |
 | `"Sundials"` | CVODES, [`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html) | CVODES | no | CVODES ASA | no | first-order derivatives |
 | `"deSolve"` | `lsodes`, cOde | sens. equations | no | no | no | dMod models |
 
@@ -115,15 +124,15 @@ the results are loaded from `results/sensitivities.rds`.
 
 # the chain and objective of model.R once more, every function object with the reverse sweep and
 # second derivatives; Pimpl() passes the reverse sweep through the Jacobian of the root
-dm <- c("forward", "reverse", "forward-reverse")
-modelR <- odemodel(reactions, events = events, modelname = "oppelt_rev_ode", deriv2 = TRUE,
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
+modelR <- odemodel(reactions, events = events, modelname = "oppelt_rev_ode",
                    derivMode = dm, compile = FALSE)
 xR <- Xs(modelR, options = list(atol = 1e-10, rtol = 1e-8))
-gR <- Y(observables, xR, modelname = "oppelt_rev_obs", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-eR <- Y(errors, gR, modelname = "oppelt_rev_err", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = TRUE,
-              controlsPTC = list(stability = FALSE))
-pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+gR <- Y(observables, xR, modelname = "oppelt_rev_obs", compile = FALSE, derivMode = dm)
+eR <- Y(errors, gR, modelname = "oppelt_rev_err", compile = FALSE, derivMode = dm)
+pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE,
+              derivMode = "forward-forward", controlsPTC = list(stability = FALSE))
+pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, derivMode = dm)
 compile(gR, xR, pSSR, pR, eR, output = "oppelt_rev", cores = getOption("dMod2.cores"))
 objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) +
   constraintStability(pSSR, pR, width = rampWidth)

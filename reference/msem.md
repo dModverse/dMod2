@@ -122,10 +122,10 @@ msem(
 
   :   how FOCEI gets the second derivatives of the volume term:
       `"forward-reverse"` (default), sweeps for models built with
-      `derivMode = c("forward", "reverse", "forward-reverse")`, or
+      `derivMode = c("reverse", "forward-reverse")`, or
       `"forward-forward"`, the second-order sensitivities of models
-      built with `deriv2 = TRUE`. Without the mode asked for the fit
-      takes the other, with a message.
+      built with `derivMode = "forward-forward"`. Without the mode asked
+      for the fit takes the other, with a message.
 
   `boundary`
 
@@ -255,10 +255,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpaROYNB/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp
+#> Overwriting: /tmp/RtmpaROYNB/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

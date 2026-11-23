@@ -15,7 +15,6 @@ importPEtab(
   compile = TRUE,
   cores = 1L,
   modelname = NULL,
-  deriv = TRUE,
   derivMode = "forward",
   options = NULL,
   optionsSens = NULL,
@@ -52,19 +51,16 @@ importPEtab(
   Base name of the generated files. Default `NULL`, the base name of the
   YAML file.
 
-- deriv:
-
-  Logical. If `FALSE`, the model is built without sensitivities, which
-  needs `backend = "cppDE"` or `"Sundials"`; the objective then has to
-  be called with `deriv = FALSE`. Default `TRUE`.
-
 - derivMode:
 
   Derivative directions to build, passed to
-  [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md):
-  `"forward"` (default), `"reverse"` or `c("forward", "reverse")`.
-  `"reverse"` needs `backend = "cppDE"` or `"Sundials"`. First order
-  only.
+  [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
+  [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
+  [`P()`](https://dmodverse.github.io/dMod2/reference/P.md): `"forward"`
+  (default), `"reverse"`, `c("forward", "reverse")` or `"none"`.
+  `"reverse"` and `"none"` need `backend = "cppDE"` or `"Sundials"`;
+  with `"none"` the objective has to be called with `deriv = FALSE`.
+  First order only.
 
 - options, optionsSens:
 

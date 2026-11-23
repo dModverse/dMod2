@@ -242,7 +242,7 @@ trustL1(
       Hessian at `parinit`; `"identity"` the identity matrix, after
       which the objective is asked for gradients only until a reseed;
       `"exact"` the true Hessian at `parinit`, then gradients only.
-      `"exact"` needs `deriv2`, see `derivMode` in
+      `"exact"` needs `deriv2 = TRUE` in a call, see `derivMode` in
       [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md).
       In a first phase of source `"gn"`, `"exact"` makes the first step
       use the exact Hessian at `parinit`.

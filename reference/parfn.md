@@ -72,14 +72,15 @@ The other arguments are named:
   without derivatives. Default `NULL`.
 
 - `deriv`: `TRUE` (default) returns first derivatives with respect to
-  `pars`.
-
-- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-  Every function of the chain has to be built for them, see the
-  arguments `deriv2` and `derivMode` of
+  `pars`. Every function of the chain has to be built with
+  `derivMode = "forward"`, see
   [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
   [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
   [`P()`](https://dmodverse.github.io/dMod2/reference/P.md).
+
+- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+  Every function of the chain has to be built with
+  `derivMode = "forward-forward"`.
 
 - `hessian`: objective functions only, see the table below. Default
   `NULL`.
@@ -147,7 +148,7 @@ x <- Xd(grid)
 ## An observation function
 g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
        modelname = "prediction_obs", outdir = tempdir())
-#> Overwriting: /tmp/RtmpNgFK2N/prediction_obs.cpp
+#> Overwriting: /tmp/RtmpaROYNB/prediction_obs.cpp
 
 ## One parameter transformation per condition
 innerpars <- c(getParameters(x), getParameters(g))

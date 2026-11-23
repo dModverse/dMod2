@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -182,8 +182,8 @@ x\)</span> restricted to the conservation manifold, <span class="math inline">\(
 C\)</span>, is nonsingular; such a root is isolated in the conservation
 class. Where the matrix is singular, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> takes the
 pseudo-inverse and warns. Differentiating (4) again gives the second
-derivatives, <code>Pimpl(deriv2 = TRUE)</code>, with the same matrix. A
-reverse sweep applies the transpose of the solution <span class="math inline">\(\partial x / \partial p\)</span> of (4) (<a href="methods-sensitivities.html#reverse-sweep">Sensitivities and
+derivatives, <code>Pimpl(derivMode = "forward-forward")</code>, with the
+same matrix. A reverse sweep applies the transpose of the solution <span class="math inline">\(\partial x / \partial p\)</span> of (4) (<a href="methods-sensitivities.html#reverse-sweep">Sensitivities and
 Hessians</a>).</p>
 </div>
 <div class="section level2">
@@ -238,9 +238,9 @@ n_c\)</span> over the cluster of <span class="math inline">\(n_c\)</span> eigenv
 eigenvalue and exact for a cluster that stays degenerate. Where two real
 eigenvalues on the ramp meet and become a complex pair, the derivatives
 of both diverge and the gradient of (5) has a kink. Both need
-<code>Pimpl(deriv2 = TRUE)</code>. The term is a model assumption, not
-data: profiles with <code>stop = "data"</code> and likelihood ratios
-leave it out.</p>
+<code>Pimpl(derivMode = "forward-forward")</code>. The term is a model
+assumption, not data: profiles with <code>stop = "data"</code> and
+likelihood ratios leave it out.</p>
 <p>The Gauss-Newton Hessian of (5),</p>
 <p><span class="math display">\[2 \sum_{k \,:\, \mathrm{Re}\,\lambda_k
 &gt; \lambda_0}

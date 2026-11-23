@@ -11,8 +11,6 @@ result into a prediction function.
 ``` r
 odemodel(
   f,
-  deriv = TRUE,
-  deriv2 = FALSE,
   derivMode = "forward",
   forcings = NULL,
   events = NULL,
@@ -36,37 +34,29 @@ odemodel(
   operators an equation may use are listed in
   [cppDE::expressions](https://dmodverse.github.io/cppDE/reference/expressions.html).
 
-- deriv:
-
-  logical, build first-order sensitivities. Default `TRUE`. `FALSE`
-  builds the states alone, for
-  [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md), and
-  `derivMode` has no effect.
-
-- deriv2:
-
-  logical, build second-order sensitivities. Default `FALSE`. `TRUE` is
-  the same as adding `"forward-forward"` to `derivMode`, needs
-  `backend = "cppDE"` and implies `deriv = TRUE`.
-
 - derivMode:
 
   character, the derivative directions to build, one or more of:
 
-  - `"forward"` (default): sensitivity equations. `deriv = TRUE` builds
-    them also when `derivMode` leaves out `"forward"`.
+  - `"forward"` (default): first-order sensitivities.
 
   - `"reverse"`: adjoint gradient, needed for
     `obj(..., sweep = "reverse")`. Not available on
     `backend = "deSolve"`.
 
-  - `"forward-forward"`: second-order sensitivities.
+  - `"forward-forward"`: second-order sensitivities, needed for
+    `deriv2 = TRUE` in a call. `backend = "cppDE"` only.
 
   - `"forward-reverse"`: adjoint Hessian, needed for
     `obj(..., sweep = "reverse", deriv2 = TRUE)`. `backend = "cppDE"`
     only.
 
-  Each direction is compiled separately.
+  - `"none"`: the states alone, for
+    [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md).
+
+  Each direction is compiled separately. The two second-order directions
+  build `"forward"` as well. A call that asks for a derivative not built
+  is an error.
 
 - forcings:
 
@@ -179,7 +169,7 @@ print(model)
 #>   Backend: cppDE [bdf]
 #>   Model:   odemodel_F
 #>   Sens1:   odemodel_F_s
-#>   Sens2:   not compiled (deriv2 = FALSE)
+#>   Sens2:   not built (derivMode without "forward-forward")
 #> 
 #> Equations:
 #> Idx Inner <- Outer

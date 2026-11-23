@@ -19,7 +19,7 @@ Hessian."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -330,7 +330,7 @@ a first phase of source <code>"gn"</code>. A structured phase takes
 <code>"identity"</code> the identity matrix, after which the objective is
 asked for gradients only until a reseed; <code>"exact"</code> the true
 Hessian at <code>parinit</code>, then gradients only. <code>"exact"</code> needs
-<code>deriv2</code>, see <code>derivMode</code> in <code><a href="odemodel.html">odemodel()</a></code>. In a first phase
+<code>deriv2 = TRUE</code> in a call, see <code>derivMode</code> in <code><a href="odemodel.html">odemodel()</a></code>. In a first phase
 of source <code>"gn"</code>, <code>"exact"</code> makes the first step use the
 exact Hessian at <code>parinit</code>.</p></dd>
 

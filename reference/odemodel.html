@@ -17,7 +17,7 @@ the result into a prediction function."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -100,8 +100,6 @@ the result into a prediction function.</p>
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">odemodel</span><span class="op">(</span></span>
 <span>  <span class="va">f</span>,</span>
-<span>  deriv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  deriv2 <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  derivMode <span class="op">=</span> <span class="st">"forward"</span>,</span>
 <span>  forcings <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  events <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -124,28 +122,19 @@ sides; the names are the states. The functions and operators an equation
 may use are listed in <a href="https://dmodverse.github.io/cppDE/reference/expressions.html" class="external-link">cppDE::expressions</a>.</p></dd>
 
 
-<dt id="arg-deriv">deriv<a class="anchor" aria-label="anchor" href="#arg-deriv"></a></dt>
-<dd><p>logical, build first-order sensitivities. Default <code>TRUE</code>.
-<code>FALSE</code> builds the states alone, for <code><a href="Xf.html">Xf()</a></code>, and <code>derivMode</code> has no
-effect.</p></dd>
-
-
-<dt id="arg-deriv-">deriv2<a class="anchor" aria-label="anchor" href="#arg-deriv-"></a></dt>
-<dd><p>logical, build second-order sensitivities. Default <code>FALSE</code>.
-<code>TRUE</code> is the same as adding <code>"forward-forward"</code> to <code>derivMode</code>, needs
-<code>backend = "cppDE"</code> and implies <code>deriv = TRUE</code>.</p></dd>
-
-
 <dt id="arg-derivmode">derivMode<a class="anchor" aria-label="anchor" href="#arg-derivmode"></a></dt>
 <dd><p>character, the derivative directions to build, one or
-more of:</p><ul><li><p><code>"forward"</code> (default): sensitivity equations. <code>deriv = TRUE</code> builds them
-also when <code>derivMode</code> leaves out <code>"forward"</code>.</p></li>
+more of:</p><ul><li><p><code>"forward"</code> (default): first-order sensitivities.</p></li>
 <li><p><code>"reverse"</code>: adjoint gradient, needed for <code>obj(..., sweep = "reverse")</code>.
 Not available on <code>backend = "deSolve"</code>.</p></li>
-<li><p><code>"forward-forward"</code>: second-order sensitivities.</p></li>
+<li><p><code>"forward-forward"</code>: second-order sensitivities, needed for
+<code>deriv2 = TRUE</code> in a call. <code>backend = "cppDE"</code> only.</p></li>
 <li><p><code>"forward-reverse"</code>: adjoint Hessian, needed for
 <code>obj(..., sweep = "reverse", deriv2 = TRUE)</code>. <code>backend = "cppDE"</code> only.</p></li>
-</ul><p>Each direction is compiled separately.</p></dd>
+<li><p><code>"none"</code>: the states alone, for <code><a href="Xf.html">Xf()</a></code>.</p></li>
+</ul><p>Each direction is compiled separately. The two second-order directions
+build <code>"forward"</code> as well. A call that asks for a derivative not built is
+an error.</p></dd>
 
 
 <dt id="arg-forcings">forcings<a class="anchor" aria-label="anchor" href="#arg-forcings"></a></dt>
@@ -235,7 +224,7 @@ sensitivities, additional outputs and spline nodes of the forcings
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Backend: cppDE [bdf]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Model:   odemodel_F</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   Sens1:   odemodel_F_s</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   Sens2:   not compiled (deriv2 = FALSE)</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Sens2:   not built (derivMode without "forward-forward")</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Equations:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Idx Inner &lt;- Outer</span>

@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -254,9 +254,11 @@ above the numerical error; <code>model.R</code> defines them as
 <p>The default is the hybrid of Fides <span class="citation"><a href="#ref-froehlich2022fides">[2]</a></span>: Gauss-Newton until the
 radius stayed the same for 20 iterations, then BFGS (<a href="methods-trust.html#hessian-phases">Methods &gt; Hessian
 phases</a>). The sparse path, multiple shooting and
-<code>boundary = "clip"</code> run Gauss-Newton. <code>"exact"</code>
-needs <code>deriv2 = TRUE</code> or
-<code>derivMode = "forward-reverse"</code> (<a href="guide-sensitivities.html">Sensitivities</a>). Quasi-Newton
+<code>boundary = "clip"</code> run Gauss-Newton. With an error model the
+Gauss-Newton Hessian can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Methods
+&gt; Gauss-Newton with an error model</a>). <code>"exact"</code> needs a
+chain built with <code>derivMode = "forward-forward"</code> or
+<code>"forward-reverse"</code> (<a href="guide-sensitivities.html">Sensitivities</a>). Quasi-Newton
 settings, entries of <code>qnControl</code>:</p>
 <table class="table">
 <colgroup>

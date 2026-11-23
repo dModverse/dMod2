@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -329,9 +329,8 @@ curvature by SR1</td>
 </tr>
 <tr class="even">
 <td><code>derivMode = "forward-forward"</code></td>
-<td>
-<code>deriv2 = TRUE</code> sensitivities; exact gradient, curvature
-without third-order terms</td>
+<td>second-order sensitivities; exact gradient, curvature without
+third-order terms</td>
 </tr>
 <tr class="odd">
 <td><code>secondOrderCorrection = FALSE</code></td>
@@ -339,10 +338,12 @@ without third-order terms</td>
 </tr>
 </tbody>
 </table>
-<p>Where the model has <code>deriv2</code>, the reported Hessian has the
-exact Schur complement and the curvature of the volume term without
-third-order sensitivities, as <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> states. For <span class="math inline">\(\sigma\)</span> depending on <span class="math inline">\(\eta\)</span>, quadrature gives better standard
-errors of <span class="math inline">\(\Omega\)</span>.</p>
+<p>Where the model is built with <code>"forward-forward"</code>, the
+reported Hessian has the exact Schur complement and the curvature of the
+volume term without third-order sensitivities, as <code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code>
+states. For <span class="math inline">\(\sigma\)</span> depending on
+<span class="math inline">\(\eta\)</span>, quadrature gives better
+standard errors of <span class="math inline">\(\Omega\)</span>.</p>
 </div>
 </div>
 <div class="section level2">
@@ -370,10 +371,10 @@ signed log-sum-exp; a nonpositive sum, an unresolved posterior, fails
 the evaluation, naming the group. The gradient is the quadrature of the
 exact gradient of <span class="math inline">\(\log L_i\)</span> on the
 current nodes (Fisher’s identity), the Hessian follows by Louis’
-identity from data Hessians per node that are exact where the model has
-<code>deriv2</code> and Gauss-Newton otherwise; the move of the grid
-with <span class="math inline">\(\psi\)</span> is not
-differentiated.</p>
+identity from data Hessians per node that are exact where the model is
+built with <code>"forward-forward"</code> and Gauss-Newton otherwise;
+the move of the grid with <span class="math inline">\(\psi\)</span> is
+not differentiated.</p>
 <p><code>method = "quadrature"</code> starts from the converged FOCEI
 fit and alternates:</p>
 <ul>

@@ -41,10 +41,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpaROYNB/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp
+#> Overwriting: /tmp/RtmpaROYNB/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -86,7 +86,7 @@ summary(fit)
 #> omega_Ka_Ka  -0.4552 0.23600 51.850
 #> omega_V_V    -1.9770 0.29440 14.890
 #> omega_Cl_Cl  -1.3360 0.25060 18.750
-#> Standard errors without the curvature of the prediction in the random effects within the volume term (forward over reverse; deriv2 = TRUE gives the full one)
+#> Standard errors without the curvature of the prediction in the random effects within the volume term (forward over reverse; derivMode = "forward-forward" gives the full one)
 #> 
 #> Random effects:
 #>  type eta1 eta2 estimate      se

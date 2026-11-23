@@ -15,7 +15,7 @@ derivatives, on the output of a prediction function such as Xs()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -106,8 +106,6 @@ derivatives, on the output of a prediction function such as <code><a href="Xs.ht
 <span>  modelname <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  cores <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  deriv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  deriv2 <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  derivMode <span class="op">=</span> <span class="st">"forward"</span>,</span>
 <span>  outdir <span class="op">=</span> <span class="fu">.dmodOutdir</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -172,28 +170,19 @@ when <code>g</code> is a list, on Windows only to compile them; <code>NULL</code
 Ignored for a single observation function, which is one source either way.</p></dd>
 
 
-<dt id="arg-deriv">deriv<a class="anchor" aria-label="anchor" href="#arg-deriv"></a></dt>
-<dd><p>Logical. If <code>TRUE</code> (default), build the first derivatives,
-returned as <code>attr(, "deriv")</code>, <code>[time, observable, parameter]</code>, when the
-call has <code>deriv = TRUE</code> and <code>derivMode</code> contains <code>"forward"</code>. <code>FALSE</code>
-returns none, whatever the call asks.</p></dd>
-
-
-<dt id="arg-deriv-">deriv2<a class="anchor" aria-label="anchor" href="#arg-deriv-"></a></dt>
-<dd><p>Logical. If <code>TRUE</code>, build the second derivatives, returned
-as <code>attr(, "deriv2")</code>, <code>[time, observable, parameter, parameter]</code>, when
-the call has <code>deriv2 = TRUE</code>; on a function built without them that call
-is an error. Requires <code>deriv = TRUE</code>. Default <code>FALSE</code>.</p></dd>
-
-
 <dt id="arg-derivmode">derivMode<a class="anchor" aria-label="anchor" href="#arg-derivmode"></a></dt>
-<dd><p>Which derivative code to build, any of <code>"forward"</code>
-(default), <code>"reverse"</code> and <code>"forward-reverse"</code>.</p><ul><li><p><code>"forward"</code>: the Jacobian; without it the function returns no <code>deriv</code>
-attribute.</p></li>
-<li><p><code>"reverse"</code>: needed for <code>sweep = "reverse"</code>.</p></li>
+<dd><p>The derivatives to build, one or more of <code>"forward"</code>
+(default), <code>"reverse"</code>, <code>"forward-forward"</code> and <code>"forward-reverse"</code>, or
+<code>"none"</code>, as in <code><a href="odemodel.html">odemodel()</a></code>.</p><ul><li><p><code>"forward"</code>: the Jacobian, <code>attr(, "deriv")</code>,
+<code>[time, observable, parameter]</code>.</p></li>
+<li><p><code>"reverse"</code>: the vector-Jacobian product of <code>sweep = "reverse"</code>.</p></li>
+<li><p><code>"forward-forward"</code>: the second derivatives, <code>attr(, "deriv2")</code>,
+<code>[time, observable, parameter, parameter]</code>, for <code>deriv2 = TRUE</code>.</p></li>
 <li><p><code>"forward-reverse"</code>: needed for <code>sweep = "reverse"</code> with
 <code>deriv2 = TRUE</code>.</p></li>
-</ul></dd>
+<li><p><code>"none"</code>: values only.</p></li>
+</ul><p>The second-order directions build <code>"forward"</code> as well. A call that asks
+for a derivative not built is an error.</p></dd>
 
 
 <dt id="arg-outdir">outdir<a class="anchor" aria-label="anchor" href="#arg-outdir"></a></dt>
@@ -227,10 +216,11 @@ the resulting class:
 <p>The other arguments are named:</p><ul><li><p><code>fixed</code>: named numeric vector of parameters that enter the evaluation
 without derivatives. Default <code>NULL</code>.</p></li>
 <li><p><code>deriv</code>: <code>TRUE</code> (default) returns first derivatives with respect to
-<code>pars</code>.</p></li>
+<code>pars</code>. Every function of the chain has to be built with
+<code>derivMode = "forward"</code>, see <code><a href="odemodel.html">odemodel()</a></code>, <code>Y()</code> and <code><a href="P.html">P()</a></code>.</p></li>
 <li><p><code>deriv2</code>: <code>TRUE</code> returns second derivatives as well. Default <code>FALSE</code>.
-Every function of the chain has to be built for them, see the arguments
-<code>deriv2</code> and <code>derivMode</code> of <code><a href="odemodel.html">odemodel()</a></code>, <code>Y()</code> and <code><a href="P.html">P()</a></code>.</p></li>
+Every function of the chain has to be built with
+<code>derivMode = "forward-forward"</code>.</p></li>
 <li><p><code>hessian</code>: objective functions only, see the table below. Default
 <code>NULL</code>.</p></li>
 <li><p><code>sweep</code>: objective functions only. <code>"forward"</code> (default) propagates the

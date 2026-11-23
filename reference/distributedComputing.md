@@ -227,7 +227,7 @@ if (.Platform$OS.type == "unix") {
   job$purge(local = TRUE)
   setwd(old)
 }
-#> example: 2 tasks started on localhost (2 cores)
+#> example: 2 tasks started on localhost (3 cores)
 #> example: 0 of 2 tasks done, 2 running
 #> example: 1 of 2 tasks done, 1 running
 #> example: 2 of 2 tasks done

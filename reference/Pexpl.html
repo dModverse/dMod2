@@ -17,7 +17,7 @@ only after compilation."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -106,8 +106,6 @@ only after compilation.</p>
 <span>  compile <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  modelname <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  deriv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  deriv2 <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  derivMode <span class="op">=</span> <span class="st">"forward"</span>,</span>
 <span>  outdir <span class="op">=</span> <span class="fu">.dmodOutdir</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -154,18 +152,16 @@ is <code>"expl_parfn"</code>, followed by <code>_&lt;condition&gt;</code>.</p></
 <dd><p>Logical. Print the compiler output, default <code>FALSE</code>.</p></dd>
 
 
-<dt id="arg-deriv-deriv-">deriv, deriv2<a class="anchor" aria-label="anchor" href="#arg-deriv-deriv-"></a></dt>
-<dd><p>Build the first derivatives, <code>attr(, "deriv")</code>,
-<code>[inner, outer]</code>, and the second, <code>attr(, "deriv2")</code>,
-<code>[inner, outer, outer]</code>. Default <code>TRUE</code> and <code>FALSE</code>; <code>deriv2</code> needs
-<code>deriv = TRUE</code>.</p></dd>
-
-
 <dt id="arg-derivmode">derivMode<a class="anchor" aria-label="anchor" href="#arg-derivmode"></a></dt>
-<dd><p>Which derivative code to build, any of <code>"forward"</code>
-(default), <code>"reverse"</code> and <code>"forward-reverse"</code>. <code>"reverse"</code> is needed for
-<code>sweep = "reverse"</code>, <code>"forward-reverse"</code> for <code>sweep = "reverse"</code> with
-<code>deriv2 = TRUE</code>.</p></dd>
+<dd><p>The derivatives to build, one or more of <code>"forward"</code>
+(default), <code>"reverse"</code>, <code>"forward-forward"</code> and <code>"forward-reverse"</code>, or
+<code>"none"</code>, as in <code><a href="odemodel.html">odemodel()</a></code>. <code>"forward"</code> builds the Jacobian,
+<code>attr(, "deriv")</code>, <code>[inner, outer]</code>, <code>"forward-forward"</code> the second
+derivatives, <code>attr(, "deriv2")</code>, <code>[inner, outer, outer]</code>; <code>"reverse"</code> is
+needed for <code>sweep = "reverse"</code>, <code>"forward-reverse"</code> for
+<code>sweep = "reverse"</code> with <code>deriv2 = TRUE</code>. The second-order directions
+build <code>"forward"</code> as well. A call that asks for a derivative not built is
+an error.</p></dd>
 
 
 <dt id="arg-outdir">outdir<a class="anchor" aria-label="anchor" href="#arg-outdir"></a></dt>
@@ -197,10 +193,11 @@ the resulting class:
 <p>The other arguments are named:</p><ul><li><p><code>fixed</code>: named numeric vector of parameters that enter the evaluation
 without derivatives. Default <code>NULL</code>.</p></li>
 <li><p><code>deriv</code>: <code>TRUE</code> (default) returns first derivatives with respect to
-<code>pars</code>.</p></li>
+<code>pars</code>. Every function of the chain has to be built with
+<code>derivMode = "forward"</code>, see <code><a href="odemodel.html">odemodel()</a></code>, <code><a href="Y.html">Y()</a></code> and <code><a href="P.html">P()</a></code>.</p></li>
 <li><p><code>deriv2</code>: <code>TRUE</code> returns second derivatives as well. Default <code>FALSE</code>.
-Every function of the chain has to be built for them, see the arguments
-<code>deriv2</code> and <code>derivMode</code> of <code><a href="odemodel.html">odemodel()</a></code>, <code><a href="Y.html">Y()</a></code> and <code><a href="P.html">P()</a></code>.</p></li>
+Every function of the chain has to be built with
+<code>derivMode = "forward-forward"</code>.</p></li>
 <li><p><code>hessian</code>: objective functions only, see the table below. Default
 <code>NULL</code>.</p></li>
 <li><p><code>sweep</code>: objective functions only. <code>"forward"</code> (default) propagates the

@@ -109,7 +109,8 @@ working directory.
 | `odemodel(outputs = , estimate = , gridpoints = )` | `...`, deSolve only |
 | `Xs(optionsOde = , optionsSens = )` | `Xs(options = , optionsSens = )`, see [`cppDE::solveODE()`](https://dmodverse.github.io/cppDE/reference/solveODE.html) |
 | `Xs(fcontrol = )` | deSolve only |
-| none | `deriv2 = TRUE` in [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md), [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md), [`P()`](https://dmodverse.github.io/dMod2/reference/P.md): exact second derivatives |
+| `odemodel(deriv = FALSE)` | `odemodel(derivMode = "none")` |
+| none | `derivMode = "forward-forward"` in [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md), [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md), [`P()`](https://dmodverse.github.io/dMod2/reference/P.md): exact second derivatives |
 
 ## Renamed arguments
 
@@ -154,7 +155,7 @@ settings to `stepControl`.
 | `stepControl = list(stop = "data")` | `stop`: also any numeric attribute of the objective |
 | threshold `qchisq(1 - alpha, 1)` | `delta =`, e.g. `profileThreshold(method = "F", n = , p = )` |
 | both sides | `side = c("both", "left", "right")` |
-| `algoControl = list(W = "hessian")`: Gauss-Newton | exact Hessian with `deriv2 = TRUE` |
+| `algoControl = list(W = "hessian")`: Gauss-Newton | exact Hessian with `derivMode = "forward-forward"` |
 | `cores =` over parameters | `cores = n`, or `c(pars = , conditions = )` |
 | none | attribute `"ends"`: steps and stop reason per side |
 | none | `sparse = "auto"`: sparse Hessian where available |

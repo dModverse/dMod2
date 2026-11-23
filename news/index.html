@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -85,6 +85,15 @@
       <small>Source: <a href="https://github.com/dModverse/dMod2/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.16.1" id="dmod2-0161">dMod2 0.16.1<a class="anchor" aria-label="anchor" href="#dmod2-0161"></a></h2>
+<ul><li>
+<code>derivMode</code> alone selects the derivatives a constructor builds: <code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code>, <code><a href="../reference/Pexpl.html">Pexpl()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> and <code><a href="../reference/importPEtab.html">importPEtab()</a></code> take one or more of <code>"forward"</code> (default), <code>"reverse"</code>, <code>"forward-forward"</code> and <code>"forward-reverse"</code>, or <code>"none"</code>. The build arguments <code>deriv</code> and <code>deriv2</code> are removed: <code>deriv2 = TRUE</code> is <code>derivMode = "forward-forward"</code>, <code>deriv = FALSE</code> is <code>derivMode = "none"</code>. Passing <code>deriv</code> or <code>deriv2</code> is an error.</li>
+<li>A second-order direction, <code>"forward-forward"</code> or <code>"forward-reverse"</code>, builds <code>"forward"</code> as well. <code>"none"</code> combines with no other direction. <code>odemodel(derivMode = "reverse")</code> builds no forward sensitivities. <code><a href="../reference/Pimpl.html">Pimpl()</a></code> obtains the reverse directions from the forward ones.</li>
+<li>
+<code>deriv</code>, <code>deriv2</code> and <code>sweep</code> of a call keep their meaning. A call that asks for a derivative the function object was built without is an error that names the missing <code>derivMode</code> direction; <code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/Pexpl.html">Pexpl()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> built without first derivatives no longer return values alone on <code>deriv = TRUE</code>.</li>
+<li>The <code>odemodel</code> object holds the built directions in <code>attr(, "derivMode")</code>.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.16.0" id="dmod2-0160">dMod2 0.16.0<a class="anchor" aria-label="anchor" href="#dmod2-0160"></a></h2>
 <ul><li>The plotting theme and color helpers are named after the package: <code><a href="../reference/theme_dMod2.html">theme_dMod2()</a></code>, <code><a href="../reference/scale_color_dMod2.html">scale_color_dMod2()</a></code>, <code><a href="../reference/scale_color_dMod2.html">scale_fill_dMod2()</a></code> (with <code>_c</code> and <code>_div</code>), <code>dMod2_colors</code>, <code>dMod2_colors_cb</code>, <code><a href="../reference/dMod2_palette.html">dMod2_palette()</a></code>, <code><a href="../reference/dMod2_palettes.html">dMod2_palettes()</a></code>, <code><a href="../reference/dMod2_gradient.html">dMod2_gradient()</a></code>, <code><a href="../reference/dMod2_gradient.html">dMod2_divergent()</a></code> and their <code>_cb</code> forms; the <code>dMod</code> names are gone. <code><a href="../reference/theme_dMod2.html">theme_dMod2()</a></code> draws the axis ticks outside the panel.</li>

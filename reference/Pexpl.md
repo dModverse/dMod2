@@ -15,8 +15,6 @@ Pexpl(
   compile = FALSE,
   modelname = NULL,
   verbose = FALSE,
-  deriv = TRUE,
-  deriv2 = FALSE,
   derivMode = "forward",
   outdir = .dmodOutdir()
 )
@@ -63,18 +61,18 @@ Pexpl(
 
   Logical. Print the compiler output, default `FALSE`.
 
-- deriv, deriv2:
-
-  Build the first derivatives, `attr(, "deriv")`, `[inner, outer]`, and
-  the second, `attr(, "deriv2")`, `[inner, outer, outer]`. Default
-  `TRUE` and `FALSE`; `deriv2` needs `deriv = TRUE`.
-
 - derivMode:
 
-  Which derivative code to build, any of `"forward"` (default),
-  `"reverse"` and `"forward-reverse"`. `"reverse"` is needed for
+  The derivatives to build, one or more of `"forward"` (default),
+  `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or `"none"`,
+  as in
+  [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md).
+  `"forward"` builds the Jacobian, `attr(, "deriv")`, `[inner, outer]`,
+  `"forward-forward"` the second derivatives, `attr(, "deriv2")`,
+  `[inner, outer, outer]`; `"reverse"` is needed for
   `sweep = "reverse"`, `"forward-reverse"` for `sweep = "reverse"` with
-  `deriv2 = TRUE`.
+  `deriv2 = TRUE`. The second-order directions build `"forward"` as
+  well. A call that asks for a derivative not built is an error.
 
 - outdir:
 
@@ -118,14 +116,15 @@ The other arguments are named:
   without derivatives. Default `NULL`.
 
 - `deriv`: `TRUE` (default) returns first derivatives with respect to
-  `pars`.
-
-- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-  Every function of the chain has to be built for them, see the
-  arguments `deriv2` and `derivMode` of
+  `pars`. Every function of the chain has to be built with
+  `derivMode = "forward"`, see
   [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
   [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) and
   [`P()`](https://dmodverse.github.io/dMod2/reference/P.md).
+
+- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+  Every function of the chain has to be built with
+  `derivMode = "forward-forward"`.
 
 - `hessian`: objective functions only, see the table below. Default
   `NULL`.

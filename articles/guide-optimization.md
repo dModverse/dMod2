@@ -60,8 +60,11 @@ Gauss-Newton until the radius stayed the same for 20 iterations, then
 BFGS ([Methods \> Hessian
 phases](https://dmodverse.github.io/dMod2/articles/methods-trust.html#hessian-phases)).
 The sparse path, multiple shooting and `boundary = "clip"` run
-Gauss-Newton. `"exact"` needs `deriv2 = TRUE` or
-`derivMode = "forward-reverse"`
+Gauss-Newton. With an error model the Gauss-Newton Hessian can be
+indefinite ([Methods \> Gauss-Newton with an error
+model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
+`"exact"` needs a chain built with `derivMode = "forward-forward"` or
+`"forward-reverse"`
 ([Sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.md)).
 Quasi-Newton settings, entries of `qnControl`:
 

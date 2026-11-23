@@ -71,9 +71,9 @@ is nonsingular; such a root is isolated in the conservation class. Where
 the matrix is singular,
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) takes
 the pseudo-inverse and warns. Differentiating (4) again gives the second
-derivatives, `Pimpl(deriv2 = TRUE)`, with the same matrix. A reverse
-sweep applies the transpose of the solution \\\partial x / \partial p\\
-of (4) ([Sensitivities and
+derivatives, `Pimpl(derivMode = "forward-forward")`, with the same
+matrix. A reverse sweep applies the transpose of the solution \\\partial
+x / \partial p\\ of (4) ([Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep)).
 
 ## Stability
@@ -127,9 +127,9 @@ cluster of \\n_c\\ eigenvalues with spectral projector \\P\\, which is
 (6) for a simple eigenvalue and exact for a cluster that stays
 degenerate. Where two real eigenvalues on the ramp meet and become a
 complex pair, the derivatives of both diverge and the gradient of (5)
-has a kink. Both need `Pimpl(deriv2 = TRUE)`. The term is a model
-assumption, not data: profiles with `stop = "data"` and likelihood
-ratios leave it out.
+has a kink. Both need `Pimpl(derivMode = "forward-forward")`. The term
+is a model assumption, not data: profiles with `stop = "data"` and
+likelihood ratios leave it out.
 
 The Gauss-Newton Hessian of (5),
 

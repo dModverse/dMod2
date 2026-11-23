@@ -33,15 +33,15 @@ as.eqnvec(reactions)
 ```
 
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) needs second
-derivatives: `deriv2 = TRUE` and the forward-over-reverse derivative
-modes.
+derivatives: `derivMode` with `"forward-forward"` and the
+forward-over-reverse directions.
 
 ``` r
 
-dm <- c("forward", "reverse", "forward-reverse")
-x <- Xs(odemodel(reactions, modelname = "theo", compile = FALSE, deriv2 = TRUE, derivMode = dm))
-g <- Y(c(cp = "Cc"), x, modelname = "theo_g", compile = FALSE, deriv2 = TRUE, derivMode = dm)
-e <- Y(c(cp = "sigma"), g, attachInput = FALSE, modelname = "theo_e", compile = FALSE, deriv2 = TRUE,
+dm <- c("forward", "reverse", "forward-forward", "forward-reverse")
+x <- Xs(odemodel(reactions, modelname = "theo", compile = FALSE, derivMode = dm))
+g <- Y(c(cp = "Cc"), x, modelname = "theo_g", compile = FALSE, derivMode = dm)
+e <- Y(c(cp = "sigma"), g, attachInput = FALSE, modelname = "theo_e", compile = FALSE,
        derivMode = dm)
 ```
 
@@ -97,7 +97,7 @@ trafo <- eqnvec() |>
   insert("Cc <- 0") |>
   insert("x <- exp(x)", x = c("Ka", "V", "Cl", "sigma")) |>
   insert(Ka + V + Cl ~ 1 + (1 | ID))
-p <- P(trafo, method = "explicit", modelname = "theo_p", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p <- P(trafo, method = "explicit", modelname = "theo_p", compile = FALSE, derivMode = dm)
 compile(x, g, e, p, output = "theo", cores = 6)
 random <- randomEffects(p)
 random
@@ -224,8 +224,9 @@ below.
 | `derivMode` | `"forward-reverse"` | volume-term second derivatives, or `"forward-forward"` |
 | `secondOrderCorrection` | `TRUE` | derivative of the volume term |
 
-`"forward-forward"` needs `deriv2 = TRUE`.
-`secondOrderCorrection = FALSE` biases the estimates ([Methods \> Volume
+`"forward-forward"` needs models built with
+`derivMode = "forward-forward"`. `secondOrderCorrection = FALSE` biases
+the estimates ([Methods \> Volume
 term](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#volume-term)).
 `fixed` holds parameters at given values, `sparse = TRUE` uses sparse
 Hessians. The solver error must stay below the tolerances.
@@ -411,7 +412,7 @@ trafo2 <- eqnvec() |>
   insert("x <- exp(x)", x = c("Ka", "V", "Cl", "sigma")) |>
   insert(Ka + V ~ 1 + (1 | ID)) |>
   insert(Cl ~ 1 + logWeight + (1 | ID))
-p2 <- P(trafo2, method = "explicit", modelname = "theo_p2", compile = FALSE, deriv2 = TRUE, derivMode = dm)
+p2 <- P(trafo2, method = "explicit", modelname = "theo_p2", compile = FALSE, derivMode = dm)
 compile(p2, output = "theo2", cores = 6)
 fit2 <- em(normL2(data, g * x * p2, errmodel = e), randomEffects(p2), init, verbose = FALSE)
 comparison <- anova(fit, fit2)

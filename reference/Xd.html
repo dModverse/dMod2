@@ -15,7 +15,7 @@ interpolation in time of one parameter per grid point."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -139,10 +139,11 @@ the resulting class:
 <p>The other arguments are named:</p><ul><li><p><code>fixed</code>: named numeric vector of parameters that enter the evaluation
 without derivatives. Default <code>NULL</code>.</p></li>
 <li><p><code>deriv</code>: <code>TRUE</code> (default) returns first derivatives with respect to
-<code>pars</code>.</p></li>
+<code>pars</code>. Every function of the chain has to be built with
+<code>derivMode = "forward"</code>, see <code><a href="odemodel.html">odemodel()</a></code>, <code><a href="Y.html">Y()</a></code> and <code><a href="P.html">P()</a></code>.</p></li>
 <li><p><code>deriv2</code>: <code>TRUE</code> returns second derivatives as well. Default <code>FALSE</code>.
-Every function of the chain has to be built for them, see the arguments
-<code>deriv2</code> and <code>derivMode</code> of <code><a href="odemodel.html">odemodel()</a></code>, <code><a href="Y.html">Y()</a></code> and <code><a href="P.html">P()</a></code>.</p></li>
+Every function of the chain has to be built with
+<code>derivMode = "forward-forward"</code>.</p></li>
 <li><p><code>hessian</code>: objective functions only, see the table below. Default
 <code>NULL</code>.</p></li>
 <li><p><code>sweep</code>: objective functions only. <code>"forward"</code> (default) propagates the

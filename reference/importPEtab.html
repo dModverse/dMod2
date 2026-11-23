@@ -19,7 +19,7 @@ read by importSbml()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -107,7 +107,6 @@ read by <code><a href="importSbml.html">importSbml()</a></code>.</p>
 <span>  compile <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  cores <span class="op">=</span> <span class="fl">1L</span>,</span>
 <span>  modelname <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  deriv <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  derivMode <span class="op">=</span> <span class="st">"forward"</span>,</span>
 <span>  options <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  optionsSens <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -145,16 +144,12 @@ Default <code>1</code>.</p></dd>
 name of the YAML file.</p></dd>
 
 
-<dt id="arg-deriv">deriv<a class="anchor" aria-label="anchor" href="#arg-deriv"></a></dt>
-<dd><p>Logical. If <code>FALSE</code>, the model is built without sensitivities,
-which needs <code>backend = "cppDE"</code> or <code>"Sundials"</code>; the objective then has to
-be called with <code>deriv = FALSE</code>. Default <code>TRUE</code>.</p></dd>
-
-
 <dt id="arg-derivmode">derivMode<a class="anchor" aria-label="anchor" href="#arg-derivmode"></a></dt>
-<dd><p>Derivative directions to build, passed to <code><a href="odemodel.html">odemodel()</a></code>:
-<code>"forward"</code> (default), <code>"reverse"</code> or <code>c("forward", "reverse")</code>.
-<code>"reverse"</code> needs <code>backend = "cppDE"</code> or <code>"Sundials"</code>. First order only.</p></dd>
+<dd><p>Derivative directions to build, passed to <code><a href="odemodel.html">odemodel()</a></code>,
+<code><a href="Y.html">Y()</a></code> and <code><a href="P.html">P()</a></code>: <code>"forward"</code> (default), <code>"reverse"</code>,
+<code>c("forward", "reverse")</code> or <code>"none"</code>. <code>"reverse"</code> and <code>"none"</code> need
+<code>backend = "cppDE"</code> or <code>"Sundials"</code>; with <code>"none"</code> the objective has to be
+called with <code>deriv = FALSE</code>. First order only.</p></dd>
 
 
 <dt id="arg-options-optionssens">options, optionsSens<a class="anchor" aria-label="anchor" href="#arg-options-optionssens"></a></dt>

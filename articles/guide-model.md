@@ -257,8 +257,8 @@ is the analytic alternative.
 
 # the cells rest before TNFα is added: a steady state with the amounts of NFκB and IKK conserved;
 # an unstable one is returned rather than refused, the objective below keeps it stable
-pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE, deriv2 = TRUE,
-             controlsPTC = list(stability = FALSE))
+pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE,
+             derivMode = "forward-forward", controlsPTC = list(stability = FALSE))
 ```
 
 ## Events and switches
@@ -450,7 +450,8 @@ is known:
 (`controlsPTC = list(stability = FALSE)`);
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
 is zero on a stable resting state and reaches 100 per eigenvalue at the
-stability boundary, and needs `Pimpl(deriv2 = TRUE)` ([Methods \> Steady
+stability boundary, and needs `Pimpl(derivMode = "forward-forward")`
+([Methods \> Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)).
 
 ``` r

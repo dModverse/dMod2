@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -122,25 +122,33 @@
 sensitivities and the chain rule through every function object. Code:
 <code>sensitivities.R</code>; details: <a href="methods-sensitivities.html">Methods &gt; Sensitivities and
 Hessians</a>.</p>
+<p><code>derivMode</code> of <code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Y.html">Y()</a></code>,
+<code><a href="../reference/P.html">P()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> selects the derivatives a
+function object is built with: <code>"forward"</code>,
+<code>"reverse"</code>, <code>"forward-forward"</code>,
+<code>"forward-reverse"</code>, or <code>"none"</code>. The arguments
+<code>deriv</code>, <code>deriv2</code> and <code>sweep</code> of a call
+select what the call computes; a call that asks for a derivative not
+built is an error.</p>
 <div class="section level2">
 <h2 id="forward-sensitivities">Forward sensitivities<a class="anchor" aria-label="anchor" href="#forward-sensitivities"></a>
 </h2>
-<p>The default: <code><a href="../reference/Xs.html">Xs()</a></code> integrates <span class="math inline">\(\partial x / \partial \theta\)</span> with the
-states, the objective returns gradient and Gauss-Newton Hessian.
-<code>sensErrCon</code> in <code>optionsSens</code> sets whether
-sensitivities enter the error test (default <code>TRUE</code>). With an
-error model the Gauss-Newton Hessian can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Methods
-&gt; Gauss-Newton with an error model</a>).</p>
+<p>The default, <code>derivMode = "forward"</code>: <code><a href="../reference/Xs.html">Xs()</a></code>
+integrates <span class="math inline">\(\partial x / \partial
+\theta\)</span> with the states, the objective returns gradient and
+Gauss-Newton Hessian. <code>sensErrCon</code> in
+<code>optionsSens</code> sets whether sensitivities enter the error test
+(default <code>TRUE</code>).</p>
 </div>
 <div class="section level2">
 <h2 id="forward-over-forward">Forward over forward<a class="anchor" aria-label="anchor" href="#forward-over-forward"></a>
 </h2>
-<p><code>deriv2 = TRUE</code> in <code><a href="../reference/odemodel.html">odemodel()</a></code>,
-<code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> gives the
-exact Hessian from second-order sensitivities. The equation count grows
-with the square of the parameters (guide model: 63); it suits small
-models such as those of <a href="guide-nlme.html">Nonlinear
-mixed-effects models</a>.</p>
+<p><code>derivMode = "forward-forward"</code> in
+<code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code> and
+<code><a href="../reference/Pimpl.html">Pimpl()</a></code> builds second-order sensitivities, and a call with
+<code>deriv2 = TRUE</code> returns the exact Hessian from them. The
+equation count grows with the square of the parameters (guide model:
+63); it suits small models such as those of <a href="guide-nlme.html">Nonlinear mixed-effects models</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="reverse-sweep">Reverse sweep<a class="anchor" aria-label="anchor" href="#reverse-sweep"></a>
@@ -237,7 +245,7 @@ directional second derivatives.</p>
 <code>"cppDE"</code> (default)</td>
 <td>C++: BDF/NDF, Adams, Rosenbrock, Tsitouras</td>
 <td>duals</td>
-<td><code>deriv2</code></td>
+<td>duals</td>
 <td>discrete adjoint</td>
 <td>yes</td>
 <td>all models</td>
@@ -277,15 +285,15 @@ from <code>results/sensitivities.rds</code>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the chain and objective of model.R once more, every function object with the reverse sweep and</span></span>
 <span><span class="co"># second derivatives; Pimpl() passes the reverse sweep through the Jacobian of the root</span></span>
-<span><span class="va">dm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"forward"</span>, <span class="st">"reverse"</span>, <span class="st">"forward-reverse"</span><span class="op">)</span></span>
-<span><span class="va">modelR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/odemodel.html">odemodel</a></span><span class="op">(</span><span class="va">reactions</span>, events <span class="op">=</span> <span class="va">events</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_ode"</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>,</span>
+<span><span class="va">dm</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"forward"</span>, <span class="st">"reverse"</span>, <span class="st">"forward-forward"</span>, <span class="st">"forward-reverse"</span><span class="op">)</span></span>
+<span><span class="va">modelR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/odemodel.html">odemodel</a></span><span class="op">(</span><span class="va">reactions</span>, events <span class="op">=</span> <span class="va">events</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_ode"</span>,</span>
 <span>                   derivMode <span class="op">=</span> <span class="va">dm</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">xR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Xs.html">Xs</a></span><span class="op">(</span><span class="va">modelR</span>, options <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>atol <span class="op">=</span> <span class="fl">1e-10</span>, rtol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">gR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">observables</span>, <span class="va">xR</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
-<span><span class="va">eR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">errors</span>, <span class="va">gR</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
-<span><span class="va">pSSR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Pimpl.html">Pimpl</a></span><span class="op">(</span><span class="va">reactions</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_ss"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>              controlsPTC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stability <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">pR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/P.html">P</a></span><span class="op">(</span><span class="va">trafo</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_par"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
+<span><span class="va">gR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">observables</span>, <span class="va">xR</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
+<span><span class="va">eR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">errors</span>, <span class="va">gR</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
+<span><span class="va">pSSR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Pimpl.html">Pimpl</a></span><span class="op">(</span><span class="va">reactions</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_ss"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>              derivMode <span class="op">=</span> <span class="st">"forward-forward"</span>, controlsPTC <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stability <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">pR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/P.html">P</a></span><span class="op">(</span><span class="va">trafo</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_par"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/compile.html">compile</a></span><span class="op">(</span><span class="va">gR</span>, <span class="va">xR</span>, <span class="va">pSSR</span>, <span class="va">pR</span>, <span class="va">eR</span>, output <span class="op">=</span> <span class="st">"oppelt_rev"</span>, cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">objR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">gR</span> <span class="op">*</span> <span class="va">xR</span> <span class="op">*</span> <span class="va">pSSR</span> <span class="op">*</span> <span class="va">pR</span>, <span class="va">eR</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">mu</span>, sigma <span class="op">=</span> <span class="va">sigma</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="../reference/constraintStability.html">constraintStability</a></span><span class="op">(</span><span class="va">pSSR</span>, <span class="va">pR</span>, width <span class="op">=</span> <span class="va">rampWidth</span><span class="op">)</span></span></code></pre></div>

@@ -19,8 +19,6 @@ Y(
   modelname = NULL,
   verbose = FALSE,
   cores = NULL,
-  deriv = TRUE,
-  deriv2 = FALSE,
   derivMode = "forward",
   outdir = .dmodOutdir()
 )
@@ -87,32 +85,28 @@ Y(
   Ignored for a single observation function, which is one source either
   way.
 
-- deriv:
-
-  Logical. If `TRUE` (default), build the first derivatives, returned as
-  `attr(, "deriv")`, `[time, observable, parameter]`, when the call has
-  `deriv = TRUE` and `derivMode` contains `"forward"`. `FALSE` returns
-  none, whatever the call asks.
-
-- deriv2:
-
-  Logical. If `TRUE`, build the second derivatives, returned as
-  `attr(, "deriv2")`, `[time, observable, parameter, parameter]`, when
-  the call has `deriv2 = TRUE`; on a function built without them that
-  call is an error. Requires `deriv = TRUE`. Default `FALSE`.
-
 - derivMode:
 
-  Which derivative code to build, any of `"forward"` (default),
-  `"reverse"` and `"forward-reverse"`.
+  The derivatives to build, one or more of `"forward"` (default),
+  `"reverse"`, `"forward-forward"` and `"forward-reverse"`, or `"none"`,
+  as in
+  [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md).
 
-  - `"forward"`: the Jacobian; without it the function returns no
-    `deriv` attribute.
+  - `"forward"`: the Jacobian, `attr(, "deriv")`,
+    `[time, observable, parameter]`.
 
-  - `"reverse"`: needed for `sweep = "reverse"`.
+  - `"reverse"`: the vector-Jacobian product of `sweep = "reverse"`.
+
+  - `"forward-forward"`: the second derivatives, `attr(, "deriv2")`,
+    `[time, observable, parameter, parameter]`, for `deriv2 = TRUE`.
 
   - `"forward-reverse"`: needed for `sweep = "reverse"` with
     `deriv2 = TRUE`.
+
+  - `"none"`: values only.
+
+  The second-order directions build `"forward"` as well. A call that
+  asks for a derivative not built is an error.
 
 - outdir:
 
@@ -161,13 +155,14 @@ The other arguments are named:
   without derivatives. Default `NULL`.
 
 - `deriv`: `TRUE` (default) returns first derivatives with respect to
-  `pars`.
-
-- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
-  Every function of the chain has to be built for them, see the
-  arguments `deriv2` and `derivMode` of
+  `pars`. Every function of the chain has to be built with
+  `derivMode = "forward"`, see
   [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
   `Y()` and [`P()`](https://dmodverse.github.io/dMod2/reference/P.md).
+
+- `deriv2`: `TRUE` returns second derivatives as well. Default `FALSE`.
+  Every function of the chain has to be built with
+  `derivMode = "forward-forward"`.
 
 - `hessian`: objective functions only, see the table below. Default
   `NULL`.

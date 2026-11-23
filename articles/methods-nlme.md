@@ -148,14 +148,15 @@ For Gauss-Newton \\H_i\\, from second-order sensitivities,
 | `control` | volume term |
 |----|----|
 | `derivMode = "forward-reverse"` (default) | traces from one forward pass and a backward sweep ([Sensitivities](https://dmodverse.github.io/dMod2/articles/guide-sensitivities.md)); exact gradient, curvature by SR1 |
-| `derivMode = "forward-forward"` | `deriv2 = TRUE` sensitivities; exact gradient, curvature without third-order terms |
+| `derivMode = "forward-forward"` | second-order sensitivities; exact gradient, curvature without third-order terms |
 | `secondOrderCorrection = FALSE` | derivative dropped; biased estimates |
 
-Where the model has `deriv2`, the reported Hessian has the exact Schur
-complement and the curvature of the volume term without third-order
-sensitivities, as [`summary()`](https://rdrr.io/r/base/summary.html)
-states. For \\\sigma\\ depending on \\\eta\\, quadrature gives better
-standard errors of \\\Omega\\.
+Where the model is built with `"forward-forward"`, the reported Hessian
+has the exact Schur complement and the curvature of the volume term
+without third-order sensitivities, as
+[`summary()`](https://rdrr.io/r/base/summary.html) states. For
+\\\sigma\\ depending on \\\eta\\, quadrature gives better standard
+errors of \\\Omega\\.
 
 ## Adaptive sparse-grid quadrature
 
@@ -180,9 +181,9 @@ Negative weights make \\\log L_i\\ a signed log-sum-exp; a nonpositive
 sum, an unresolved posterior, fails the evaluation, naming the group.
 The gradient is the quadrature of the exact gradient of \\\log L_i\\ on
 the current nodes (Fisher’s identity), the Hessian follows by Louis’
-identity from data Hessians per node that are exact where the model has
-`deriv2` and Gauss-Newton otherwise; the move of the grid with \\\psi\\
-is not differentiated.
+identity from data Hessians per node that are exact where the model is
+built with `"forward-forward"` and Gauss-Newton otherwise; the move of
+the grid with \\\psi\\ is not differentiated.
 
 `method = "quadrature"` starts from the converged FOCEI fit and
 alternates:

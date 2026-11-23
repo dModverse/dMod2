@@ -49,7 +49,7 @@ x <- Xd(grid)
 ## An observation function
 g <- Y(c(Aobs = "s*A"), states = "A", parameters = "s",
        modelname = "prediction_obs", outdir = tempdir())
-#> Overwriting: /tmp/RtmpNgFK2N/prediction_obs.cpp
+#> Overwriting: /tmp/RtmpaROYNB/prediction_obs.cpp
 
 ## One parameter transformation per condition
 innerpars <- c(getParameters(x), getParameters(g))
