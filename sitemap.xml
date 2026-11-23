@@ -82,11 +82,11 @@
 <url><loc>https://dmodverse.github.io/dMod2/reference/customTotals.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/dMod2-package.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/dMod2Jobs.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/dMod_colors.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/dMod_colors_cb.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/dMod_gradient.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/dMod_palette.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/dMod_palettes.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/dMod2_colors.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/dMod2_colors_cb.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/dMod2_gradient.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/dMod2_palette.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/dMod2_palettes.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/dModfn.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/datalist.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/datapointL2.html</loc></url>
@@ -196,8 +196,8 @@
 <url><loc>https://dmodverse.github.io/dMod2/reference/res.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/residuals.em.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/resolveRecurrence.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/scale_color_dMod.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/scale_color_dMod_c.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/scale_color_dMod2.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/scale_color_dMod2_c.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/setCompartmentVolume.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/simulate.alignment.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/simulate.em.html</loc></url>
@@ -209,7 +209,7 @@
 <url><loc>https://dmodverse.github.io/dMod2/reference/summary.eqnvec.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/symmetryDetection.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/symmetryReduction.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/theme_dMod.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/theme_dMod2.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/times-.fn.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/trust.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/unique.parframe.html</loc></url>

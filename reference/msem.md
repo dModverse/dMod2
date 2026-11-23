@@ -76,15 +76,43 @@ msem(
   :   start of the standard deviations of the random effects, default
       0.3.
 
+  `inner`
+
+  :   `"nested"` (default) solves the modes at every evaluation of the
+      outer search; `"sqp"` takes `sqpIterlim` iterations of the inner
+      search from the modes predicted along d eta / d theta, with value
+      and gradient corrected to first order for the eta gradient left
+      over, until the outer search stops, and then goes on nested from
+      there, so that the estimates are those of the nested search.
+      Applies to FOCEI and to spike-and-slab and Dirichlet-process
+      random effects.
+
   `innerControl`
 
-  :   the trust region of the modes; it stops where the Newton step is
-      below `steptol`, default 1e-8.
+  :   the trust region of the modes: `rinit` and `rmax`, the initial and
+      largest radius (default 1 and 10); `iterlim`, default 30 and over
+      several groupings 100; `steptol`, default 1e-8, the Newton step at
+      which it stops; `mtol`, default 1e-12, the predicted change of -2
+      log L, relative to -2 log L, at which a step on the boundary of
+      the region stops it; `eigenFloorRelative`, default 1e-10, the
+      floor of the eigenvalues of the inner Hessian relative to their
+      mean (one grouping); `sqpIterlim`, default 2, the inner iterations
+      per evaluation with `inner = "sqp"`. With spike-and-slab and
+      Dirichlet-process random effects only `sqpIterlim` applies. Other
+      entries are an error.
 
   `trustControl`
 
   :   the outer trust region; it stops where the predicted change of -2
-      log L is below `mtol`, default 1e-5.
+      log L is below `mtol`, default 1e-5. Takes `ftol`, `mtol`, `gtol`
+      and `xtol` flat or in `tolControl`. With random effects over
+      several groupings the outer search is
+      [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
+      and every argument of
+      [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+      passes, `hessianMethod`, `phases` and `qnControl` included; FOCEI
+      of one grouping reads `rinit`, `rmax`, `iterlim`, `ftol` and
+      `mtol`. Other entries are an error.
 
   `secondOrderCorrection`
 
@@ -110,7 +138,8 @@ msem(
 
   `quadrature`, `saem`, `sparseFit`
 
-  :   lists of the sections Quadrature, SAEM and Sparse random effects.
+  :   lists of the sections Quadrature, SAEM and Sparse random effects;
+      other entries are an error.
 
 - fits:
 
@@ -226,10 +255,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_err.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

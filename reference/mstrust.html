@@ -15,7 +15,7 @@ random offsets drawn by samplefun, or the rows of a parframe."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -252,13 +252,13 @@ chapters <a href="https://dmodverse.github.io/dMod2/articles/guide-optimization.
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2     1 9.263308e-17      TRUE         26     fvalue    27      0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3     2 4.196884e-16      TRUE         19     fvalue    20      0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4     4 1.311916e-15      TRUE         31     fvalue    32      0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5     5 5.083307e-12      TRUE         34     fvalue    35      0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   nSwitch elapsed         a         b</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1       0   0.001 1.0000000 1.0000000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2       0   0.024 1.0000000 1.0000000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3       0   0.001 1.0000000 1.0000000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4       0   0.001 1.0000000 0.9999999</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5       0   0.002 0.9999978 0.9999955</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5     5 5.083307e-12      TRUE         34     fvalue    35      0         1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   nSwitch iterations.gn iterations.bfgs elapsed         a         b</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1       0            19               0   0.001 1.0000000 1.0000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2       0            26               0   0.013 1.0000000 1.0000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3       0            19               0   0.001 1.0000000 1.0000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4       0            31               0   0.001 1.0000000 0.9999999</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5       0            34               0   0.001 0.9999978 0.9999955</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Reproducible starts from a parframe</span></span></span>
 <span class="r-in"><span><span class="va">starts</span> <span class="op">&lt;-</span> <span class="fu"><a href="msParframe.html">msParframe</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">0</span>, b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>, n <span class="op">=</span> <span class="fl">5</span>, sd <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
@@ -270,12 +270,12 @@ chapters <a href="https://dmodverse.github.io/dMod2/articles/guide-optimization.
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3     5 1.829942e-14      TRUE         12     fvalue    13      0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4     1 2.178106e-14      TRUE         15     fvalue    16      0         0</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 5     3 2.523921e-14      TRUE         20     fvalue    21      0         0</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   nSwitch elapsed         a         b</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1       0   0.001 1.0000000 1.0000000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2       0   0.001 1.0000000 1.0000000</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3       0   0.001 0.9999999 0.9999997</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4       0   0.001 0.9999999 0.9999998</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5       0   0.000 0.9999999 0.9999997</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   nSwitch iterations.gn iterations.bfgs elapsed         a         b</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1       0             7               0   0.001 1.0000000 1.0000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2       0            18               0   0.001 1.0000000 1.0000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3       0            12               0   0.001 0.9999999 0.9999997</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4       0            15               0   0.001 0.9999999 0.9999998</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5       0            20               0   0.001 0.9999999 0.9999997</span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

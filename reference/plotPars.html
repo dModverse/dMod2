@@ -15,7 +15,7 @@ fits belong to."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -84,7 +84,7 @@ fits belong to."></head><body>
   <main id="main" class="col-md-9"><div class="page-header">
 
       <h1>Plot Parameter Values of a Collection of Fits</h1>
-      <small class="dont-index">Source: <a href="https://github.com/dModverse/dMod2/blob/master/R/parClass.R" class="external-link"><code>R/parClass.R</code></a>, <a href="https://github.com/dModverse/dMod2/blob/master/R/plots.R" class="external-link"><code>R/plots.R</code></a></small>
+      <small class="dont-index">Source: <a href="https://github.com/dModverse/dMod2/blob/master/R/parClass.R" class="external-link"><code>R/parClass.R</code></a>, <a href="https://github.com/dModverse/dMod2/blob/master/R/plots.R" class="external-link"><code>R/plots.R</code></a>, <a href="https://github.com/dModverse/dMod2/blob/master/R/plotsEM.R" class="external-link"><code>R/plotsEM.R</code></a></small>
       <div class="d-none name"><code>plotPars.Rd</code></div>
     </div>
 
@@ -101,7 +101,13 @@ fits belong to.</p>
 <span><span class="co"># S3 method for class 'parframe'</span></span>
 <span><span class="fu">plotPars</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span>, tol <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span></span>
-<span><span class="fu">plotPars</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span><span class="op">)</span></span></code></pre></div>
+<span><span class="fu">plotPars</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># S3 method for class 'em'</span></span>
+<span><span class="fu">plotPars</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span>, level <span class="op">=</span> <span class="fl">0.95</span>, which <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span>
+<span></span>
+<span><span class="co"># S3 method for class 'list'</span></span>
+<span><span class="fu">plotPars</span><span class="op">(</span><span class="va">x</span>, <span class="va">...</span>, level <span class="op">=</span> <span class="fl">0.95</span>, which <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -120,10 +126,28 @@ fits belong to.</p>
 <dd><p>A value more than <code>tol</code> above the lowest value of the current
 step starts a new step. Defaults to 1.</p></dd>
 
+
+<dt id="arg-level">level<a class="anchor" aria-label="anchor" href="#arg-level"></a></dt>
+<dd><p>With an <code>em</code> fit or a list of them: the level of the Wald
+intervals, see <a href="confint.em.html">confint()</a>. Default 0.95.</p></dd>
+
+
+<dt id="arg-which">which<a class="anchor" aria-label="anchor" href="#arg-which"></a></dt>
+<dd><p>With an <code>em</code> fit or a list of them: names of the parameters to
+show, by default all estimated ones.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
     <p>A <code>ggplot</code> object with the plotted data frame as attribute <code>"data"</code>.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
+    <p>An <code>em</code> fit, see <code><a href="em.html">em()</a></code>, or a list of them, as fits of one model by
+several methods: the estimates of fixed effects and hyperparameters with
+Wald intervals, where the fit has standard errors, one row per parameter
+and one color per fit. The fits of a list are labeled by the names of the
+list, else by their method.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>

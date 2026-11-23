@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -119,11 +119,10 @@
     
     
 <p>Western blots, plate readers and similar assays read on
-experiment-specific scales: exposure and background differ between gels
-or plates. <code><a href="../reference/alignmentModel.html">alignmentModel()</a></code> and <code><a href="../reference/align.html">align()</a></code> bring
-all experiments onto one common scale by maximum likelihood, before or
-instead of a dynamic model, with the reading model written as an
-expression, as in the R package <a href="https://github.com/JetiLab/blotIt" class="external-link">blotIt</a>.</p>
+experiment-specific scales. <code><a href="../reference/alignmentModel.html">alignmentModel()</a></code> and
+<code><a href="../reference/align.html">align()</a></code> bring all experiments onto one common scale by
+maximum likelihood, with the reading model written as an expression, as
+in the R package <a href="https://github.com/JetiLab/blotIt" class="external-link">blotIt</a>.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dmodverse.github.io/dMod2/">dMod2</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
@@ -132,11 +131,10 @@ expression, as in the R package <a href="https://github.com/JetiLab/blotIt" clas
 <div class="section level2">
 <h2 id="simulated-blot-data">Simulated blot data<a class="anchor" aria-label="anchor" href="#simulated-blot-data"></a>
 </h2>
-<p>A phosphorylation at five time points after stimulation in six
-biological replicates, each with own cells, stimulation and lysates on a
-separate gel, every sample in three lanes (technical replicates).
-Simulated: 20 % biological variability per sample, exposure and
-background per gel, 15 % technical noise per lane.</p>
+<p>A phosphorylation at five time points, six biological replicates on
+six gels, every sample in three lanes. Simulated: 20 % biological
+variability per sample, exposure and background per gel, 15 % technical
+noise per lane.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span>, <span class="fl">30</span>, <span class="fl">60</span>, <span class="fl">120</span><span class="op">)</span></span>
@@ -162,12 +160,9 @@ background per gel, 15 % technical noise per lane.</p>
 <h2 id="alignment-model">Alignment model<a class="anchor" aria-label="anchor" href="#alignment-model"></a>
 </h2>
 <p>A reading is value <code>yi</code> times gel scale <code>sj</code>
-plus background <code>bj</code>, with standard deviation proportional to
-the prediction. Each symbol is a linear predictor over the data columns,
-one formula per role: a value per time point, a scale per gel, one
-background and one error parameter. All symbols are on log scale, hence
-positive. <code>technical = "lane"</code> replaces the three lanes of a
-sample by their mean, see <a href="#technical-and-biological-replicates">technical and biological
+plus background <code>bj</code>, with relative error. Each symbol is a
+linear predictor over the data columns, on log scale.
+<code>technical = "lane"</code> averages the lanes of a sample, see <a href="#technical-and-biological-replicates">technical and biological
 replicates</a>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">logs</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"yi &lt;- exp(yi)"</span>, <span class="st">"sj &lt;- exp(sj)"</span>, <span class="st">"bj &lt;- exp(bj)"</span>, <span class="st">"sigmaR &lt;- exp(sigmaR)"</span><span class="op">)</span></span>
@@ -182,19 +177,16 @@ replicates</a>.</p>
 <span><span class="co">#&gt;   sigmaR     error         1 parameter, sigmaR = exp(sigmaR)</span></span>
 <span><span class="co">#&gt;   technical replicates over lane: 90 readings, their geometric means</span></span>
 <span><span class="co">#&gt;   mean of yi normalized in 1 block of experiments</span></span></code></pre></div>
-<p>Doubling all values and halving all scales changes nothing; the
-alignment holds the geometric mean of the values at 1 within each block
-of experiments sharing values.</p>
+<p>The geometric mean of the values is held at 1 within each block of
+experiments sharing values.</p>
 </div>
 <div class="section level2">
 <h2 id="fit-by-restricted-likelihood">Fit by restricted likelihood<a class="anchor" aria-label="anchor" href="#fit-by-restricted-likelihood"></a>
 </h2>
 <p><code><a href="../reference/align.html">align()</a></code> fits from several perturbed starts and keeps the
-best. Error parameters are estimated by restricted maximum likelihood by
-default, correcting for the degrees of freedom of the prediction
-parameters: here 5 values, 6 scales and the background against 30
-readings. The print names the likelihood of <span class="math inline">\(-2 \log L\)</span> and lists the maximum
-likelihood fits the restricted one starts from.</p>
+best; error parameters by restricted maximum likelihood. The fits of
+this chapter are loaded from <code>results/guide-alignment.rds</code>,
+computed by <code>results/guide-alignment.R</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/align.html">align</a></span><span class="op">(</span><span class="va">m</span>, fits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span>
 <span><span class="va">fit</span></span></code></pre></div>
@@ -214,9 +206,8 @@ likelihood fits the restricted one starts from.</p>
 <div class="section level2">
 <h2 id="comparison-with-the-simulation">Comparison with the simulation<a class="anchor" aria-label="anchor" href="#comparison-with-the-simulation"></a>
 </h2>
-<p>On the alignment scale the simulated course is
-<code>truth / exp(mean(log(truth)))</code>. Error (log ratio of aligned
-to simulated) against the standard error <code>se</code>:</p>
+<p>Error (log ratio of aligned to simulated course) against the standard
+error <code>se</code>:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">simulated</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>time <span class="op">=</span> <span class="va">times</span>, value <span class="op">=</span> <span class="va">truth</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="va">truth</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">errors</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">fit</span><span class="op">)</span> <span class="op">{</span></span>
@@ -237,27 +228,18 @@ to simulated) against the standard error <code>se</code>:</p>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>shape <span class="op">=</span> <span class="st">"aligned"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span>data <span class="op">=</span> <span class="va">simulated</span>, <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span>shape <span class="op">=</span> <span class="st">"simulated"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_manual.html" class="external-link">scale_shape_manual</a></span><span class="op">(</span>values <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>aligned <span class="op">=</span> <span class="fl">16</span>, simulated <span class="op">=</span> <span class="fl">4</span><span class="op">)</span>, name <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"value"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"value"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/theme_dMod2.html">theme_dMod2</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="technical-and-biological-replicates">Technical and biological replicates<a class="anchor" aria-label="anchor" href="#technical-and-biological-replicates"></a>
 </h2>
-<p>A biological replicate repeats the experiment (cells, stimulation,
-lysate) and differs by biological variability and every measurement
-step. A technical replicate measures the same sample again (lysate in
-another lane, cDNA in another well) and differs by the measurement steps
-alone.</p>
-<p>The lanes of a sample share the biological deviation of that sample,
-so they are not independent readings of the biology.
-<code>technical = "lane"</code> averages them before the alignment;
-readings agreeing in all columns but <code>value</code>,
-<code>lloq</code> and the technical columns form one sample. The mean is
-geometric for a relative error model, as here, and arithmetic for an
-absolute one, as for readings already on log scale. The error model then
-describes the scatter of sample means: biological variability plus
-technical noise of a three-lane mean.</p>
-<p>The same data with every lane as a separate reading:</p>
+<p>Technical replicates (lanes, wells) measure the same sample and share
+the biological deviation of that sample. <code>technical = "lane"</code>
+averages them before the alignment; readings agreeing in all columns but
+<code>value</code>, <code>lloq</code> and the technical columns form one
+sample. The mean is geometric for a relative error model, arithmetic for
+an absolute one. The same data with every lane as a reading:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mLanes</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/alignmentModel.html">alignmentModel</a></span><span class="op">(</span><span class="va">d</span>, model <span class="op">=</span> <span class="st">"yi * sj + bj"</span>, errmodel <span class="op">=</span> <span class="st">"sigmaR * prediction"</span>,</span>
 <span>                         biological <span class="op">=</span> <span class="va">yi</span> <span class="op">~</span> <span class="va">time</span>, scaling <span class="op">=</span> <span class="va">sj</span> <span class="op">~</span> <span class="va">gel</span>, error <span class="op">=</span> <span class="va">bj</span> <span class="op">+</span> <span class="va">sigmaR</span> <span class="op">~</span> <span class="fl">1</span>,</span>
@@ -275,23 +257,17 @@ technical noise of a three-lane mean.</p>
 <span><span class="co">#&gt; 3   30      3.90    3.70 -0.040 0.074</span></span>
 <span><span class="co">#&gt; 4   60      1.90    1.80 -0.084 0.060</span></span>
 <span><span class="co">#&gt; 5  120      0.48    0.53  0.089 0.050</span></span></code></pre></div>
-<p>Both fits find nearly the same values and errors, but the lane fit
-reports standard errors smaller by about <span class="math inline">\(\sqrt{3}\)</span>: it counts 90 readings, while
-most of the error is the biological deviation of 30 samples. The errors
-of the lane fit reach 1.8 standard errors, those of the fit of means
-stay within two.</p>
+<p>The lane fit reports standard errors smaller by about <span class="math inline">\(\sqrt{3}\)</span>; the errors reach 1.8 standard
+errors, those of the fit of means stay within two.</p>
 </div>
 <div class="section level2">
 <h2 id="random-background-per-gel">Random background per gel<a class="anchor" aria-label="anchor" href="#random-background-per-gel"></a>
 </h2>
-<p>Instead of six free backgrounds, the background can be a random
-effect per gel around a common value. The role then takes a list of
-formulas; the fit integrates the random effects by FOCEI as in <a href="guide-nlme.html">Nonlinear mixed-effects models</a>, with their
-standard deviation by restricted likelihood. Five readings per gel say
-little about it, so a prior holds the standard deviation of the log
-background near 0.3: <code>omega_bj_bj</code>, the log of that standard
+<p>A random effect per gel around a common background, integrated by
+FOCEI as in <a href="guide-nlme.html">Nonlinear mixed-effects
+models</a>. A prior on <code>omega_bj_bj</code>, the log standard
 deviation, normal around <span class="math inline">\(\log 0.3\)</span>
-with standard deviation 0.3.</p>
+with standard deviation 0.3:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/alignmentModel.html">alignmentModel</a></span><span class="op">(</span><span class="va">d</span>, model <span class="op">=</span> <span class="st">"yi * sj + bj"</span>, errmodel <span class="op">=</span> <span class="st">"sigmaR * prediction"</span>,</span>
 <span>                     biological <span class="op">=</span> <span class="va">yi</span> <span class="op">~</span> <span class="va">time</span>, scaling <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">sj</span> <span class="op">~</span> <span class="va">gel</span>, <span class="va">bj</span> <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">gel</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -311,8 +287,7 @@ with standard deviation 0.3.</p>
 <span><span class="co">#&gt; 3   30      3.90    3.50 -0.084 0.120</span></span>
 <span><span class="co">#&gt; 4   60      1.90    1.70 -0.120 0.098</span></span>
 <span><span class="co">#&gt; 5  120      0.48    0.53  0.100 0.084</span></span></code></pre></div>
-<p>Background per gel, common value times the random effect at the mode,
-against the simulation:</p>
+<p>Background per gel against the simulation:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">bg</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">fit2</span><span class="op">$</span><span class="va">parameters</span><span class="op">[[</span><span class="st">"bj"</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span> <span class="va">fit2</span><span class="op">$</span><span class="va">random</span><span class="op">$</span><span class="va">mode</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/match.html" class="external-link">match</a></span><span class="op">(</span><span class="va">gels</span>, <span class="va">fit2</span><span class="op">$</span><span class="va">random</span><span class="op">$</span><span class="va">group</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>gel <span class="op">=</span> <span class="va">gels</span>, simulated <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="va">background</span><span class="op">)</span>, common <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">parameters</span><span class="op">[[</span><span class="st">"bj"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -324,11 +299,9 @@ against the simulation:</p>
 <span><span class="co">#&gt; G4  G4       126    113     57</span></span>
 <span><span class="co">#&gt; G5  G5        95    113     61</span></span>
 <span><span class="co">#&gt; G6  G6        93    113     62</span></span></code></pre></div>
-<p>Both fits have nearly the same likelihood; values change by less than
-their standard errors. The random backgrounds lie below the simulated
-ones with little spread, since the bands lie far above the background.
-In the <a href="#western-blot-and-targeted-mass-spectrometry">Western
-blots</a> below, gels with weak lanes resolve it.</p>
+<p>Values change by less than their standard errors. Bands far above the
+background leave it unresolved; gels with weak lanes resolve it, see <a href="#western-blot-and-targeted-mass-spectrometry">Western
+blots</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="fit-options">Fit options<a class="anchor" aria-label="anchor" href="#fit-options"></a>
@@ -375,36 +348,23 @@ likelihood</td>
 </tr>
 </tbody>
 </table>
-<p>The alignment objective needs no ODE solver and is exact up to
-rounding, so fits stop at tolerances near the square root of machine
-precision, about <span class="math inline">\(10^{-8}\)</span>, for value
-change, predicted decrease and gradient.</p>
-<p>Absolute readings, such as targeted mass spectrometry concentrations,
-are marked in a column <code>absolute</code> and fix the scale of their
-block. The two sections below treat qPCR with wells below the detection
-limit, and Western blots with random background per gel plus mass
-spectrometry in nM.</p>
+<p>Fits stop at tolerances of about <span class="math inline">\(10^{-8}\)</span>. Absolute readings, such as mass
+spectrometry concentrations, are marked in a column
+<code>absolute</code> and fix the scale of their block.</p>
 </div>
 <div class="section level2">
 <h2 id="qpcr-with-censored-wells">qPCR with censored wells<a class="anchor" aria-label="anchor" href="#qpcr-with-censored-wells"></a>
 </h2>
-<p>Target mRNA at seven time points after stimulation in four
-experiments (biological replicates), each with own cells, cDNA, plate
-and a subset of time points, none shared by all; every sample in two
-wells (technical duplicates). A well reports the cycle Ct at which
-fluorescence crosses a threshold above background during exponential
-growth. The amount doubles per cycle, so 36 - Ct is the log2
-concentration in arbitrary units, shifted by an experiment offset.
-Untreated cells barely express the target: a well not crossing the
-threshold in 40 cycles reports no Ct, and the reading lies below 36 - 40
-= -4.</p>
+<p>Target mRNA at seven time points in four experiments, each on a
+subset of time points, every sample in two wells. 36 - Ct is the log2
+concentration in arbitrary units; a well without Ct after 40 cycles lies
+below -4.</p>
 <div class="section level3">
 <h3 id="qpcr-data">qPCR data<a class="anchor" aria-label="anchor" href="#qpcr-data"></a>
 </h3>
 <p>Column <code>lloq</code> holds the limit of each reading; an
-<code>NA</code> reading is censored there. Samples scatter around their
-experiment course by 0.5 cycles (standard deviation), wells of a sample
-by 0.25.</p>
+<code>NA</code> reading is censored there. Standard deviation 0.5 cycles
+between samples, 0.25 between wells.</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span>, <span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">4</span>, <span class="fl">8</span>, <span class="fl">24</span><span class="op">)</span></span>
@@ -433,11 +393,10 @@ by 0.25.</p>
 <div class="section level3">
 <h3 id="qpcr-model">qPCR model<a class="anchor" aria-label="anchor" href="#qpcr-model"></a>
 </h3>
-<p>A reading is <code>yi + sj</code>, log2 concentration per time point
-plus experiment offset, with absolute error.
-<code>technical = "well"</code> averages the wells arithmetically, since
-readings are already log2. A sample with one well below the limit is
-censored at the mean of the other well and the limit.</p>
+<p>A reading is <code>yi + sj</code>, log2 concentration plus experiment
+offset, with absolute error. <code>technical = "well"</code> averages
+the wells; a sample with one well below the limit is censored at the
+mean of the other well and the limit.</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/alignmentModel.html">alignmentModel</a></span><span class="op">(</span><span class="va">qpcr</span>, model <span class="op">=</span> <span class="st">"yi + sj"</span>, errmodel <span class="op">=</span> <span class="st">"sigma"</span>,</span>
 <span>                    biological <span class="op">=</span> <span class="va">yi</span> <span class="op">~</span> <span class="va">time</span>,</span>
@@ -456,8 +415,8 @@ censored at the mean of the other well and the limit.</p>
 <div class="section level3">
 <h3 id="qpcr-fit">qPCR fit<a class="anchor" aria-label="anchor" href="#qpcr-fit"></a>
 </h3>
-<p>The mean of the values is held at 0; differences to the untreated
-value are log2 fold changes.</p>
+<p>The mean of the values is held at 0; <code>log2fc</code> is relative
+to the untreated value.</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/align.html">align</a></span><span class="op">(</span><span class="va">m</span>, fits <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">fit</span></span></code></pre></div>
@@ -476,8 +435,8 @@ value are log2 fold changes.</p>
 <span><span class="co">#&gt; 5  4.0  1.8934505 0.2030375 4.9253261       5.2</span></span>
 <span><span class="co">#&gt; 6  8.0  2.8791506 0.2068818 5.9110262       5.6</span></span>
 <span><span class="co">#&gt; 7 24.0  1.5480179 0.2072289 4.5798935       4.4</span></span></code></pre></div>
-<p>Duplicate means per experiment before and after alignment; censored
-samples enter by the limit and are not drawn.</p>
+<p>Sample means before and after alignment, censored samples not
+drawn:</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">fit</span><span class="op">$</span><span class="va">scaled</span><span class="op">[</span><span class="op">!</span><span class="va">fit</span><span class="op">$</span><span class="va">scaled</span><span class="op">$</span><span class="va">bloq</span>, <span class="op">]</span></span>
 <span><span class="va">both</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span><span class="va">s</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"experiment"</span>, <span class="st">"time"</span><span class="op">)</span><span class="op">]</span>, stage <span class="op">=</span> <span class="st">"before"</span>, value <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">value</span><span class="op">)</span>,</span>
@@ -487,7 +446,7 @@ samples enter by the limit and are not drawn.</p>
 <code class="sourceCode R"><span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/ggplot.html" class="external-link">ggplot</a></span><span class="op">(</span><span class="va">both</span>, <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/aes.html" class="external-link">aes</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">time</span><span class="op">)</span>, <span class="va">value</span>, color <span class="op">=</span> <span class="va">experiment</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span> <span class="va">stage</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [h]"</span>, y <span class="op">=</span> <span class="st">"log2(conc.) [a.u.]"</span>, color <span class="op">=</span> <span class="st">"experiment"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="../reference/scale_color_dMod.html">scale_color_dMod</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="../reference/scale_color_dMod2.html">scale_color_dMod2</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/theme_dMod2.html">theme_dMod2</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-16-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotAligned.html">plotAligned</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_x_sqrt</a></span><span class="op">(</span>breaks <span class="op">=</span> <span class="va">times</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [h]"</span>, y <span class="op">=</span> <span class="st">"log2(conc.) [a.u.]"</span><span class="op">)</span></span></code></pre></div>
@@ -515,26 +474,18 @@ samples enter by the limit and are not drawn.</p>
 <div class="section level2">
 <h2 id="western-blot-and-targeted-mass-spectrometry">Western blot and targeted mass spectrometry<a class="anchor" aria-label="anchor" href="#western-blot-and-targeted-mass-spectrometry"></a>
 </h2>
-<p>A phosphoprotein after ligand stimulation, quantified on ten gels and
-by targeted mass spectrometry. Five gels hold a short course up to 4 h,
-five a long one up to 48 h, sharing only the untreated lane and 4 h.
-Each gel holds four time points of one course on a separate scale, the
-long gels far lower. Each gel adds a background (the membrane signal
-around the bands), scaled with the bands by the image; it shows on weak
-lanes, untreated and late, and hides under the others. With a background
-per gel, untreated level and typical background are told apart only by
-the variation between gels: a normal random effect per gel. Mass
-spectrometry measures nM at four time points of both courses, three
-samples each. These readings are marked in column <code>absolute</code>,
-predicted by the expression <code>absolute</code> (by default the first
-biological symbol), depend on no scaling parameter and have gel
-<code>NA</code>; their block is not normalized but comes out in nM.</p>
+<p>A phosphoprotein on ten gels, five with a short course up to 4 h and
+five with a long one up to 48 h, sharing the untreated lane and 4 h, and
+by targeted mass spectrometry in nM at four time points. The background
+per gel is a normal random effect. Mass spectrometry readings are marked
+in column <code>absolute</code>, predicted by the expression
+<code>absolute</code> (by default the first biological symbol) and have
+gel <code>NA</code>; the block comes out in nM.</p>
 <div class="section level3">
 <h3 id="blot-and-mass-spectrometry-data">Blot and mass spectrometry data<a class="anchor" aria-label="anchor" href="#blot-and-mass-spectrometry-data"></a>
 </h3>
-<p>One row per reading: log2 of the band in arbitrary units or of the
-concentration in nM. Short course gels S1 to S5, long course L1 to
-L5.</p>
+<p>Log2 band in arbitrary units or log2 concentration in nM; gels S1 to
+S5 short, L1 to L5 long.</p>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">6</span><span class="op">)</span></span>
 <span><span class="va">short</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span>, <span class="fl">30</span>, <span class="fl">60</span>, <span class="fl">120</span>, <span class="fl">240</span><span class="op">)</span></span>
@@ -564,17 +515,10 @@ L5.</p>
 <div class="section level3">
 <h3 id="blot-and-mass-spectrometry-model">Blot and mass spectrometry model<a class="anchor" aria-label="anchor" href="#blot-and-mass-spectrometry-model"></a>
 </h3>
-<p>A band reads <code>log2(2^yi + 2^(b + bj)) + sj</code>: log2
-concentration <code>yi</code> in nM per time point plus background,
-shifted by <code>sj</code> per gel. The log2 background is the common
-fixed <code>b</code> plus <code>bj</code>, a normal random effect around
-0 per gel. A mass spectrometry reading is <code>yi</code>. Errors are
-absolute, one per method. The data say little about the background
-(small spread, hidden by bands), so a prior holds the standard deviation
-of <code>bj</code> near 0.3 (<code>omega_bj_bj</code>, the log of that
-standard deviation, normal around <span class="math inline">\(\log
-0.3\)</span> with standard deviation 0.3), and a weak prior puts
-<code>b</code> around 1 nM (normal around 0, standard deviation 2).</p>
+<p>A band reads <code>log2(2^yi + 2^(b + bj)) + sj</code>, a mass
+spectrometry reading <code>yi</code>, with absolute error per method.
+Priors: <code>omega_bj_bj</code> normal around <span class="math inline">\(\log 0.3\)</span> with standard deviation 0.3,
+<code>b</code> normal around 0 with standard deviation 2.</p>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/alignmentModel.html">alignmentModel</a></span><span class="op">(</span><span class="va">wbms</span>, model <span class="op">=</span> <span class="st">"log2(2^yi + 2^(b + bj)) + sj"</span>, errmodel <span class="op">=</span> <span class="st">"sigma"</span>,</span>
 <span>                    biological <span class="op">=</span> <span class="va">yi</span> <span class="op">~</span> <span class="va">time</span>,</span>
@@ -596,8 +540,7 @@ standard deviation, normal around <span class="math inline">\(\log
 <div class="section level3">
 <h3 id="blot-and-mass-spectrometry-fit">Blot and mass spectrometry fit<a class="anchor" aria-label="anchor" href="#blot-and-mass-spectrometry-fit"></a>
 </h3>
-<p>Values come out as log2 concentrations in nM, also at time points
-without mass spectrometry:</p>
+<p>Values in log2 nM, also at time points without mass spectrometry:</p>
 <div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/align.html">align</a></span><span class="op">(</span><span class="va">m</span>, fits <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
 <span><span class="va">fit</span></span></code></pre></div>
@@ -626,9 +569,8 @@ scale:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>MS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span>, WB <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">p</span><span class="op">[[</span><span class="st">"sigma"</span><span class="op">]</span><span class="op">]</span> <span class="op">+</span> <span class="va">p</span><span class="op">[[</span><span class="st">"sigma_methodWB"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        MS        WB </span></span>
 <span><span class="co">#&gt; 0.5679049 0.7157826</span></span></code></pre></div>
-<p>Readings per gel and of mass spectrometry before (bands in arbitrary
-units, mass spectrometry in nM) and after alignment (all in nM);
-absolute readings stay unchanged:</p>
+<p>Readings before and after alignment; absolute readings stay
+unchanged:</p>
 <div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">s</span> <span class="op">&lt;-</span> <span class="va">fit</span><span class="op">$</span><span class="va">scaled</span></span>
 <span><span class="va">s</span><span class="op">$</span><span class="va">gel</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">absolute</span>, <span class="st">"MS"</span>, <span class="va">s</span><span class="op">$</span><span class="va">gel</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">gels</span>, <span class="st">"MS"</span><span class="op">)</span><span class="op">)</span></span>
@@ -642,7 +584,7 @@ absolute readings stay unchanged:</p>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/geom_point.html" class="external-link">geom_point</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/facet_wrap.html" class="external-link">facet_wrap</a></span><span class="op">(</span><span class="op">~</span> <span class="va">panel</span>, scales <span class="op">=</span> <span class="st">"free_y"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/guides.html" class="external-link">guides</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/guide_axis.html" class="external-link">guide_axis</a></span><span class="op">(</span>angle <span class="op">=</span> <span class="fl">45</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"log2(conc.)"</span>, color <span class="op">=</span> <span class="st">"gel"</span>, shape <span class="op">=</span> <span class="st">"method"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="../reference/scale_color_dMod.html">scale_color_dMod</a></span><span class="op">(</span>palette <span class="op">=</span> <span class="st">"dMod"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"bottom"</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="../reference/scale_color_dMod2.html">scale_color_dMod2</a></span><span class="op">(</span>palette <span class="op">=</span> <span class="st">"dMod"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/theme_dMod2.html">theme_dMod2</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"bottom"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-24-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotAligned.html">plotAligned</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_x_sqrt</a></span><span class="op">(</span>breaks <span class="op">=</span> <span class="va">times</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/guides.html" class="external-link">guides</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/guide_axis.html" class="external-link">guide_axis</a></span><span class="op">(</span>angle <span class="op">=</span> <span class="fl">45</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
@@ -656,8 +598,7 @@ absolute readings stay unchanged:</p>
 <h3 id="random-background">Random background<a class="anchor" aria-label="anchor" href="#random-background"></a>
 </h3>
 <p>Standard deviation of the log2 background between gels, and per gel
-the mode with conditional standard error. The standard deviation lies
-near the prior mean, so it comes mostly from the prior.</p>
+the mode with conditional standard error:</p>
 <div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span><span class="op">$</span><span class="va">omega</span></span>
 <span><span class="co">#&gt;     type eta1 eta2  estimate         se</span></span>
@@ -674,27 +615,19 @@ near the prior mean, so it comes mostly from the prior.</p>
 <span><span class="co">#&gt; 8     L3  bj eta_bj_L3  0.004758834 0.2810873</span></span>
 <span><span class="co">#&gt; 9     L4  bj eta_bj_L4  0.026913625 0.2755418</span></span>
 <span><span class="co">#&gt; 10    L5  bj eta_bj_L5 -0.039047130 0.2856489</span></span></code></pre></div>
-<p>The shrinkage <span class="math inline">\(1 -
-\operatorname{SD}(\text{modes}) / \omega\)</span> measures how much the
-data know about the random effect of one gel; where bands hide the
-background, the mode stays near 0. Aligned values, <code>b</code> and
-<span class="math inline">\(\omega\)</span> integrate over the random
-effects and do not depend on the modes; a mode is no measurement of the
-gel background, and plots of modes look too narrow.</p>
+<p>Shrinkage <span class="math inline">\(1 -
+\operatorname{SD}(\text{modes}) / \omega\)</span>; aligned values,
+<code>b</code> and <span class="math inline">\(\omega\)</span> do not
+depend on the modes.</p>
 <div class="sourceCode" id="cb37"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span><span class="op">$</span><span class="va">fit</span><span class="op">$</span><span class="va">shrinkage</span></span>
 <span><span class="co">#&gt; eta_bj </span></span>
 <span><span class="co">#&gt; 0.8728</span></span></code></pre></div>
-<p>Conditional draws of the random effects against the estimated normal,
-which they follow whatever the shrinkage. At high shrinkage the draws
-mostly repeat that normal, so the plot could hardly reveal a background
-distributed otherwise.</p>
+<p>Conditional draws against the estimated normal:</p>
 <div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotRandomEffects.html">plotRandomEffects</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-29-1.png" class="r-plt" alt="" width="768"></p>
-<p>Readings against the individual prediction (IPRED, random effects at
-the modes) and the population prediction (PRED, every gel at the
-population background):</p>
+<p>Individual (IPRED) and population prediction (PRED):</p>
 <div class="sourceCode" id="cb39"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">fit</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"right"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>color <span class="op">=</span> <span class="st">"gel"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-30-1.png" class="r-plt" alt="" width="768"></p>

@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -207,15 +207,15 @@ r_k^{3/2}, &amp; r_k \le 1, \\
   1 + \tfrac{3}{2}(r_k - 1), &amp; r_k &gt; 1, \end{cases} \qquad
   r_k = \frac{\max\bigl(0,\ \mathrm{Re}\,\lambda_k -
 \lambda_0\bigr)}{\lambda_{tol} - \lambda_0},
-  \qquad \lambda_0 = \lambda_{tol} - m s,
+  \qquad \lambda_0 = \lambda_{tol} - \max(d, m s),
   \tag{5}\]</span></p>
-<p>with weight <span class="math inline">\(\kappa\)</span> and the
-relative width <span class="math inline">\(m\)</span> of the ramp,
-<code>stabilityMargin</code> with default <span class="math inline">\(10^{-6}\)</span>. The term is zero on a root whose
-leading real part lies more than <span class="math inline">\(m
-s\)</span> below <span class="math inline">\(\lambda_{tol}\)</span>,
-however slowly a perturbation decays there; it does not depend on the
-time the data span. Each eigenvalue whose real part reaches <span class="math inline">\(\lambda_{tol}\)</span> adds <span class="math inline">\(\kappa\)</span>, and beyond, the term grows
+<p>with weight <span class="math inline">\(\kappa\)</span> and the width
+<span class="math inline">\(\max(d, m s)\)</span> of the ramp: at least
+the absolute <code>width</code> <span class="math inline">\(d\)</span>,
+default 0, and at least the <code>margin</code> <span class="math inline">\(m\)</span> relative to the scale, default <span class="math inline">\(10^{-6}\)</span>, the precision of the
+eigenvalues. The term is zero on a root whose leading real part lies
+below <span class="math inline">\(\lambda_0\)</span>, however slowly a
+perturbation decays there. Each eigenvalue whose real part reaches <span class="math inline">\(\lambda_{tol}\)</span> adds <span class="math inline">\(\kappa\)</span>, and beyond, the term grows
 quadratically. Steady states that agree in the parameters, resting
 states and start values they read count once. For a simple eigenvalue
 with right and left eigenvectors <span class="math inline">\(u_k\)</span>, <span class="math inline">\(v_k\)</span> of <span class="math inline">\(J\)</span>, <span class="math inline">\(v_k^{\mathsf H} u_k \ne 0\)</span>, and (4),</p>
@@ -229,9 +229,18 @@ with right and left eigenvectors <span class="math inline">\(u_k\)</span>, <span
 <p>and <span class="math inline">\(s = |\lambda_m|\)</span>, <span class="math inline">\(\lambda_m\)</span> the eigenvalue of largest
 modulus, has the derivative <span class="math inline">\(\mathrm{Re}(\bar\lambda_m\, \mathrm{d}\lambda_m /
 \mathrm{d}p) / s\)</span> by (6), continuous except where the eigenvalue
-of largest modulus changes. Both need <code>Pimpl(deriv2 = TRUE)</code>.
-The term is a model assumption, not data: profiles with
-<code>stop = "data"</code> and likelihood ratios leave it out.</p>
+of largest modulus changes. Eigenvalues that coincide within the error
+of the eigenvalues, as a defective double eigenvalue of a chain of
+states with equal rates, have no derivative each; each takes the mean
+<span class="math inline">\(\mathrm{tr}(P\, \mathrm{d}J/\mathrm{d}p) /
+n_c\)</span> over the cluster of <span class="math inline">\(n_c\)</span> eigenvalues with spectral projector
+<span class="math inline">\(P\)</span>, which is (6) for a simple
+eigenvalue and exact for a cluster that stays degenerate. Where two real
+eigenvalues on the ramp meet and become a complex pair, the derivatives
+of both diverge and the gradient of (5) has a kink. Both need
+<code>Pimpl(deriv2 = TRUE)</code>. The term is a model assumption, not
+data: profiles with <code>stop = "data"</code> and likelihood ratios
+leave it out.</p>
 <p>The Gauss-Newton Hessian of (5),</p>
 <p><span class="math display">\[2 \sum_{k \,:\, \mathrm{Re}\,\lambda_k
 &gt; \lambda_0}
@@ -241,9 +250,17 @@ The term is a model assumption, not data: profiles with
 \sqrt{\kappa}\, \min(r_k, 1)^{1/2}\,
   \frac{\mathrm{d} r_k}{\mathrm{d}p}, \tag{7}\]</span></p>
 <p>vanishes at the onset with the term and the gradient and is
-continuous at <span class="math inline">\(r_k = 1\)</span>. The ramp is
-<span class="math inline">\(m s\)</span> wide, so <span class="math inline">\(r_k\)</span> is as accurate as the root relative
-to that width. The eigenvalues above the onset, their conditions,
+continuous at <span class="math inline">\(r_k = 1\)</span>. Outside the
+ramp the term and (7) vanish, so the model of a trust-region step sees
+the boundary only from within the ramp; on a ramp narrow against the
+change of <span class="math inline">\(\mathrm{Re}\,\lambda_k\)</span>
+over a step, the steps cross it and are rejected, and the iterates creep
+along the boundary. A <code>width</code> <span class="math inline">\(d\)</span> in the units of the rates, wide against
+that change, avoids it and leaves a resting state untouched whose
+slowest mode decays faster than <span class="math inline">\(d\)</span>;
+the ramp then does not move with <span class="math inline">\(s\)</span>.
+A ramp <span class="math inline">\(m s\)</span> wide gives <span class="math inline">\(r_k\)</span> as accurate as the root relative to
+that width. The eigenvalues above the onset, their conditions,
 half-lives and the states with the largest entries of the right
 eigenvectors are the attribute <code>"eigenvalues"</code> of a call of
 the term.</p>
@@ -252,16 +269,32 @@ the term.</p>
 <h2 id="analytical-steady-state-constraints">Analytical steady-state constraints<a class="anchor" aria-label="anchor" href="#analytical-steady-state-constraints"></a>
 </h2>
 <p><code><a href="../reference/steadyStates.html">steadyStates()</a></code> solves <span class="math inline">\(f(x,
-p) = 0\)</span> in closed form <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a>, <a href="#ref-kaschek2019dmod">[2]</a></span>. Each unknown, a state or a
-kinetic parameter, is solved from a combination of balances such that
-the solution is a ratio of sums of positive terms. The solution is thus
-positive for positive parameters, also with
-<code>solveQuadratic = TRUE</code>, which takes the positive root of a
-balance quadratic in the state. A state whose balance is spent on a
-kinetic parameter stays free, as the parameter of the steady-state value
-of the state. States that are zero in every steady state are set to 0. A
-conserved quantity keeps one state free. Volumes are never solved
-for.</p>
+p) = 0\)</span> in closed form <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a>, <a href="#ref-kaschek2019dmod">[2]</a></span>. The balances are taken in
+amounts, so that a quantity conserved across compartments is a dependent
+balance. First, a state whose balance is linear in the state, with all
+terms of the state on one side, is solved from that balance, influx over
+outflux rate, unless the rate constants of the solution leave a cycle of
+the graph of states without a cut; the states of conserved quantities
+are left to the cuts. Then the cycles are cut, each at a state of a
+conserved quantity, which stays free, or at a state whose balance is
+solved for a rate constant common to the flux terms of one side. The
+cuts are ranked as by <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a></span>: conserved
+quantities first, then sides whose flux terms occur in no other balance,
+fewer balances changed, fewer terms, more cycles through the state. Then
+each unknown, a state or a kinetic parameter, is solved from a
+combination of balances such that the solution is a ratio of sums of
+positive terms. The solution is thus positive for positive parameters,
+also with <code>solveQuadratic = TRUE</code>, which takes the positive
+root of a balance quadratic in the state. A state whose balance is spent
+on a kinetic parameter stays free, as the parameter of the steady-state
+value of the state. States that are zero in every steady state are set
+to 0. A conserved quantity keeps one state free. Volumes are never
+solved for.</p>
+<p>Only if no solution of this form exists, a side whose flux terms have
+separate rate constants <span class="math inline">\(k_0, \dots,
+k_m\)</span> is a cut as well. The fluxes <span class="math inline">\(v_j\)</span> of the side get free ratios <span class="math inline">\(r_{x,j} = v_j / v_0 &gt; 0\)</span>, named
+<code>r_&lt;state&gt;_&lt;j&gt;</code>; <span class="math inline">\(k_0\)</span> is solved, each <span class="math inline">\(k_j\)</span> follows from <span class="math inline">\(r_{x,j}\)</span> and <span class="math inline">\(k_0\)</span>. The ratios are new parameters of the
+transformation.</p>
 <p>The result, one equation per solved unknown, replaces identity
 entries of a parameter transformation:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
@@ -319,7 +352,7 @@ optimization than with common numerical implementations <span class="citation"><
 <code><a href="../reference/steadyStates.html">steadyStates()</a></code> does not test stability;
 <code><a href="../reference/Pimpl.html">Pimpl()</a></code> does (<a href="#stability">Stability</a>).
 <code><a href="../reference/Pimpl.html">Pimpl()</a></code> is needed where no closed form of positive sums
-exists, as for the network of the guide.</p>
+exists.</p>
 <p>Reference: <code><a href="../reference/conservedQuantities.html">conservedQuantities()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code>,
 <code><a href="../reference/steadyStates.html">steadyStates()</a></code>, <code><a href="../reference/constraintStability.html">constraintStability()</a></code></p>
 </div>
@@ -339,10 +372,9 @@ Biology</em>, vol. 4, p. 41, 2016, doi: <a href="https://doi.org/10.3389/fcell.2
 <div class="csl-left-margin">[2] </div>
 <div class="csl-right-inline">D.
 Kaschek, W. Mader, M. Fehling-Kaschek, M. Rosenblatt, and J. Timmer,
-<span>“<span class="nocase">dMod</span>: <span>Efficient</span>
-parameter estimation and uncertainty analysis for dynamic
-models,”</span> <em>Journal of Statistical Software</em>, vol. 88, no.
-10, pp. 1–32, 2019, doi: <a href="https://doi.org/10.18637/jss.v088.i10" class="external-link">10.18637/jss.v088.i10</a>.</div>
+<span>“Dynamic modeling, parameter estimation, and uncertainty analysis
+in <span>R</span>,”</span> <em>Journal of Statistical Software</em>,
+vol. 88, no. 10, pp. 1–32, 2019, doi: <a href="https://doi.org/10.18637/jss.v088.i10" class="external-link">10.18637/jss.v088.i10</a>.</div>
 </div>
 </div>
 </div>

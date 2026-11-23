@@ -1,13 +1,10 @@
 # 7. Nonlinear mixed-effects models
 
-A mixed-effects model writes each individual parameter (subject, cell,
-cell line) as a population value plus a random deviation, estimates
-population values and spread, and integrates the deviations out of the
-likelihood. In dMod2 random effects are declared in the `parfn`;
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) fits by the
-EM algorithm with one of four approximations of the integral. Example:
-theophylline, twelve subjects, one oral dose each, plasma concentrations
-over a day.
+A mixed-effects model writes each individual parameter as a population
+value plus a random deviation and integrates the deviations out of the
+likelihood. Random effects are declared in the `parfn`;
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) fits the
+model. Example: theophylline, twelve subjects, one oral dose each.
 
 ``` r
 
@@ -18,10 +15,8 @@ dir.create(getOption("dMod2.outdir"), showWarnings = FALSE)
 
 ## Pharmacokinetic model
 
-The dose enters a depot, is absorbed into the central compartment of
-volume \\V\\ and cleared by the flux \\\mathrm{Cl}\\ C_c\\ in the unit
-frame: clearance \\\mathrm{Cl}\\ is a volume per time, the concentration
-falls at rate \\\mathrm{Cl}/V\\.
+Depot, central compartment of volume \\V\\, clearance \\\mathrm{Cl}\\
+(volume per time).
 
 ``` r
 
@@ -38,8 +33,8 @@ as.eqnvec(reactions)
 ```
 
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) needs second
-derivatives: build with `deriv2 = TRUE` and the forward-over-reverse
-derivative modes.
+derivatives: `deriv2 = TRUE` and the forward-over-reverse derivative
+modes.
 
 ``` r
 
@@ -52,8 +47,8 @@ e <- Y(c(cp = "sigma"), g, attachInput = FALSE, modelname = "theo_e", compile = 
 
 ## Theophylline data
 
-Each subject is a condition; the condition table holds dose in mg and
-body weight.
+One condition per subject; the condition table holds dose in mg and body
+weight.
 
 ``` r
 
@@ -84,14 +79,14 @@ plotData(data) +
 
 ## Random-effect formulas
 
-`define("x <- x", x = ...)` starts the transformation as in [Setting up
+[`define()`](https://dmodverse.github.io/dMod2/reference/define.md)
+starts the transformation as in [Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.md),
 [`branch()`](https://dmodverse.github.io/dMod2/reference/define.md)
-copies it per table row, and
+copies it per table row,
 [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md) sets
-the dose into the depot, an empty central compartment and log-scale
-parameters. An effect formula turns a symbol into a linear predictor
-with fixed and random effects in lme4 notation:
+dose, initial values and log parameters. Effect formulas in lme4
+notation give the linear predictors:
 
 ``` r
 
@@ -113,10 +108,9 @@ random
 #>   fixed effects: Ka, V, Cl
 ```
 
-The formula acts after the log transformation, so \\\log \mathrm{Cl}\_i
-= \mathrm{Cl} + \eta\_{\mathrm{Cl},i}\\, \\\eta\_{\mathrm{Cl},i} \sim
-\mathcal{N}(0, \omega\_{\mathrm{Cl}}^2)\\: log-normal individual
-parameters. Further forms:
+The formula acts after the log transformation: \\\log \mathrm{Cl}\_i =
+\mathrm{Cl} + \eta\_{\mathrm{Cl},i}\\, \\\eta\_{\mathrm{Cl},i} \sim
+\mathcal{N}(0, \omega\_{\mathrm{Cl}}^2)\\. Further forms:
 
 - `Cl ~ 1 + (1 | ID)`: random intercept per subject.
 - `Cl ~ 1 + logWeight + (1 | ID)`: a covariate, fixed effect
@@ -130,27 +124,20 @@ parameters. Further forms:
 - `Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))`: spike-and-slab instead of
   normal random effects.
 
-A group (a level of the grouping, such as a subject) may own several
-conditions, which share the group random effects; a condition outside
-every group has none. The random effects of one ID, or of one term
-without ID, form a block with full covariance, so \\\Omega\\ is block
-diagonal; `omega_<a>_<b>` are the entries of the Cholesky factor of each
-block, with the log of the factor diagonal on the diagonal, for a random
-effect alone in a block the log of the standard deviation of that
-effect. This chapter treats normal random effects; spike-and-slab and
-Dirichlet-process ones are in [Sparse
+Conditions of one group share the group random effects. The random
+effects of one ID form a block with full covariance; `omega_<a>_<b>` are
+the entries of the Cholesky factor of the block, with the log of the
+diagonal. Spike-and-slab and Dirichlet-process random effects: [Sparse
 deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md).
 
 ## Marginal likelihood
 
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) maximizes
 the likelihood of fixed effects, \\\Omega\\ and error parameters with
-the random effects of every group integrated out. It takes the data
-objective `normL2(data, g * x * p, errmodel = e)` and builds the
-random-effect prior from `randomEffects(p)`; `normT(..., df = 4)`
-instead of
-[`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
-gives Student-t residuals. `method` picks the approximation:
+the random effects integrated out. It takes
+`normL2(data, g * x * p, errmodel = e)`, or `normT(..., df = 4)` for
+Student-t residuals, and builds the prior from `randomEffects(p)`.
+`method`:
 
 | method | use | reported \\-2 \log L\\ |
 |----|----|----|
@@ -161,23 +148,20 @@ gives Student-t residuals. `method` picks the approximation:
 
 \\K\\ is the number of random effects of a group. Derivations: [Methods
 \> Marginal
-likelihood](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#marginal-likelihood)
-and [Methods \> EM
+likelihood](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#marginal-likelihood),
+[Methods \> EM
 algorithm](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#em-algorithm).
 
 ## First-order conditional estimation (FOCEI)
 
-First-order conditional estimation with interaction replaces each
-integral by Laplace’s approximation at the mode of the group; \\-2 \log
-L\\ may lie above or below the exact one. Inner and outer trust regions
-and gradient: [Methods \>
+Laplace’s approximation at the mode of each group, [Methods \>
 FOCEI](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#focei).
 
 ### FOCEI fit
 
-`init` holds the parameters that are neither random effects nor created
-by effect formulas (those start at 0); random-effect standard deviations
-start at `control$sd`.
+`init` holds the parameters other than random effects and effect-formula
+coefficients (those start at 0); standard deviations start at
+`control$sd`.
 
 ``` r
 
@@ -185,6 +169,9 @@ init <- c(Ka = 0, V = 3, Cl = 0.7, sigma = log(0.5))
 fit <- em(obj = normL2(data, g * x * p, errmodel = e), random = random, init = init, verbose = FALSE)
 summary(fit)
 ```
+
+The fit is loaded from `results/guide-nlme.rds`, computed by
+`results/guide-nlme.R`.
 
     #> EM summary (focei): -2 log L 359.403232, converged TRUE, 10 iterations
     #>   without the 2 pi constant of the data (NONMEM OBJ): 116.803459
@@ -207,28 +194,23 @@ summary(fit)
     #> 
     #> Shrinkage: eta_Ka = 0.018, eta_V = 0.103, eta_Cl = 0.039
 
-Every block here holds one random effect, so `omega_*` are log standard
-deviations, shown on natural scale in the random-effects table.
-Shrinkage near 0 means the modes spread as widely as the random effects,
-near 1 that the data of a subject hardly move the individual parameter.
+`omega_*` are log standard deviations here. Shrinkage near 1 means the
+data of a subject hardly move the individual parameter.
 
-`value` is \\-2 \log L\\ with all data constants; `valueNonmem`, \\-2
-\log L\\ less \\\log(2\pi)\\ per reading above the limit of
-quantification, compares with the NONMEM `OBJ` (`NA` for
+`value` is \\-2 \log L\\; `valueNonmem` compares with the NONMEM `OBJ`
+(`NA` for
 [`normT()`](https://dmodverse.github.io/dMod2/reference/normT.md)). The
-fit holds `argument`, `Omega`, `omega` (standard deviations and
-correlations with standard errors), `random` (modes per group with
-conditional standard errors), `etaModes`, `etaSE` and `shrinkage`.
-Methods: [`coef()`](https://rdrr.io/r/stats/coef.html),
+fit holds `Omega`, `omega`, `random`, `etaModes`, `etaSE` and
+`shrinkage`. Methods: [`coef()`](https://rdrr.io/r/stats/coef.html),
 [`vcov()`](https://rdrr.io/r/stats/vcov.html),
 [`confint()`](https://rdrr.io/r/stats/confint.html) (Wald or
 `method = "profile"`),
 [`logLik()`](https://rdrr.io/r/stats/logLik.html),
 [`AIC()`](https://rdrr.io/r/stats/AIC.html),
 [`BIC()`](https://rdrr.io/r/stats/AIC.html),
-[`anova()`](https://rdrr.io/r/stats/anova.html) of nested fits,
-[`predict()`](https://rdrr.io/r/stats/predict.html) (individual and
-population), [`residuals()`](https://rdrr.io/r/stats/residuals.html),
+[`anova()`](https://rdrr.io/r/stats/anova.html),
+[`predict()`](https://rdrr.io/r/stats/predict.html),
+[`residuals()`](https://rdrr.io/r/stats/residuals.html),
 [`simulate()`](https://rdrr.io/r/stats/simulate.html) and the plots
 below.
 
@@ -242,28 +224,20 @@ below.
 | `derivMode` | `"forward-reverse"` | volume-term second derivatives, or `"forward-forward"` |
 | `secondOrderCorrection` | `TRUE` | derivative of the volume term |
 
-`"forward-forward"` needs `deriv2 = TRUE`;
-[`summary()`](https://rdrr.io/r/base/summary.html) says whether the
-Hessian is exact; `secondOrderCorrection = FALSE` biases the estimates
-([Methods \> Volume
+`"forward-forward"` needs `deriv2 = TRUE`.
+`secondOrderCorrection = FALSE` biases the estimates ([Methods \> Volume
 term](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#volume-term)).
-`fixed` holds parameters at given values. `sparse = TRUE` uses sparse
-Hessians for many fixed effects, `"auto"` decides as
-[`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md). The
-outer `mtol` is a predicted change of \\10^{-5}\\ in \\-2 \log L\\, the
-inner tolerances are tighter; the solver error must stay below them.
-`em(cores = )` spreads groups and conditions over threads, [Remote
+`fixed` holds parameters at given values, `sparse = TRUE` uses sparse
+Hessians. The solver error must stay below the tolerances.
+`em(cores = )`: [Remote
 computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html#threads-and-processes).
 
 ## Adaptive sparse-grid quadrature
 
-Laplace’s approximation biases \\\Omega\\ most for skewed posteriors,
-e.g. oral doses sampled near absorption. `method = "quadrature"` starts
-from the converged FOCEI fit and integrates on a sparse grid around each
-group mode at the level `tol` requires; level \\K\\ is Laplace’s
+`method = "quadrature"` starts from the FOCEI fit and integrates on a
+sparse grid around each group mode; level \\K\\ is Laplace’s
 approximation. A certificate flags groups whose posterior the grid does
-not resolve. Grid, stages and certificate: [Methods \> Adaptive
-sparse-grid
+not resolve. [Methods \> Adaptive sparse-grid
 quadrature](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#adaptive-sparse-grid-quadrature).
 
 | entry of `control$quadrature` | default | controls |
@@ -277,36 +251,25 @@ quadrature](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#adaptiv
 | `pruneTol` | `Inf` | drop nodes with log weight this far below the largest |
 | `certificate` | `points = 256`, `seed = 1` | importance-sampling check, `FALSE` skips |
 
-A quadrature fit holds `stageTrace` (per rebuild: stage level, value,
-Newton decrement, resolution, highest level, node count), `etaCov`
-(posterior covariance \\\hat M_i - \hat m_i \hat m_i^\top\\ per group)
-and `certificate`. `plotTrace(fit)` draws the trace,
-`plotRandomEffects(fit)` histograms and QQ plots of conditional draws,
-or with `type = "modes"` of the modes, against the fitted
-\\\mathcal{N}(0, \Omega\_{kk})\\ (see [Model
-diagnostics](#model-diagnostics)).
+The fit holds `stageTrace`, `etaCov` (posterior covariance per group)
+and `certificate`; `plotTrace(fit)` draws the trace.
 
 ## Laplace EM
 
-`method = "laplaceEM"` runs expectation conditional maximization on the
-Laplace approximation and reports the quadrature of level \\K + 2\\.
-Settings in `control$quadrature`: convergence tolerance `epsEcm`
-(default `1e-5`), iterations `maxEcm` (default 200), and of the
-quadrature above `cm1Control`, `maxCm1Iter`, `pruneTol` and `maxLevel`;
-the levels are \\K + 1\\ and \\K + 2\\, and the fit has no certificate.
-Details: [Methods \> Laplace
+`method = "laplaceEM"`: expectation conditional maximization on the
+Laplace approximation, reporting the quadrature of level \\K + 2\\,
+without certificate. `control$quadrature` takes `epsEcm` (default
+`1e-5`), `maxEcm` (default 200) and `cm1Control`, `maxCm1Iter`,
+`pruneTol`, `maxLevel`. [Methods \> Laplace
 EM](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#laplace-em).
 
 ## Stochastic approximation EM (SAEM)
 
-`method = "saem"` draws the random effects from the posterior and
-averages over iterations, after a burn-in with falling step sizes;
-suited to many random effects and skewed, heavy-tailed or multimodal
-posteriors. [`set.seed()`](https://rdrr.io/r/base/Random.html)
-reproduces a fit.
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) reports the
-quadrature of level \\K + 2\\ at the estimate, with standard errors from
-the Hessian of that quadrature. Details: [Methods \>
+`method = "saem"` samples the random effects from the posterior and
+averages over iterations after a burn-in;
+[`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces a fit.
+Value and standard errors come from the quadrature of level \\K + 2\\.
+[Methods \>
 SAEM](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#saem).
 
 | entry of `control$saem` | default | controls |
@@ -353,11 +316,8 @@ round(c(laplaceEM$argument[names(fit$argument)], minus2logL = laplaceEM$value), 
     #> omega_Cl_Cl  minus2logL 
     #>      -1.330     360.745
 
-Estimates agree within their standard errors. Each \\-2 \log L\\
-approximates the same integral; Laplace EM and SAEM report the
-quadrature. FOCEI may lie below it: Laplace’s method is no bound, and a
-lower value is approximation error, not a better fit. Stage trace and
-certificate of the quadrature fit:
+Estimates agree within their standard errors. FOCEI may lie below the
+quadrature: Laplace’s method is no bound.
 
 ``` r
 
@@ -383,14 +343,11 @@ fits$quadrature$certificate
 Here one rebuild ends the fit: the Newton decrement on the rebuilt nodes
 lies below what the nodes resolve, so the estimate of FOCEI stands, with
 the value of the quadrature. No group is flagged.
-[`plotTrace()`](https://dmodverse.github.io/dMod2/reference/plotTrace.md)
-draws the trace of a fit with several rebuilds.
 
 ## Model diagnostics
 
-[`plotCombined()`](https://dmodverse.github.io/dMod2/reference/plotCombined.md)
-draws each subject with individual (IPRED, random effects at the modes)
-and population prediction (PRED, random effects 0):
+Individual (IPRED, random effects at the modes) and population
+prediction (PRED, random effects 0):
 
 ``` r
 
@@ -401,9 +358,8 @@ plotCombined(fit, ncol = 4) +
 ![](guide-nlme_files/figure-html/unnamed-chunk-8-1.png)
 
 Conditional weighted residuals (CWRES) linearize around the modes;
-normalized prediction distribution errors (NPDE) come from simulations,
-decorrelated per subject, without linearization. Both should look like
-standard normal noise against prediction and time.
+normalized prediction distribution errors (NPDE) come from simulations.
+Both should be standard normal.
 
 ``` r
 
@@ -412,8 +368,7 @@ plotResiduals(fit, type = c("CWRES", "NPDE"), nsim = 200, seed = 1)
 
 ![](guide-nlme_files/figure-html/unnamed-chunk-9-1.png)
 
-The visual predictive check compares data percentiles with simulated
-prediction intervals per time bin.
+Visual predictive check:
 
 ``` r
 
@@ -422,8 +377,8 @@ plotVPC(fit, nsim = 200, bins = 8, seed = 1)
 
 ![](guide-nlme_files/figure-html/unnamed-chunk-10-1.png)
 
-Histograms and QQ plots of draws from the conditional distributions of
-the random effects against the fitted \\\mathcal{N}(0, \Omega\_{kk})\\:
+Conditional draws of the random effects against the fitted
+\\\mathcal{N}(0, \Omega\_{kk})\\:
 
 ``` r
 
@@ -432,8 +387,7 @@ plotRandomEffects(fit)
 
 ![](guide-nlme_files/figure-html/unnamed-chunk-11-1.png)
 
-Against a covariate, random effects show whether it explains part of the
-variability:
+Random effects against a covariate:
 
 ``` r
 
@@ -444,8 +398,7 @@ plotRandomEffects(fit, covariates = table["weight"])
 
 ## Covariate effects
 
-Clearance and volume usually scale with body weight, entered as a fixed
-effect on a table column, centered on log scale:
+Body weight as a fixed effect on a table column, centered on log scale:
 
 ``` r
 
@@ -470,37 +423,34 @@ comparison
     #> 2     2    8 358.6210 374.6210 397.6834 0.7822652  1 0.3764493
 
 [`anova()`](https://rdrr.io/r/stats/anova.html) compares nested fits by
-likelihood ratio. Weight lowers \\-2 \log L\\ by 0.78, p-value 0.38:
-among twelve subjects of similar weight it explains little clearance
-spread, and the simpler model stays.
+likelihood ratio. Weight lowers \\-2 \log L\\ by 0.78, p-value 0.38; the
+simpler model stays.
 
 ## Nested and crossed groups
 
-Further groupings, nested (occasions within subjects) or crossed
-(patients and centers), are further formula terms.
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) integrates
-them by FOCEI per connected component of the conditions; the
-[pharmacometrics
+Nested groupings (occasions within subjects) or crossed ones (patients
+and centers) are further formula terms, integrated by FOCEI per
+connected component of the conditions. The [pharmacometrics
 project](https://dmodverse.github.io/dMod2/articles/pharmacometrics.md)
-fits mavoglurant with between-occasion variability this way:
+fits mavoglurant with between-occasion variability:
 
 ``` r
 
 insert(trafo, Cl ~ 1 + (1 | ID) + (1 | ID:OCC))
 ```
 
-Which groups differ at all, rather than by how much: [Sparse
+Which groups differ at all: [Sparse
 deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md).
 
 ## Multistart optimization
 
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) runs
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) from `fits`
-starts, the first at `init`, the others perturbed around it with
-standard deviation `sd`, and returns the best fit, all starts in
-`$multistart`. `theophyllineMultistart.R` of the project
-`pharmacometrics` runs 200 starts each for FOCEI, quadrature and SAEM
-from the same draws:
+starts, the first at `init`, the others perturbed with standard
+deviation `sd`, and returns the best fit, all starts in `$multistart`.
+`theophyllineMultistart.R` of the project `pharmacometrics` runs 200
+starts each for FOCEI, quadrature and SAEM; the result is loaded from
+`results/multistart.rds` of the project.
 
 ``` r
 
@@ -516,7 +466,7 @@ ms <- lapply(names(methods), function(m) {
 names(ms) <- names(methods)
 ```
 
-FOCEI waterfall of all 200 starts:
+FOCEI:
 
 ``` r
 
@@ -525,7 +475,7 @@ plotValues(saved$multistart$FOCEI, pseudoLog = wide)
 
 ![](guide-nlme_files/figure-html/unnamed-chunk-16-1.png)
 
-Quadrature and SAEM, both valued by the quadrature, so comparable:
+Quadrature and SAEM, both valued by the quadrature:
 
 ``` r
 
@@ -534,9 +484,8 @@ plotValues(saved$multistart[c("quadrature", "SAEM")], pseudoLog = wide)
 
 ![](guide-nlme_files/figure-html/unnamed-chunk-17-1.png)
 
-All three methods find the same two optima, with method-specific \\-2
-\log L\\. Most starts end on the upper plateau, the fit above; about 21
-of 200 per method reach the lower one, the flip-flop solution:
+All three methods find the same two optima. About 21 of 200 starts per
+method reach the lower one, the flip-flop solution:
 
 ``` r
 
@@ -549,18 +498,15 @@ signif(rbind(fit = c(exp(fit$argument[c("Ka", "V", "Cl")]), minus2logL = fit$val
 #> flipflop 0.08483  1.682 2.724      352.9
 ```
 
-With one oral dose and no intravenous data, absorption and elimination
-can swap. In the flip-flop solution absorption is the slow step, the
-volume shrinks to 1.7 L and the `Ka` random effect vanishes. The
-likelihood prefers it by 6.5, but theophylline spreads through the body
-water, about 0.5 L/kg, not a few liters; drug knowledge or a prior on
-`V` selects the upper plateau.
+With one oral dose, absorption and elimination can swap: absorption
+becomes the slow step, the volume shrinks to 1.7 L and the `Ka` random
+effect vanishes. The likelihood prefers it by 6.5, but theophylline
+spreads through the body water, about 0.5 L/kg; a prior on `V` selects
+the upper plateau.
 
 ### Zero variance components
 
-At the flip-flop solution the `Ka` variance runs to 0.
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) returns the
-fit with that variance at 0 and names it in `fit$boundary`;
+A variance that runs to 0 is returned at 0 and named in `fit$boundary`;
 `control$boundary` (default 0.1) is the accepted rise of \\-2 \log L\\,
 `FALSE` switches it off ([Methods \> Zero variance
 components](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#variance-at-the-boundary)).
@@ -579,7 +525,7 @@ sapply(saved$best, function(b) signif(b[c("Ka", "V", "Cl")], 4))
 ```
 
 `theophyllineMultistart.R` refits the best fit of each method by every
-other method from the estimates of that fit:
+other method:
 
 ``` r
 
@@ -612,21 +558,14 @@ saved$cross
 #> 9       SAEM       SAEM 354.4930      TRUE 0.08446507 1.670658
 ```
 
-From every start each method reaches the same estimates, with
-method-specific \\-2 \log L\\: FOCEI about 1.6 below the quadrature,
-which integrates more accurately than Laplace’s method; SAEM, valued by
-the quadrature of level \\K + 2\\ at the SAEM estimate, within 0.05 of
-it.
+Each method reaches the same estimates from every start. FOCEI lies
+about 1.6 below the quadrature, SAEM within 0.05 of it.
 
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) draws
 all starts and seeds before spreading fits over `cores`, so
 [`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces a run;
-`cores = c(fits = , conditions = )` splits cores between parallel fits
-and threads, see [Remote
+`cores = c(fits = , conditions = )`: see [Remote
 computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.html#threads-and-processes).
-Every start runs to convergence;
-[`plotValues()`](https://dmodverse.github.io/dMod2/reference/plotValues.md)
-draws `$multistart` as a waterfall.
 
 Reference:
 [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md),

@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,70 +118,54 @@
 
     
     
-<p>Fits, profiles and mixed-effects models need derivatives of the
-objective. dMod2 computes them exactly from the ODE sensitivities,
-propagated by the chain rule through every function object, without
-finite differences. This chapter covers forward, forward over forward,
-reverse and forward over reverse, the backends of
-<code><a href="../reference/odemodel.html">odemodel()</a></code>, and their costs on the guide model
-(<code>sensitivities.R</code> of the project). Details: <a href="methods-sensitivities.html">Methods &gt; Sensitivities and
+<p>dMod2 computes derivatives of the objective exactly from the ODE
+sensitivities and the chain rule through every function object. Code:
+<code>sensitivities.R</code>; details: <a href="methods-sensitivities.html">Methods &gt; Sensitivities and
 Hessians</a>.</p>
 <div class="section level2">
 <h2 id="forward-sensitivities">Forward sensitivities<a class="anchor" aria-label="anchor" href="#forward-sensitivities"></a>
 </h2>
-<p>The default. <code><a href="../reference/Xs.html">Xs()</a></code> integrates the sensitivities <span class="math inline">\(\partial x / \partial \theta\)</span> with the
-states, and every function object of <code>g*x*p</code> multiplies them
-by the Jacobian of that object. The objective returns gradient and
-Gauss-Newton Hessian for one solve with a tangent per parameter.
-<code>sensErrCon</code> in <code>optionsSens</code> of <code><a href="../reference/Xs.html">Xs()</a></code>
-sets whether sensitivities enter the error test, by default yes. With
-fixed standard deviations the Gauss-Newton Hessian is positive
-semidefinite, with an error model it can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Methods
+<p>The default: <code><a href="../reference/Xs.html">Xs()</a></code> integrates <span class="math inline">\(\partial x / \partial \theta\)</span> with the
+states, the objective returns gradient and Gauss-Newton Hessian.
+<code>sensErrCon</code> in <code>optionsSens</code> sets whether
+sensitivities enter the error test (default <code>TRUE</code>). With an
+error model the Gauss-Newton Hessian can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Methods
 &gt; Gauss-Newton with an error model</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="forward-over-forward">Forward over forward<a class="anchor" aria-label="anchor" href="#forward-over-forward"></a>
 </h2>
 <p><code>deriv2 = TRUE</code> in <code><a href="../reference/odemodel.html">odemodel()</a></code>,
-<code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> builds
-second-order sensitivities; the objective called with
-<code>deriv2 = TRUE</code> and the forward sweep returns the exact
-Hessian. The equation count grows with the square of the parameters, so
-this suits small models such as those of <a href="guide-nlme.html">Nonlinear mixed-effects models</a>. The guide
-model with 63 parameters uses it once below to show the cost.</p>
+<code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> gives the
+exact Hessian from second-order sensitivities. The equation count grows
+with the square of the parameters (guide model: 63); it suits small
+models such as those of <a href="guide-nlme.html">Nonlinear
+mixed-effects models</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="reverse-sweep">Reverse sweep<a class="anchor" aria-label="anchor" href="#reverse-sweep"></a>
 </h2>
-<p>The gradient alone comes from one backward sweep of the adjoint
-system, at a cost independent of the parameter count (<a href="methods-sensitivities.html#reverse-sweep">Methods &gt; Reverse
-sweep</a>). Every function object but <code><a href="../reference/Pimpl.html">Pimpl()</a></code>, which passes
-the sweep through the Jacobian of the root, is built with
-<code>derivMode = c("forward", "reverse")</code>, and the model is
-called with <code>sweep = "reverse"</code>. Both passes use the solver
+<p>One backward sweep of the adjoint system gives the gradient at a cost
+independent of the parameter count (<a href="methods-sensitivities.html#reverse-sweep">Methods &gt; Reverse
+sweep</a>). Build with <code>derivMode = c("forward", "reverse")</code>
+(<code><a href="../reference/Pimpl.html">Pimpl()</a></code> passes the sweep through the Jacobian of the
+root), call with <code>sweep = "reverse"</code>. Both passes solve with
 <code>options</code> alone; solves with sensitivities use
-<code>optionsSens</code> merged over <code>options</code>.</p>
-<p>In <code><a href="../reference/trust.html">trust()</a></code> the sweep is set per phase:</p>
+<code>optionsSens</code> merged over <code>options</code>. In
+<code><a href="../reference/trust.html">trust()</a></code> the sweep is set per phase:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">start</span>,</span>
 <span>             phases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span><span class="op">)</span>,</span>
 <span>                           <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"sr1"</span>, sweep <span class="op">=</span> <span class="st">"reverse"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span><span class="op">$</span><span class="va">phaseSweep</span></span></code></pre></div>
 <p>Without <code>sweep</code>, <code>"bfgs"</code> and
-<code>"sr1"</code> phases sweep backwards if the objective allows it at
-the start, otherwise forwards. Gauss-Newton always runs forwards, since
-<span class="math inline">\(J^\top J\)</span> needs forward
-sensitivities; a <code>"gn"</code> phase with
-<code>sweep = "reverse"</code> is an error, and the objective called
-with <code>sweep = "reverse"</code> returns no Gauss-Newton Hessian,
-with a warning where <code>hessian = TRUE</code> asks for one.
-<code>"exact"</code> runs forwards by default and backwards with
-<code>sweep = "reverse"</code>, where <code>deriv2 = TRUE</code> gives
-the exact Hessian by forward over reverse. A change of sweep between
-phases evaluates the current iterate once more. <a href="guide-optimization.html">Optimization</a> compares the Hessian
-sources on the guide model.</p>
+<code>"sr1"</code> phases sweep backwards if the objective allows it.
+Gauss-Newton needs forward sensitivities: a <code>"gn"</code> phase with
+<code>sweep = "reverse"</code> is an error. <code>"exact"</code> with
+<code>sweep = "reverse"</code> and <code>deriv2 = TRUE</code> uses
+forward over reverse.</p>
 <p>The backward sweep follows the step grid of the value pass by
-default. On the cppDE backend, <code>optionsReverse</code> of
+default; on the cppDE backend <code>optionsReverse</code> of
 <code><a href="../reference/Xs.html">Xs()</a></code> sets the accuracy, see
 <code><a href="https://dmodverse.github.io/cppDE/reference/adjointControl.html" class="external-link">cppDE::adjointControl()</a></code>:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
@@ -210,27 +194,24 @@ solve, else is redone in substeps</td>
 </tr>
 </tbody>
 </table>
-<p>Under <code>refine</code>, value and <code>chi2</code> of the reverse
-objective include the change from the computed to the refined
-trajectory, the attribute <code>correction</code> (<a href="methods-sensitivities.html#accuracy-of-a-reverse-gradient">Methods
+<p>Under <code>refine</code>, value and <code>chi2</code> include the
+change to the refined trajectory, attribute <code>correction</code> (<a href="methods-sensitivities.html#accuracy-of-a-reverse-gradient">Methods
 &gt; Accuracy of a reverse gradient</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="forward-over-reverse">Forward over reverse<a class="anchor" aria-label="anchor" href="#forward-over-reverse"></a>
 </h2>
 <p>The exact Hessian without second-order sensitivities, one column per
-parameter from the backward sweep (<a href="methods-sensitivities.html#forward-over-reverse">Methods &gt;
+parameter (<a href="methods-sensitivities.html#forward-over-reverse">Methods &gt;
 Forward over reverse</a>). Build with
-<code>derivMode = c("forward", "reverse", "forward-reverse")</code> and
-call with <code>sweep = "reverse", deriv2 = TRUE</code>. FOCEI in <a href="guide-nlme.html">Nonlinear mixed-effects models</a> uses the same
-sweeps for directional second derivatives.</p>
+<code>derivMode = c("forward", "reverse", "forward-reverse")</code>,
+call with <code>sweep = "reverse", deriv2 = TRUE</code>. FOCEI in <a href="guide-nlme.html">Nonlinear mixed-effects models</a> uses it for
+directional second derivatives.</p>
 </div>
 <div class="section level2">
 <h2 id="ode-backends">ODE backends<a class="anchor" aria-label="anchor" href="#ode-backends"></a>
 </h2>
-<p><code>odemodel(backend = )</code> selects the solver; the function
-objects above are the same, <code><a href="../reference/Xs.html">Xs()</a></code> dispatches on the model
-class.</p>
+<p><code>odemodel(backend = )</code> selects the solver:</p>
 <table style="width:100%;" class="table">
 <colgroup>
 <col width="14%">
@@ -283,7 +264,7 @@ class.</p>
 </tr>
 </tbody>
 </table>
-<p>See cppDE on <a href="https://dmodverse.github.io/cppDE/articles/methods-stepping.html" class="external-link">stepping</a>,
+<p>cppDE on <a href="https://dmodverse.github.io/cppDE/articles/methods-stepping.html" class="external-link">stepping</a>,
 <a href="https://dmodverse.github.io/cppDE/articles/methods-cvode.html" class="external-link">CVODES</a>
 and <a href="https://dmodverse.github.io/cppDE/articles/benchmarks.html" class="external-link">benchmarks</a>
 against CVODES.</p>
@@ -291,8 +272,8 @@ against CVODES.</p>
 <div class="section level2">
 <h2 id="costs-on-the-guide-model">Costs on the guide model<a class="anchor" aria-label="anchor" href="#costs-on-the-guide-model"></a>
 </h2>
-<p><code>sensitivities.R</code> rebuilds the chain of <a href="guide-model.html">Setting up models</a> with all directions and
-evaluates the data term at the best fit of <a href="guide-optimization.html">Optimization</a>:</p>
+<p><code>sensitivities.R</code> evaluates the data term of <a href="guide-model.html">Setting up models</a> at the best fit of <a href="guide-optimization.html">Optimization</a>; the results are loaded
+from <code>results/sensitivities.rds</code>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the chain and objective of model.R once more, every function object with the reverse sweep and</span></span>
 <span><span class="co"># second derivatives; Pimpl() passes the reverse sweep through the Jacobian of the root</span></span>
@@ -307,10 +288,10 @@ evaluates the data term at the best fit of <a href="guide-optimization.html">Opt
 <span><span class="va">pR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/P.html">P</a></span><span class="op">(</span><span class="va">trafo</span>, modelname <span class="op">=</span> <span class="st">"oppelt_rev_par"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span>, derivMode <span class="op">=</span> <span class="va">dm</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/compile.html">compile</a></span><span class="op">(</span><span class="va">gR</span>, <span class="va">xR</span>, <span class="va">pSSR</span>, <span class="va">pR</span>, <span class="va">eR</span>, output <span class="op">=</span> <span class="st">"oppelt_rev"</span>, cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">objR</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">gR</span> <span class="op">*</span> <span class="va">xR</span> <span class="op">*</span> <span class="va">pSSR</span> <span class="op">*</span> <span class="va">pR</span>, <span class="va">eR</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">mu</span>, sigma <span class="op">=</span> <span class="va">sigma</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="../reference/constraintStability.html">constraintStability</a></span><span class="op">(</span><span class="va">pSSR</span>, <span class="va">pR</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="../reference/constraintStability.html">constraintStability</a></span><span class="op">(</span><span class="va">pSSR</span>, <span class="va">pR</span>, width <span class="op">=</span> <span class="va">rampWidth</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">s</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/sensitivities.rds"</span><span class="op">)</span></span></code></pre></div>
-<p>Reverse and forward gradients agree:</p>
+<p>Relative difference of reverse and forward gradient:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the data term, whose gradient the prior balances at the optimum, so that it does not vanish</span></span>
 <span><span class="va">best</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fits.rds"</span><span class="op">)</span><span class="op">)</span></span>
@@ -323,10 +304,8 @@ evaluates the data term at the best fit of <a href="guide-optimization.html">Opt
 <span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">gradients</span><span class="op">$</span><span class="va">forward</span> <span class="op">-</span> <span class="va">gradients</span><span class="op">$</span><span class="va">reverse</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">gradients</span><span class="op">$</span><span class="va">forward</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">gradients</span><span class="op">$</span><span class="va">forward</span> <span class="op">-</span> <span class="va">s</span><span class="op">$</span><span class="va">gradients</span><span class="op">$</span><span class="va">reverse</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">gradients</span><span class="op">$</span><span class="va">forward</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0.0001523368</span></span></code></pre></div>
-<p>within the solver tolerances, since the sweep without
-<code>refine</code> runs on the grid of the value pass. Seconds per
-evaluation, minimum of ten:</p>
+<span><span class="co">#&gt; [1] 0.0003422859</span></span></code></pre></div>
+<p>Seconds per evaluation, minimum of ten:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the shortest of ten evaluations, in seconds</span></span>
 <span><span class="va">cost</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">...</span><span class="op">)</span> <span class="op">{</span></span>
@@ -340,10 +319,9 @@ evaluation, minimum of ten:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">s</span><span class="op">$</span><span class="va">timing</span></span>
 <span><span class="co">#&gt;           value         forward         reverse forward-reverse </span></span>
-<span><span class="co">#&gt;           0.007           0.126           0.019           0.873</span></span></code></pre></div>
-<p>A reverse gradient costs a few values, a forward gradient one solve
-with a tangent per parameter, forward over reverse about 6.9 forward
-gradients. Forward over forward, measured once:</p>
+<span><span class="co">#&gt;           0.007           0.185           0.024           1.014</span></span></code></pre></div>
+<p>Forward over reverse costs about 5.5 forward gradients; forward over
+forward, once:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># one evaluation of the exact Hessian forward over forward, with second-order sensitivities in all</span></span>
 <span><span class="co"># pairs of parameters: the time and the peak memory of the process in GB</span></span>
@@ -355,10 +333,10 @@ gradients. Forward over forward, measured once:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>seconds <span class="op">=</span> <span class="va">s</span><span class="op">$</span><span class="va">forwardForward</span>, <span class="va">s</span><span class="op">$</span><span class="va">memory</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        seconds         before forwardForward </span></span>
-<span><span class="co">#&gt;     13.6990000      0.7658653      0.9201126</span></span></code></pre></div>
+<span><span class="co">#&gt;     16.0610000      0.6090393      0.7765503</span></span></code></pre></div>
 <p>It takes 16 times as long as forward over reverse and raises the peak
-memory of the process from 0.8 to 0.9 GB; for this model it is a check,
-not a method. Both Hessians agree up to the solver error:</p>
+memory of the process from 0.6 to 0.8 GB. Relative difference of the two
+Hessians:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">exact</span> <span class="op">&lt;-</span> <span class="fu">dataTerm</span><span class="op">(</span><span class="va">best</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, sweep <span class="op">=</span> <span class="st">"reverse"</span>, deriv2 <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">$</span><span class="va">hessian</span></span>
 <span><span class="co"># the two exact Hessians agree up to the error of the solver</span></span>
@@ -368,7 +346,7 @@ not a method. Both Hessians agree up to the solver error:</p>
 <span>                       gaussNewton <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/eigen.html" class="external-link">eigen</a></span><span class="op">(</span><span class="va">gaussNewton</span>, symmetric <span class="op">=</span> <span class="cn">TRUE</span>, only.values <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">$</span><span class="va">values</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">forwardForwardHessian</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">exact</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">colnames</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">exact</span><span class="op">)</span><span class="op">]</span> <span class="op">-</span> <span class="va">s</span><span class="op">$</span><span class="va">exact</span><span class="op">)</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">exact</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 1.140178e-09</span></span></code></pre></div>
+<span><span class="co">#&gt; [1] 4.871075e-10</span></span></code></pre></div>
 <p>Eigenvalues of exact and Gauss-Newton Hessian at the best fit:</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">eig</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>rank <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">s</span><span class="op">$</span><span class="va">hessians</span><span class="op">)</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span>,</span>
@@ -379,15 +357,10 @@ not a method. Both Hessians agree up to the solver error:</p>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_y_continuous</a></span><span class="op">(</span>trans <span class="op">=</span> <span class="fu">scales</span><span class="fu">::</span><span class="fu"><a href="https://scales.r-lib.org/reference/transform_log.html" class="external-link">pseudo_log_trans</a></span><span class="op">(</span>sigma <span class="op">=</span> <span class="fl">1e-3</span>, base <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>,</span>
 <span>                              breaks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1e-1</span>, <span class="fl">0</span>, <span class="fl">1e-2</span>, <span class="fl">1</span>, <span class="fl">1e2</span>, <span class="fl">1e4</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"rank"</span>, y <span class="op">=</span> <span class="st">"eigenvalue"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="../reference/theme_dMod2.html">theme_dMod2</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-sensitivities_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="768"></p>
-<p>They agree in the large eigenvalues, the well-determined directions.
-The smallest eigenvalue is -0.053 for the exact Hessian and -0.025 for
-Gauss-Newton. The model estimates the standard deviations of the imaging
-readouts, and with an error model Gauss-Newton can be indefinite (<a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Gauss-Newton
-with an error model</a>). In the flat directions the Hessian sources of
-<a href="guide-optimization.html">Optimization</a> take different
-steps.</p>
+<p>The smallest eigenvalue is -0.052 for the exact Hessian and -0.025
+for Gauss-Newton.</p>
 <p>Reference: <code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Xs.html">Xs()</a></code>,
 <code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code>,
 <code><a href="../reference/normL2.html">normL2()</a></code>, <code><a href="../reference/controls.html">controls()</a></code>, <code><a href="../reference/trust.html">trust()</a></code></p>

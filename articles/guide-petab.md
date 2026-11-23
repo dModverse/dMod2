@@ -1,40 +1,30 @@
 # 10. PEtab import and export
 
 PEtab is the exchange format for ODE parameter estimation problems: an
-SBML model plus tables of measurements, observables with noise models,
-conditions, and parameters with scales and bounds, joined by a YAML
-file. This chapter writes the guide model at the best fit as a PEtab
-problem and reads it back (`petab.R`); problems of the [PEtab benchmark
-collection](https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab)
-and other tools are read the same way.
+SBML model plus tables of measurements, observables, conditions and
+parameters, joined by a YAML file. `petab.R` writes the guide model at
+the best fit as a PEtab problem and reads it back, as for problems of
+the [PEtab benchmark
+collection](https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab).
 
 ## PEtab export
 
 [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md)
 writes reactions as SBML, observables, errors, data, and the
-transformation `p` with scales, fixed values and values per condition. A
-parameter entering only as [`exp()`](https://rdrr.io/r/base/Log.html) is
-on log scale. PEtab 2, the default, has no parameter scales: values are
-written on linear scale, with a warning listing the log-scale
-parameters. The gauge of
+transformation `p` with fixed values and values per condition. PEtab 2,
+the default, has no parameter scales: values of parameters entering as
+[`exp()`](https://rdrr.io/r/base/Log.html) are written on linear scale,
+with a warning. The gauge of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md)
-becomes fixed values, also linear.
+becomes fixed values.
 
-- **State at rest.** With `steadyState = pSS`, each condition starts
-  with a pre-equilibration to steady state before time 0. The totals of
-  the conserved moieties (the
-  [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
-  parameters) become initial-value parameters: one species per total
-  starts at the total, here complex `NfkIkb` for NFκB and
-  unphosphorylated `Ikk` for IKK, all others at 0; the simulation
-  preserves the totals. Both conditions differ only in the dose, given
-  by the event, and share one pre-equilibration condition.
-- **Event.** With `events = events`, the event at time 0 becomes the
-  `TNF` value in the condition table, set after pre-equilibration.
-- **Errors.** Imaging readouts get their error model; the blots, outside
-  the error model, get the data standard deviations as noise parameters
-  per measurement, as in
-  [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md).
+- **State at rest.** `steadyState = pSS` gives a pre-equilibration
+  before time 0, shared by both conditions. One species per conserved
+  total starts at the total (`NfkIkb`, `Ikk`), all others at 0.
+- **Event.** `events = events` writes the event at time 0 as the `TNF`
+  value of the condition.
+- **Errors.** Imaging readouts get the error model, blots the data
+  standard deviations as noise parameters per measurement.
 
 ``` r
 
@@ -51,6 +41,7 @@ list.files("results/petab")
 #> [7] "parameters_oppelt.tsv"
 ```
 
+The export uses the best fit of `fit.R`, loaded from `results/fits.rds`.
 Each experiment starts with the pre-equilibration at \\t = -\infty\\,
 then the experiment condition at 0:
 
@@ -71,11 +62,9 @@ read.delim("results/petab/conditions_oppelt.tsv")
 ## PEtab import
 
 [`importPEtab()`](https://dmodverse.github.io/dMod2/reference/importPEtab.md)
-builds `prdfn`, the `obsfn`s of observables and errors, the `parfn` with
-the scales of the parameter table, data and `objfn`. A pre-equilibration
-becomes a
-[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) with
-totals from the initial values. `options` go to the solver; with
+builds `prdfn`, the `obsfn`s of observables and errors, the `parfn`,
+data and `objfn`; a pre-equilibration becomes a
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md). With
 `compile = FALSE`,
 [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
 builds the sources.
@@ -97,28 +86,24 @@ compile(petab$prd, petab$e, output = "oppelt_petab", cores = 6)
 c(model.R = attr(obj(c(best, gauge), deriv = FALSE), "data"),
   PEtab   = petab$obj(petab$bestfit, deriv = FALSE)$value)
 #>   model.R     PEtab 
-#> -511.1645 -511.1645
+#> -511.1689 -511.1690
 ```
 
 The imported problem reproduces the data term of `model.R` at the best
-fit. `petab$bestfit` has the nominal values on the problem scales,
-`petab$parlower` and `petab$parupper` the bounds; it is fitted and
-profiled like any other.
+fit. `petab$bestfit` holds the nominal values on the problem scales,
+`petab$parlower` and `petab$parupper` the bounds.
 
 ## SBML models
 
 [`exportSbml()`](https://dmodverse.github.io/dMod2/reference/exportSbml.md)
-writes species with compartments and volumes, reactions with kinetic
-laws, parameters and initial assignments, here one species per total set
-to that total. SBML kinetic laws are amounts per time:
-[`exportSbml()`](https://dmodverse.github.io/dMod2/reference/exportSbml.md)
-multiplies concentration rates by the compartment volume,
+writes species with compartments, reactions, parameters and initial
+assignments; concentration rates are multiplied by the compartment
+volume,
 [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md)
 divides again.
 [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md)
-returns a list: the equation list with compartments and volumes in
-`reactions`, parameter values, initial values, observables, assignment
-rules and events:
+returns the equation list in `reactions`, parameter and initial values,
+observables, assignment rules and events:
 
 ``` r
 
@@ -140,10 +125,8 @@ list without PEtab tables.
 
 - SBML and PEtab run through reticulate with `python-libsbml`;
   `DMOD_LIBSBML_PYTHON` selects the interpreter.
-- PEtab 1 and 2 are read.
-  [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md)
-  writes 2 by default, 1 with `formatVersion = "1"`, which keeps scales
-  but puts expressions into the condition table that only dMod2 reads.
+- PEtab 1 and 2 are read. `exportPEtab(formatVersion = "1")` keeps
+  scales but writes condition expressions that only dMod2 reads.
 - [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md)
   writes events at time 0 that replace a state and refuses others.
 

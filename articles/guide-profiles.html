@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,34 +118,29 @@
 
     
     
-<p>The profile likelihood <span class="citation"><a href="#ref-raue2009structural">[1]</a></span> determines how well the
-data constrain each parameter. This chapter profiles all parameters of
-the full model at the best fit of <a href="guide-optimization.html">Optimization</a>, tests the core model of
-the publication, and fits a reduced model, by <code>profiles.R</code>,
-<code>variants.R</code>, <code>reduced.R</code> and
-<code>refit.R</code>.</p>
+<p>The profile likelihood <span class="citation"><a href="#ref-raue2009structural">[1]</a></span> shows how well the data
+constrain each parameter. This chapter profiles the full model at the
+best fit of <a href="guide-optimization.html">Optimization</a>, tests
+the core model of the publication and fits a reduced model.</p>
 <div class="section level2">
 <h2 id="profile-likelihood-and-confidence-intervals">Profile likelihood and confidence intervals<a class="anchor" aria-label="anchor" href="#profile-likelihood-and-confidence-intervals"></a>
 </h2>
-<p>The profile likelihood of a parameter is the data term along the path
-on which the other parameters minimize an objective with that parameter
-fixed. Here that objective is the one of the multistart with the prior
-replaced by a prior of standard deviation 20 on the log scale at the
-best fit, so that the data term, not the prior, shapes the profiles; the
-optimum of that objective is the lowest point of every profile. Values
-of the data term within the 95 % quantile of <span class="math inline">\(\chi^2_1\)</span>, 3.84, of the minimum form the
-95 % confidence interval (<a href="methods-profiles.html">Methods &gt;
+<p>The profile of a parameter is the data term along the path on which
+the other parameters minimize the objective with that parameter fixed.
+Here the objective has a prior of standard deviation 20 on the log scale
+at the best fit, so that the data term shapes the profiles. Data terms
+within 3.84, the 95 % quantile of <span class="math inline">\(\chi^2_1\)</span>, of the minimum form the 95 %
+confidence interval (<a href="methods-profiles.html">Methods &gt;
 Profile likelihood</a>). <code>stepControl = list(stop = "data")</code>
 ends a profile there, <code>confint(val.column = "data")</code> reads
-the interval off, and <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> gives other
-levels. A profile open towards <span class="math inline">\(-\infty\)</span> on the log scale means the
-process can be switched off, towards <span class="math inline">\(+\infty\)</span> that it can be instantaneous (<a href="methods-profiles.html#shapes">Methods &gt; Shapes</a>).</p>
+the interval, <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> gives other levels. A
+profile open towards <span class="math inline">\(-\infty\)</span> means
+the process can be switched off, towards <span class="math inline">\(+\infty\)</span> that it can be instantaneous (<a href="methods-profiles.html#shapes">Methods &gt; Shapes</a>).</p>
 <p><code>method = "integrate"</code> (default) follows the constrained
 optimum as a curve, with
-<code>algoControl = list(reoptimize = TRUE)</code> corrected at every
-step by a <code><a href="../reference/trust.html">trust()</a></code> fit with the settings of
-<code>optControl</code>; <code>method = "optimize"</code> refits at
-every step.</p>
+<code>algoControl = list(reoptimize = TRUE)</code> corrected by
+<code><a href="../reference/trust.html">trust()</a></code>; <code>method = "optimize"</code> refits at every
+step.</p>
 <table class="table">
 <colgroup>
 <col width="25%">
@@ -201,57 +196,39 @@ every step.</p>
 </tr>
 </tbody>
 </table>
-<p><code>limits</code> bounds the profiled parameter relative to the
-optimum, <code>side</code> profiles one side, <code>cores</code>
-profiles parameters in parallel (<a href="guide-remote-computing.html#threads-and-processes">Remote
+<p><code>limits</code> bounds the profiled parameter, <code>side</code>
+profiles one side, <code>cores</code> profiles in parallel (<a href="guide-remote-computing.html#threads-and-processes">Remote
 computing</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="profiles-of-the-full-model">Profiles of the full model<a class="anchor" aria-label="anchor" href="#profiles-of-the-full-model"></a>
 </h2>
 <p><code>profiles.R</code> refits the best fit of the multistart to the
-tolerances of the profiles:</p>
+tolerances of the profiles,</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the best fit of the multistart, refitted to the tolerances of the profiles</span></span>
 <span><span class="va">refit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fits.rds"</span><span class="op">)</span><span class="op">)</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>,</span>
 <span>               iterlim <span class="op">=</span> <span class="fl">1000</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span></span></code></pre></div>
-<p>and fits the objective of the profiles from there, the best of 20
-fits from starts about the refit, since a single fit can stop short of
-the floor of a flat valley:</p>
+<p>fits the objective of the profiles once,</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the profiles replace the prior of model.R by one of standard deviation 20 at the refit, so that</span></span>
-<span><span class="co"># the data term shapes them; they start at the optimum of that objective</span></span>
+<span><span class="co"># the data term shapes them; they start at the optimum of that objective, one fit from the refit</span></span>
 <span><span class="va">objProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prd</span>, <span class="va">e</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">refit</span><span class="op">$</span><span class="va">argument</span>, sigma <span class="op">=</span> <span class="fl">20</span><span class="op">)</span> <span class="op">+</span> <span class="va">stability</span></span>
-<span><span class="co"># the best of 20 fits from `center` and from starts about it, sd 0.1, which reaches the floor of</span></span>
-<span><span class="co"># a flat valley where a single fit stops on it</span></span>
-<span><span class="va">bestFit</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">center</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">fits</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mstrust.html">mstrust</a></span><span class="op">(</span><span class="va">objProfile</span>, <span class="va">center</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, sd <span class="op">=</span> <span class="fl">0.1</span>, fits <span class="op">=</span> <span class="fl">20</span>, startFromCenter <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>                  rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span>,</span>
-<span>                  cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">values</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">fits</span>, <span class="kw">function</span><span class="op">(</span><span class="va">f</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">is.numeric</a></span><span class="op">(</span><span class="va">f</span><span class="op">$</span><span class="va">value</span><span class="op">)</span><span class="op">)</span> <span class="va">f</span><span class="op">$</span><span class="va">value</span> <span class="kw">else</span> <span class="cn">Inf</span>, <span class="fl">0</span><span class="op">)</span></span>
-<span>  <span class="va">fits</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/which.min.html" class="external-link">which.min</a></span><span class="op">(</span><span class="va">values</span><span class="op">)</span><span class="op">]</span><span class="op">]</span></span>
-<span><span class="op">}</span></span>
-<span><span class="va">fitProfile</span> <span class="op">&lt;-</span> <span class="fu">bestFit</span><span class="op">(</span><span class="va">refit</span><span class="op">$</span><span class="va">argument</span><span class="op">)</span></span>
+<span><span class="va">fitProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">objProfile</span>, <span class="va">refit</span><span class="op">$</span><span class="va">argument</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>,</span>
+<span>                    iterlim <span class="op">=</span> <span class="fl">1000</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span></span>
 <span><span class="va">best</span> <span class="op">&lt;-</span> <span class="va">fitProfile</span><span class="op">$</span><span class="va">argument</span></span></code></pre></div>
-<p>Each side runs until the data term has risen by the threshold or the
-parameter has moved by 7 on the log scale; a profile below the fit
-restarts the 20 fits about its lowest point. <code>helix.R</code> runs
-one parameter per cluster task.</p>
+<p>and profiles each side until the data term has risen by the threshold
+or the parameter has moved by 7. The profiles are loaded from
+<code>results/profiles.rds</code>:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the profiles integrated, every step re-optimized, each side until the data term has risen by the</span></span>
 <span><span class="co"># threshold or the parameter has moved by 7 on the natural log scale, the settings of refit.R.</span></span>
-<span><span class="co"># Where a profile reaches a lower value than the fit, the fit restarts from there and all</span></span>
-<span><span class="co"># profiles run again. helix.R runs one profile per array task.</span></span>
+<span><span class="co"># helix.R runs one profile per array task.</span></span>
 <span><span class="va">limits</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, upper <span class="op">=</span> <span class="fl">7</span><span class="op">)</span></span>
-<span><span class="kw">repeat</span> <span class="op">{</span></span>
-<span>  <span class="va">profiles</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/profile.html">profile</a></span><span class="op">(</span><span class="va">objProfile</span>, <span class="va">best</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">best</span><span class="op">)</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, limits <span class="op">=</span> <span class="va">limits</span>,</span>
-<span>                      stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stop <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span>, algoControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reoptimize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span>                      optControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iterlim <span class="op">=</span> <span class="fl">100</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span>,</span>
-<span>                      cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">profiles</span><span class="op">$</span><span class="va">value</span><span class="op">)</span> <span class="op">&gt;</span> <span class="va">fitProfile</span><span class="op">$</span><span class="va">value</span> <span class="op">-</span> <span class="fl">1e-2</span><span class="op">)</span> <span class="kw">break</span></span>
-<span>  <span class="va">fitProfile</span> <span class="op">&lt;-</span> <span class="fu">bestFit</span><span class="op">(</span><span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="va">profiles</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">best</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
-<span>  <span class="va">best</span> <span class="op">&lt;-</span> <span class="va">fitProfile</span><span class="op">$</span><span class="va">argument</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<span><span class="va">profiles</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/profile.html">profile</a></span><span class="op">(</span><span class="va">objProfile</span>, <span class="va">best</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">best</span><span class="op">)</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, limits <span class="op">=</span> <span class="va">limits</span>,</span>
+<span>                    stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stop <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span>, algoControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reoptimize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>                    optControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iterlim <span class="op">=</span> <span class="fl">100</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span>,</span>
+<span>                    cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">saved</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/profiles.rds"</span><span class="op">)</span></span>
 <span><span class="va">refit</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">refit</span></span>
@@ -262,16 +239,13 @@ one parameter per cluster task.</p>
 <code class="sourceCode R"><span><span class="va">dataTerm</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="fu">obj</span><span class="op">(</span><span class="va">p</span>, fixed <span class="op">=</span> <span class="va">gauge</span><span class="op">)</span>, <span class="st">"data"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>refit <span class="op">=</span> <span class="fu">dataTerm</span><span class="op">(</span><span class="va">refit</span><span class="op">$</span><span class="va">argument</span><span class="op">)</span>, profiles <span class="op">=</span> <span class="fu">dataTerm</span><span class="op">(</span><span class="va">fitProfile</span><span class="op">$</span><span class="va">argument</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;     refit  profiles </span></span>
-<span><span class="co">#&gt; -511.1645 -516.6900</span></span></code></pre></div>
-<p>Without the prior of <code>model.R</code> the data term falls by
-5.53.</p>
-<p>No profile lies more than 0.01 below the fit, so the profiles start
-at the optimum:</p>
+<span><span class="co">#&gt; -511.1690 -516.6701</span></span></code></pre></div>
+<p>Without the prior of <code>model.R</code> the data term falls by 5.5.
+No profile lies below the fit:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fit <span class="op">=</span> <span class="va">fitProfile</span><span class="op">$</span><span class="va">value</span>, lowest <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">profiles</span><span class="op">$</span><span class="va">value</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;       fit    lowest </span></span>
-<span><span class="co">#&gt; -516.4319 -516.4319</span></span></code></pre></div>
-<p>The intervals and their shapes:</p>
+<span><span class="co">#&gt; -516.4301 -516.4321</span></span></code></pre></div>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervals</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">profiles</span>, level <span class="op">=</span> <span class="fl">0.95</span>, val.column <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span></span>
 <span><span class="va">intervals</span><span class="op">$</span><span class="va">shape</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/with.html" class="external-link">with</a></span><span class="op">(</span><span class="va">intervals</span>, <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">lower</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">upper</span><span class="op">)</span>, <span class="st">"finite"</span>,</span>
@@ -280,35 +254,37 @@ at the optimum:</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">intervals</span><span class="op">$</span><span class="va">shape</span><span class="op">)</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt;             finite         open above         open below open on both sides </span></span>
-<span><span class="co">#&gt;                 43                  5                 13                  2</span></span>
+<span><span class="co">#&gt;                 42                  5                 14                  2</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">intervals</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span></span>
 <span><span class="va">intervals</span><span class="op">[</span><span class="va">intervals</span><span class="op">$</span><span class="va">shape</span> <span class="op">!=</span> <span class="st">"finite"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"value"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"shape"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;                          name       value      lower       upper</span></span>
-<span><span class="co">#&gt; 1                act_Ikb_Base  -5.7900112       -Inf  -5.2246989</span></span>
-<span><span class="co">#&gt; 3                act_Ikk_Base -12.5395315       -Inf  -7.7842208</span></span>
-<span><span class="co">#&gt; 4              act_Ikk_by_TNF  -2.2555809 -3.0468834         Inf</span></span>
-<span><span class="co">#&gt; 5                act_Nfk_Base -10.8710745       -Inf  -5.6778514</span></span>
-<span><span class="co">#&gt; 13                 degrad_Ikb   0.6960236 -0.2405842         Inf</span></span>
-<span><span class="co">#&gt; 16 eta_act_Ikb_Base_c_pNfkIkb   4.9711656  3.7276695         Inf</span></span>
-<span><span class="co">#&gt; 17      eta_act_Ikb_c_pNfkIkb   0.8949144       -Inf   2.5454680</span></span>
-<span><span class="co">#&gt; 18 eta_act_Nfk_Base_c_NfkpIkb  -0.6889309       -Inf         Inf</span></span>
-<span><span class="co">#&gt; 21                eta_int_Ikb   2.8959881  1.0643828         Inf</span></span>
-<span><span class="co">#&gt; 22               eta_int_pNfk   2.8549780  1.2419877         Inf</span></span>
-<span><span class="co">#&gt; 23                eta_s_ppIkk  -4.4380672       -Inf  -0.5073721</span></span>
-<span><span class="co">#&gt; 27                    inh_Ikk  -0.3340083       -Inf         Inf</span></span>
-<span><span class="co">#&gt; 28                    int_Nfk  -4.3062722       -Inf  -2.7411592</span></span>
-<span><span class="co">#&gt; 29                 off_A20GFP  -0.7466689       -Inf  -0.5113851</span></span>
-<span><span class="co">#&gt; 31                   off_IkBa  -7.6912246       -Inf  -3.2198518</span></span>
-<span><span class="co">#&gt; 32          off_ipIkBa_ibIkBa  -2.5313816       -Inf  -1.6122589</span></span>
-<span><span class="co">#&gt; 36         off_ipNFkB_ibpIkBa  -7.2914722       -Inf  -2.4769839</span></span>
-<span><span class="co">#&gt; 39                  off_pIkBa  -7.3229987       -Inf  -2.3854180</span></span>
-<span><span class="co">#&gt; 48            s_ipNFkB_ibNFkB  -2.2371683       -Inf  -0.4965864</span></span>
-<span><span class="co">#&gt; 60                 tau_A20GFP -15.4028563       -Inf -10.1805725</span></span>
+<span><span class="co">#&gt; 1                act_Ikb_Base  -5.7919000       -Inf  -5.2235302</span></span>
+<span><span class="co">#&gt; 3                act_Ikk_Base -12.4290599       -Inf  -7.7809870</span></span>
+<span><span class="co">#&gt; 4              act_Ikk_by_TNF  -2.2158982 -3.0482695         Inf</span></span>
+<span><span class="co">#&gt; 5                act_Nfk_Base -10.7053150       -Inf  -5.6748730</span></span>
+<span><span class="co">#&gt; 11                 deact_TNFR  -6.4916921       -Inf  -1.2841902</span></span>
+<span><span class="co">#&gt; 13                 degrad_Ikb   0.6960847 -0.2419782         Inf</span></span>
+<span><span class="co">#&gt; 16 eta_act_Ikb_Base_c_pNfkIkb   4.9730426  3.7242550         Inf</span></span>
+<span><span class="co">#&gt; 17      eta_act_Ikb_c_pNfkIkb   0.8955969       -Inf   2.5506495</span></span>
+<span><span class="co">#&gt; 18 eta_act_Nfk_Base_c_NfkpIkb  -0.6876100       -Inf         Inf</span></span>
+<span><span class="co">#&gt; 21                eta_int_Ikb   2.9003857  1.0610826         Inf</span></span>
+<span><span class="co">#&gt; 22               eta_int_pNfk   2.8593583  1.2383545         Inf</span></span>
+<span><span class="co">#&gt; 23                eta_s_ppIkk  -4.3338331       -Inf  -0.5029478</span></span>
+<span><span class="co">#&gt; 27                    inh_Ikk  -0.4859866       -Inf         Inf</span></span>
+<span><span class="co">#&gt; 28                    int_Nfk  -4.3108096       -Inf  -2.7384181</span></span>
+<span><span class="co">#&gt; 29                 off_A20GFP  -0.7473438       -Inf  -0.5109775</span></span>
+<span><span class="co">#&gt; 31                   off_IkBa  -7.5714193       -Inf  -3.2170736</span></span>
+<span><span class="co">#&gt; 32          off_ipIkBa_ibIkBa  -2.5303205       -Inf  -1.6106014</span></span>
+<span><span class="co">#&gt; 36         off_ipNFkB_ibpIkBa  -7.1843412       -Inf  -2.4733675</span></span>
+<span><span class="co">#&gt; 39                  off_pIkBa  -7.2101743       -Inf  -2.3816122</span></span>
+<span><span class="co">#&gt; 48            s_ipNFkB_ibNFkB  -2.2371895       -Inf  -0.4943420</span></span>
+<span><span class="co">#&gt; 60                 tau_A20GFP -15.3359687       -Inf -10.1752749</span></span>
 <span><span class="co">#&gt;                 shape</span></span>
 <span><span class="co">#&gt; 1          open below</span></span>
 <span><span class="co">#&gt; 3          open below</span></span>
 <span><span class="co">#&gt; 4          open above</span></span>
 <span><span class="co">#&gt; 5          open below</span></span>
+<span><span class="co">#&gt; 11         open below</span></span>
 <span><span class="co">#&gt; 13         open above</span></span>
 <span><span class="co">#&gt; 16         open above</span></span>
 <span><span class="co">#&gt; 17         open below</span></span>
@@ -325,8 +301,7 @@ at the optimum:</p>
 <span><span class="co">#&gt; 39         open below</span></span>
 <span><span class="co">#&gt; 48         open below</span></span>
 <span><span class="co">#&gt; 60         open below</span></span></code></pre></div>
-<p>The open profiles, data term and prior separately; on an open side
-the data term stays below 3.84, and the prior rises by up to 0.5:</p>
+<p>The open profiles; on an open side the prior rises by up to 0.5:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># panels wide enough for the parameter names, few ticks and the legend below</span></span>
 <span><span class="va">readable</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_x_continuous</a></span><span class="op">(</span>breaks <span class="op">=</span> <span class="fu">scales</span><span class="fu">::</span><span class="fu"><a href="https://scales.r-lib.org/reference/breaks_pretty.html" class="external-link">breaks_pretty</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -345,11 +320,8 @@ the data term stays below 3.84, and the prior rises by up to 0.5:</p>
 <p><code><a href="../reference/plotPaths.html">plotPaths()</a></code> shows how the other parameters compensate
 along a profile. Along <code>act_Ikb_Base</code>,
 <code>eta_act_Ikb_Base_c_pNfkIkb</code> rises by the same amount: the
-data determine the product, the phosphorylation of IκBα in the complex
-with pNFκB. <code>int_Nfk</code> trades in the same way against the
-import factors of IκBα and pNFκB. Parameters with an open profile, such
-as <code>act_Ikk_Base</code>, drift along without changing the data
-term. Shown are the parameters that move by more than 1:</p>
+data determine the product. Shown are the parameters that move by more
+than 1:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the parameters that move along the profile of `par` by more than `by` on the log scale</span></span>
 <span><span class="va">movers</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">par</span>, <span class="va">by</span> <span class="op">=</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span></span>
@@ -368,16 +340,10 @@ term. Shown are the parameters that move by more than 1:</p>
 <div class="section level2">
 <h2 id="predictions-along-a-profile">Predictions along a profile<a class="anchor" aria-label="anchor" href="#predictions-along-a-profile"></a>
 </h2>
-<p><code><a href="../reference/plotArray.html">plotArray()</a></code> predicts the model at points along one side
-of a profile, from the optimum to the end, colored by the profiled
-parameter; <code>fixed</code> adds the gauge the profiles held fixed.
-Within the threshold the measured readouts stay within the noise of the
-data, so the states show what a profile leaves open. Along the upper
-side of <code>degrad_RnaA20</code>, which ends where the data term has
-risen by the threshold, the last stage of the A20 transcript,
-<code>RnaA20</code>, falls by two orders of magnitude and the delay
-stages before it rise, while A20, the protein that A20GFP reads out,
-stays nearly the same:</p>
+<p><code><a href="../reference/plotArray.html">plotArray()</a></code> predicts along one side of a profile,
+colored by the profiled parameter; <code>fixed</code> adds the gauge.
+Along the upper side of <code>degrad_RnaA20</code>, <code>RnaA20</code>
+falls by two orders of magnitude while A20 stays nearly the same:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">states</span> <span class="op">&lt;-</span> <span class="va">x</span> <span class="op">*</span> <span class="va">pSS</span> <span class="op">*</span> <span class="va">p</span></span>
 <span><span class="va">minutes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">360</span>, <span class="fl">2</span><span class="op">)</span></span>
@@ -385,11 +351,9 @@ stays nearly the same:</p>
 <span><span class="fu"><a href="../reference/plotArray.html">plotArray</a></span><span class="op">(</span><span class="st">"degrad_RnaA20"</span>, <span class="va">profiles</span>, <span class="va">states</span>, <span class="va">minutes</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">chain</span>, <span class="va">condition</span> <span class="op">==</span> <span class="st">"TNF"</span>,</span>
 <span>          direction <span class="op">=</span> <span class="st">"up"</span>, nSim <span class="op">=</span> <span class="fl">5</span>, fixed <span class="op">=</span> <span class="va">gauge</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-profiles_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="768"></p>
-<p>Along the lower side of <code>ext_nNfkIkb</code>, a slower export of
-the complex of NFκB and IκBα from the nucleus, the complex builds up to
-a few percent of total NFκB at the expense of free and phosphorylated
-nuclear NFκB, so that their sum, which nucNFkB reads out, stays the
-same:</p>
+<p>Along the lower side of <code>ext_nNfkIkb</code> the nuclear complex
+builds up at the expense of free and phosphorylated nuclear NFκB; their
+sum, read out by nucNFkB, stays the same:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotArray.html">plotArray</a></span><span class="op">(</span><span class="st">"ext_nNfkIkb"</span>, <span class="va">profiles</span>, <span class="va">states</span>, <span class="va">minutes</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"nNfk"</span>, <span class="st">"pnNfk"</span>, <span class="st">"nNfkIkb"</span><span class="op">)</span>,</span>
 <span>          <span class="va">condition</span> <span class="op">==</span> <span class="st">"TNF"</span>, direction <span class="op">=</span> <span class="st">"down"</span>, nSim <span class="op">=</span> <span class="fl">5</span>, fixed <span class="op">=</span> <span class="va">gauge</span><span class="op">)</span></span></code></pre></div>
@@ -398,10 +362,8 @@ same:</p>
 <div class="section level2">
 <h2 id="core-model-of-the-publication">Core model of the publication<a class="anchor" aria-label="anchor" href="#core-model-of-the-publication"></a>
 </h2>
-<p>The publication reduced the full model to a core model of 29
-reactions <span class="citation"><a href="#ref-oppelt2018model">[2]</a>,
-Table S5</span> with fixed values (Tables S8 and S9). The settings on
-the log scale:</p>
+<p>The core model of the publication has 29 reactions <span class="citation"><a href="#ref-oppelt2018model">[2]</a>, Table S5</span>
+and fixed values (Tables S8 and S9), on the log scale:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -509,22 +471,22 @@ the same rate</td>
 <span><span class="va">settings</span><span class="op">$</span><span class="va">inside</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/with.html" class="external-link">with</a></span><span class="op">(</span><span class="va">settings</span>, <span class="va">core</span> <span class="op">&gt;=</span> <span class="va">lower</span> <span class="op">&amp;</span> <span class="va">core</span> <span class="op">&lt;=</span> <span class="va">upper</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">settings</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span></span>
 <span><span class="va">settings</span></span>
-<span><span class="co">#&gt;                     name       lower       upper              shape      core</span></span>
-<span><span class="co">#&gt; 1           act_Ikk_Base        -Inf  -7.7842208         open below      -Inf</span></span>
-<span><span class="co">#&gt; 2                inh_Ikk        -Inf         Inf open on both sides       Inf</span></span>
-<span><span class="co">#&gt; 3           act_Ikb_Base        -Inf  -5.2246989         open below      -Inf</span></span>
-<span><span class="co">#&gt; 4  eta_act_Ikb_c_pNfkIkb        -Inf   2.5454680         open below  0.000000</span></span>
-<span><span class="co">#&gt; 5           act_Nfk_Base        -Inf  -5.6778514         open below      -Inf</span></span>
-<span><span class="co">#&gt; 6            eta_s_ppIkk        -Inf  -0.5073721         open below      -Inf</span></span>
-<span><span class="co">#&gt; 7     eta_split_pNfkpIkb  -0.8458371   1.4787138             finite  0.000000</span></span>
-<span><span class="co">#&gt; 8             deact_TNFR -13.6207740  -1.2890428             finite -6.907755</span></span>
-<span><span class="co">#&gt; 9                int_Nfk        -Inf  -2.7411592         open below -4.605170</span></span>
-<span><span class="co">#&gt; 10           deact_pnNfk  -1.3211662   0.4105904             finite  6.907755</span></span>
-<span><span class="co">#&gt; 11  eta_form_complex_nuc   0.2587081  11.5774150             finite  4.966895</span></span>
-<span><span class="co">#&gt; 12           ext_nNfkIkb   0.1646880   8.5916617             finite  6.907755</span></span>
-<span><span class="co">#&gt; 13              off_IkBa        -Inf  -3.2198518         open below      -Inf</span></span>
-<span><span class="co">#&gt; 14     off_ipIkBa_ibIkBa        -Inf  -1.6122589         open below      -Inf</span></span>
-<span><span class="co">#&gt; 15            tau_A20GFP        -Inf -10.1805725         open below      -Inf</span></span>
+<span><span class="co">#&gt;                     name      lower       upper              shape      core</span></span>
+<span><span class="co">#&gt; 1           act_Ikk_Base       -Inf  -7.7809870         open below      -Inf</span></span>
+<span><span class="co">#&gt; 2                inh_Ikk       -Inf         Inf open on both sides       Inf</span></span>
+<span><span class="co">#&gt; 3           act_Ikb_Base       -Inf  -5.2235302         open below      -Inf</span></span>
+<span><span class="co">#&gt; 4  eta_act_Ikb_c_pNfkIkb       -Inf   2.5506495         open below  0.000000</span></span>
+<span><span class="co">#&gt; 5           act_Nfk_Base       -Inf  -5.6748730         open below      -Inf</span></span>
+<span><span class="co">#&gt; 6            eta_s_ppIkk       -Inf  -0.5029478         open below      -Inf</span></span>
+<span><span class="co">#&gt; 7     eta_split_pNfkpIkb -0.8470426   1.4910851             finite  0.000000</span></span>
+<span><span class="co">#&gt; 8             deact_TNFR       -Inf  -1.2841902         open below -6.907755</span></span>
+<span><span class="co">#&gt; 9                int_Nfk       -Inf  -2.7384181         open below -4.605170</span></span>
+<span><span class="co">#&gt; 10           deact_pnNfk -1.3227174   0.4162159             finite  6.907755</span></span>
+<span><span class="co">#&gt; 11  eta_form_complex_nuc  0.2494872  11.5817034             finite  4.966203</span></span>
+<span><span class="co">#&gt; 12           ext_nNfkIkb  0.1601604   8.5930735             finite  6.907755</span></span>
+<span><span class="co">#&gt; 13              off_IkBa       -Inf  -3.2170736         open below      -Inf</span></span>
+<span><span class="co">#&gt; 14     off_ipIkBa_ibIkBa       -Inf  -1.6106014         open below      -Inf</span></span>
+<span><span class="co">#&gt; 15            tau_A20GFP       -Inf -10.1752749         open below      -Inf</span></span>
 <span><span class="co">#&gt;    inside</span></span>
 <span><span class="co">#&gt; 1    TRUE</span></span>
 <span><span class="co">#&gt; 2    TRUE</span></span>
@@ -543,11 +505,10 @@ the same rate</td>
 <span><span class="co">#&gt; 15   TRUE</span></span></code></pre></div>
 <p>Every setting but one lies in the 95 % interval; the data bound
 <code>deact_pnNfk</code> to 0.27 to 1.5 per minute, below the fixed
-1000. A profile tests one setting with all others free; the likelihood
-ratio test takes them together. <code>variants.R</code> fits the core
-model and the variants that release one setting, each with the prior of
-<code>model.R</code>, and compares the data terms with the full
-model:</p>
+1000. No profile tests the single delay step, and the publication gives
+no reason for it. The likelihood ratio test takes all settings together:
+<code>variants.R</code> fits the core model and the variants that
+release one setting, loaded from <code>results/variants.rds</code>:</p>
 <table class="table">
 <colgroup>
 <col width="55%">
@@ -579,7 +540,7 @@ model:</p>
 <td align="left">
 <code>deact_TNFR</code> estimated</td>
 <td align="right">-0.40</td>
-<td align="right">27.59</td>
+<td align="right">27.60</td>
 <td align="right">26.30</td>
 </tr>
 <tr class="even">
@@ -607,7 +568,7 @@ model:</p>
 <td align="left">
 <code>ext_nNfkIkb</code> estimated</td>
 <td align="right">-0.08</td>
-<td align="right">27.27</td>
+<td align="right">27.28</td>
 <td align="right">26.30</td>
 </tr>
 <tr class="even">
@@ -633,23 +594,18 @@ model:</p>
 </tr>
 </tbody>
 </table>
-<p>The core model lies 27.19 above the full model, against the threshold
-27.59 for 17 removed parameters, and is accepted. A negative decrease
-means that the prior on the released parameter costs more than the data
-gain. The two delay steps and the separate factor lower the data term
-most; together they lower it by 8.15 at one added parameter, more than
-the threshold 3.84 of one degree of freedom. <code>reduced.R</code>
-takes these two deviations from the publication. In that model the scale
-<code>s_ipNFkB_ibNFkB</code> of the NFκB blot after NFκB precipitation
-has a profile open below, compensated only by the offset;
-<code>reduced.R</code> sets the scale to 0.</p>
+<p>The core model lies 27.2 above the full model, against the threshold
+27.59 for 17 removed parameters, and is accepted. The two delay steps
+and the separate factor together lower the data term by 8.14 at one
+added parameter, more than 3.84; <code>reduced.R</code> takes both and
+sets the scale <code>s_ipNFkB_ibNFkB</code>, whose profile is open
+below, to 0.</p>
 </div>
 <div class="section level2">
 <h2 id="reduced-model">Reduced model<a class="anchor" aria-label="anchor" href="#reduced-model"></a>
 </h2>
-<p>The core model with the two delay steps and the separate factor for
-the release of pNFκB, and the NFκB blot after NFκB precipitation reading
-the offset alone:</p>
+<p>The core model with two delay steps, the separate factor and the
+scale <code>s_ipNFkB_ibNFkB</code> at 0:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the core model of the publication (Table S5 of the supplement), with the two delay steps of the</span></span>
 <span><span class="co"># A20 transcript of the full model and a separate factor for the release of pNFκB</span></span>
@@ -698,10 +654,9 @@ the offset alone:</p>
 <code class="sourceCode R"><span><span class="co"># the readout whose scale goes to 0 is the offset</span></span>
 <span><span class="va">observablesReduced</span> <span class="op">&lt;-</span> <span class="va">observables</span></span>
 <span><span class="va">observablesReduced</span><span class="op">[</span><span class="st">"ipNFkB_ibNFkB"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"log(off_ipNFkB_ibNFkB)"</span></span></code></pre></div>
-<p>Without basal activation the resting states form a continuum. As in
-the publication, all NFκB rests in the complex with IκBα and all IKK is
-inactive, a steady state for every parameter value; the reduced model
-needs neither <code><a href="../reference/Pimpl.html">Pimpl()</a></code> nor a stability term:</p>
+<p>As in the publication, all NFκB rests in the complex with IκBα and
+all IKK is inactive, a steady state for every parameter value, so
+neither <code><a href="../reference/Pimpl.html">Pimpl()</a></code> nor a stability term is needed:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># at rest all NFκB is bound to IκBα and all IKK inactive, the other states are 0: without basal</span></span>
 <span><span class="co"># activation this is a steady state for every parameter value, as in the publication; TNFα added</span></span>
@@ -744,7 +699,8 @@ needs neither <code><a href="../reference/Pimpl.html">Pimpl()</a></code> nor a s
 <span><span class="va">gaugeReduced</span> <span class="op">&lt;-</span> <span class="va">gauge</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">intersect</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gauge</span><span class="op">)</span>, <span class="va">outerReduced</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="va">objReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prdReduced</span>, <span class="va">eReduced</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">muReduced</span>, sigma <span class="op">=</span> <span class="va">sigmaReduced</span><span class="op">)</span></span></code></pre></div>
 <p><code>refit.R</code> fits from the full model and from 50 starts
-around that fit, then compares the data terms:</p>
+around that fit; the result is loaded from
+<code>results/reduced.rds</code>:</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># from the full model refitted in profiles.R, the basal phosphorylation in the pNFκB complex at</span></span>
 <span><span class="co"># the product of the two rates it replaces, then a multistart around that fit</span></span>
@@ -772,40 +728,28 @@ around that fit, then compares the data terms:</p>
 <code class="sourceCode R"><span><span class="va">saved</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/reduced.rds"</span><span class="op">)</span></span>
 <span><span class="va">saved</span><span class="op">$</span><span class="va">ratio</span></span>
 <span><span class="co">#&gt;       full    reduced difference    removed  threshold </span></span>
-<span><span class="co">#&gt; -511.16447 -492.11862   19.04585   16.00000   26.29623</span></span></code></pre></div>
+<span><span class="co">#&gt; -511.16897 -492.11682   19.05215   16.00000   26.29623</span></span></code></pre></div>
 <p>With 16 fewer parameters the data term is higher by 19.05, below the
-threshold 26.3: the reduced model is accepted.</p>
+threshold 26.3.</p>
 </div>
 <div class="section level2">
 <h2 id="profiles-of-the-reduced-model">Profiles of the reduced model<a class="anchor" aria-label="anchor" href="#profiles-of-the-reduced-model"></a>
 </h2>
-<p>With the prior and the settings of the profiles of the full model,
-from the optimum of that objective:</p>
+<p>With the prior and settings of the profiles of the full model:</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># the prior of the profiles of profiles.R, standard deviation 20 at the best fit</span></span>
+<code class="sourceCode R"><span><span class="co"># the prior of the profiles of profiles.R, standard deviation 20 at the best fit, and one fit from</span></span>
+<span><span class="co"># there</span></span>
 <span><span class="va">objReducedProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prdReduced</span>, <span class="va">eReduced</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">bestReduced</span>, sigma <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span>
-<span><span class="co"># the best of 20 fits from `center` and from starts about it, sd 0.1, as for the full model</span></span>
-<span><span class="va">bestReducedFit</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">center</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="va">fits</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mstrust.html">mstrust</a></span><span class="op">(</span><span class="va">objReducedProfile</span>, <span class="va">center</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, sd <span class="op">=</span> <span class="fl">0.1</span>, fits <span class="op">=</span> <span class="fl">20</span>,</span>
-<span>                  startFromCenter <span class="op">=</span> <span class="cn">TRUE</span>, rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>,</span>
-<span>                  tolControl <span class="op">=</span> <span class="va">tolerances</span>, cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="va">values</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">fits</span>, <span class="kw">function</span><span class="op">(</span><span class="va">f</span><span class="op">)</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">is.numeric</a></span><span class="op">(</span><span class="va">f</span><span class="op">$</span><span class="va">value</span><span class="op">)</span><span class="op">)</span> <span class="va">f</span><span class="op">$</span><span class="va">value</span> <span class="kw">else</span> <span class="cn">Inf</span>, <span class="fl">0</span><span class="op">)</span></span>
-<span>  <span class="va">fits</span><span class="op">[[</span><span class="fu"><a href="https://rdrr.io/r/base/which.min.html" class="external-link">which.min</a></span><span class="op">(</span><span class="va">values</span><span class="op">)</span><span class="op">]</span><span class="op">]</span></span>
-<span><span class="op">}</span></span>
-<span><span class="va">fitReducedProfile</span> <span class="op">&lt;-</span> <span class="fu">bestReducedFit</span><span class="op">(</span><span class="va">bestReduced</span><span class="op">)</span></span>
+<span><span class="va">fitReducedProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">objReducedProfile</span>, <span class="va">bestReduced</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, rinit <span class="op">=</span> <span class="fl">0.1</span>,</span>
+<span>                           rmax <span class="op">=</span> <span class="fl">10</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span></span>
 <span><span class="va">bestReducedProfile</span> <span class="op">&lt;-</span> <span class="va">fitReducedProfile</span><span class="op">$</span><span class="va">argument</span></span></code></pre></div>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># the settings of the full model, with the same restart from a lower point of a profile</span></span>
-<span><span class="kw">repeat</span> <span class="op">{</span></span>
-<span>  <span class="va">profilesReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/profile.html">profile</a></span><span class="op">(</span><span class="va">objReducedProfile</span>, <span class="va">bestReducedProfile</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">bestReducedProfile</span><span class="op">)</span>,</span>
-<span>                             fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, limits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, upper <span class="op">=</span> <span class="fl">7</span><span class="op">)</span>,</span>
-<span>                             stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stop <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span>, algoControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reoptimize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span>                             optControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iterlim <span class="op">=</span> <span class="fl">100</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span>,</span>
-<span>                             cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
-<span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">profilesReduced</span><span class="op">$</span><span class="va">value</span><span class="op">)</span> <span class="op">&gt;</span> <span class="va">fitReducedProfile</span><span class="op">$</span><span class="va">value</span> <span class="op">-</span> <span class="fl">1e-2</span><span class="op">)</span> <span class="kw">break</span></span>
-<span>  <span class="va">fitReducedProfile</span> <span class="op">&lt;-</span> <span class="fu">bestReducedFit</span><span class="op">(</span><span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="va">profilesReduced</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">bestReducedProfile</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
-<span>  <span class="va">bestReducedProfile</span> <span class="op">&lt;-</span> <span class="va">fitReducedProfile</span><span class="op">$</span><span class="va">argument</span></span>
-<span><span class="op">}</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="co"># the settings of the full model</span></span>
+<span><span class="va">profilesReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/profile.html">profile</a></span><span class="op">(</span><span class="va">objReducedProfile</span>, <span class="va">bestReducedProfile</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">bestReducedProfile</span><span class="op">)</span>,</span>
+<span>                           fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, limits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, upper <span class="op">=</span> <span class="fl">7</span><span class="op">)</span>,</span>
+<span>                           stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stop <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span>, algoControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reoptimize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>                           optControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iterlim <span class="op">=</span> <span class="fl">100</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span>,</span>
+<span>                           cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">intervalsReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">profiles</span>, level <span class="op">=</span> <span class="fl">0.95</span>, val.column <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span></span>
 <span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">shape</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/with.html" class="external-link">with</a></span><span class="op">(</span><span class="va">intervalsReduced</span>, <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">lower</span><span class="op">)</span> <span class="op">&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/is.finite.html" class="external-link">is.finite</a></span><span class="op">(</span><span class="va">upper</span><span class="op">)</span>, <span class="st">"finite"</span>,</span>
@@ -817,8 +761,8 @@ from the optimum of that objective:</p>
 <span><span class="co">#&gt;     finite open above </span></span>
 <span><span class="co">#&gt;         46          1</span></span>
 <span><span class="va">intervalsReduced</span><span class="op">[</span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">shape</span> <span class="op">!=</span> <span class="st">"finite"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"value"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"shape"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;            name    value     lower upper      shape</span></span>
-<span><span class="co">#&gt; 16 form_complex 1.642231 0.0371494   Inf open above</span></span></code></pre></div>
+<span><span class="co">#&gt;            name    value      lower upper      shape</span></span>
+<span><span class="co">#&gt; 16 form_complex 1.641204 0.03715742   Inf open above</span></span></code></pre></div>
 <p>All parameters are identifiable except <code>form_complex</code>,
 bounded below at 0.016 on the log10 scale and open above on a plateau
 3.8 above the optimum; the publication reports (-0.21, 3.03). The
@@ -828,30 +772,145 @@ The rate constants:</p>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rates</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">name</span>, <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"^(s|off|sigma|tau)_"</span>, <span class="va">intervalsReduced</span><span class="op">$</span><span class="va">name</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">intervalsReduced</span><span class="op">[</span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">rates</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"value"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span><span class="op">)</span><span class="op">]</span></span>
-<span><span class="co">#&gt;                     name      value      lower       upper</span></span>
-<span><span class="co">#&gt; 1         act_Ikb_by_Ikk -0.5785138 -1.3227682  0.04888587</span></span>
-<span><span class="co">#&gt; 2        act_Ikb_complex -0.4435216 -1.5265361  0.73659673</span></span>
-<span><span class="co">#&gt; 3         act_Ikk_by_TNF -2.4054690 -2.8963347 -1.88812922</span></span>
-<span><span class="co">#&gt; 4         act_Nfk_by_Ikk -0.3119924 -1.0740781  0.34832896</span></span>
-<span><span class="co">#&gt; 5               act_pIkk -2.6425595 -2.8707011 -2.41230812</span></span>
-<span><span class="co">#&gt; 6              build_A20 -6.6944717 -7.7303130 -3.80761477</span></span>
-<span><span class="co">#&gt; 7            deact_ppIkk -2.6561999 -3.1280925 -1.92040718</span></span>
-<span><span class="co">#&gt; 8             degrad_A20 -5.6818726 -6.9806245 -0.94336508</span></span>
-<span><span class="co">#&gt; 9             degrad_Ikb -0.3409813 -0.7367588  0.75321783</span></span>
-<span><span class="co">#&gt; 10           degrad_mIkb -3.3669460 -3.6082798 -3.10788652</span></span>
-<span><span class="co">#&gt; 11         degrad_RnaA20 -3.2192022 -6.9809076 -0.69389291</span></span>
-<span><span class="co">#&gt; 12 eta_act_Nfk_c_NfkpIkb -0.8338219 -1.4585789 -0.05027163</span></span>
-<span><span class="co">#&gt; 13           eta_int_Ikb  2.8946116  2.6387424  3.23312699</span></span>
-<span><span class="co">#&gt; 14          eta_int_pNfk  2.9035892  2.6040582  3.30735453</span></span>
-<span><span class="co">#&gt; 15    eta_split_pNfkpIkb -0.6474823 -1.0303877  0.06290213</span></span>
-<span><span class="co">#&gt; 16          form_complex  1.6422314  0.0371494         Inf</span></span>
-<span><span class="co">#&gt; 28     prod_mIkb_by_nNfk -5.3862879 -5.4930029 -5.25943593</span></span>
-<span><span class="co">#&gt; 40        shuttle_RnaA20 -3.2215379 -4.9032052 -2.36789078</span></span>
-<span><span class="co">#&gt; 44         split_NfkpIkb -2.8941365 -3.7634032 -2.27033090</span></span>
-<span><span class="co">#&gt; 47          trigger_iIkk -5.8946739 -6.3586374 -5.45137696</span></span></code></pre></div>
+<span><span class="co">#&gt;                     name      value       lower       upper</span></span>
+<span><span class="co">#&gt; 1         act_Ikb_by_Ikk -0.5786251 -1.32277075  0.04888621</span></span>
+<span><span class="co">#&gt; 2        act_Ikb_complex -0.4439880 -1.52654336  0.73659710</span></span>
+<span><span class="co">#&gt; 3         act_Ikk_by_TNF -2.4055240 -2.89633535 -1.88812862</span></span>
+<span><span class="co">#&gt; 4         act_Nfk_by_Ikk -0.3114658 -1.07408487  0.34832350</span></span>
+<span><span class="co">#&gt; 5               act_pIkk -2.6424782 -2.87069116 -2.41229978</span></span>
+<span><span class="co">#&gt; 6              build_A20 -6.6943231 -7.73028658 -3.80715536</span></span>
+<span><span class="co">#&gt; 7            deact_ppIkk -2.6563380 -3.12809306 -1.92034115</span></span>
+<span><span class="co">#&gt; 8             degrad_A20 -5.6818610 -6.98062703 -0.94326105</span></span>
+<span><span class="co">#&gt; 9             degrad_Ikb -0.3414496 -0.73674978  0.75322162</span></span>
+<span><span class="co">#&gt; 10           degrad_mIkb -3.3668241 -3.60828178 -3.10788366</span></span>
+<span><span class="co">#&gt; 11         degrad_RnaA20 -3.2190873 -6.98090634 -0.69387744</span></span>
+<span><span class="co">#&gt; 12 eta_act_Nfk_c_NfkpIkb -0.8339846 -1.45858000 -0.05026957</span></span>
+<span><span class="co">#&gt; 13           eta_int_Ikb  2.8945555  2.63874332  3.23312801</span></span>
+<span><span class="co">#&gt; 14          eta_int_pNfk  2.9033150  2.60405334  3.30735511</span></span>
+<span><span class="co">#&gt; 15    eta_split_pNfkpIkb -0.6477235 -1.03038957  0.06290221</span></span>
+<span><span class="co">#&gt; 16          form_complex  1.6412041  0.03715742         Inf</span></span>
+<span><span class="co">#&gt; 28     prod_mIkb_by_nNfk -5.3862578 -5.49300289 -5.25943580</span></span>
+<span><span class="co">#&gt; 40        shuttle_RnaA20 -3.2215971 -4.90320558 -2.36789127</span></span>
+<span><span class="co">#&gt; 44         split_NfkpIkb -2.8945791 -3.76340512 -2.27032950</span></span>
+<span><span class="co">#&gt; 47          trigger_iIkk -5.8949051 -6.35858279 -5.45137436</span></span></code></pre></div>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotProfile.html">plotProfile</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">profiles</span>, <span class="va">mode</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data"</span>, <span class="st">"prior"</span><span class="op">)</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">rates</span>, ncol <span class="op">=</span> <span class="fl">4</span><span class="op">)</span> <span class="op">+</span> <span class="va">readable</span></span></code></pre></div>
 <p><img src="guide-profiles_files/figure-html/unnamed-chunk-23-1.png" class="r-plt" alt="" width="768"></p>
+<p>Exchanging <code>degrad_A20</code> and <code>degrad_RnaA20</code>
+leaves every readout and the prior unchanged, a discrete symmetry (<a href="guide-symmetries.html#discrete-symmetries">Symmetries &gt;
+Discrete symmetries</a>). Of the 34 best fits of the multistart, 33 lie
+on the side <code>degrad_A20 &lt; degrad_RnaA20</code> and 1 at the
+mirror image. The profile of <code>degrad_RnaA20</code> passes through
+the mirror image of the optimum, within 0.0005 of the data term at the
+optimum.</p>
+<p>The second minimum of <code>shuttle_RnaA20</code> is another local
+optimum, close to the fixed set of the swap: at
+<code>shuttle_RnaA20</code> = -4.68 the degradation rates are -2.8 and
+-2.79, the data term 1.62 above the optimum, reached by 1 fits of the
+multistart. The estimates of the publication, <span class="math inline">\(-4.72\)</span> and <span class="math inline">\(-4.46\)</span> <span class="citation"><a href="#ref-oppelt2018model">[2]</a>, Table S7</span>, also lie close to
+the fixed set.</p>
+</div>
+<div class="section level2">
+<h2 id="profiles-in-the-fundamental-domain">Profiles in the fundamental domain<a class="anchor" aria-label="anchor" href="#profiles-in-the-fundamental-domain"></a>
+</h2>
+<p>The fundamental domain <code>degrad_A20 &lt; degrad_RnaA20</code>
+holds the optimum and removes the swap. <code>fundamental.R</code> fits
+the reduced model in the chart that
+<code>symmetryReduction(branch = "degrad_A20 &lt; degrad_RnaA20")</code>
+returns, with
+<code>define("degrad_RnaA20 &lt;- degrad_A20 + delta_RnaA20")</code>
+before <code>insert("x &lt;- exp(x)")</code>; the fixed set lies at
+<code>delta_RnaA20</code> <span class="math inline">\(\to
+-\infty\)</span>. Only the parameter transformation is new:</p>
+<div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># the parameters of reduced.R with degrad_RnaA20 above degrad_A20 by exp(delta_RnaA20), the chart</span></span>
+<span><span class="co"># of symmetryReduction(branch = "degrad_A20 &lt; degrad_RnaA20"); ODE, observables and errors of</span></span>
+<span><span class="co"># reduced.R</span></span>
+<span><span class="va">trafoFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"x &lt;- x"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="../reference/getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">xReduced</span>, <span class="va">gReduced</span>, <span class="va">eReduced</span><span class="op">)</span>,</span>
+<span>                               <span class="va">reactionsReduced</span><span class="op">$</span><span class="va">states</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"x &lt;- y"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">fixedReduced</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">fixedReduced</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"x &lt;- y"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">resting</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">resting</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"degrad_RnaA20 &lt;- degrad_A20 + delta_RnaA20"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">insert</a></span><span class="op">(</span><span class="st">"x &lt;- exp(x)"</span>, x <span class="op">=</span> <span class="va">.currentSymbols</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"TNF &lt;- 0"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">branch</a></span><span class="op">(</span><span class="fu"><a href="../reference/covariates.html">covariates</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"dose_TNF &lt;- 0"</span>, conditionMatch <span class="op">=</span> <span class="st">"control"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
+<span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"dose_TNF &lt;- 1"</span>, conditionMatch <span class="op">=</span> <span class="st">"TNF"</span><span class="op">)</span></span>
+<span><span class="va">pFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/P.html">P</a></span><span class="op">(</span><span class="va">trafoFundamental</span>, modelname <span class="op">=</span> <span class="st">"oppelt_fund_par"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/compile.html">compile</a></span><span class="op">(</span><span class="va">pFundamental</span>, output <span class="op">=</span> <span class="st">"oppelt_fund"</span>, cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">prdFundamental</span> <span class="op">&lt;-</span> <span class="va">gReduced</span> <span class="op">*</span> <span class="va">xReduced</span> <span class="op">*</span> <span class="va">pFundamental</span></span></code></pre></div>
+<p><code>delta_RnaA20</code> has the prior of
+<code>degrad_RnaA20</code>, mean <span class="math inline">\(\log(1/60)\)</span> and standard deviation 2:</p>
+<div class="sourceCode" id="cb28"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># the prior of reduced.R; the difference of the two rates with the prior of degrad_RnaA20</span></span>
+<span><span class="va">outerFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">prdFundamental</span><span class="op">)</span></span>
+<span><span class="va">muFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">muReduced</span>, delta_RnaA20 <span class="op">=</span> <span class="va">muReduced</span><span class="op">[[</span><span class="st">"degrad_RnaA20"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">[</span><span class="va">outerFundamental</span><span class="op">]</span></span>
+<span><span class="va">sigmaFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">sigmaReduced</span>,</span>
+<span>                      delta_RnaA20 <span class="op">=</span> <span class="va">sigmaReduced</span><span class="op">[[</span><span class="st">"degrad_RnaA20"</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">[</span><span class="va">outerFundamental</span><span class="op">]</span></span>
+<span><span class="va">objFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prdFundamental</span>, <span class="va">eReduced</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">muFundamental</span>, sigma <span class="op">=</span> <span class="va">sigmaFundamental</span><span class="op">)</span></span></code></pre></div>
+<p>One fit from the best fit of <code>refit.R</code>, loaded with the
+profiles from <code>results/fundamental.rds</code>:</p>
+<div class="sourceCode" id="cb29"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># the best fit of refit.R, on the side degrad_A20 &lt; degrad_RnaA20, in the chart</span></span>
+<span><span class="va">bestReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/reduced.rds"</span><span class="op">)</span><span class="op">$</span><span class="va">fits</span><span class="op">)</span></span>
+<span><span class="va">ordered</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sort.html" class="external-link">sort</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">bestReduced</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"degrad_A20"</span>, <span class="st">"degrad_RnaA20"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">start</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">unclass</a></span><span class="op">(</span><span class="va">bestReduced</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">bestReduced</span><span class="op">)</span>, <span class="st">"degrad_RnaA20"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="va">start</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"degrad_A20"</span>, <span class="st">"delta_RnaA20"</span><span class="op">)</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">ordered</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span>, <span class="va">ordered</span><span class="op">[[</span><span class="fl">2</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">ordered</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">fitFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">objFundamental</span>, <span class="va">start</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">outerFundamental</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gaugeReduced</span><span class="op">)</span><span class="op">)</span><span class="op">]</span>,</span>
+<span>                        fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>,</span>
+<span>                        tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span></span>
+<span><span class="co"># the data terms of the best fit of refit.R, of the same point in the chart, and of the fit</span></span>
+<span><span class="va">dataFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prdFundamental</span>, <span class="va">eReduced</span><span class="op">)</span></span>
+<span><span class="va">dataTermReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prdReduced</span>, <span class="va">eReduced</span><span class="op">)</span></span>
+<span><span class="va">dataTerms</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>reduced <span class="op">=</span> <span class="fu">dataTermReduced</span><span class="op">(</span><span class="va">bestReduced</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span><span class="op">)</span><span class="op">$</span><span class="va">value</span>,</span>
+<span>               chart <span class="op">=</span> <span class="fu">dataFundamental</span><span class="op">(</span><span class="va">start</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span><span class="op">)</span><span class="op">$</span><span class="va">value</span>,</span>
+<span>               fit <span class="op">=</span> <span class="fu">dataFundamental</span><span class="op">(</span><span class="va">fitFundamental</span><span class="op">$</span><span class="va">argument</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span><span class="op">)</span><span class="op">$</span><span class="va">value</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb30"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fundamental.rds"</span><span class="op">)</span></span>
+<span><span class="va">fundamental</span><span class="op">$</span><span class="va">dataTerms</span></span>
+<span><span class="co">#&gt;   reduced     chart       fit </span></span>
+<span><span class="co">#&gt; -492.1168 -492.1168 -492.1082</span></span></code></pre></div>
+<p>Profiles with the prior and settings of the reduced model:</p>
+<div class="sourceCode" id="cb31"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># the prior of the profiles of refit.R, standard deviation 20 at the fit, and one fit from there</span></span>
+<span><span class="va">objFundamentalProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prdFundamental</span>, <span class="va">eReduced</span><span class="op">)</span> <span class="op">+</span></span>
+<span>  <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">fitFundamental</span><span class="op">$</span><span class="va">argument</span>, sigma <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span>
+<span><span class="va">fitFundamentalProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">objFundamentalProfile</span>, <span class="va">fitFundamental</span><span class="op">$</span><span class="va">argument</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span>,</span>
+<span>                               rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span></span>
+<span><span class="va">bestFundamentalProfile</span> <span class="op">&lt;-</span> <span class="va">fitFundamentalProfile</span><span class="op">$</span><span class="va">argument</span></span></code></pre></div>
+<div class="sourceCode" id="cb32"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># the settings of refit.R</span></span>
+<span><span class="va">profilesFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/profile.html">profile</a></span><span class="op">(</span><span class="va">objFundamentalProfile</span>, <span class="va">bestFundamentalProfile</span>,</span>
+<span>                               <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">bestFundamentalProfile</span><span class="op">)</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span>,</span>
+<span>                               limits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, upper <span class="op">=</span> <span class="fl">7</span><span class="op">)</span>, stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stop <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span>,</span>
+<span>                               algoControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reoptimize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>                               optControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iterlim <span class="op">=</span> <span class="fl">100</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span>,</span>
+<span>                               cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb33"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>reduced <span class="op">=</span> <span class="va">saved</span><span class="op">$</span><span class="va">fitProfile</span><span class="op">$</span><span class="va">value</span>, fundamental <span class="op">=</span> <span class="va">fundamental</span><span class="op">$</span><span class="va">fitProfile</span><span class="op">$</span><span class="va">value</span><span class="op">)</span></span>
+<span><span class="co">#&gt;     reduced fundamental </span></span>
+<span><span class="co">#&gt;   -492.4257   -492.4257</span></span>
+<span><span class="va">intervalsFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">fundamental</span><span class="op">$</span><span class="va">profiles</span>, level <span class="op">=</span> <span class="fl">0.95</span>, val.column <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">intervalsFundamental</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span></span>
+<span><span class="va">swapped</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"degrad_A20"</span>, <span class="st">"delta_RnaA20"</span>, <span class="st">"shuttle_RnaA20"</span><span class="op">)</span></span>
+<span><span class="va">intervalsFundamental</span><span class="op">[</span><span class="va">intervalsFundamental</span><span class="op">$</span><span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">swapped</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"value"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt;              name     value     lower      upper</span></span>
+<span><span class="co">#&gt; 8      degrad_A20 -5.681904 -6.980624 -2.3702114</span></span>
+<span><span class="co">#&gt; 11   delta_RnaA20 -3.308272      -Inf -0.7057431</span></span>
+<span><span class="co">#&gt; 40 shuttle_RnaA20 -3.221512 -4.902937 -2.3687925</span></span></code></pre></div>
+<div class="sourceCode" id="cb34"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">ratesFundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">intervalsFundamental</span><span class="op">$</span><span class="va">name</span>,</span>
+<span>                            <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"^(s|off|sigma|tau)_"</span>, <span class="va">intervalsFundamental</span><span class="op">$</span><span class="va">name</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="fu"><a href="../reference/plotProfile.html">plotProfile</a></span><span class="op">(</span><span class="va">fundamental</span><span class="op">$</span><span class="va">profiles</span>, <span class="va">mode</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data"</span>, <span class="st">"prior"</span><span class="op">)</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">ratesFundamental</span>,</span>
+<span>            ncol <span class="op">=</span> <span class="fl">4</span><span class="op">)</span> <span class="op">+</span> <span class="va">readable</span></span></code></pre></div>
+<p><img src="guide-profiles_files/figure-html/unnamed-chunk-29-1.png" class="r-plt" alt="" width="768"></p>
+<p>No profile crosses into the mirror image. The profile of
+<code>delta_RnaA20</code> is open below, leveling off 1.62 above the
+optimum at the fixed set. The upper bound of <code>degrad_A20</code>
+falls from -0.94 to -2.37; the other intervals change by at most
+0.0006.</p>
 <p>Reference: <code><a href="../reference/profile.html">profile()</a></code>, <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code>,
 <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code>, <code><a href="../reference/plotProfile.html">plotProfile()</a></code>,
 <code><a href="../reference/plotPaths.html">plotPaths()</a></code>, <code><a href="../reference/plotArray.html">plotArray()</a></code></p>
@@ -878,7 +937,7 @@ Oppelt <em>et al.</em>, <span>“Model-based identification of
 <span>IκBα</span>-mediated regulation of <span>NFκB</span> signal
 transduction as a tool to quantify the impact of drug-induced liver
 injury compounds,”</span> <em>npj Systems Biology and Applications</em>,
-vol. 4, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
+vol. 4, no. 1, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
 </div>
 </div>
 </div>

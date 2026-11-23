@@ -6,18 +6,30 @@
     }
   };
 </script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet"><link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet"><script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet"><script src="../extra.js"></script><meta property="og:title" content="Analytical Steady States — steadyStates"><meta name="description" content="Computes symbolic steady-state expressions for use in a parameter
-transformation, following the AlyssaPetit method [1], [2]. Each balance
-equation, or a combination of balances, is solved for a state or a rate
-constant such that the result is a ratio of sums of positive terms. A state
-whose equation was spent on a rate constant stays a free parameter;
-compartment volumes are fixed. The solver is a Python module called through
-reticulate; it needs numpy, sympy and scipy."><meta property="og:description" content="Computes symbolic steady-state expressions for use in a parameter
-transformation, following the AlyssaPetit method [1], [2]. Each balance
-equation, or a combination of balances, is solved for a state or a rate
-constant such that the result is a ratio of sums of positive terms. A state
-whose equation was spent on a rate constant stays a free parameter;
-compartment volumes are fixed. The solver is a Python module called through
-reticulate; it needs numpy, sympy and scipy."></head><body>
+transformation, following the AlyssaPetit method [1], [2]. States whose
+own balance gives a ratio of positive sums are solved from it first. The
+cycles of the graph of states left are cut then: at a state of a conserved
+quantity, or at a state whose balance is solved for a rate constant of one
+flux side instead. Each cut state stays a free parameter. The remaining
+states and the rate constants of the cuts are then solved, each from a
+balance or a combination of balances in amounts, such that the result is a
+ratio of sums of positive terms. Only if that fails, a flux side with
+separate rate constants is cut as well: the fluxes of the side keep free
+ratios, the new parameters r_&amp;lt;state&amp;gt;_&amp;lt;j&amp;gt;. Compartment volumes are fixed.
+The solver is a Python module called through reticulate; it needs
+numpy, sympy and scipy."><meta property="og:description" content="Computes symbolic steady-state expressions for use in a parameter
+transformation, following the AlyssaPetit method [1], [2]. States whose
+own balance gives a ratio of positive sums are solved from it first. The
+cycles of the graph of states left are cut then: at a state of a conserved
+quantity, or at a state whose balance is solved for a rate constant of one
+flux side instead. Each cut state stays a free parameter. The remaining
+states and the rate constants of the cuts are then solved, each from a
+balance or a combination of balances in amounts, such that the result is a
+ratio of sums of positive terms. Only if that fails, a flux side with
+separate rate constants is cut as well: the fluxes of the side keep free
+ratios, the new parameters r_&amp;lt;state&amp;gt;_&amp;lt;j&amp;gt;. Compartment volumes are fixed.
+The solver is a Python module called through reticulate; it needs
+numpy, sympy and scipy."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -25,7 +37,7 @@ reticulate; it needs numpy, sympy and scipy."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -100,12 +112,18 @@ reticulate; it needs numpy, sympy and scipy."></head><body>
 
     <div class="ref-description section level2">
     <p>Computes symbolic steady-state expressions for use in a parameter
-transformation, following the AlyssaPetit method [1], [2]. Each balance
-equation, or a combination of balances, is solved for a state or a rate
-constant such that the result is a ratio of sums of positive terms. A state
-whose equation was spent on a rate constant stays a free parameter;
-compartment volumes are fixed. The solver is a Python module called through
-<span class="pkg">reticulate</span>; it needs <span class="pkg">numpy</span>, <span class="pkg">sympy</span> and <span class="pkg">scipy</span>.</p>
+transformation, following the AlyssaPetit method [1], [2]. States whose
+own balance gives a ratio of positive sums are solved from it first. The
+cycles of the graph of states left are cut then: at a state of a conserved
+quantity, or at a state whose balance is solved for a rate constant of one
+flux side instead. Each cut state stays a free parameter. The remaining
+states and the rate constants of the cuts are then solved, each from a
+balance or a combination of balances in amounts, such that the result is a
+ratio of sums of positive terms. Only if that fails, a flux side with
+separate rate constants is cut as well: the fluxes of the side keep free
+ratios, the new parameters <code>r_&lt;state&gt;_&lt;j&gt;</code>. Compartment volumes are fixed.
+The solver is a Python module called through <span class="pkg">reticulate</span>; it needs
+<span class="pkg">numpy</span>, <span class="pkg">sympy</span> and <span class="pkg">scipy</span>.</p>
     </div>
 
     <div class="section level2">
@@ -151,7 +169,7 @@ at zero and treated as exogenous. Default <code>NULL</code>.</p></dd>
 <code>c("A + pA = totA", "B + pB = totB")</code> or as <code>c("A + pA", "B + pB")</code>.
 Default <code>NULL</code>: a basis is derived, or taken from <code><a href="customTotals.html">customTotals()</a></code> when the
 <code>eqnlist</code> has them. Each given quantity keeps one of the states in it free, the
-first where possible.</p></dd>
+first one on a cycle of the graph of states.</p></dd>
 
 
 <dt id="arg-neglect">neglect<a class="anchor" aria-label="anchor" href="#arg-neglect"></a></dt>
@@ -182,8 +200,8 @@ introduces <code><a href="https://rdrr.io/r/base/MathFun.html" class="external-l
 
 <dt id="arg-priority">priority<a class="anchor" aria-label="anchor" href="#arg-priority"></a></dt>
 <dd><p>Character vector of state and rate-parameter names, most
-preferred first: named states are solved earlier, named rate parameters
-are preferred as pivots. Default <code>NULL</code>.</p></dd>
+preferred first: named states are solved rather than kept free and solved
+earlier, named rate parameters are preferred as pivots. Default <code>NULL</code>.</p></dd>
 
 
 <dt id="arg-resolve">resolve<a class="anchor" aria-label="anchor" href="#arg-resolve"></a></dt>
@@ -231,16 +249,12 @@ non-linear ordinary differential equation models.
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">steadies</span> <span class="op">&lt;-</span> <span class="fu">steadyStates</span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">steadies</span></span></span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                         export_Tca_cana </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                "Tca_canalicular*transport_Tca/Tca_cyto" </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                              import_Tca </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> "(Tca_canalicular*transport_Tca + Tca_cyto*export_Tca_baso)/Tca_buffer" </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                              Tca_buffer </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                            "Tca_buffer" </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                                Tca_cyto </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                              "Tca_cyto" </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                         Tca_canalicular </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>                                                       "Tca_canalicular" </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                                                                                    Tca_cyto </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                                 "Tca_buffer*import_Tca/(export_Tca_baso + export_Tca_cana)" </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                                                                             Tca_canalicular </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> "Tca_buffer*export_Tca_cana*import_Tca/(transport_Tca*(export_Tca_baso + export_Tca_cana))" </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                                                                                  Tca_buffer </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                                                                                "Tca_buffer" </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Parameter transformation that puts the model in steady state</span></span></span>
 <span class="r-in"><span><span class="va">parameters</span> <span class="op">&lt;-</span> <span class="fu"><a href="getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span></span>
@@ -249,11 +263,11 @@ non-linear ordinary differential equation models.
 <span class="r-in"><span><span class="va">trafo</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Idx           Inner &lt;- Outer</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   1      Tca_buffer &lt;- Tca_buffer</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   2 Tca_canalicular &lt;- Tca_canalicular</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   3        Tca_cyto &lt;- Tca_cyto</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   2 Tca_canalicular &lt;- Tca_buffer*export_Tca_cana*import_Tca/(transport_Tca*(export_Tca_baso+export_Tca_cana))</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   3        Tca_cyto &lt;- Tca_buffer*import_Tca/(export_Tca_baso+export_Tca_cana)</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   4 export_Tca_baso &lt;- export_Tca_baso</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   5 export_Tca_cana &lt;- Tca_canalicular*transport_Tca/Tca_cyto</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   6      import_Tca &lt;- (Tca_canalicular*transport_Tca+Tca_cyto*export_Tca_baso)/Tca_buffer</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   5 export_Tca_cana &lt;- export_Tca_cana</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   6      import_Tca &lt;- import_Tca</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   7   transport_Tca &lt;- transport_Tca</span>
 </code></pre></div>
     </div>

@@ -206,7 +206,7 @@ symmetryDetection(
   [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
   (needs msolve, implies `reconstruct = TRUE`). A model the global
   analysis does not handle gets the reason in
-  `info$discrete$unsupported` and a warning. Needs symident 0.15.0.
+  `info$discrete$unsupported` and a warning.
 
 - globalOptions:
 

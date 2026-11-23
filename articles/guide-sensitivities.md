@@ -1,27 +1,18 @@
 # 3. Sensitivities
 
-Fits, profiles and mixed-effects models need derivatives of the
-objective. dMod2 computes them exactly from the ODE sensitivities,
-propagated by the chain rule through every function object, without
-finite differences. This chapter covers forward, forward over forward,
-reverse and forward over reverse, the backends of
-[`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
-and their costs on the guide model (`sensitivities.R` of the project).
-Details: [Methods \> Sensitivities and
+dMod2 computes derivatives of the objective exactly from the ODE
+sensitivities and the chain rule through every function object. Code:
+`sensitivities.R`; details: [Methods \> Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
 
 ## Forward sensitivities
 
-The default. [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)
-integrates the sensitivities \\\partial x / \partial \theta\\ with the
-states, and every function object of `g*x*p` multiplies them by the
-Jacobian of that object. The objective returns gradient and Gauss-Newton
-Hessian for one solve with a tangent per parameter. `sensErrCon` in
-`optionsSens` of
-[`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) sets whether
-sensitivities enter the error test, by default yes. With fixed standard
-deviations the Gauss-Newton Hessian is positive semidefinite, with an
-error model it can be indefinite ([Methods \> Gauss-Newton with an error
+The default: [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)
+integrates \\\partial x / \partial \theta\\ with the states, the
+objective returns gradient and Gauss-Newton Hessian. `sensErrCon` in
+`optionsSens` sets whether sensitivities enter the error test (default
+`TRUE`). With an error model the Gauss-Newton Hessian can be indefinite
+([Methods \> Gauss-Newton with an error
 model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
 
 ## Forward over forward
@@ -30,27 +21,23 @@ model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gau
 [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),
 [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md),
 [`P()`](https://dmodverse.github.io/dMod2/reference/P.md) and
-[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) builds
-second-order sensitivities; the objective called with `deriv2 = TRUE`
-and the forward sweep returns the exact Hessian. The equation count
-grows with the square of the parameters, so this suits small models such
-as those of [Nonlinear mixed-effects
-models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md). The
-guide model with 63 parameters uses it once below to show the cost.
+[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) gives
+the exact Hessian from second-order sensitivities. The equation count
+grows with the square of the parameters (guide model: 63); it suits
+small models such as those of [Nonlinear mixed-effects
+models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
 ## Reverse sweep
 
-The gradient alone comes from one backward sweep of the adjoint system,
-at a cost independent of the parameter count ([Methods \> Reverse
+One backward sweep of the adjoint system gives the gradient at a cost
+independent of the parameter count ([Methods \> Reverse
 sweep](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep)).
-Every function object but
-[`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md), which
-passes the sweep through the Jacobian of the root, is built with
-`derivMode = c("forward", "reverse")`, and the model is called with
-`sweep = "reverse"`. Both passes use the solver `options` alone; solves
-with sensitivities use `optionsSens` merged over `options`.
-
-In [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) the
+Build with `derivMode = c("forward", "reverse")`
+([`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
+passes the sweep through the Jacobian of the root), call with
+`sweep = "reverse"`. Both passes solve with `options` alone; solves with
+sensitivities use `optionsSens` merged over `options`. In
+[`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) the
 sweep is set per phase:
 
 ``` r
@@ -62,19 +49,12 @@ fit$phaseSweep
 ```
 
 Without `sweep`, `"bfgs"` and `"sr1"` phases sweep backwards if the
-objective allows it at the start, otherwise forwards. Gauss-Newton
-always runs forwards, since \\J^\top J\\ needs forward sensitivities; a
-`"gn"` phase with `sweep = "reverse"` is an error, and the objective
-called with `sweep = "reverse"` returns no Gauss-Newton Hessian, with a
-warning where `hessian = TRUE` asks for one. `"exact"` runs forwards by
-default and backwards with `sweep = "reverse"`, where `deriv2 = TRUE`
-gives the exact Hessian by forward over reverse. A change of sweep
-between phases evaluates the current iterate once more.
-[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
-compares the Hessian sources on the guide model.
+objective allows it. Gauss-Newton needs forward sensitivities: a `"gn"`
+phase with `sweep = "reverse"` is an error. `"exact"` with
+`sweep = "reverse"` and `deriv2 = TRUE` uses forward over reverse.
 
-The backward sweep follows the step grid of the value pass by default.
-On the cppDE backend, `optionsReverse` of
+The backward sweep follows the step grid of the value pass by default;
+on the cppDE backend `optionsReverse` of
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) sets the
 accuracy, see
 [`cppDE::adjointControl()`](https://dmodverse.github.io/cppDE/reference/adjointControl.html):
@@ -91,28 +71,24 @@ controls(x, name = "optionsReverse") <- list(refine = FALSE)   # the grid of the
 | `refine` | `TRUE`: each sweep step passes the error test of the solve, else is redone in substeps |
 | `gradtol` | absolute tolerance for the share of each step in the gradient |
 
-Under `refine`, value and `chi2` of the reverse objective include the
-change from the computed to the refined trajectory, the attribute
-`correction` ([Methods \> Accuracy of a reverse
+Under `refine`, value and `chi2` include the change to the refined
+trajectory, attribute `correction` ([Methods \> Accuracy of a reverse
 gradient](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#accuracy-of-a-reverse-gradient)).
 
 ## Forward over reverse
 
 The exact Hessian without second-order sensitivities, one column per
-parameter from the backward sweep ([Methods \> Forward over
+parameter ([Methods \> Forward over
 reverse](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#forward-over-reverse)).
-Build with `derivMode = c("forward", "reverse", "forward-reverse")` and
+Build with `derivMode = c("forward", "reverse", "forward-reverse")`,
 call with `sweep = "reverse", deriv2 = TRUE`. FOCEI in [Nonlinear
 mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md) uses
-the same sweeps for directional second derivatives.
+it for directional second derivatives.
 
 ## ODE backends
 
-`odemodel(backend = )` selects the solver; the function objects above
-are the same,
-[`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) dispatches
-on the model class.
+`odemodel(backend = )` selects the solver:
 
 | backend | solver | forward | fwd/fwd | reverse | fwd/rev | use |
 |----|----|----|----|----|----|----|
@@ -120,7 +96,7 @@ on the model class.
 | `"Sundials"` | CVODES, [`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html) | CVODES | no | CVODES ASA | no | first-order derivatives |
 | `"deSolve"` | `lsodes`, cOde | sens. equations | no | no | no | dMod models |
 
-See cppDE on
+cppDE on
 [stepping](https://dmodverse.github.io/cppDE/articles/methods-stepping.html),
 [CVODES](https://dmodverse.github.io/cppDE/articles/methods-cvode.html)
 and
@@ -129,10 +105,11 @@ against CVODES.
 
 ## Costs on the guide model
 
-`sensitivities.R` rebuilds the chain of [Setting up
-models](https://dmodverse.github.io/dMod2/articles/guide-model.md) with
-all directions and evaluates the data term at the best fit of
-[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md):
+`sensitivities.R` evaluates the data term of [Setting up
+models](https://dmodverse.github.io/dMod2/articles/guide-model.md) at
+the best fit of
+[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md);
+the results are loaded from `results/sensitivities.rds`.
 
 ``` r
 
@@ -149,7 +126,7 @@ pSSR <- Pimpl(reactions, modelname = "oppelt_rev_ss", compile = FALSE, deriv2 = 
 pR <- P(trafo, modelname = "oppelt_rev_par", compile = FALSE, deriv2 = TRUE, derivMode = dm)
 compile(gR, xR, pSSR, pR, eR, output = "oppelt_rev", cores = getOption("dMod2.cores"))
 objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) +
-  constraintStability(pSSR, pR)
+  constraintStability(pSSR, pR, width = rampWidth)
 ```
 
 ``` r
@@ -157,7 +134,7 @@ objR <- normL2(data, gR * xR * pSSR * pR, eR) + constraintL2(mu, sigma = sigma) 
 s <- readRDS("results/sensitivities.rds")
 ```
 
-Reverse and forward gradients agree:
+Relative difference of reverse and forward gradient:
 
 ``` r
 
@@ -175,11 +152,10 @@ max(abs(gradients$forward - gradients$reverse)) / max(abs(gradients$forward))
 ``` r
 
 max(abs(s$gradients$forward - s$gradients$reverse)) / max(abs(s$gradients$forward))
-#> [1] 0.0001523368
+#> [1] 0.0003422859
 ```
 
-within the solver tolerances, since the sweep without `refine` runs on
-the grid of the value pass. Seconds per evaluation, minimum of ten:
+Seconds per evaluation, minimum of ten:
 
 ``` r
 
@@ -198,12 +174,11 @@ timing
 
 s$timing
 #>           value         forward         reverse forward-reverse 
-#>           0.007           0.126           0.019           0.873
+#>           0.007           0.185           0.024           1.014
 ```
 
-A reverse gradient costs a few values, a forward gradient one solve with
-a tangent per parameter, forward over reverse about 6.9 forward
-gradients. Forward over forward, measured once:
+Forward over reverse costs about 5.5 forward gradients; forward over
+forward, once:
 
 ``` r
 
@@ -220,12 +195,12 @@ c(seconds = forwardForward, memory)
 
 c(seconds = s$forwardForward, s$memory)
 #>        seconds         before forwardForward 
-#>     13.6990000      0.7658653      0.9201126
+#>     16.0610000      0.6090393      0.7765503
 ```
 
 It takes 16 times as long as forward over reverse and raises the peak
-memory of the process from 0.8 to 0.9 GB; for this model it is a check,
-not a method. Both Hessians agree up to the solver error:
+memory of the process from 0.6 to 0.8 GB. Relative difference of the two
+Hessians:
 
 ``` r
 
@@ -240,7 +215,7 @@ hessians <- data.frame(exact = sort(eigen(exact, symmetric = TRUE, only.values =
 ``` r
 
 max(abs(s$forwardForwardHessian[rownames(s$exact), colnames(s$exact)] - s$exact)) / max(abs(s$exact))
-#> [1] 1.140178e-09
+#> [1] 4.871075e-10
 ```
 
 Eigenvalues of exact and Gauss-Newton Hessian at the best fit:
@@ -255,20 +230,13 @@ ggplot2::ggplot(eig, ggplot2::aes(rank, value, color = Hessian)) +
   ggplot2::scale_y_continuous(trans = scales::pseudo_log_trans(sigma = 1e-3, base = 10),
                               breaks = c(-1e-1, 0, 1e-2, 1, 1e2, 1e4)) +
   ggplot2::labs(x = "rank", y = "eigenvalue") +
-  theme_dMod()
+  theme_dMod2()
 ```
 
 ![](guide-sensitivities_files/figure-html/unnamed-chunk-11-1.png)
 
-They agree in the large eigenvalues, the well-determined directions. The
-smallest eigenvalue is -0.053 for the exact Hessian and -0.025 for
-Gauss-Newton. The model estimates the standard deviations of the imaging
-readouts, and with an error model Gauss-Newton can be indefinite
-([Gauss-Newton with an error
-model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
-In the flat directions the Hessian sources of
-[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
-take different steps.
+The smallest eigenvalue is -0.052 for the exact Hessian and -0.025 for
+Gauss-Newton.
 
 Reference:
 [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md),

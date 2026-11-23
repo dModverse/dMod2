@@ -1,33 +1,33 @@
 # 1. Setting up models
 
-A model in dMod2 is a chain of function objects, each returning an
-output together with the derivatives with respect to the parameters:
+A model in dMod2 is a chain of function objects, each returning output
+and derivatives:
 
 | class | constructors | mapping |
 |----|----|----|
-| `parfn` | [`P()`](https://dmodverse.github.io/dMod2/reference/P.md), [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md), [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) | outer to inner parameters per condition, or parameters to a steady state ([`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)) |
-| `prdfn` | [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md), [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) | parameters to state trajectories, with sensitivities ([`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)) or without ([`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md)) |
-| `obsfn` | [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) | states to observables, observables to standard deviations (error model) |
-| `objfn` | [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md), [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md), [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md) | parameters to \\-2 \log L\\ with gradient and Hessian |
+| `parfn` | [`P()`](https://dmodverse.github.io/dMod2/reference/P.md), [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md), [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) | outer to inner parameters, or to a steady state |
+| `prdfn` | [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md), [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) | parameters to trajectories, with ([`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)) or without sensitivities |
+| `obsfn` | [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) | states to observables, observables to standard deviations |
+| `objfn` | [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md), [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md), [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md) | \\-2 \log L\\ |
 
-`*` concatenates two objects by the chain rule. For \\y =
-g(x(p(\theta)))\\,
+`*` concatenates by the chain rule,
 
 \\\frac{\partial y}{\partial \theta} = \frac{\partial g}{\partial
 x}\\\frac{\partial x}{\partial p}\\ \frac{\partial p}{\partial
 \theta},\\
 
-each factor computed exactly by the object it belongs to, the middle one
-from the sensitivity equations. `g*x*pSS*p` maps the outer parameters to
-the observables of all conditions, `normL2(data, g*x*pSS*p, e)` is the
-objective, and `+` adds objectives, e.g. a prior. Inner parameters are
-the symbols of the equations, with values per condition; outer
-parameters are those of the fit, shared by all conditions they enter.
+each factor exact, the middle one from the sensitivity equations; `+`
+adds objectives. `normL2(data, g*x*pSS*p, e)` is the objective. Inner
+parameters are the symbols of the equations, per condition; outer
+parameters are those of the fit.
 
 The guide uses the model of Oppelt et al. [\[1\]](#ref-oppelt2018model),
 NFκB signaling in HepG2 cells after TNFα, from the project
 [`examples/oppeltNPJSystBiolAppl2018`](https://github.com/dModverse/dMod2/tree/master/examples/oppeltNPJSystBiolAppl2018).
-This chapter follows `model.R`, the full model of the publication.
+This chapter follows `model.R`. Multistarts, profiles and other
+expensive results were computed once by the scripts of the project and
+are stored in `results/*.rds`; the chapters load them with `stored()`,
+which warns if a source script changed since.
 
 ``` r
 
@@ -40,25 +40,21 @@ options(dMod2.outdir = "build", dMod2.cores = detectFreeCores())
 
 ## Reaction network
 
-TNFα activates the receptor, the receptor activates IKK, and IKK
-phosphorylates IκBα and NFκB in their complex. Phosphorylated IκBα is
-degraded, free NFκB enters the nucleus and induces IκBα and A20. IκBα
-exports NFκB, A20 inhibits IKK activation; the two negative feedbacks
-give damped oscillations of nuclear NFκB. IKK passes through the states
-`Ikk`, `pIkk`, `ppIkk` and the refractory `iIkk`.
+TNFα activates the receptor, the receptor IKK, and IKK phosphorylates
+IκBα and NFκB in their complex. Free NFκB enters the nucleus and induces
+IκBα and A20, the two negative feedbacks.
 
 [`addReaction()`](https://dmodverse.github.io/dMod2/reference/addReaction.md)
-adds a reaction to an `eqnlist`.
+adds a reaction to an `eqnlist`;
 [`assignCompartment()`](https://dmodverse.github.io/dMod2/reference/assignCompartment.md)
-places the four nuclear species in the nucleus of volume `Vnuc` relative
-to the cytoplasm. Rates are concentration rates in the compartment of
-the educts, of the products for a reaction without net educts, so
+places the nuclear species in the nucleus of relative volume `Vnuc`.
+Rates are concentration rates in the compartment of the educts (of the
+products without net educts):
 
 \\\dot x_i = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{c(r)}\\ v_r(x, p),\\
 
 with \\S\_{ri}\\ the stoichiometry and \\V\_{c(r)}\\ the volume of the
-compartment of reaction \\r\\. TNFα is not used up: the reaction
-`TNF -> TNF + TNFR` keeps it constant as a catalyst.
+compartment of reaction \\r\\.
 
 | reaction | rate | description |
 |:---|:---|:---|
@@ -168,9 +164,8 @@ reactions <- eqnlist() |>
 ```
 
 Expressions follow the [expression language of
-cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html).
-Factors named `eta_` relate two rates, e.g. `eta_form_complex_nuc` the
-nuclear to the cytoplasmic complex formation.
+cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html);
+factors `eta_` relate two rates.
 
 ``` r
 
@@ -186,11 +181,9 @@ as.eqnvec(reactions)[c("NfkIkb", "nNfk", "TNF", "TNFR")]
 
 ## Observation functions
 
-The data are live-cell imaging of NFκB and A20-GFP, immunoblots of the
-cytoplasm, and immunoblots after immunoprecipitation of NFκB or IκBα.
-Each readout but the ratio `ratioNFkBIkBa` measures a sum of species up
-to a scale `s_` and an offset `off_`; imaging signals bleach with rate
-`tau_`. On the natural log scale of the data,
+Readouts (live-cell imaging, immunoblots) are sums of species with scale
+`s_`, offset `off_` and, for imaging, bleaching rate `tau_`, on the
+natural log scale:
 
 \\y = \log(s\\ x + o) - \tau t .\\
 
@@ -224,9 +217,9 @@ observables <- eqnvec(
 
 ## Error model
 
-Blots have a standard deviation per point in the column `sigma`. The
-imaging readouts get an estimated standard deviation on the log scale;
-rows with a value in `sigma` ignore the error model.
+Blots have a standard deviation per point in the column `sigma`; imaging
+readouts get an estimated one. Rows with a value in `sigma` ignore the
+error model.
 
 ``` r
 
@@ -236,8 +229,8 @@ errors <- eqnvec(nucNFkB = "sigma_nucNFkB", cytNFkB = "sigma_cytNFkB", A20GFP = 
 
 ## Steady-state constraints
 
-The cells rest before TNFα. NFκB and IKK are conserved, so \\f(x, p) =
-0\\ determines the resting state only together with the totals:
+NFκB and IKK are conserved, so \\f(x, p) = 0\\ determines the resting
+state only with the totals:
 
 ``` r
 
@@ -253,13 +246,12 @@ conservedQuantities(reactions)
 ```
 
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) solves
-the steady state numerically in every evaluation, with the totals
-`totalNfk` and `totalIkk` as parameters, `TNF` held at 0, and exact
-derivatives of the root ([Methods \> Steady
+the steady state numerically, with the totals `totalNfk` and `totalIkk`
+as parameters, `TNF` at 0, and exact derivatives of the root ([Methods
+\> Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.md)).
-[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md),
-the analytic alternative, finds no positive closed form for this
-network.
+[`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
+is the analytic alternative.
 
 ``` r
 
@@ -271,22 +263,19 @@ pSS <- Pimpl(reactions, modelname = "oppelt_ss", compile = FALSE, deriv2 = TRUE,
 
 ## Events and switches
 
-TNFα is added at time 0: an event replaces `TNF` by `dose_TNF`, 1 under
-stimulation and 0 in the control. Event times and values may be
-parameters; the sensitivities pass the event. A switch on a state needs
-no event: `"piecewise(kon, A > A0, koff)"` switches the rate when `A`
-crosses `A0`, with exact sensitivities ([cppDE \>
+An event at time 0 sets `TNF` to `dose_TNF`, 1 under stimulation, 0 in
+the control. Event times and values may be parameters.
+`"piecewise(kon, A > A0, koff)"` switches a rate on a state, with exact
+sensitivities ([cppDE \>
 Events](https://dmodverse.github.io/cppDE/articles/methods-events.html)).
 
 ## Prediction functions
 
 [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md)
-generates C++ code for the right-hand side and the sensitivity
-equations; [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)
-turns it into the `prdfn` `x`,
-[`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) builds the
-observables `g` and the error model `e`. `compile = FALSE` defers
-compilation to one joint
+generates C++ code for the ODE and the sensitivity equations,
+[`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) the `prdfn`
+`x`, [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) the
+observables `g` and the error model `e`; `compile = FALSE` defers to one
 [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md).
 
 ``` r
@@ -299,12 +288,10 @@ g <- Y(observables, x, modelname = "oppelt_obs", compile = FALSE)
 e <- Y(errors, g, modelname = "oppelt_err", compile = FALSE)
 ```
 
-The default backend `"cppDE"` integrates by BDF with first- and, with
-`deriv2 = TRUE`, second-order sensitivities; `backend = "Sundials"` uses
-CVODES, `"deSolve"` deSolve. A step is accepted if the weighted RMS norm
-of the local errors is at most one, \\\bigl(\tfrac1n \sum_i
-\varepsilon_i^2 / (\mathrm{atol} + \mathrm{rtol}\\\|x_i\|)^2\bigr)^{1/2}
-\le 1\\:
+The backend `"cppDE"` (default) integrates by BDF, `"Sundials"` uses
+CVODES, `"deSolve"` deSolve. A step is accepted if \\\bigl(\tfrac1n
+\sum_i \varepsilon_i^2 / (\mathrm{atol} +
+\mathrm{rtol}\\\|x_i\|)^2\bigr)^{1/2} \le 1\\:
 
 | option | default | controls |
 |----|----|----|
@@ -314,13 +301,12 @@ of the local errors is at most one, \\\bigl(\tfrac1n \sum_i
 | `hini` | `0` | first step, 0 estimates it |
 | `sensErrCon` | `TRUE` | (`optionsSens` only) sensitivities in the error test |
 
-Logarithmic observables magnify the relative error of small states;
-`model.R` sets `rtol = 1e-8`, `atol = 1e-10`.
+`model.R` sets `rtol = 1e-8`, `atol = 1e-10`, since log observables
+magnify errors of small states.
 
 ## Experimental data
 
-`model.R` reads the CSV of the publication and keeps HepG2 cells without
-compound: 312 points in two conditions.
+HepG2 cells without compound: 312 points in two conditions.
 
 ``` r
 
@@ -377,11 +363,6 @@ covariates(data)
 #> control   control        no
 ```
 
-[`as.datalist()`](https://dmodverse.github.io/dMod2/reference/datalist.md)
-splits the data by condition;
-[`covariates()`](https://dmodverse.github.io/dMod2/reference/covariates.md)
-lists the columns that describe the conditions.
-
 ``` r
 
 plotData(data, name %in% c("nucNFkB", "cytNFkB", "A20GFP", "IkBa", "pIkBa", "pIKK")) +
@@ -431,8 +412,8 @@ getEquations(p, conditions = "control")[c("dose_TNF", "TNF")]
 ```
 
 [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
-builds all sources into one shared object in `getOption("dMod2.outdir")`
-and reuses object files whose source and flags are unchanged.
+builds one shared object in `getOption("dMod2.outdir")`, reusing
+unchanged objects.
 
 ``` r
 
@@ -452,12 +433,10 @@ length(getParameters(prd))
 Gauss-Newton Hessian ([Methods \> Likelihood and
 prior](https://dmodverse.github.io/dMod2/articles/methods-objective.md)).
 [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md)
-adds a Gaussian prior on the log scale, which keeps parameters the data
-do not determine finite; the multistart of
-[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
-draws the starts from it. Mean 0 and standard deviation 4, a factor of
-\\e^4 \approx 55\\, for parameters of unknown magnitude; narrower where
-the magnitude is known:
+adds a Gaussian prior on the log scale, also the start distribution of
+[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md):
+mean 0 and standard deviation 4 by default, narrower where the magnitude
+is known:
 
 | parameters | mean | sd | reason |
 |----|----|----|----|
@@ -467,18 +446,11 @@ the magnitude is known:
 | `shuttle_RnaA20`, `degrad_RnaA20`, `build_A20`, `degrad_A20`, `degrad_mIkb` | \\\log(1/60)\\ | 2 | transcripts and A20 turn over within about an hour |
 | `trigger_iIkk` | \\\log(1/240)\\ | 2 | IKK recovers over hours |
 
-Starts far outside these ranges end on plateaus where a signal bleaches
-away, the noise explains every residual or A20 follows NFκB within
-minutes.
-
-`pSS` returns unstable roots too
+`pSS` also returns unstable roots
 (`controlsPTC = list(stability = FALSE)`);
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md)
-adds a term that is zero on a stable resting state, rises on a narrow
-ramp below the stability boundary and reaches 100 for each eigenvalue at
-the boundary. It needs `Pimpl(deriv2 = TRUE)`. Profiles with
-`stop = "data"` and likelihood ratios read the data term without it
-([Methods \> Steady
+is zero on a stable resting state and reaches 100 per eigenvalue at the
+stability boundary, and needs `Pimpl(deriv2 = TRUE)` ([Methods \> Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)).
 
 ``` r
@@ -508,8 +480,10 @@ sigma[turnover] <- 2
 mu["trigger_iIkk"] <- log(1 / 240)
 sigma["trigger_iIkk"] <- 2
 # the cells rest: a term that is zero on a stable resting state and reaches 100 where it loses
-# stability
-stability <- constraintStability(pSS, p)
+# stability, on a ramp of a tenth of the inverse time span of the data, wide enough for the model
+# of a fit step to see the boundary before the step crosses it
+rampWidth <- 0.1 / max(as.data.frame(data)$time)
+stability <- constraintStability(pSS, p, width = rampWidth)
 obj <- normL2(data, prd, e) + constraintL2(mu, sigma = sigma) + stability
 ```
 
@@ -523,9 +497,9 @@ tolerances <- list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2)
 
 ## Model evaluation
 
-At the best fit of
+The best fit of
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md),
-with the parameters fixed by the gauge of
+with the gauge of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md):
 
 ``` r
@@ -534,14 +508,13 @@ best <- as.parvec(readRDS("results/fits.rds"))
 value <- obj(best, fixed = gauge)
 c(value = value$value, data = attr(value, "data"), prior = attr(value, "prior"))
 #>      value       data      prior 
-#> -488.67733 -511.16447   22.48714
+#> -488.67736 -511.16897   22.49162
 max(abs(value$gradient))
-#> [1] 0.02861733
+#> [1] 0.007025491
 ```
 
-The prediction against the data, with one standard deviation of the
-error model as a band, each observable up to the last time point of the
-data:
+Prediction and data, with one standard deviation of the error model as a
+band:
 
 ``` r
 
@@ -588,6 +561,6 @@ Reference:
 A. Oppelt *et al.*, “Model-based identification of TNFα-induced
 IKKβ-mediated and IκBα-mediated regulation of NFκB signal transduction
 as a tool to quantify the impact of drug-induced liver injury
-compounds,” *npj Systems Biology and Applications*, vol. 4, p. 23, 2018,
-doi:
+compounds,” *npj Systems Biology and Applications*, vol. 4, no. 1, p.
+23, 2018, doi:
 [10.1038/s41540-018-0058-z](https://doi.org/10.1038/s41540-018-0058-z).

@@ -171,9 +171,10 @@ A job is kept in `<jobname>_folder`, in the working directory for
 `"localhost"` and in the home directory of a remote node. The job
 manifest `job.rds` lies in the local `<jobname>_folder` and in that of
 every remote node. A job of the same name that still runs there is an
-error, also when it was submitted from another machine. Every job is
-registered in `tools::R_user_dir("dMod2", "data")` until
-`purge(local = TRUE)`, and
+error, also when it was submitted from another machine, and so is a job
+of the same name in the folder of a remote node that was submitted from
+another working directory, until it is purged. Every job is registered
+in `tools::R_user_dir("dMod2", "data")` until `purge(local = TRUE)`, and
 [`dMod2Jobs()`](https://dmodverse.github.io/dMod2/reference/dMod2Jobs.md)
 lists them.
 
@@ -226,7 +227,7 @@ if (.Platform$OS.type == "unix") {
   job$purge(local = TRUE)
   setwd(old)
 }
-#> example: 2 tasks started on localhost (3 cores)
+#> example: 2 tasks started on localhost (2 cores)
 #> example: 0 of 2 tasks done, 2 running
 #> example: 1 of 2 tasks done, 1 running
 #> example: 2 of 2 tasks done

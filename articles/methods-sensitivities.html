@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -262,10 +262,11 @@ absolute tolerance</td>
 </tbody>
 </table>
 <p>A trust region converges with a gradient whose error is small
-relative to the gradient <span class="citation"><a href="#ref-carter1991global">[1]</a>, <a href="#ref-conn2000trust">[2]</a></span>. <code>gradtol</code> bounds
-the error of every step in absolute terms, and the errors of the steps
-add up over the sweep; near the optimum, where the gradient vanishes, a
-fixed <code>gradtol</code> does not keep the relative error small (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html" class="external-link">checking
+relative to the gradient <span class="citation"><a href="#ref-carter1991global">[1]</a>, <a href="#ref-nocedal2006numerical">[2]</a></span>. <code>gradtol</code>
+bounds the error of every step in absolute terms, and the errors of the
+steps add up over the sweep; near the optimum, where the gradient
+vanishes, a fixed <code>gradtol</code> does not keep the relative error
+small (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html" class="external-link">checking
 the sweep</a>).</p>
 <p>A refined sweep differentiates the trajectory with substeps, not the
 computed one. Under <code>refine</code> it therefore returns, per seed,
@@ -332,11 +333,12 @@ G. Carter, <span>“On the global convergence of trust region algorithms
 using inexact gradient information,”</span> <em>SIAM Journal on
 Numerical Analysis</em>, vol. 28, no. 1, pp. 251–265, 1991, doi: <a href="https://doi.org/10.1137/0728014" class="external-link">10.1137/0728014</a>.</div>
 </div>
-<div id="ref-conn2000trust" class="csl-entry">
+<div id="ref-nocedal2006numerical" class="csl-entry">
 <div class="csl-left-margin">[2] </div>
-<div class="csl-right-inline">A.
-R. Conn, N. I. M. Gould, and P. L. Toint, <em>Trust-region methods</em>.
-Philadelphia: SIAM, 2000. doi: <a href="https://doi.org/10.1137/1.9780898719857" class="external-link">10.1137/1.9780898719857</a>.</div>
+<div class="csl-right-inline">J.
+Nocedal and S. J. Wright, <em>Numerical optimization</em>, 2nd ed. in
+Springer series in operations research and financial engineering. New
+York: Springer, 2006. doi: <a href="https://doi.org/10.1007/978-0-387-40065-5" class="external-link">10.1007/978-0-387-40065-5</a>.</div>
 </div>
 </div>
 </div>

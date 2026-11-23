@@ -13,7 +13,7 @@ plotRandomEffects(x, ...)
 # S3 method for class 'em'
 plotRandomEffects(
   x,
-  type = c("conditional", "modes"),
+  type = c("conditional", "modes", "inclusion"),
   draws = 20L,
   bins = 30,
   covariates = NULL,
@@ -35,10 +35,20 @@ plotRandomEffects(
 - type:
 
   `"conditional"` (default): per group `draws` values from the
-  conditional distribution of the random effects of the group, normal
-  around the mode with the conditional standard error; under the model
-  they follow `N(0, Omega_kk)` whatever the shrinkage. `"modes"`: the
-  modes, narrower than `N(0, Omega_kk)` by the shrinkage.
+  conditional distribution of the random effects of the group; under the
+  model they follow the random-effect distribution whatever the
+  shrinkage. A normal random effect is drawn normal around the mode with
+  the conditional standard error, against `N(0, Omega_kk)`. A
+  spike-and-slab random effect is 0 with the posterior probability `p0`
+  and otherwise normal, with the reported value, or where the reported
+  structure has the spike the mode of the slab, as mean and the variance
+  that gives the conditional standard error; drawn against the prior,
+  the slab density `prob N(0, tau^2)` and a cap at the height of a bar
+  of area `1 - prob` at 0. `"modes"`: the modes, or the reported values
+  of spike-and-slab random effects, narrower than the distribution by
+  the shrinkage. `"inclusion"`: a heatmap of the posterior probability
+  `1 - p0` of a deviation per group and sparse random effect, labeled
+  with the reported value where the reported structure has a deviation.
 
 - draws:
 
@@ -62,9 +72,14 @@ plotRandomEffects(
 
 A ggplot (or a list of ggplots if `cowplot` is unavailable).
 
-A ggplot, or without cowplot a list with `hist` and `qq`. With
-`covariates`, a ggplot for one covariate; for several a cowplot grid, or
-without cowplot a list of ggplots named by covariate.
+A ggplot, or without cowplot a list with `hist` and `qq`; the QQ plot
+has the normal random effects only, a fit with sparse random effects
+alone gives the histograms as one ggplot. With `type = "inclusion"` a
+ggplot. With `covariates`, a ggplot for one covariate; for several a
+cowplot grid, or without cowplot a list of ggplots named by covariate.
+Spike-and-slab random effects that reach no data of the group are left
+out; Dirichlet-process random effects, which couple the groups, appear
+in the heatmap only.
 
 ## Examples
 
@@ -83,10 +98,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_err.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

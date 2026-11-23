@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,34 +118,24 @@
 
     
     
-<p>dMod2 parallelizes along two axes: conditions of one objective
-evaluation in threads, independent fits and profiles in processes.
-<code><a href="../reference/distributedComputing.html">distributedComputing()</a></code> runs any R code as tasks in
-processes detached from the session, locally, over ssh or as a SLURM
-array job. The local job below runs at page build; commands for other
-machines are shown, not run.</p>
+<p>Conditions of one evaluation run in threads, independent fits and
+profiles in processes. <code><a href="../reference/distributedComputing.html">distributedComputing()</a></code> runs R code
+as tasks in detached processes, locally, over ssh or as a SLURM array
+job. Only the local job below runs at page build.</p>
 <div class="section level2">
 <h2 id="threads-and-processes">Threads and processes<a class="anchor" aria-label="anchor" href="#threads-and-processes"></a>
 </h2>
 <p><code>options(dMod2.cores = n)</code>, or
 <code>obj(pars, cores = n)</code> for one call, solves the conditions of
-an evaluation in <code>n</code> threads of an OpenMP team inside cppDE,
-constant in size within a session. The guide model has two conditions,
-so this axis uses at most two threads; many conditions, or
-<code><a href="../reference/em.html">em()</a></code> with many groups, gain in proportion. A single
-condition never uses it. Predictions do not pass through forked
-processes: sending back the arrays of states and sensitivities costs
-more than computing them.</p>
+an evaluation in <code>n</code> OpenMP threads inside cppDE; a single
+condition uses one.</p>
 <p><code><a href="../reference/mstrust.html">mstrust()</a></code>, <code><a href="../reference/msem.html">msem()</a></code> and
-<code><a href="../reference/profile.html">profile()</a></code> run independent fits as processes through
-<code>cores</code>. With one number, fits are forks of the session, each
-solving conditions in one thread: a forked child never starts the thread
-team, and BLAS and OpenMP stay at one thread across the fork.
+<code><a href="../reference/profile.html">profile()</a></code> run fits as processes through <code>cores</code>.
+With one number, fits are forks of the session with one thread each.
 <code>cores = c(fits = 4, conditions = 2)</code> runs four fits with two
-threads each in fresh R processes (a PSOCK cluster), as always on
-Windows. Each process holds a copy of the predictions, so memory grows
-with the process count; keep the product of both below the core
-count.</p>
+threads each in fresh R processes (a PSOCK cluster, always on Windows).
+Memory grows with the process count; keep the product of both below the
+core count.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -225,13 +215,11 @@ count,</li>
 <li>
 <code>jobname</code>: the job name.</li>
 </ul>
-<p><code>input</code> names the session objects the code reads,
-functions included, by default all objects of the calling environment.
-The process attaches dMod2 and the R defaults; other packages are loaded
-by the code, and session options such as <code>dMod2.cores</code> do not
-reach it.</p>
-<p>Example: coverage of the 95% t interval for the mean of exponential
-samples, one task per sample size, on the local machine:</p>
+<p><code>input</code> names the session objects the code reads, by
+default all objects of the calling environment. The process attaches
+dMod2 and the R defaults; session options do not reach it.</p>
+<p>Example: coverage of the 95% t interval for exponential samples, one
+task per sample size:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">interval</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">y</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/stats/t.test.html" class="external-link">t.test</a></span><span class="op">(</span><span class="va">y</span><span class="op">)</span><span class="op">$</span><span class="va">conf.int</span></span>
 <span><span class="va">sizes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">10</span>, <span class="fl">20</span>, <span class="fl">50</span><span class="op">)</span><span class="op">)</span></span>
@@ -251,9 +239,7 @@ samples, one task per sample size, on the local machine:</p>
 <span><span class="co">#&gt; Job coverage: 4 tasks on localhost (1 core)</span></span>
 <span><span class="co">#&gt; check(), wait(), get(combine = TRUE, all = FALSE), log(i), purge(local = FALSE), terminate()</span></span></code></pre></div>
 <p>The call returns once tasks have started. <code>job</code> is a list
-of functions: <code>check()</code> reports task states,
-<code>wait()</code> polls until none runs, <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> joins the
-results, here into one data frame.</p>
+of functions:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">job</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; coverage: 0 of 4 tasks done, 4 running</span></span>
@@ -269,20 +255,16 @@ results, here into one data frame.</p>
 <span><span class="co">#&gt; 2 10   0.8960</span></span>
 <span><span class="co">#&gt; 3 20   0.9285</span></span>
 <span><span class="co">#&gt; 4 50   0.9445</span></span></code></pre></div>
-<p>Task <code>i</code> uses seed <code>seed + i</code>, independent of
-worker and order; without <code>seed</code> one is drawn. A task that
+<p>Task <code>i</code> uses seed <code>seed + i</code>. A task that
 errors returns the <code>try-error</code>, the others go on.</p>
 </div>
 <div class="section level2">
 <h2 id="job-folder-layout">Job folder layout<a class="anchor" aria-label="anchor" href="#job-folder-layout"></a>
 </h2>
-<p>At submission the job files go into a temporary stage, copied to
-every node as one <code>tar</code> stream over ssh into
-<code>&lt;jobname&gt;_folder/&lt;k&gt;</code> of the home directory,
-<code>k</code> the node number. On <code>"localhost"</code> the folder
-is in the working directory and no ssh is used. The local
-<code>&lt;jobname&gt;_folder</code> also holds the manifest
-<code>job.rds</code>. After the local job:</p>
+<p>The job files go to <code>&lt;jobname&gt;_folder/&lt;k&gt;</code> in
+the home directory of node <code>k</code>, on <code>"localhost"</code>
+in the working directory. The local <code>&lt;jobname&gt;_folder</code>
+also holds the manifest <code>job.rds</code>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/list.files.html" class="external-link">list.files</a></span><span class="op">(</span><span class="st">"coverage_folder"</span>, recursive <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
 <span><span class="co">#&gt;  [1] "1/job.R"           "1/slot_1.pid"      "1/slot_1.sh"      </span></span>
@@ -349,9 +331,8 @@ of the running task</td>
 </tr>
 </tbody>
 </table>
-<p><code>job.R</code> is the same for every task, called as
-<code>Rscript job.R &lt;taskId&gt; &lt;cores&gt;</code> with output in
-<code>task_&lt;taskId&gt;.out</code>:</p>
+<p>Every task runs
+<code>Rscript job.R &lt;taskId&gt; &lt;cores&gt;</code>:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readLines.html" class="external-link">readLines</a></span><span class="op">(</span><span class="st">"coverage_folder/1/job.R"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; library(dMod2)</span></span>
@@ -374,12 +355,8 @@ of the running task</td>
 <span><span class="co">#&gt; })</span></span>
 <span><span class="co">#&gt; saveRDS(result, paste0('task_', taskId, '.part'))</span></span>
 <span><span class="co">#&gt; invisible(file.rename(paste0('task_', taskId, '.part'), paste0('task_', taskId, '.rds')))</span></span></code></pre></div>
-<p>It attaches dMod2, loads workspace and shared objects, reads the
-task, sets the seed and evaluates the code in <code><a href="https://rdrr.io/r/base/try.html" class="external-link">try()</a></code>,
-writing <code>task_&lt;taskId&gt;.rds</code> for <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code>.
-Tasks share nothing but files. The code runs in the job folder of the
-node; files written there come back with
-<code>get(all = TRUE)</code>.</p>
+<p>The code runs in the job folder of the node; files written there come
+back with <code>get(all = TRUE)</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="nodes-and-workers">Nodes and workers<a class="anchor" aria-label="anchor" href="#nodes-and-workers"></a>
@@ -394,50 +371,37 @@ node; files written there come back with
 <span><span class="va">on</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/localNode.html">sshNodes</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"localhost"</span>, <span class="st">"server1"</span><span class="op">)</span><span class="op">)</span>                <span class="co"># the local machine and one more</span></span>
 <span><span class="va">on</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/localNode.html">slurmCluster</a></span><span class="op">(</span><span class="st">"mycluster"</span>, cores <span class="op">=</span> <span class="fl">8</span>, walltime <span class="op">=</span> <span class="st">"12:00:00"</span><span class="op">)</span></span></code></pre></div>
 <p>A node is an ssh destination (<code>"host"</code>,
-<code>"user@host"</code>) with key authentication, since no terminal
-takes a password. <code>"localhost"</code> runs without ssh, in the
-session shell and working directory, with the R and library paths of the
-session, so no second dMod2 install is needed; <code><a href="../reference/localNode.html">localNode()</a></code>
-is <code>sshNodes("localhost")</code>.</p>
+<code>"user@host"</code>) with key authentication.
+<code>"localhost"</code> runs without ssh, with the R and library paths
+of the session; <code><a href="../reference/localNode.html">localNode()</a></code> is
+<code>sshNodes("localhost")</code>.</p>
 <p>Each node is one worker. Task <code>i</code> goes to worker
 <code>(i - 1) %% W + 1</code> of <code>W</code>; a worker runs the
-assigned tasks in sequence, each with the <code>cores</code> of the
-node. <code>tasks = NULL</code>, the default, gives one task per
-worker.</p>
-<p><code>cores</code> per task is one number, a vector named by node, or
-<code>NULL</code> for the free cores at submission.
-<code><a href="../reference/detectFreeCores.html">detectFreeCores()</a></code> counts cores minus the one-minute load
-average, on a local Windows machine minus the processor load since the
-previous call, at least 1, locally or over ssh; a node gets at most the
-free cores, with a warning if given more.</p>
+assigned tasks in sequence with the <code>cores</code> of the node.
+<code>tasks = NULL</code>, the default, gives one task per worker.
+<code>cores</code> is one number, a vector named by node, or
+<code>NULL</code> for the free cores, which
+<code><a href="../reference/detectFreeCores.html">detectFreeCores()</a></code> counts as cores minus the load
+average.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/detectFreeCores.html">detectFreeCores</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"localhost"</span>, <span class="st">"server1"</span>, <span class="st">"server2"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>On each node <code>slot_&lt;k&gt;.sh</code> calls
-<code>Rscript job.R</code> for each task of the node in turn, started as
-<code>nohup setsid sh slot_&lt;k&gt;.sh &amp;</code>, so it survives the
-end of the ssh connection or the session. Tasks run with
-<code>OMP_NUM_THREADS=1</code> and <code>MKL_NUM_THREADS=1</code>, so
-BLAS and OpenMP start only threads the code asks for, and with
+<p>Tasks survive the end of the ssh connection and the session, and run
+with <code>OMP_NUM_THREADS=1</code>, <code>MKL_NUM_THREADS=1</code> and
 <code>libs</code> first in the library paths.</p>
 </div>
 <div class="section level2">
 <h2 id="model-files-and-builds">Model files and builds<a class="anchor" aria-label="anchor" href="#model-files-and-builds"></a>
 </h2>
 <p>The model files of a job are those of the model objects in
-<code>input</code> (<code>obsfn</code>, <code>parfn</code>,
-<code>prdfn</code>, objectives), found through their sources; without
-any, all model files of <code>getOption("dMod2.outdir")</code>, else of
-the working directory. <code>build</code> sets how they reach the
-nodes:</p>
+<code>input</code>; without any, all model files of
+<code>getOption("dMod2.outdir")</code>, else of the working directory.
+<code>build</code>:</p>
 <ul>
 <li>
-<code>"compile"</code>: sources are copied and <code>build.sh</code>
-compiles them into one shared object against the cppDE installed on the
-node, with cppDE headers, SUNDIALS, KLU, the model <code>-D</code>
-switches and <code>-O2</code>. <code>buildCores</code> compilers run at
-once, by default the node cores, at most 16. Past the command-line limit
-objects go through a static archive, <code>buildBundle</code> sources
-per translation unit.</li>
+<code>"compile"</code>: sources are compiled on the node into one
+shared object against the cppDE installed there, with
+<code>buildCores</code> compilers (default the node cores, at most 16)
+and <code>buildBundle</code> sources per translation unit.</li>
 <li>
 <code>"link"</code>: object files are copied and linked, which needs
 a compatible compiler on the node.</li>
@@ -448,15 +412,10 @@ compatible node.</li>
 <code>"auto"</code>, the default: <code>"copy"</code> when all nodes
 are <code>"localhost"</code>, else <code>"compile"</code>.</li>
 </ul>
-<p>The build runs once per node before the first task;
-<code>job.R</code> points every model object of the workspace at the one
-shared object (<code><a href="../reference/modelname.html">modelname()</a></code>). On SLURM it runs once on the
-login node for all array tasks. Output goes to <code>build.log</code>; a
-failed build stops the submission and shows the end of the log.
-<code>libs</code> prepends library paths on the nodes for build and
-tasks, expanded remotely, so <code>~</code> is the remote home.</p>
-<p>The coverage job has no model files: no model object in
-<code>input</code>, no shared object in the working directory.</p>
+<p>The build runs once per node, on SLURM once on the login node. A
+failed build stops the submission and shows the end of
+<code>build.log</code>. <code>libs</code> prepends library paths on the
+nodes; <code>~</code> is the remote home.</p>
 </div>
 <div class="section level2">
 <h2 id="job-monitoring-and-recovery">Job monitoring and recovery<a class="anchor" aria-label="anchor" href="#job-monitoring-and-recovery"></a>
@@ -502,19 +461,14 @@ the local <code>&lt;jobname&gt;_folder/&lt;k&gt;</code>, with
 </tr>
 </tbody>
 </table>
-<p>A task is done when the result file exists, running while the worker
-runs (also while waiting), failed when the worker ended without a
-result. <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> copies remote results over ssh into the local
+<p>A task is failed when the worker ended without a result.
+<code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> copies remote results into the local
 <code>&lt;jobname&gt;_folder/&lt;k&gt;</code>, with
 <code>all = TRUE</code> all files. It joins parlists with
-<code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code> and data frames, parameter frames included, with
-<code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind()</a></code>, which merges the two sides of a profile; other
-results come as a list. Missing results are dropped with a warning.
-<code>get(combine = FALSE)</code> returns one entry per task, named like
-<code>tasks</code>: <code>NULL</code> if not done, the
-<code>try-error</code> if failed. <code>terminate()</code> ends the
-process group of every slot, on SLURM the job by
-<code>scancel</code>.</p>
+<code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code> and data frames with <code><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind()</a></code>, which merges
+the two sides of a profile; other results come as a list.
+<code>get(combine = FALSE)</code> returns one entry per task:
+<code>NULL</code> if not done, the <code>try-error</code> if failed.</p>
 <p>Output of the second task, then deletion:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">job</span><span class="op">$</span><span class="fu">log</span><span class="op">(</span><span class="fl">2</span><span class="op">)</span></span>
@@ -523,19 +477,15 @@ process group of every slot, on SLURM the job by
 <p><code>distributedComputing(wait = TRUE)</code> waits, returns
 <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> and deletes the job; a job with failed tasks is kept
 for <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">log()</a></code>.</p>
-<p>A job outlives the session. The manifest is in the local
-<code>&lt;jobname&gt;_folder</code>, in the
-<code>&lt;jobname&gt;_folder</code> of every remote node until
-<code>purge()</code>, and in the registry
-<code>tools::R_user_dir("dMod2", "data")</code> until
-<code>purge(local = TRUE)</code>; <code><a href="../reference/dMod2Jobs.html">dMod2Jobs()</a></code> lists
-registered jobs. <code>recover = TRUE</code> with a job name returns the
-job functions without resubmitting, from the manifest in the working
-directory, else the registry, else, with <code>on</code>, the remote
-node folders, which recovers a job from another machine. A new job of
-the same name is an error while the old one runs where the new one would
-replace the old folders: in the same working directory or on the same
-remote nodes, also from another machine.</p>
+<p>A job outlives the session. The manifest is in the local and remote
+<code>&lt;jobname&gt;_folder</code> and in the registry
+<code>tools::R_user_dir("dMod2", "data")</code>;
+<code><a href="../reference/dMod2Jobs.html">dMod2Jobs()</a></code> lists registered jobs.
+<code>recover = TRUE</code> with a job name returns the job functions
+without resubmitting, from the working directory, the registry or, with
+<code>on</code>, the remote nodes, also for a job from another machine.
+A new job of the same name is an error while the old one runs in the
+same folders.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/dMod2Jobs.html">dMod2Jobs</a></span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">job</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span>jobname <span class="op">=</span> <span class="st">"fits"</span>, recover <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
@@ -545,32 +495,23 @@ remote nodes, also from another machine.</p>
 <div class="section level2">
 <h2 id="slurm-clusters">SLURM clusters<a class="anchor" aria-label="anchor" href="#slurm-clusters"></a>
 </h2>
-<p><code><a href="../reference/localNode.html">slurmCluster()</a></code> names the login node, reached by ssh, and
-the resources per array task: <code>cores</code>, <code>walltime</code>,
+<p><code><a href="../reference/localNode.html">slurmCluster()</a></code> names the login node and the resources
+per array task: <code>cores</code>, <code>walltime</code>,
 <code>memPerCore</code> in GB. Workers are the <code>array</code> array
-tasks, by default one per task; array task <code>j</code> runs tasks
-<code>j</code>, <code>j + array</code>, <code>j + 2 * array</code>, … in
-sequence. The stage goes to <code>~/&lt;jobname&gt;_folder/1</code> on
-the login node, where the template environment is set up, the model
-files are built once, and <code>sbatch</code> submits from that folder,
-so compute nodes must see the login-node home directory.
-<code>partition</code>, <code>account</code>, <code>maxRunning</code>
-(array tasks at once) and <code>sbatch</code> (further options such as
-<code>"--constraint=ib"</code>) override the <code>#SBATCH</code> lines
-of the template. The start reports the job ID; <code>check()</code>
-reads <code>squeue</code>, <code>terminate()</code> calls
-<code>scancel</code>.</p>
+tasks, by default one per task. The job folder is
+<code>~/&lt;jobname&gt;_folder/1</code> on the login node, where the
+model files are built once and <code>sbatch</code> submits, so compute
+nodes must see that home directory. <code>partition</code>,
+<code>account</code>, <code>maxRunning</code> and <code>sbatch</code>
+(further options) override the <code>#SBATCH</code> lines of the
+template.</p>
 <p><code><a href="../reference/slurmTemplate.html">slurmTemplate()</a></code> sets up the job script template once per
-login node, stored in <code>tools::R_user_dir("dMod2", "config")</code>.
-A template is a cluster job script with placeholders
-<code>{{ jobname }}</code>, <code>{{ ntasks }}</code> (array tasks),
+login node. A template is a job script with placeholders
+<code>{{ jobname }}</code>, <code>{{ ntasks }}</code>,
 <code>{{ cores }}</code>, <code>{{ memPerCore }}</code>,
-<code>{{ walltime }}</code>, and one line <code>{{ run }}</code> that
-runs the tasks. Non-comment lines before <code>{{ run }}</code> set up
-the environment, e.g. <code>module load</code>, also for the build on
-the login node. A placeholder without value is an error, so
-<code>{{ walltime }}</code> needs <code>walltime</code>. The shipped
-template for the bwForCluster Helix:</p>
+<code>{{ walltime }}</code> and one line <code>{{ run }}</code>; lines
+before <code>{{ run }}</code> set up the environment, also for the
+build. The shipped template for the bwForCluster Helix:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/writeLines.html" class="external-link">writeLines</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readLines.html" class="external-link">readLines</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/system.file.html" class="external-link">system.file</a></span><span class="op">(</span><span class="st">"slurm"</span>, <span class="st">"helix.sh"</span>, package <span class="op">=</span> <span class="st">"dMod2"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; #!/bin/bash</span></span>
@@ -601,9 +542,8 @@ one job.</p>
 <div class="section level2">
 <h2 id="fits-and-profiles-of-the-guide-project">Fits and profiles of the guide project<a class="anchor" aria-label="anchor" href="#fits-and-profiles-of-the-guide-project"></a>
 </h2>
-<p>A cluster starts many small tasks sooner than one large one, so these
-jobs use one core per task. The 200 fits of <code>fit.R</code> (<a href="guide-optimization.html">Optimization</a>) as 200 one-fit tasks,
-each start drawn from the task seed:</p>
+<p>The 200 fits of <a href="guide-optimization.html">Optimization</a> as
+200 one-fit tasks:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">free</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">mu</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gauge</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fitsJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span></span>
@@ -614,14 +554,12 @@ each start drawn from the task seed:</p>
 <span><span class="va">fitsJob</span><span class="op">$</span><span class="fu">wait</span><span class="op">(</span>interval <span class="op">=</span> <span class="fl">60</span><span class="op">)</span></span>
 <span><span class="va">fits</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/as.parframe.html">as.parframe</a></span><span class="op">(</span><span class="va">fitsJob</span><span class="op">$</span><span class="fu">get</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fitsJob</span><span class="op">$</span><span class="fu">purge</span><span class="op">(</span>local <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
-<p>The sources of <code>obj</code> compile once on the login node.
-<code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> joins the parlists, <code><a href="../reference/as.parframe.html">as.parframe()</a></code> sorts
-by value. A later session, also on another day, takes up the job by
-name:</p>
+<p>A later session takes up the job by name:</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fitsJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span>jobname <span class="op">=</span> <span class="st">"oppelt_fits"</span>, recover <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p>The profiles of <a href="guide-profiles.html">Profile likelihood</a>,
-one side of one parameter per task:</p>
+one side of one parameter per task; <code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> binds both sides
+into one profile:</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">sides</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>par <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">best</span><span class="op">)</span>, side <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"left"</span>, <span class="st">"right"</span><span class="op">)</span>, stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">profilesJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span></span>
@@ -633,25 +571,20 @@ one side of one parameter per task:</p>
 <span>  input <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"obj"</span>, <span class="st">"best"</span>, <span class="st">"gauge"</span>, <span class="st">"tolerances"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">profilesJob</span><span class="op">$</span><span class="fu">wait</span><span class="op">(</span>interval <span class="op">=</span> <span class="fl">60</span><span class="op">)</span></span>
 <span><span class="va">profiles</span> <span class="op">&lt;-</span> <span class="va">profilesJob</span><span class="op">$</span><span class="fu">get</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> binds both sides of each parameter into one
-profile.</p>
 <p>An <code><a href="../reference/msem.html">msem()</a></code> multistart splits by <code>which</code>: every
 task draws all starts from the same seed and fits those it names. The
 200 starts of <a href="guide-sparse-deviations.html">Sparse
-deviations</a>, two per task:</p>
+deviations</a>:</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">compoundsJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span><span class="op">{</span></span>
+<code class="sourceCode R"><span><span class="va">dcfJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span></span>
-<span>  <span class="fu"><a href="../reference/msem.html">msem</a></span><span class="op">(</span><span class="va">objCompounds</span> <span class="op">+</span> <span class="va">priorCompounds</span>, <span class="va">random</span>, <span class="va">init</span>, fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, fits <span class="op">=</span> <span class="fl">200</span>,</span>
-<span>       sd <span class="op">=</span> <span class="va">sdStart</span>, keepFits <span class="op">=</span> <span class="cn">TRUE</span>, which <span class="op">=</span> <span class="va">task</span><span class="op">)</span></span>
-<span><span class="op">}</span>, tasks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/split.html" class="external-link">split</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">200</span>, <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">100</span>, each <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span>, on <span class="op">=</span> <span class="va">cluster</span>, jobname <span class="op">=</span> <span class="st">"oppelt_compounds"</span>,</span>
-<span>input <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"objCompounds"</span>, <span class="st">"priorCompounds"</span>, <span class="st">"random"</span>, <span class="st">"init"</span>, <span class="st">"gaugeReduced"</span>, <span class="st">"sdStart"</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">fitCompounds</span> <span class="op">&lt;-</span> <span class="va">compoundsJob</span><span class="op">$</span><span class="fu">get</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> returns one <code><a href="../reference/msem.html">msem()</a></code> fit, the best,
-with table and fits of all starts. <code>helix.R</code> of the project
-runs the other expensive guide scripts the same way.</p>
-<p>Without SLURM, as many tasks run at once as there are nodes. One task
-per node, the default, with ten fits per node core:</p>
+<span>  <span class="fu"><a href="../reference/msem.html">msem</a></span><span class="op">(</span><span class="va">objSS</span>, <span class="va">randomSS</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">initDCF</span>, prob_compound <span class="op">=</span> <span class="fl">0.2</span>, tau_compound <span class="op">=</span> <span class="fl">0.5</span><span class="op">)</span>,</span>
+<span>       fixed <span class="op">=</span> <span class="va">gaugeReduced</span>, fits <span class="op">=</span> <span class="fl">200</span>, sd <span class="op">=</span> <span class="fl">0.5</span>, keepFits <span class="op">=</span> <span class="cn">TRUE</span>, which <span class="op">=</span> <span class="va">task</span><span class="op">)</span></span>
+<span><span class="op">}</span>, tasks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">as.list</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">200</span><span class="op">)</span>, on <span class="op">=</span> <span class="va">cluster</span>, jobname <span class="op">=</span> <span class="st">"oppelt_dcf"</span>,</span>
+<span>input <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"objSS"</span>, <span class="st">"randomSS"</span>, <span class="st">"initDCF"</span>, <span class="st">"gaugeReduced"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">fitDCF</span> <span class="op">&lt;-</span> <span class="va">dcfJob</span><span class="op">$</span><span class="fu">get</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="https://rdrr.io/r/base/get.html" class="external-link">get()</a></code> returns the best <code><a href="../reference/msem.html">msem()</a></code> fit with all
+starts. Over ssh, one task per node:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fitsJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/mstrust.html">mstrust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">mu</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, sd <span class="op">=</span> <span class="va">sigma</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, fits <span class="op">=</span> <span class="fl">10</span> <span class="op">*</span> <span class="va">cores</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>,</span>

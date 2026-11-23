@@ -1,399 +1,530 @@
 # 8. Sparse deviations
 
 Oppelt et al. [\[1\]](#ref-oppelt2018model) also measured the TNFα
-response under drugs causing liver injury: diclofenac (DCF) with the
-imaging and blots of the first chapters, and amiodarone (AMD),
-paracetamol (APAP), fialuridine (FIAU) and ximelagatran (XIM) with four
-blots. Which pathway processes does each compound change? The
-publication answered this for DCF with an L1 penalty on the differences
-of all rate constants between treated and untreated cells, scanned over
-the penalty strength. Here all five compounds are the groups of a
-spike-and-slab random effect: a compound leaves a rate constant
-unchanged or changes it by a normal draw, with probability and spread of
-changes estimated from all compounds together. Code: `compounds.R`, on
-the reduced model of [Profile
+response of HepG2 cells under diclofenac (DCF). Which rate constants
+does DCF change? The publication selected differences by an L1 scan and
+a likelihood ratio test [\[2\]](#ref-steiert2016l1). This chapter
+repeats the scan and answers the same question with spike-and-slab
+random effects. Model: the reduced model of [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md);
 random effects and
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) are
-introduced in [Nonlinear mixed-effects
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md): [Nonlinear
+mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
+`dcf.R` computed the fits; the chapter loads them.
 
-The second part lists the sparse random-effect distributions
-(spike-and-slab, Dirichlet-process) and what their fits report;
-derivations are in [Methods \> Sparsity
+The second part lists the sparse random-effect distributions and what
+their fits report; derivations: [Methods \> Sparsity
 priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md).
 
-## Compound data
+## Data and model
 
-Each compound has a separate control: DCF on the blots and imaging of
-the first chapters, the other four on a third blot set with their own
-untreated, stimulated control. A condition without compound belongs to
-no group (`NA` in column `compound`).
+TNFα-stimulated cells of the first blot scale, without (`TNF_none`) and
+with DCF (`TNF_DCF`).
 
 ``` r
 
-# HepG2 cells: the first blot scale with and without TNFα and DCF, the third with TNFα and the
-# other four compounds; a condition without a compound belongs to no group
-cells <- subset(raw, cell == "HepG2" & (scale == 1 | (scale == 3 & treatment == "TNF")) &
-                  (scale == 3 | compound %in% c("no", "DCF")))
-cells$compound[cells$compound == "no"] <- NA
-cells$blot <- paste0("blot", cells$scale)
-cells$condition <- with(cells, paste(ifelse(treatment == "TNF", "TNF", "control"),
-                                     ifelse(is.na(compound), "none", compound), blot, sep = "_"))
-dataCompounds <- as.datalist(cells[c("name", "time", "value", "sigma", "condition", "treatment",
-                                     "compound", "blot")],
-                             splitBy = "condition", keepCovariates = c("treatment", "compound", "blot"))
+# the TNFα-stimulated cells of the first blot scale, without compound and with DCF
+cellsDCF <- subset(raw, cell == "HepG2" & scale == 1 & treatment == "TNF" & compound %in% c("no", "DCF"))
+cellsDCF$compound[cellsDCF$compound == "no"] <- NA
+cellsDCF$condition <- ifelse(is.na(cellsDCF$compound), "TNF_none", "TNF_DCF")
+dataDCF <- as.datalist(cellsDCF[c("name", "time", "value", "sigma", "condition", "treatment", "compound")],
+                       splitBy = "condition", keepCovariates = c("treatment", "compound"))
 ```
 
-``` r
-
-covariates(dataCompounds)
-#>                             condition treatment compound  blot
-#> TNF_none_blot1         TNF_none_blot1       TNF     <NA> blot1
-#> control_none_blot1 control_none_blot1        no     <NA> blot1
-#> TNF_DCF_blot1           TNF_DCF_blot1       TNF      DCF blot1
-#> control_DCF_blot1   control_DCF_blot1        no      DCF blot1
-#> TNF_none_blot3         TNF_none_blot3       TNF     <NA> blot3
-#> TNF_AMD_blot3           TNF_AMD_blot3       TNF      AMD blot3
-#> TNF_APAP_blot3         TNF_APAP_blot3       TNF     APAP blot3
-#> TNF_FIAU_blot3         TNF_FIAU_blot3       TNF     FIAU blot3
-#> TNF_XIM_blot3           TNF_XIM_blot3       TNF      XIM blot3
-```
-
-## Spike-and-slab random effects
-
-With \\\theta_k\\ the log rate constant \\k\\ and \\\eta\_{ik}\\ the
-change by compound \\i\\, a condition with compound \\i\\ uses
-\\\theta_k + \eta\_{ik}\\, one without uses \\\theta_k\\. The
-spike-and-slab distribution [\[2\]](#ref-mitchell1988bayesian),
-[\[3\]](#ref-george1993variable) of a change is
-
-\\p(\eta\_{ik}) = (1 - \rho)\\ \delta(\eta\_{ik}) + \rho\\
-\mathcal{N}(\eta\_{ik};\\ 0, \tau^2),\\
-
-a spike at 0 with weight \\1 - \rho\\ and a normal slab of standard
-deviation \\\tau\\ with weight \\\rho\\. Changes are independent across
-compounds and rate constants; \\\rho\\, \\\tau\\ are shared.
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates
-\\\theta\\, \\\rho\\ and \\\tau\\ from the likelihood with the changes
-integrated out, a sum over the subsets of changed rate constants
-([Methods \> Sparsity
-priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal)).
-The posterior spike probability \\p_0 = \Pr(\eta\_{ik} = 0 \mid y)\\
-near 0 means a change, near the prior \\1 - \rho\\ no evidence, above it
-evidence against a change.
-
-Each compound has 20 candidate rate constants, and the subset sum is
-exact; beyond a term budget
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) uses the
-expectation consistent (EC) approximation ([Methods \> Spike and
-slab](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#spike-and-slab)).
-Comparison with the L1 penalty: [Methods \> Selection of
-deviations](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#selection-of-deviations).
-
-## Compound model
-
-The reduced model of [Profile
-likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md)
-with second derivatives for
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md). The resting
-state of the reduced model (all NFκB bound to IκBα, all IKK inactive)
-holds for all rate constants, so a compound changes the dynamics only
-from TNFα on:
+With DCF an estimated rate constant \\k\\ becomes \\\log k + \Delta_k\\.
+[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md) with
+`x ~ 1 + (1 | gr(compound, dist = spikeSlab()))` writes each
+\\\Delta_k\\ as a random effect `eta_<k>_DCF`, 0 without compound; the
+L1 scan treats the same symbols as parameters. 24 differences, as in the
+publication:
 
 ``` r
 
-# the reduced model with second derivatives forward over reverse, which the mixed-effects fit uses;
-# the resting state of reduced.R holds for every value of the rate constants, so a compound
-# changes the dynamics from the time of TNFα on
+# every rate constant the publication does not fix has a change by DCF, 24 as in the publication,
+# a spike-and-slab random effect over the compound; for the spike and slab without the four rate
+# constants of the gauge, whose change equals that of a partner; second derivatives forward over
+# reverse for em()
+ratesDCF <- setdiff(getParameters(odemodel(reactionsReduced, compile = FALSE)),
+                    c(reactionsReduced$states, names(fixedReduced), "Vnuc", "TNF", "dose_TNF"))
 dm <- c("forward", "reverse", "forward-reverse")
-candidates <- setdiff(getParameters(odemodel(reactionsReduced, compile = FALSE)),
-                      c(reactionsReduced$states, names(gauge), names(fixedReduced), "dose_TNF"))
-modelCompounds <- odemodel(reactionsReduced, events = events, modelname = "oppelt_cmp_ode",
-                           compile = FALSE, derivMode = dm)
-xCompounds <- Xs(modelCompounds, options = list(atol = 1e-10, rtol = 1e-8))
-gCompounds <- Y(observablesReduced, xCompounds, modelname = "oppelt_cmp_obs", compile = FALSE,
-                derivMode = dm)
-eCompounds <- Y(errors, gCompounds, modelname = "oppelt_cmp_err", compile = FALSE, derivMode = dm)
-```
-
-`x ~ 1 + (1 | gr(compound, dist = spikeSlab()))` in
-[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md)
-replaces rate constant `x` by a fixed effect plus a compound random
-effect. Candidates are the rate constants the reduced model estimates,
-all but gauge and fixed values of the publication. Scales and offsets of
-the third blot set are separate parameters, except `off_IkBa`, fixed at
-0 by the reduced model.
-
-``` r
-
-# every rate constant the reduced model estimates, with a spike-and-slab random effect over the
-# compounds; the blots of the third scale with scales and offsets of their own
-blot3 <- setdiff(c("s_IkBa", "off_IkBa", "s_pIkBa", "off_pIkBa", "s_pIKK", "off_pIKK", "s_pNFkB",
-                   "off_pNFkB"), names(fixedReduced))
-trafoCompounds <- eqnvec() |>
-  define("x <- x", x = setdiff(getParameters(xCompounds, gCompounds, eCompounds),
-                               reactionsReduced$states)) |>
+modelDCF <- odemodel(reactionsReduced, events = events, modelname = "oppelt_dcf_ode", compile = FALSE,
+                     derivMode = dm)
+# solves without sensitivities at atol 1e-12: at atol 1e-10 they can leave the positive orthant, where
+# the complex formation is unstable; those with sensitivities hold at 1e-10
+xDCF <- Xs(modelDCF, options = list(atol = 1e-12, rtol = 1e-8), optionsSens = list(atol = 1e-10))
+gDCF <- Y(observablesReduced, xDCF, modelname = "oppelt_dcf_obs", compile = FALSE, derivMode = dm)
+eDCF <- Y(errors, gDCF, modelname = "oppelt_dcf_err", compile = FALSE, derivMode = dm)
+trafoBase <- eqnvec() |>
+  define("x <- x", x = setdiff(getParameters(xDCF, gDCF, eDCF), reactionsReduced$states)) |>
   define("x <- y", x = names(fixedReduced), y = fixedReduced) |>
   define("x <- y", x = names(resting), y = resting) |>
   insert("x <- exp(x)", x = .currentSymbols) |>
   define("TNF <- 0") |>
-  branch(covariates(dataCompounds)) |>
-  define("dose_TNF <- 0", conditionMatch = "^control") |>
-  define("dose_TNF <- 1", conditionMatch = "^TNF") |>
-  insert("x <- y", x = blot3, y = paste0(blot3, "_blot3"), conditionMatch = "blot3$") |>
-  insert(x ~ 1 + (1 | gr(compound, dist = spikeSlab())), x = candidates)
-pCompounds <- P(trafoCompounds, method = "explicit", modelname = "oppelt_cmp_par", compile = FALSE,
-                derivMode = dm)
-
-compile(gCompounds, xCompounds, pCompounds, eCompounds, output = "oppelt_cmp",
-        cores = getOption("dMod2.cores"))
-prdCompounds <- gCompounds * xCompounds * pCompounds
-objCompounds <- normL2(dataCompounds, prdCompounds, eCompounds)
+  branch(covariates(dataDCF)) |>
+  define("dose_TNF <- 1")
+ratesSS <- setdiff(ratesDCF, names(gauge))
+pDCF <- P(insert(trafoBase, x ~ 1 + (1 | gr(compound, dist = spikeSlab())), x = ratesDCF),
+          method = "explicit", modelname = "oppelt_dcf_par", compile = FALSE, derivMode = dm)
+pSS <- P(insert(trafoBase, x ~ 1 + (1 | gr(compound, dist = spikeSlab())), x = ratesSS),
+         method = "explicit", modelname = "oppelt_dcfss_par", compile = FALSE, derivMode = dm)
+compile(gDCF, xDCF, pDCF, pSS, eDCF, output = "oppelt_dcf", cores = getOption("dMod2.cores"))
+prdDCF <- gDCF * xDCF * pDCF
 ```
 
-## Joint fit of all compounds
+## L1 scan
 
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates
-fixed effects, change modes, \\\rho\\ and \\\tau\\ together.
-`compounds.R` runs 200 starts, the reduced optimum with changes at 0 and
-199 around it, redrawing failed starts; `helix.R` splits them into
-[`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md)
-tasks by `msem(which = )` ([Remote
+The penalty \\\lambda \sum_k \lvert \Delta_k \rvert\\
+[\[2\]](#ref-steiert2016l1), [\[3\]](#ref-tibshirani1996regression) is
+added to \\-2 \log L\\;
+[`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md) sets
+differences exactly to 0 ([L1
+penalties](https://dmodverse.github.io/dMod2/articles/guide-optimization.html#l1-penalties)).
+
+Four rate constants enter the data only as a product with a partner:
+`uptake` with `act_Ikk_by_TNF`, `prod_Ikb` with `prod_mIkb_by_nNfk`,
+`build_RnaA20` with `build_A20`, and `split_NfkIkb` with
+`eta_split_pNfkpIkb`. The reduced model fixes the four as gauge
+([Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md)),
+so their differences are 0, and both methods share the other 20
+candidates. The publication penalized all 24 and set partners aside
+after the scan.
+
+Each \\\lambda\\, 0 and 31 values from \\10^{-2}\\ to \\10^4\\ evenly on
+the log scale, runs 1000 starts around the reduced fit, then starts from
+the best fits of the other \\\lambda\\ until none improves. `dcf.R` runs
+the fits through `fitTasks()` ([Remote
 computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.md)):
 
 ``` r
 
-# the fixed effects from the reduced model at the optimum, those of the third blot from the first;
-# the effects of the compounds start at 0, the hyperparameters at a few changes of moderate size
-bestReduced <- as.parvec(readRDS("results/reduced.rds")$fits)
-random <- randomEffects(pCompounds)
-population <- setdiff(getParameters(prdCompounds), c(unlist(random$etas), names(gaugeReduced)))
-init <- bestReduced[intersect(population, names(bestReduced))]
-init[paste0(blot3, "_blot3")] <- bestReduced[blot3]
-init[c("prob_compound", "tau_compound")] <- c(0.2, 0.5)
-# the prior of model.R, that of the first blot also for the third
-third <- function(v) c(v, setNames(v[blot3], paste0(blot3, "_blot3")))[population]
-priorCompounds <- constraintL2(third(muReduced), sigma = third(sigmaReduced))
-# the spread of the starts: per fixed effect half the 68 % profile interval of the reduced model,
-# between 0.1 and 0.5 on the log scale, 0.5 where the profile is open and for the hyperparameters
-ci <- confint(readRDS("results/reduced.rds")$profiles, level = 0.68)
-width <- setNames(pmin(pmax((ci$upper - ci$lower) / 2, 0.1), 0.5), ci$name)
-width <- c(width, setNames(width[intersect(blot3, names(width))], paste0(intersect(blot3, names(width)), "_blot3")))
-sdStart <- setNames(rep(0.5, length(init)), names(init))
-known <- intersect(names(sdStart), names(width)[!is.na(width)])
-sdStart[known] <- width[known]
-# 200 starts: the one above and 199 moved by sdStart, the probability of a change on the logit
-# scale and the spread by a factor; a start whose fit fails is drawn again; every start runs to the
-# end, with up to 1000 iterations of the trust region, one core each
-set.seed(3)
-fitCompounds <- msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced,
-                     control = list(sparseFit = list(maxOuter = 1000, trustControl = list(tolControl = tolerances))),
-                     fits = 200, sd = sdStart, keepFits = TRUE,
-                     cores = getOption("dMod2.cores"))
+# The L1 scan over the 20 candidates of the spike and slab, the changes of the four partners of the
+# gauge at 0: the penalty lambda |eta| on every candidate, lambda = 0, 31 values from 1e-2 to 1e4
+# evenly on the log scale and four more between 10^0.8 and 10, per lambda 1000 starts, the
+# population parameters drawn around the fit of the reduced model with sd 1, the changes at 0, the
+# first start the fit itself
+zeroDCF <- setNames(numeric(length(changesDCF)), changesDCF)
+changesL1 <- paste0("eta_", ratesSS, "_DCF")
+offL1 <- setdiff(changesDCF, changesL1)
+stopifnot(all(changesL1 %in% changesDCF))
+lambdasDCF <- sort(c(0, 10^seq(-2, 4, by = 0.2), 10^seq(0.84, 0.96, by = 0.04)))
+startsL1 <- msParframe(c(initDCF, zeroDCF), n = 1000, seed = 12,
+                       sd = c(setNames(rep(1, length(initDCF)), names(initDCF)), zeroDCF))
+startL1 <- function(i) unlist(startsL1[i, c(names(initDCF), changesL1)])
+# a start vector with the population parameters and candidates of `argument`, the others at the start
+fullStart <- function(argument) {
+  start <- c(initDCF, zeroDCF[changesL1])
+  shared <- intersect(names(argument), names(start))
+  start[shared] <- argument[shared]
+  start
+}
+# the penalized fit of a task, with -2 log L without the penalty
+penalizedDCF <- function(task) {
+  fit <- try(trustL1(objDCF, task$start, mu = zeroDCF[changesL1], lambda = task$lambda, rinit = 1,
+                     rmax = 10, iterlim = 1000, fixed = c(gaugeReduced, zeroDCF[offL1]),
+                     tolControl = tolerances), silent = TRUE)
+  if (inherits(fit, "try-error")) return(NULL)
+  list(lambda = task$lambda, argument = fit$argument,
+       value = objDCF(c(fit$argument, zeroDCF[offL1]), fixed = gaugeReduced, deriv = FALSE)$value,
+       converged = fit$converged)
+}
+# the candidates of a set fitted without penalty, the other changes at 0
+refitDCF <- function(task) {
+  off <- setdiff(changesDCF, task$set)
+  start <- task$start[setdiff(names(task$start), off)]
+  fit <- try(trust(objDCF, start, rinit = 1, rmax = 10, iterlim = 1000,
+                   fixed = c(gaugeReduced, zeroDCF[off]), tolControl = tolerances), silent = TRUE)
+  if (inherits(fit, "try-error")) return(NULL)
+  list(set = task$set, argument = fit$argument, value = fit$value, converged = fit$converged)
+}
+# the penalized objective of every fit in penalizedFits at `x`
+penalizedAt <- function(x) vapply(penalizedFits, function(r) r$value + x * sum(abs(r$argument[changesL1])), 0)
+# the fits of a list of tasks, one per task; helix.R runs them on the cluster instead
+fitTasks <- function(tasks, fn)
+  Filter(Negate(is.null), parallel::mclapply(tasks, fn, mc.cores = getOption("dMod2.cores"),
+                                             mc.preschedule = FALSE))
 ```
-
-The best fit is saved with a table of all starts:
 
 ``` r
 
-# the best fit with the table and the fits of all starts, saved without the model, which an
-# evaluation at the estimates restores
-saved <- fitCompounds
-saved[c("design", "prdfn", "errfn", "data")] <- NULL
-# the md5 of the files the result is computed from, which the guide checks on reading
-sources <- c("model.R", "reduced.R", "compounds.R", "data/oppelt2018.csv", "results/reduced.rds")
-attr(saved, "stamp") <- list(md5 = tools::md5sum(sources), dMod2 = packageVersion("dMod2"))
-saveRDS(saved, "results/compounds.rds")
+# every lambda also from the five best fits of the other lambdas, evaluated at it, and from the
+# five best of the lambda itself, until no lambda improves by more than 0.01
+bestAt <- function() vapply(lambdasDCF, function(x) {
+  own <- vapply(penalizedFits, `[[`, 0, "lambda") == x
+  min(penalizedAt(x)[own])
+}, 0)
+repeat {
+  before <- bestAt()
+  lambdaOf <- vapply(penalizedFits, `[[`, 0, "lambda")
+  tasks <- unlist(lapply(lambdasDCF, function(x) {
+    value <- penalizedAt(x)
+    other <- which(lambdaOf != x); own <- which(lambdaOf == x)
+    pick <- c(other[order(value[other])][1:5], own[order(value[own])][1:5])
+    lapply(pick, function(i) list(start = penalizedFits[[i]]$argument[c(names(initDCF), changesL1)], lambda = x))
+  }), recursive = FALSE)
+  penalizedFits <- c(penalizedFits, fitTasks(tasks, penalizedDCF))
+  if (all(before - bestAt() <= 0.01)) break
+}
 ```
 
 ``` r
 
-fit <- readRDS("results/compounds.rds")
-c(value = fit$value, converged = fit$converged, iterations = fit$iterations)
-#>      value  converged iterations 
-#>  -498.2213     0.0000    23.0000
-fit$argument[c("prob_compound", "tau_compound")]
-#> prob_compound  tau_compound 
-#>     0.5702302     0.8094011
-fit$coupling
-#> NULL
+dcfL1 <- stored("results/dcfL1.rds", "dcf.R", envir = new.env())
 ```
 
-`value` is \\-2 \log L\\ of the approximate marginal, `iterations` the
-steps of the joint trust region of fixed effects and hyperparameters,
-`coupling` the integral over coupled changes, here none: every compound
-is integrated exactly.
-
-## Multistart optimization
-
-The objective has local optima.
-[`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) redraws
-a start whose fit fails, e.g. where EC does not converge. `$multistart`
-has per start `value`, `converged`, `iterations`, attempts (`tries`) and
-the `error` of a start that failed every attempt. The waterfall shows
-the best 100 starts; a plateau is one optimum.
+Waterfall of the best 200 values of \\-2 \log L\\ of the data, without
+the penalty, per \\\lambda\\, the y axis shared within a row:
 
 ``` r
 
-plotValues(fit, rank(value, ties.method = "first") <= 100)
+objectiveL1 <- dcfL1$penalized
+lambdaL1 <- sort(unique(objectiveL1$lambda))
+# the best 200 fits per lambda, six lambdas per row, the y axis shared within a row
+best200 <- function(x) {
+  x <- head(x[order(x$value), ], 200)
+  x$rank <- seq_len(nrow(x))
+  x
+}
+waterL1 <- do.call(rbind, lapply(seq_along(lambdaL1), function(i)
+  cbind(best200(objectiveL1[objectiveL1$lambda == lambdaL1[i], ]), row = (i - 1) %/% 6,
+        col = (i - 1) %% 6, label = sprintf("lambda == %s", format(signif(lambdaL1[i], 3))))))
+ggplot2::ggplot(waterL1, ggplot2::aes(rank, value)) +
+  ggplot2::geom_point(ggplot2::aes(color = converged), size = 0.8) +
+  ggplot2::geom_text(data = unique(waterL1[c("row", "col", "label")]),
+                     ggplot2::aes(x = 100, y = Inf, label = label), parse = TRUE, vjust = 1.4,
+                     inherit.aes = FALSE) +
+  ggplot2::facet_grid(row ~ col, scales = "free_y") +
+  ggplot2::scale_color_manual(values = c(`TRUE` = "black", `FALSE` = dMod2_colors[2]),
+                              labels = c(`TRUE` = "converged", `FALSE` = "not converged"),
+                              name = NULL) +
+  ggplot2::scale_y_continuous(expand = ggplot2::expansion(mult = c(0.05, 0.25))) +
+  ggplot2::labs(x = "fit rank", y = "-2 log L of the data") +
+  theme_dMod2() +
+  ggplot2::theme(strip.text = ggplot2::element_blank(), legend.position = "bottom")
+```
+
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-4-1.png)
+
+Of at least 1010 fits per \\\lambda\\, 11 to 57 reach the best penalized
+value within 0.1, a median 43; most others end at local optima or crawl
+and stop short.
+
+Differences over \\\lambda\\ (Fig. 2a of the publication), in color
+those kept at the selected \\\lambda\\ (dashed):
+
+``` r
+
+paths <- data.frame(lambda = rep(as.numeric(rownames(dcfL1$path)), ncol(dcfL1$path)),
+                    difference = rep(sub("^eta_(.*)_DCF$", "\\1", colnames(dcfL1$path)),
+                                     each = nrow(dcfL1$path)),
+                    value = as.vector(dcfL1$path))
+paths <- paths[paths$lambda > 0, ]
+kept <- sub("^eta_(.*)_DCF$", "\\1", dcfL1$selected)
+ggplot2::ggplot(paths, ggplot2::aes(lambda, value, group = difference)) +
+  ggplot2::geom_vline(xintercept = dcfL1$lambda, linetype = 2, color = "gray50") +
+  ggplot2::geom_line(data = paths[!paths$difference %in% kept, ], color = "gray75") +
+  ggplot2::geom_line(data = paths[paths$difference %in% kept, ], ggplot2::aes(color = difference)) +
+  ggplot2::scale_x_log10(breaks = 10^(-2:4), labels = trimws(format(10^(-2:4), scientific = FALSE, drop0trailing = TRUE))) +
+  ggplot2::labs(x = expression(lambda), y = expression(Delta ~ "[log]"), color = NULL) +
+  theme_dMod2()
 ```
 
 ![](guide-sparse-deviations_files/figure-html/unnamed-chunk-6-1.png)
 
-Of the 200 starts, 67 end within 1 of the best -2 log L, 69 did not
-converge and 0 failed.
-
-## Changes by compound
-
-Changes with \\p_0 \< 0.05\\, with log-scale modes:
+Over \\\lambda\\ (Fig. 2b): \\-2 \log L\\ of the data (black), plus
+penalty (red, penalty gray), and the number of nonzero differences:
 
 ``` r
 
-changes <- fit$random[fit$random$p0 < 0.05, c("group", "eta", "mode", "se", "p0")]
-changes <- changes[order(changes$group, changes$p0), ]
-rownames(changes) <- NULL
-changes
-#>    group                eta       mode         se           p0
-#> 1    AMD     act_Ikk_by_TNF -0.6233761 0.19988090 5.562790e-03
-#> 2   APAP  prod_mIkb_by_nNfk -0.6792646 0.15467503 1.389098e-04
-#> 3    DCF  prod_mIkb_by_nNfk -0.7919219 0.05806600 0.000000e+00
-#> 4    DCF        degrad_mIkb -1.6574043 0.08891258 0.000000e+00
-#> 5    DCF       trigger_iIkk  0.9105895 0.18670109 8.294768e-07
-#> 6    DCF           act_pIkk  0.5764056 0.13601052 2.013579e-04
-#> 7    DCF     act_Ikb_by_Ikk -0.9741569 0.27050695 1.084077e-03
-#> 8    DCF     shuttle_RnaA20 -0.6663163 0.14076848 1.621477e-02
-#> 9    DCF     act_Ikk_by_TNF -0.5578158 0.16541868 2.812831e-02
-#> 10  FIAU eta_split_pNfkpIkb -0.9523072 0.14002669 3.485343e-08
-#> 11  FIAU       eta_int_pNfk -0.7847355 0.16210083 1.385864e-05
-#> 12  FIAU           act_pIkk -2.0239328 0.42188882 1.591529e-05
-#> 13  FIAU     act_Ikk_by_TNF  0.7825836 0.28370356 4.345786e-03
+scan <- dcfL1$scan[dcfL1$scan$lambda > 0, ]
+curves <- rbind(data.frame(lambda = scan$lambda, value = scan$data, panel = "-2 log L", curve = "data"),
+                data.frame(lambda = scan$lambda, value = scan$data + scan$penalty, panel = "-2 log L",
+                           curve = "data + penalty"),
+                data.frame(lambda = scan$lambda, value = scan$changes, panel = "nonzero differences",
+                           curve = "count"))
+ggplot2::ggplot(curves, ggplot2::aes(lambda, value)) +
+  ggplot2::geom_ribbon(data = data.frame(lambda = scan$lambda, lo = scan$data,
+                                         hi = scan$data + scan$penalty, panel = "-2 log L"),
+                       ggplot2::aes(x = lambda, ymin = lo, ymax = hi), inherit.aes = FALSE,
+                       fill = "gray85") +
+  ggplot2::geom_vline(xintercept = dcfL1$lambda, linetype = 2, color = "gray50") +
+  ggplot2::geom_line(ggplot2::aes(color = curve)) +
+  ggplot2::scale_color_manual(values = c(data = "black", `data + penalty` = "#b2182b",
+                                         count = "#2166ac"), guide = "none") +
+  ggplot2::scale_x_log10(breaks = 10^(-2:4), labels = trimws(format(10^(-2:4), scientific = FALSE, drop0trailing = TRUE))) +
+  ggplot2::facet_wrap(~ panel, ncol = 1, scales = "free_y") +
+  ggplot2::labs(x = expression(lambda), y = NULL) +
+  theme_dMod2()
 ```
 
-DCF changes 7 of the 20 rate constants, AMD 1, APAP 1, FIAU 4 and XIM 0.
-The probability of a change is 0.57, and a change has a spread of 0.81
-on the log scale, a factor of about 2.2. Of the 7 rate constants the L1
-scan of the publication selected for DCF, the spike and slab finds 6:
-IKK activation by TNFα (`act_Ikk_by_TNF`), IKK recovery
-(`trigger_iIkk`), IKK phosphorylation (`act_pIkk`), IκBα phosphorylation
-by pIKK (`act_Ikb_by_Ikk`), IκBα transcription (`prod_mIkb_by_nNfk`) and
-IκBα transcript degradation (`degrad_mIkb`); not A20 translation
-(`build_A20`), but the delay of the A20 transcript (`shuttle_RnaA20`).
-[\[1\]](#ref-oppelt2018model)
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-7-1.png)
+
+The differences kept at each \\\lambda\\ are refitted without penalty,
+the others at 0, from the best penalized fits and from 300 or more
+starts around the reduced fit. Selected is the largest \\\lambda\\ whose
+refit the likelihood ratio test against all 20 candidates does not
+reject at \\p \< 0.001\\, as in the publication:
 
 ``` r
 
-shown <- fit$random
-shown$eta <- factor(shown$eta, levels = unique(shown$eta))
-shown$evidence <- -log10(pmax(shown$p0, 1e-6))
-ggplot2::ggplot(shown, ggplot2::aes(group, eta)) +
-  ggplot2::geom_tile(ggplot2::aes(fill = mode, alpha = evidence), color = "white") +
-  ggplot2::geom_point(data = shown[shown$p0 < 0.05, ], ggplot2::aes(shape = "p0 < 0.05"),
-                      fill = "white") +
-  ggplot2::scale_y_discrete(limits = rev) +
-  ggplot2::scale_fill_gradient2(low = "#2166ac", mid = "white", high = "#b2182b") +
-  ggplot2::scale_alpha(range = c(0.1, 1), limits = c(0, 6), breaks = 1:3,
-                       labels = c("1, p0 = 0.1", "2, p0 = 0.01", "3, p0 = 0.001"),
-                       guide = ggplot2::guide_legend(override.aes = list(fill = "gray30"))) +
-  ggplot2::scale_shape_manual(values = 21) +
-  ggplot2::labs(x = NULL, y = NULL, fill = "change [log]", alpha = "evidence, -log10 p0", shape = NULL) +
-  theme_dMod()
+# the likelihood ratio test of the set of each lambda against all candidates, the selection that
+# of the largest lambda not worse at p < 0.001, the threshold of the publication
+valueOf <- function(set) bestRefit(set)$value
+scanDCF <- data.frame(lambda = lambdasDCF, changes = lengths(keptDCF),
+                      data = vapply(bestDCF, `[[`, 0, "value"),
+                      penalty = lambdasDCF * vapply(bestDCF, function(r) sum(abs(r$argument[changesL1])), 0),
+                      refit = vapply(keptDCF, function(set) if (length(set)) valueOf(set) else NA_real_, 0),
+                      row.names = NULL)
+scanDCF$p <- pchisq(scanDCF$refit - valueOf(changesL1), df = length(changesL1) - scanDCF$changes,
+                    lower.tail = FALSE)
+scanDCF$p[scanDCF$changes == length(changesL1)] <- 1
+lambdaDCF <- max(scanDCF$lambda[!is.na(scanDCF$p) & scanDCF$p >= 0.001])
+selectedL1 <- keptDCF[[as.character(lambdaDCF)]]
+pathDCF <- t(vapply(bestDCF, function(r) r$argument[changesL1], zeroDCF[changesL1]))
 ```
 
-![](guide-sparse-deviations_files/figure-html/unnamed-chunk-10-1.png)
+The test rejects from \\\lambda = 10\\ on, with 11 differences and 35 in
+\\-2 \log L\\ above the refit with all 20; the publication, with 24
+candidates, rejected from \\\lambda = 10\\ on, with 11 differences and
+34. Kept at \\\lambda = 9.12\\ are 12 differences: `act_Ikb_by_Ikk`,
+`act_Ikk_by_TNF`, `act_Nfk_by_Ikk`, `act_pIkk`, `build_A20`,
+`degrad_mIkb`, `eta_int_Ikb`, `eta_int_pNfk`, `eta_split_pNfkpIkb`,
+`prod_mIkb_by_nNfk`, `shuttle_RnaA20` and `trigger_iIkk`.
 
-Each tile is one \\\eta\_{ik}\\; rate constants follow the pathway from
-IKK (top) to A20 (bottom). Color is the log-scale mode of the most
-probable structure: red increase, blue decrease, white no change
-(wherever the spike is more probable than the slab); \\-0.7\\ halves a
-rate constant. Opacity is the evidence \\-\log\_{10} p_0\\, full from 6
-on (\\p_0 \< 10^{-6}\\). A pale tile is a small change, or \\p_0\\ near
-or above \\1 - \rho\\; circles mark \\p_0 \< 0.05\\, the table above. A
-colored tile without circle has \\p_0\\ between 0.05 and 0.5.
-
-## Data and fit by compound
-
-Prediction per compound at the estimated fixed effects and changes
-against the compound data, each point with the measured standard
-deviation, which the blots have in place of an error model; gray: the
-untreated, stimulated control of the same blots at the fixed effects
-alone. DCF blots span six hours, the others 50 minutes:
+Of the 11 differences at \\\lambda = 10\\ the publication kept seven as
+independent [\[1\]](#ref-oppelt2018model): it dropped `uptake`,
+`prod_Ikb`, `eta_int_pNfk` and `act_Nfk_by_Ikk` and took
+`shuttle_RnaA20` in place of `build_A20`. The seven refitted alone,
+against the estimates and 95 % intervals of the publication:
 
 ``` r
 
-outer <- getParameters(prdCompounds)
-estimates <- c(fit$argument, fit$fixed, setNames(fit$random$mode, fit$random$parameter))
-pars <- setNames(numeric(length(outer)), outer)
-pars[intersect(outer, names(estimates))] <- estimates[intersect(outer, names(estimates))]
+publicationDCF <- dcfL1$publication
+publicationDCF$refit <- unname(dcfL1$refitPublication$argument[paste0("eta_", publicationDCF$rate, "_DCF")])
+publicationDCF
+#>                rate value lower upper       refit
+#> 1    act_Ikk_by_TNF -0.72 -0.98 -0.46 -0.67023204
+#> 2      trigger_iIkk  1.56  1.10  2.05  1.58838930
+#> 3          act_pIkk  0.91  0.57  1.27  1.18094333
+#> 4    act_Ikb_by_Ikk -0.94 -1.66 -0.45 -0.04692231
+#> 5 prod_mIkb_by_nNfk -0.83 -0.94 -0.73 -0.75843442
+#> 6       degrad_mIkb -1.77 -2.06 -1.50 -1.80486970
+#> 7    shuttle_RnaA20 -0.96 -1.68 -0.52 -0.57299532
+```
 
-treated <- grep("^TNF_[A-Z]", names(dataCompounds), value = TRUE)
-controls <- sub("^TNF_[A-Z]+_", "TNF_none_", treated)
-observed <- as.data.frame(dataCompounds)
-times <- sort(unique(c(seq(0, 60, length.out = 200), seq(0, max(observed$time), length.out = 200))))
-prediction <- as.data.frame(prdCompounds(times, pars, deriv = FALSE, conditions = union(treated, controls)))
+6 of the seven estimates, all but `act_Ikb_by_Ikk` (-0.05), lie in the
+intervals of the publication. Against the refit with all 20 candidates
+the seven give 28 more in \\-2 \log L\\ with 13 fewer parameters, \\p =
+0.01\\. All seven are among the 12 kept by the scan, against which they
+give 8 more with 5 fewer parameters, \\p = 0.14\\. The model with the
+seven differences against the data (Fig. 2c); observables measured once
+in the table:
 
-# every compound with the untreated control on the same blots
-blots <- c("IkBa", "pIkBa", "pIKK", "pNFkB")
-byCompound <- function(frame) do.call(rbind, Map(function(cond, ctl) {
-  rows <- frame[frame$condition %in% c(cond, ctl) & frame$name %in% blots,
-                c("time", "name", "value", "sigma", "condition")]
-  rows$compound <- sub("^TNF_([A-Z]+)_.*", "\\1", cond)
-  rows$treatment <- ifelse(rows$condition == cond, "compound", "control")
-  rows
-}, treated, controls))
-points <- byCompound(observed)
-# the curves over the time range of the data of the compound
-curves <- byCompound(prediction)
-curves <- curves[curves$time <= tapply(points$time, points$compound, max)[curves$compound], ]
-colors <- c(compound = "#b2182b", control = "gray55")
-ggplot2::ggplot(mapping = ggplot2::aes(time, value, color = treatment)) +
-  ggplot2::geom_line(data = curves) +
-  ggplot2::geom_errorbar(data = points, ggplot2::aes(ymin = value - sigma, ymax = value + sigma),
-                         width = 0) +
-  ggplot2::geom_point(data = points) +
-  ggplot2::facet_grid(name ~ compound, scales = "free") +
-  ggplot2::scale_x_continuous(breaks = scales::breaks_pretty(n = 3)) +
-  ggplot2::scale_color_manual(values = colors) +
-  ggplot2::labs(x = "time [min]", y = "log signal [a.u.]", color = NULL) +
-  theme_dMod() +
-  ggplot2::theme(legend.position = "bottom")
+``` r
+
+fitPlot(prdDCF, dcfL1$refitPublication$argument, changesDCF)
 ```
 
 ![](guide-sparse-deviations_files/figure-html/unnamed-chunk-11-1.png)
 
+``` r
+
+fitOnce(prdDCF, dcfL1$refitPublication$argument, changesDCF)
+#>            name time condition prediction value sigma
+#> 1 ratioNFkBIkBa    0  TNF_none          0 -0.22   0.3
+```
+
+## Spike and slab
+
+With \\\theta_k\\ the log rate constant \\k\\, cells with DCF use
+\\\theta_k + \Delta_k\\. The spike-and-slab distribution
+[\[4\]](#ref-mitchell1988bayesian), [\[5\]](#ref-george1993variable) of
+a difference is
+
+\\p(\Delta_k) = (1 - \rho)\\ \delta(\Delta_k) + \rho\\
+\mathcal{N}(\Delta_k;\\ 0, \tau^2),\\
+
+with inclusion probability \\\rho\\ (`prob_compound`) and slab standard
+deviation \\\tau\\ (`tau_compound`, log scale).
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates
+\\\theta\\, \\\rho\\ and \\\tau\\ from the likelihood with the
+differences integrated out, a sum over subsets ([Methods \> Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal)).
+\\p_0 = \Pr(\Delta_k = 0 \mid y)\\ is the posterior spike probability.
+
+The candidates are the same 20 as in the L1 scan; with both partners of
+a product as candidates, neither would reach a probability of one half.
+`dcf.R` runs 1000 starts of
+[`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) around
+the reduced fit, then 200 around the best. Waterfall of the 200:
+
+``` r
+
+# the changes as spike-and-slab random effects: 1000 starts of msem(), the population parameters
+# drawn around the fit of the reduced model with sd 1 on the log scale, the probability of a change
+# starting at 0.2 and the spread at 0.5
+initSS <- c(initDCF, prob_compound = 0.2, tau_compound = 0.5)
+set.seed(3)
+fitDCF <- msem(objSS, randomSS, initSS, fixed = gaugeReduced,
+               control = list(sparseFit = list(trustControl = list(tolControl = tolerances))),
+               fits = 1000, sd = 1, cores = getOption("dMod2.cores"))
+```
+
+``` r
+
+# 200 more starts around the best fit, sd 1 as above: the waterfall of the optimum
+set.seed(4)
+moreDCF <- msem(objSS, randomSS, fitDCF$argument, fixed = gaugeReduced,
+                control = list(sparseFit = list(trustControl = list(tolControl = tolerances))),
+                fits = 200, sd = 1, cores = getOption("dMod2.cores"))
+starts <- rbind(cbind(fitDCF$multistart, round = 1L), cbind(moreDCF$multistart, round = 2L))
+if (moreDCF$value < fitDCF$value) fitDCF <- moreDCF
+fitDCF$multistart <- starts
+```
+
+``` r
+
+dcfSS <- stored("results/dcf.rds", "dcf.R", envir = new.env())
+plotValues(dcfSS, round == 2)
+```
+
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-12-1.png)
+
+``` r
+
+dcfSS$argument[c("prob_compound", "tau_compound")]
+#> prob_compound  tau_compound 
+#>     0.4106395     1.0817230
+```
+
+1 of the 997 starts around the reduced fit and 88 of the 196 around the
+best end within 0.1 of the best value. With \\\rho = 0.41\\ a difference
+is expected for 8 of the 20 rate constants; with \\\tau = 1.08\\ a
+difference is typically a factor of 2.9. Probability of a difference,
+\\1 - p_0\\, labeled with the difference in the most probable subset;
+crosses mark the seven of the publication:
+
+``` r
+
+probability <- dcfSS$random[, c("eta", "mode", "p0")]
+probability$eta <- factor(probability$eta, levels = rev(probability$eta))
+probability$publication <- probability$eta %in% publicationDCF$rate
+ggplot2::ggplot(probability, ggplot2::aes(1 - p0, eta)) +
+  ggplot2::geom_col(fill = "#2166ac") +
+  ggplot2::geom_vline(xintercept = 0.5, linetype = 2, color = "gray50") +
+  ggplot2::geom_text(data = probability[probability$mode != 0, ],
+                     ggplot2::aes(label = sprintf("%.2f", mode)), hjust = -0.2, size = 3) +
+  ggplot2::geom_point(data = probability[probability$publication, ], ggplot2::aes(x = -0.04),
+                      shape = 4, size = 2.5) +
+  ggplot2::scale_x_continuous(limits = c(-0.06, 1.15), breaks = seq(0, 1, 0.25)) +
+  ggplot2::labs(x = "probability of a difference", y = NULL) +
+  theme_dMod2()
+```
+
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-14-1.png)
+
+The most probable subset holds 6 differences, 6 of them among the seven
+of the publication, with the same signs. Not in it: `act_Ikb_by_Ikk`
+(\\p_0 = 0.91\\). Refitted without the slab, the subset gives 28 more in
+\\-2 \log L\\ than all 20 candidates, the seven of the publication 28.
+Against the seven, the subset gives 0.07 more in \\-2 \log L\\ with 1
+parameter fewer, \\p = 0.80\\. The 20 differences are exchangeable under
+the model: the nonzero ones against the slab density \\\rho\\
+\mathcal{N}(0, \tau^2)\\ (line), the count at 0 against the expected
+\\20 (1 - \rho)\\ (bar). With 6 nonzero differences the figure shows
+gross departures from the slab, an outlier or separate clusters, but is
+no test of its shape:
+
+``` r
+
+rho <- dcfSS$argument[["prob_compound"]]
+tau <- dcfSS$argument[["tau_compound"]]
+nonzero <- dcfSS$random$mode[dcfSS$random$mode != 0]
+slab <- data.frame(x = seq(-4, 4, length.out = 401))
+slab$density <- 20 * rho * dnorm(slab$x, 0, tau)
+ggplot2::ggplot() +
+  ggplot2::geom_line(data = slab, ggplot2::aes(x, density)) +
+  ggplot2::geom_rug(data = data.frame(x = nonzero), ggplot2::aes(x), sides = "b", linewidth = 0.8,
+                    length = grid::unit(0.08, "npc")) +
+  ggplot2::geom_segment(ggplot2::aes(x = 0, xend = 0, y = 0, yend = sum(dcfSS$random$mode == 0)),
+                        linewidth = 2, color = dMod2_colors[2]) +
+  ggplot2::geom_point(ggplot2::aes(x = 0, y = 20 * (1 - rho)), shape = 4, size = 3) +
+  ggplot2::labs(x = expression(Delta ~ "[log]"), y = "differences per unit") +
+  theme_dMod2()
+```
+
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-16-1.png)
+
+The model at the spike-and-slab estimates against the data:
+
+``` r
+
+parsSS <- c(dcfSS$argument[setdiff(names(dcfSS$argument), c("prob_compound", "tau_compound"))],
+            setNames(dcfSS$random$mode, paste0("eta_", dcfSS$random$eta, "_DCF")))
+fitPlot(gDCF * xDCF * pSS, parsSS, unique(na.omit(unlist(randomEffects(pSS)$etas))))
+```
+
+![](guide-sparse-deviations_files/figure-html/unnamed-chunk-17-1.png)
+
+``` r
+
+fitOnce(gDCF * xDCF * pSS, parsSS, unique(na.omit(unlist(randomEffects(pSS)$etas))))
+#>            name time condition prediction value sigma
+#> 1 ratioNFkBIkBa    0  TNF_none          0 -0.22   0.3
+```
+
+## L1 scan and spike and slab
+
+Both methods see the same data, model, prior and 20 candidates:
+
+| method           | differences | -2 log L | p against all 20 |
+|:-----------------|------------:|---------:|-----------------:|
+| L1 scan and test |          12 |  -414.40 |            0.012 |
+| spike and slab   |           6 |  -405.95 |            0.014 |
+| publication      |           7 |  -406.01 |            0.009 |
+| all candidates   |          20 |  -434.04 |            1.000 |
+
+The spike and slab is faster and free of shrinkage. It needs one
+multistart, no scan over \\\lambda\\ and no refits. The penalty shrinks
+every kept difference toward 0, at the selected \\\lambda\\ by a median
+0.05 on the log scale against the refit without the penalty, more at
+larger \\\lambda\\; the spike and slab leaves the size of a difference
+to the slab, and the spike-and-slab differences lie a median 0.03 from
+the refit of the same subset. The most probable subset lies within the
+12 differences the scan keeps and fits the data not worse than they do,
+\\p = 0.21\\ for the 6 others. The L1 scan only tests subsets that are
+the penalized optimum at some \\\lambda\\; the spike and slab weighs
+every subset ([Methods \> Selection of
+deviations](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#selection-of-deviations)).
+The fit reports the most probable subset; the differences with \\p_0 \<
+0.5\\, the median probability model, which predicts best under broad
+conditions [\[6\]](#ref-barbieri2004optimal), are the same here.
+
 ## Sparse random-effect distributions
 
-`gr(group, dist = )` sets the random-effect distribution of a term.
-Besides
+`gr(group, dist = )` sets the random-effect distribution. Besides
 [`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md), two
-have deviations exactly zero unless the data need them:
+give deviations exactly zero unless the data need them:
 
 | distribution | a deviation \\\eta\\ of a group | hyperparameters |
 |----|----|----|
 | [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\ | `prob_<grouping>`, `tau_<grouping>` |
 | [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md) | cluster value: \\0\\ for the population cluster, else one \\\mathcal{N}(0, \tau^2)\\ draw | `concentration_<grouping>`, `tau_<grouping>` |
 
-Hyperparameters are shared by the symbols of a term, numbered `_1`,
-`_2`, … for several terms of one grouping, and estimated with the fixed
-effects unless given, as in `spikeSlab(tau = 0.5)`. A spike-and-slab
-deviation is zero with a probability reported per group. Under the
-Dirichlet process groups share deviations in clusters with the
-population value, see [Dirichlet-process random
-effects](#dirichlet-process-random-effects). Normal and sparse random
-effects of one grouping combine; `em(method = "focei")` fits all,
-Dirichlet-process ones also `method = "saem"`.
+Hyperparameters are shared by the symbols of a term (`_1`, `_2`, … for
+several terms of one grouping) and estimated unless given, as in
+`spikeSlab(tau = 0.5)`. Normal and sparse random effects of one grouping
+combine; `em(method = "focei")` fits all.
 
 ## Fitting sparse random effects
 
-`em(method = "focei")` integrates sparse random effects on the Laplace
-approximation of the data term at the joint mode of a group, exactly
-where possible, the spike-and-slab effects of a group jointly even where
-the data couple them, and by EC where the data link a Dirichlet-process
-effect to another factor or the subset sum leaves the budget. Fixed
-effects and hyperparameters move in one trust region: no EM iteration
-count, no random numbers. `fit$coupling` is `"expectationConsistent"` if
-a group needed EC, `NULL` if all are exact. Integral, gradient and
-hyperparameter steps: [Methods \> Approximate
+`em(method = "focei")` integrates sparse random effects by the Laplace
+approximation at the joint mode of a group, exactly where possible, and
+by expectation consistent (EC) approximation where the data link a
+Dirichlet-process effect to another factor or the subset sum exceeds the
+budget. Fixed effects and hyperparameters move in one trust region.
+`fit$coupling` is `"expectationConsistent"` if a group needed EC, else
+`NULL`. Methods: [Methods \> Approximate
 marginal](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal),
 [Methods \> Expectation consistent
 approximation](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#expectation-consistent-approximation)
@@ -405,22 +536,20 @@ region](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#
 | `maxOuter` | `200` | joint trust-region iterations, all runs |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `ftol = 1e-10`, `mtol = 1e-5` | joint trust region, as [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) |
 
-Other entries are an error. The compound fit passes the `tolerances` of
+Other entries are an error. The DCF fit passes the `tolerances` of
 [Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.md) in
-`trustControl`, above the solver error in value and gradient. A run
-stopping short of `mtol` restarts while runs lower \\-2 \log L\\ by more
-than `mtol`.
+`trustControl`. A run stopping short of `mtol` restarts while runs lower
+\\-2 \log L\\ by more than `mtol`.
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) perturbs
-concentrations and slab standard deviations on log scale, slab
-probabilities on logit scale.
+concentrations and slab standard deviations on log scale, probabilities
+on logit scale.
 
 ## Reported structure
 
-The fit reports the most probable structure: subset of deviations (spike
-and slab) or partition (Dirichlet process). Spike deviations are exactly
-zero, slab deviations the posterior mean given the structure ([Methods
-\> Reported
+The fit reports the most probable subset (spike and slab) or partition
+(Dirichlet process): spike deviations exactly zero, slab deviations the
+posterior mean given the structure ([Methods \> Reported
 structure](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#reported-structure)).
 `fit$random` has a row per group and random effect:
 
@@ -432,8 +561,7 @@ structure](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.ht
 - `data`, whether the random effect reaches data of the group, where
   some do not.
 
-A sparse random effect reaching no data of the group (through
-transformations, ODE, observables, error model) rests at 0 with the
+A sparse random effect reaching no data of the group rests at 0 with the
 prior standard deviation and, for spike and slab, \\p_0 = 1 - \rho\\.
 `fit$slab` lists probabilities, concentrations and slab standard
 deviations, each with term symbols, estimate and whether fixed.
@@ -442,12 +570,14 @@ deviations, each with term symbols, estimate and whether fixed.
 
 With spike-and-slab random effects `fit$hessian` is `NULL`;
 [`vcov()`](https://rdrr.io/r/stats/vcov.html) inverts `fit$information`,
-the empirical information from the group scores. It needs more groups
-than parameters, or conditions without random effects plus priors for
-the other directions; otherwise
+the empirical information of the group scores plus the expected
+information of the conditions without random effects and the priors
+(`hessian = "expected"`). It needs more groups than parameters, or those
+terms for the other directions; otherwise
 [`vcov()`](https://rdrr.io/r/stats/vcov.html) is an error and standard
-errors are `NA`. In the compound fit the conditions without compound and
-the prior complete the five compounds.
+errors are `NA`. `fit$information` is not a Hessian of the marginal and
+does not detect saddle points. The DCF fit has one group, too few for
+the empirical information, and the intervals are missing.
 [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md)
 fits have neither; `confint(method = "profile")` gives intervals.
 Details: [Methods \> Standard
@@ -459,19 +589,16 @@ With `gr(group, dist = dirichletProcess())` groups and population value
 form clusters; the concentration \\\alpha\\ sets how readily a group
 opens a new one. The population cluster has deviation zero, every other
 cluster one common deviation from \\\mathcal{N}(0, \tau^2)\\. \\\alpha\\
-and \\\tau\\ are estimated by marginal maximum likelihood in one fit,
-with no penalty to scan. The reported structure is that of spike and
-slab with clusters in place of single deviations; the compounds here are
-fitted without it.
+and \\\tau\\ are estimated by marginal maximum likelihood in one fit.
 
 `method = "focei"` sums exactly over partitions of up to 14 groups.
-`method = "saem"` draws partitions, allowing normal random effects
-alongside but no other sparse ones, and reports the most frequent
-partition of the late draws, from `window` iterations after burn-in,
-with standard error `valueSE` of \\-2 \log L\\. `control$saem$particles`
-sets the importance-sampling particles, default 500; `converged` says
-whether burn-in ended by the drift test. An SAEM fit has no gradient,
-Hessian or empirical information. Details: [Methods \> Sparsity
+`method = "saem"` draws partitions, allows normal but no other sparse
+random effects alongside, and reports the most frequent partition of the
+last `window` iterations after burn-in, with standard error `valueSE` of
+\\-2 \log L\\. `control$saem$particles` sets the importance-sampling
+particles, default 500; `converged` says whether burn-in ended by the
+drift test. An SAEM fit has no gradient, Hessian or empirical
+information. Details: [Methods \> Sparsity
 priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#dirichlet-process-random-effects).
 
 Reference:
@@ -480,7 +607,10 @@ Reference:
 [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md),
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md),
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md),
-[`plotValues()`](https://dmodverse.github.io/dMod2/reference/plotValues.md)
+[`plotValues()`](https://dmodverse.github.io/dMod2/reference/plotValues.md),
+[`plotTrace()`](https://dmodverse.github.io/dMod2/reference/plotTrace.md),
+[`plotRandomEffects()`](https://dmodverse.github.io/dMod2/reference/plotRandomEffects.md),
+[`plotPars()`](https://dmodverse.github.io/dMod2/reference/plotPars.md)
 
 [← 7. Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md) \| [9.
@@ -494,20 +624,40 @@ Alignment of relative data measurements
 A. Oppelt *et al.*, “Model-based identification of TNFα-induced
 IKKβ-mediated and IκBα-mediated regulation of NFκB signal transduction
 as a tool to quantify the impact of drug-induced liver injury
-compounds,” *npj Systems Biology and Applications*, vol. 4, p. 23, 2018,
-doi:
+compounds,” *npj Systems Biology and Applications*, vol. 4, no. 1, p.
+23, 2018, doi:
 [10.1038/s41540-018-0058-z](https://doi.org/10.1038/s41540-018-0058-z).
 
 \[2\]
+
+B. Steiert, J. Timmer, and C. Kreutz, “L1 regularization facilitates
+detection of cell type-specific parameters in dynamical systems,”
+*Bioinformatics*, vol. 32, no. 17, pp. i718–i726, 2016, doi:
+[10.1093/bioinformatics/btw461](https://doi.org/10.1093/bioinformatics/btw461).
+
+\[3\]
+
+R. Tibshirani, “Regression shrinkage and selection via the lasso,”
+*Journal of the Royal Statistical Society: Series B*, vol. 58, no. 1,
+pp. 267–288, 1996, doi:
+[10.1111/j.2517-6161.1996.tb02080.x](https://doi.org/10.1111/j.2517-6161.1996.tb02080.x).
+
+\[4\]
 
 T. J. Mitchell and J. J. Beauchamp, “Bayesian variable selection in
 linear regression,” *Journal of the American Statistical Association*,
 vol. 83, no. 404, pp. 1023–1032, 1988, doi:
 [10.1080/01621459.1988.10478694](https://doi.org/10.1080/01621459.1988.10478694).
 
-\[3\]
+\[5\]
 
 E. I. George and R. E. McCulloch, “Variable selection via Gibbs
 sampling,” *Journal of the American Statistical Association*, vol. 88,
 no. 423, pp. 881–889, 1993, doi:
 [10.1080/01621459.1993.10476353](https://doi.org/10.1080/01621459.1993.10476353).
+
+\[6\]
+
+M. M. Barbieri and J. O. Berger, “Optimal predictive model selection,”
+*The Annals of Statistics*, vol. 32, no. 3, pp. 870–897, 2004, doi:
+[10.1214/009053604000000238](https://doi.org/10.1214/009053604000000238).

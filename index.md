@@ -8,7 +8,7 @@ with exact derivatives, and estimates their parameters from data.
 remotes::install_github("dModverse/dMod2")
 ```
 
-## Where to go
+## Documentation
 
 - [Get started](https://dmodverse.github.io/dMod2/articles/dMod2.md): a
   model of bile acid transport from reactions to profile likelihoods.

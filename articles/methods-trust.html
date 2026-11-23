@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -200,7 +200,7 @@ itself.</p>
 <h3 id="bound-constraints">Bound constraints<a class="anchor" aria-label="anchor" href="#bound-constraints"></a>
 </h3>
 <p><code>boundary = "reflective"</code> is the interior method of
-Coleman and Li <span class="citation"><a href="#ref-coleman1996interior">[4]</a></span>. With <span class="math inline">\(v_i\)</span> the signed distance to the bound in
+Coleman and Li <span class="citation"><a href="#ref-coleman1994convergence">[4]</a></span>. With <span class="math inline">\(v_i\)</span> the signed distance to the bound in
 the descent direction <span class="math inline">\(-b_i\)</span> (1 if
 infinite), <span class="math inline">\(D = \operatorname{diag}(\lvert v
 \rvert^{1/2})\)</span> and <span class="math inline">\(J^v\)</span> the
@@ -243,16 +243,23 @@ the dense eigendecomposition of <span class="math inline">\(\hat
 B\)</span> elsewhere; <code><a href="../reference/trust.html">trustL1()</a></code> evaluates (8) on the model
 of the coordinates not held at a kink (<a href="#l1-penalties">L1
 penalties</a>). A run that fails (8) goes on, within
-<code>iterlim</code>; <code>mtol = 0</code> drops the condition. While
-further phases follow, the value, model and step tests hand over to the
-next one (<a href="#hessian-phases">Hessian phases</a>); the last
-quasi-Newton phase therefore ends only on the gradient, stagnation, the
-radius, <code>iterlim</code> or a failing objective <span class="citation"><a href="#ref-nocedal2006numerical">[5]</a></span>. For
-an ODE integrated at relative tolerance <span class="math inline">\(\epsilon\)</span> a weighted residual <span class="math inline">\(r_j\)</span> of a prediction <span class="math inline">\(g_j\)</span> has an error of about <span class="math inline">\(\epsilon g_j / \sigma_j\)</span>, so the value has
-one of about <span class="math inline">\(2 \epsilon \sum_j \lvert r_j
-g_j \rvert / \sigma_j\)</span>, growing with the amount of data, the
-gradient more; <code>ftol</code> and <code>gtol</code> belong at or
-above these noise floors.</p>
+<code>iterlim</code>; <code>mtol = 0</code> drops the condition.
+Stagnation, five rejected steps in a row that leave the value within
+<code>ftol</code>, ends the run, with <code>converged = TRUE</code> only
+where (8) holds: where the noise of the value exceeds the decrease a
+step predicts, a non-stationary point stagnates as well. While further
+phases follow, the value, model and step tests hand over to the next
+one, unless the phase ends the run on them (<a href="#hessian-phases">Hessian phases</a>); the last quasi-Newton phase
+therefore ends only on the gradient, stagnation, the radius,
+<code>iterlim</code> or a failing objective <span class="citation"><a href="#ref-nocedal2006numerical">[5]</a></span>. For an ODE integrated
+at relative tolerance <span class="math inline">\(\epsilon\)</span> a
+weighted residual <span class="math inline">\(r_j\)</span> of a
+prediction <span class="math inline">\(g_j\)</span> has an error of
+about <span class="math inline">\(\epsilon g_j / \sigma_j\)</span>, so
+the value has one of about <span class="math inline">\(2 \epsilon \sum_j
+\lvert r_j g_j \rvert / \sigma_j\)</span>, growing with the amount of
+data, the gradient more; <code>ftol</code> and <code>gtol</code> belong
+at or above these noise floors.</p>
 </div>
 </div>
 <div class="section level2">
@@ -304,9 +311,8 @@ B_k}{s^\top B_k s} + \frac{\tilde y\, \tilde y^\top}{s^\top \tilde y}.
 \tag{11}\]</span></p>
 <p>Then <span class="math inline">\(s^\top \tilde y \ge 0.2\, s^\top B s
 &gt; 0\)</span>. <code>qnCautious</code> skips pairs with <span class="math inline">\(s^\top y \le c \lVert s \rVert \lVert y
-\rVert\)</span> (counted in <code>qnSkipped</code>), a cautious update
-in the sense of <span class="citation"><a href="#ref-li2001global">[7]</a></span>, whose test scales with the
-gradient instead. BFGS updates from accepted steps only.</p>
+\rVert\)</span> (counted in <code>qnSkipped</code>). BFGS updates from
+accepted steps only.</p>
 </div>
 <div class="section level3">
 <h3 id="sr1-update">SR1 update<a class="anchor" aria-label="anchor" href="#sr1-update"></a>
@@ -321,26 +327,138 @@ give valid pairs <span class="citation"><a href="#ref-nocedal2006numerical">[5]<
 (default for <code>"sr1"</code>) uses them.</p>
 </div>
 <div class="section level3">
+<h3 id="structured-secant-updates">Structured secant updates<a class="anchor" aria-label="anchor" href="#structured-secant-updates"></a>
+</h3>
+<p>The data term of <code><a href="../reference/normL2.html">normL2()</a></code> is a sum of row losses <span class="math inline">\(\ell_i(m_i)\)</span> in the prediction and sigma
+<span class="math inline">\(m_i\)</span> of a data point, <span class="math inline">\(\ell_i = r_i^2\)</span> in the simplest case. With
+the Jacobian <span class="math inline">\(J\)</span> of all <span class="math inline">\(m_i\)</span> and the derivatives <span class="math inline">\(u_i = \partial \ell_i / \partial m_i\)</span>, the
+gradient is <span class="math inline">\(J^\top u\)</span> and the
+Hessian is the Gauss-Newton Hessian <span class="math inline">\(G =
+J^\top L J\)</span>, <span class="math inline">\(L\)</span> the Hessian
+of the losses in <span class="math inline">\(m\)</span>, which the
+objective returns, plus <span class="math inline">\(C = \sum_i u_i^\top
+\nabla^2 m_i\)</span>. The structured methods keep <span class="math inline">\(G\)</span> at every iterate and learn only <span class="math inline">\(A \approx C\)</span> from the steps. The secant of
+Dennis, Martínez and Tapia <span class="citation"><a href="#ref-dennis1989convergence">[7]</a></span> is <span class="math inline">\((J_{k+1} - J_k)^\top u_{k+1}\)</span> for the data
+term, of Gauss-Newton Hessian <span class="math inline">\(G^{\rm
+LS}\)</span>; the other terms of a sum, such as a prior, take the secant
+of their gradient and Hessian:</p>
+<p><span class="math display">\[B_k = G_k + A_k, \qquad
+y^\#_k = y_k - J_k^\top (u_{k+1} - u_k) - \left(G_{k+1} - G^{\rm
+LS}_{k+1}\right) s_k , \tag{13}\]</span></p>
+<p><span class="math inline">\(s_k\)</span> and <span class="math inline">\(y_k\)</span> from (9). For <span class="math inline">\(\ell_i = r_i^2\)</span>, <span class="math inline">\(u = 2 r\)</span> and the data part is <span class="math inline">\(2 (J_{k+1} - J_k)^\top r_{k+1}\)</span>, as in
+Fides <span class="citation"><a href="#ref-froehlich2022fides">[8]</a></span>. It equals <span class="math inline">\(C(\theta_{k+1}) s_k\)</span> up to <span class="math inline">\(O(\lVert s_k \rVert^2)\)</span> and takes nothing
+from the linearization error of <span class="math inline">\(G\)</span>,
+which grows with the step where the residuals are nonlinear. A Gaussian
+prior, whose Hessian is constant and part of <span class="math inline">\(G\)</span>, adds nothing. Asked for
+<code>hessian = "structured"</code>, an objective returns <span class="math inline">\(J\)</span>, <span class="math inline">\(u\)</span>
+and <span class="math inline">\(G^{\rm LS}\)</span> (see
+<code><a href="../reference/objlist.html">objlist()</a></code>); an objective without them has <span class="math inline">\(J = 0\)</span> and <span class="math inline">\(G^{\rm LS} = 0\)</span> in (13).</p>
+<p><code>"sbfgs"</code> applies the BFGS update (11) with <span class="math inline">\(\tilde y = y\)</span> to <span class="math inline">\(G_{k+1} + A_k\)</span> with the pair <span class="math inline">\((s_k, G_{k+1} s_k + y^\#_k)\)</span> and keeps the
+difference to <span class="math inline">\(G_{k+1}\)</span>,</p>
+<p><span class="math display">\[A_{k+1} = \operatorname{BFGS}(G_{k+1} +
+A_k;\ s_k, G_{k+1} s_k + y^\#_k) - G_{k+1}, \tag{14}\]</span></p>
+<p>after accepted steps and with the test of <code>qnCautious</code>.
+The update is not damped: <span class="math inline">\(G_{k+1}\)</span>
+changes from iterate to iterate, so <span class="math inline">\(G_{k+1}
++ A_k\)</span> need not be positive definite along <span class="math inline">\(s_k\)</span>, and the update then still restores
+the secant equation. <code>"ssr1"</code> applies (12) to the
+correction,</p>
+<p><span class="math display">\[A_{k+1} = A_k + \frac{w\, w^\top}{w^\top
+s_k}, \qquad w = y^\#_k - A_k s_k, \tag{15}\]</span></p>
+<p>skipped when <span class="math inline">\(\lvert w^\top s_k \rvert \le
+10^{-8} \lVert s_k \rVert \lVert w \rVert\)</span>. <span class="math inline">\(A\)</span> stays indefinite where <span class="math inline">\(C\)</span> is, and rejected trial points update it
+under <code>qnRejected</code>. Both start at <span class="math inline">\(A_0 = 0\)</span>, so the first step is a
+Gauss-Newton step; a handover or a reseed starts there again. A pair
+that leaves <span class="math inline">\(A\)</span> unchanged counts in
+<code>qnSkipped</code>.</p>
+<p><code>qnScaling = "residual"</code> is the totally structured secant
+method of Huschens <span class="citation"><a href="#ref-yabe1998quadratic">[9]</a></span>. With the residual norm
+<span class="math inline">\(\rho = \lVert u \rVert\)</span>, which is
+<span class="math inline">\(2 \lVert r \rVert\)</span> for <span class="math inline">\(\ell_i = r_i^2\)</span>, and <span class="math inline">\(\rho = \sqrt{\mathcal{J}}\)</span> for an
+objective without data rows,</p>
+<p><span class="math display">\[B_k = G_k + \rho_k A_k, \qquad z_k =
+\frac{\rho_{k+1}}{\rho_k}\, y^\#_k , \tag{16}\]</span></p>
+<ol start="14" style="list-style-type: decimal">
+<li>or (15) act on <span class="math inline">\(\rho_{k+1} A_k\)</span>
+with <span class="math inline">\(z_k\)</span> in place of <span class="math inline">\(y^\#_k\)</span>, and <span class="math inline">\(A_{k+1}\)</span> is the result divided by <span class="math inline">\(\rho_{k+1}\)</span>. The correction vanishes with
+the residuals: convergence is quadratic for a zero residual and
+superlinear otherwise. <span class="math inline">\(\rho = 0\)</span>
+leaves <span class="math inline">\(A\)</span> unchanged.</li>
+</ol>
+<p><code>"gnsbfgs"</code> is the hybrid Gauss-Newton structured BFGS
+method of Zhou and Chen <span class="citation"><a href="#ref-zhou2010global">[10]</a></span>. After every accepted step,
+with <span class="math inline">\(z_k\)</span> from (16),</p>
+<p><span class="math display">\[B_{k+1} = \begin{cases}
+G_{k+1} + A_{k+1}, \quad A_{k+1} = \operatorname{BFGS}(A_k;\ s_k, z_k),
+  &amp; z_k^\top s_k \ge \epsilon\, s_k^\top s_k , \\
+G_{k+1}, \quad A_{k+1} = A_k, &amp; \text{otherwise,}
+\end{cases} \tag{17}\]</span></p>
+<p>with <span class="math inline">\(\epsilon\)</span> =
+<code>qnHybridTol</code>, default <span class="math inline">\(10^{-6}\)</span> as in the paper, the undamped
+update (11) and <span class="math inline">\(A_0 = 0\)</span>. The ratio
+<span class="math inline">\(z^\top s / s^\top s\)</span> tends to zero
+for a zero residual, where the run becomes Gauss-Newton with quadratic
+convergence, and stays above a positive bound where <span class="math inline">\(C\)</span> is positive definite at the minimum,
+where the run is structured BFGS with superlinear convergence. The
+Gauss-Newton branch is <span class="math inline">\(G\)</span> alone,
+since the trust region regularizes; <code>qnHybridShift = TRUE</code>
+adds the term <span class="math inline">\(\rho\, I\)</span> of the
+paper, with the residual norm <span class="math inline">\(\rho\)</span>
+of (16), which keeps the matrix of the line search positive definite
+there. Where <span class="math inline">\(C\)</span> is indefinite at the
+minimum the ratio of a step can stay negative and the run then stays
+Gauss-Newton. <code>"gnssr1"</code> uses (15) with <span class="math inline">\(z_k\)</span> and the test <span class="math inline">\(\lvert z_k^\top s_k \rvert \ge \epsilon\, s_k^\top
+s_k\)</span>, so it takes negative curvature into the correction as
+well. In the trace <code>hessianSource</code> is <code>"gn"</code> for
+the iterations on the Gauss-Newton branch, <code>hybridGN</code> counts
+the steps that chose it.</p>
+</div>
+<div class="section level3">
 <h3 id="seed-and-memory">Seed and memory<a class="anchor" aria-label="anchor" href="#seed-and-memory"></a>
 </h3>
 <p>Far from the optimum <span class="math inline">\(J^\top J\)</span> is
 large and ill-conditioned; BFGS corrects a seed that is wrong by orders
 of magnitude only slowly, SR1 overwrites it. With <code>qnMemory</code>
 <span class="math inline">\(= m &gt; 0\)</span> the approximation is
-rebuilt from <span class="math inline">\(\gamma I\)</span>, <span class="math inline">\(\gamma = y^\top y / s^\top y\)</span> <span class="citation"><a href="#ref-shanno1978matrix">[8]</a></span>, and the
-last <span class="math inline">\(m\)</span> pairs, the curvature of
+rebuilt from <span class="math inline">\(\gamma I\)</span>, <span class="math inline">\(\gamma = y^\top y / s^\top y\)</span> <span class="citation"><a href="#ref-shanno1978matrix">[11]</a></span>, and
+the last <span class="math inline">\(m\)</span> pairs, the curvature of
 L-BFGS <span class="citation"><a href="#ref-nocedal2006numerical">[5]</a></span> as an explicit matrix.
 There is no diagonal preconditioner: on the log scale the
-ill-conditioning of sloppy models lies along rotated directions <span class="citation"><a href="#ref-gutenkunst2007universally">[9]</a></span>.</p>
+ill-conditioning of sloppy models lies along rotated directions <span class="citation"><a href="#ref-gutenkunst2007universally">[12]</a></span>.</p>
 </div>
 <div class="section level3">
 <h3 id="hessian-phases">Hessian phases<a class="anchor" aria-label="anchor" href="#hessian-phases"></a>
 </h3>
 <p>A phase hands over to the next where a value, model, step or
 stagnation stop or the <code>iterlim</code> of the phase would end the
-run; <code>"gradient"</code> ends the run. A handover resets the radius
-to <code>rinit</code> and seeds a quasi-Newton phase with the
-Gauss-Newton Hessian, as in Fides <span class="citation"><a href="#ref-froehlich2022fides">[10]</a></span>.</p>
+run; <code>"gradient"</code> ends the run, and with
+<code>onStop = "end"</code> the value, model, step and stagnation stops
+end it as well. A phase with <code>radiusStall</code> <span class="math inline">\(= n\)</span> also hands over after <span class="math inline">\(n\)</span> consecutive iterations that leave the
+radius unchanged, an accepted step inside the region or one that the
+region at <code>rmax</code> bounds. A handover resets the radius to
+<code>rinit</code>, or keeps it with <code>keepRadius = TRUE</code>, and
+seeds a quasi-Newton phase with the Gauss-Newton Hessian at the iterate
+of the handover. With <code>hessianInit = "tracked"</code> a BFGS phase
+starts instead from a matrix kept over the whole run: the Hessian of the
+first phase at <span class="math inline">\(\theta_0\)</span>, with the
+absolute values of the eigenvalues where it is indefinite, updated by
+(10) and (11) with the pair (9) of every accepted step of the phases
+before, under the same tests as the update in the phase.</p>
+<p>The default of <code><a href="../reference/trust.html">trust()</a></code> is the hybrid method of Fides
+<span class="citation"><a href="#ref-froehlich2022fides">[8]</a></span>:
+Gauss-Newton with <code>radiusStall = 20</code> and
+<code>onStop = "end"</code>, then BFGS, tracked from the Gauss-Newton
+Hessian at <span class="math inline">\(\theta_0\)</span>, at the radius
+of the switch, which happens at most once. Where the residuals at the
+minimum are large, the Gauss-Newton model misses the second term of the
+Hessian, and the Gauss-Newton steps converge linearly, inside the
+region: the radius no longer changes, and the BFGS matrix, which has
+taken up the curvature along the path, takes over. A run that converges
+before 20 iterations at an unchanged radius stays Gauss-Newton
+throughout. The BFGS phase evaluates the gradient forward, so the switch
+costs no evaluation. Multiple shooting, <code>boundary = "clip"</code>
+and the <a href="#sparse-hessians">sparse path</a> run Gauss-Newton
+alone, as <code>hessianMethod = "gn"</code> does.</p>
 </div>
 <div class="section level3">
 <h3 id="sparse-hessians">Sparse Hessians<a class="anchor" aria-label="anchor" href="#sparse-hessians"></a>
@@ -361,15 +479,48 @@ to <span class="math inline">\(-\lambda_{\min}\)</span>.
 factorizations with <span class="math inline">\(m + 2\)</span> solves
 each from the symbolic analysis, with the <span class="math inline">\(4
 n_\theta^3\)</span> of the eigendecomposition.</p>
+<p>A BFGS phase on the sparse path, <code>"bfgs"</code> with
+<code>hessianInit = "gn"</code>, is limited-memory BFGS on the Hessian
+<span class="math inline">\(B_0 = S_0 + U_0 D_0 U_0^\top\)</span> of the
+objective at the start of the phase. It keeps the last <span class="math inline">\(m\)</span> pairs (9), <span class="math inline">\(m\)</span> = <code>qnMemory</code> or 10 where
+that is 0, each damped by (10) against the model it updates and skipped
+by the same tests as the dense update. In the compact representation
+<span class="citation"><a href="#ref-byrd1994representations">[13]</a></span></p>
+<p><span class="math display">\[B = B_0 - W M^{-1} W^\top, \qquad W =
+(B_0 S,\ Y), \qquad
+M = \begin{pmatrix} S^\top B_0 S &amp; L \\ L^\top &amp; -E
+\end{pmatrix}, \tag{18}\]</span></p>
+<p><span class="math inline">\(S\)</span> and <span class="math inline">\(Y\)</span> hold the pairs as columns, <span class="math inline">\(L\)</span> the strict lower triangle of <span class="math inline">\(S^\top Y\)</span> and <span class="math inline">\(E\)</span> the diagonal. With <span class="math inline">\(M = P \Theta P^\top\)</span> the correction joins
+the low-rank part as the <span class="math inline">\(2m\)</span> columns
+of <span class="math inline">\(W P\)</span> with the diagonal <span class="math inline">\(-\Theta^{-1}\)</span>, which has entries of both
+signs, so the sparse factor is that of <span class="math inline">\(S_0\)</span> throughout the phase. <span class="math inline">\(B_0\)</span> stays fixed: the phase evaluates
+value and gradient only, and a Hessian at every iterate would cost what
+the phase saves. A BFGS update keeps the inertia of the matrix it starts
+from, so an indefinite <span class="math inline">\(B_0\)</span>, the
+Gauss-Newton Hessian of an error model that depends on the parameters
+for one, would keep the directions of negative curvature for the whole
+phase. Where the factorization of <span class="math inline">\(B_0\)</span> shows it is not positive definite,
+<span class="math inline">\(B_0\)</span> takes <span class="math inline">\(\tau I\)</span> added, <span class="math inline">\(\tau\)</span> the smallest of <span class="math inline">\(10^{-8}, 10^{-7}, \ldots\)</span> times a bound of
+<span class="math inline">\(\lVert B_0 \rVert\)</span> that makes it
+definite, refined by bisection <span class="citation"><a href="#ref-nocedal2006numerical">[5]</a>, Algorithm 3.3</span>; the
+dense phase takes the absolute values of the eigenvalues instead. On a
+simulated alignment of 200 gels with 721 parameters
+(<code>bench/sparse/alignment.R</code>), 20 Gauss-Newton iterations
+followed by the limited-memory phase reach the optimum of Gauss-Newton
+from every start, at 20 to 70 times the median time of Gauss-Newton:
+with <span class="math inline">\(B_0\)</span> fixed the phase converges
+linearly, and every step solves with <span class="math inline">\(2m\)</span> more low-rank columns. Gauss-Newton
+stays the source of a sparse fit; the BFGS phase is for objectives whose
+Gauss-Newton Hessian misses curvature that matters.</p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="l1-penalties">L1 penalties<a class="anchor" aria-label="anchor" href="#l1-penalties"></a>
 </h2>
 <p><code><a href="../reference/trust.html">trustL1()</a></code> minimizes the objective plus an L1 penalty on
-some of the parameters <span class="citation"><a href="#ref-tibshirani1996regression">[11]</a></span>,</p>
+some of the parameters <span class="citation"><a href="#ref-tibshirani1996regression">[14]</a></span>,</p>
 <p><span class="math display">\[\mathcal{J}(\theta) + \sum_{i \in P}
-\lambda_i \lvert \theta_i - \mu_i \rvert , \tag{13}\]</span></p>
+\lambda_i \lvert \theta_i - \mu_i \rvert , \tag{19}\]</span></p>
 <p>with penalized parameters <span class="math inline">\(P\)</span>,
 references <span class="math inline">\(\mu_i\)</span> and strengths
 <span class="math inline">\(\lambda_i\)</span>. <code><a href="../reference/trust.html">trustL1()</a></code>
@@ -379,15 +530,15 @@ parameter on the kink is removed from (1) while <span class="math inline">\(\lve
 onto <span class="math inline">\(\mu_i\)</span>, so zero differences are
 exact. Further penalties are a one-sided one,</p>
 <p><span class="math display">\[\lambda_i \max(0,\, \mu_i - \theta_i) ,
-\tag{14}\]</span></p>
+\tag{20}\]</span></p>
 <p>which keeps a parameter on the kink while <span class="math inline">\(0 \le \partial \mathcal{J} / \partial \theta_i \le
 \lambda_i\)</span>; a gate <span class="math inline">\(\lambda_i
 (\theta_i - \mu_i)\)</span> with <span class="math inline">\(\theta_i
 \ge \mu_i\)</span>, which keeps it there while <span class="math inline">\(\partial \mathcal{J} / \partial \theta_i \ge
--\lambda_i\)</span>; and a fused block <span class="math inline">\(B\)</span>, the clustered lasso <span class="citation"><a href="#ref-hauber2023uncovering">[12]</a></span> in
+-\lambda_i\)</span>; and a fused block <span class="math inline">\(B\)</span>, the clustered lasso <span class="citation"><a href="#ref-hauber2023uncovering">[15]</a></span> in
 the L1 form (Hauber et al. favor the exponent 0.8),</p>
 <p><span class="math display">\[\lambda \sum_{p &lt; q \in B} w_{pq}\,
-\lvert \theta_p - \theta_q \rvert , \tag{15}\]</span></p>
+\lvert \theta_p - \theta_q \rvert , \tag{21}\]</span></p>
 <p>optionally with an anchor; equal parameters move as one until the
 data split them.</p>
 </div>
@@ -433,22 +584,51 @@ ten, from <code>sensitivities.R</code>:</p>
 <code class="sourceCode R"><span><span class="va">timing</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="va">oppelt</span>, <span class="st">"results"</span>, <span class="st">"sensitivities.rds"</span><span class="op">)</span><span class="op">)</span><span class="op">$</span><span class="va">timing</span></span>
 <span><span class="va">timing</span></span>
 <span><span class="co">#&gt;           value         forward         reverse forward-reverse </span></span>
-<span><span class="co">#&gt;           0.007           0.126           0.019           0.873</span></span></code></pre></div>
-<p><code>optimizers.R</code> fits from the same 100 prior draws with
-Gauss-Newton, BFGS and SR1 on the reverse gradient from the identity,
-the exact Hessian, and 20 Gauss-Newton iterations followed by BFGS:</p>
+<span><span class="co">#&gt;           0.007           0.185           0.024           1.014</span></span></code></pre></div>
+<p><code>optimizers.R</code> fits from the same 100 prior draws with the
+default of <code><a href="../reference/trust.html">trust()</a></code>, Gauss-Newton, BFGS and SR1 on the
+reverse gradient from the identity, the exact Hessian, 20 Gauss-Newton
+iterations followed by BFGS, and the structured methods of <a href="#structured-secant-updates">Structured secant updates</a>, with
+and without residual scaling and the shift of the hybrids; a draw
+without a stable resting state is replaced by one with, and a task runs
+at most 30 minutes:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># 100 starts drawn from the prior, as in fit.R. BFGS and SR1 take the reverse gradient and start</span></span>
-<span><span class="co"># from the identity; the BFGS phase after Gauss-Newton starts from the Gauss-Newton Hessian</span></span>
+<code class="sourceCode R"><span><span class="co"># 100 starts drawn from the prior, as in fit.R; a start without a stable resting state is replaced</span></span>
+<span><span class="co"># by the next one of a second draw, as mstrust() draws anew. BFGS and SR1 take the reverse gradient</span></span>
+<span><span class="co"># and start from the identity; the BFGS phase after Gauss-Newton, after 20 iterations or once the</span></span>
+<span><span class="co"># radius stays unchanged, starts from the Gauss-Newton Hessian; the structured methods add a learned correction to the Gauss-Newton Hessian at every</span></span>
+<span><span class="co"># iterate, scaled with the residual norm or, on the Gauss-Newton branch of a hybrid, shifted by it</span></span>
 <span><span class="va">free</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">mu</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gauge</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="va">starts</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/msParframe.html">msParframe</a></span><span class="op">(</span><span class="va">mu</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, n <span class="op">=</span> <span class="fl">100</span>, seed <span class="op">=</span> <span class="fl">2</span>, sd <span class="op">=</span> <span class="va">sigma</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, keepfirst <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="va">draw</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">seed</span><span class="op">)</span> <span class="fu"><a href="../reference/msParframe.html">msParframe</a></span><span class="op">(</span><span class="va">mu</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, n <span class="op">=</span> <span class="fl">100</span>, seed <span class="op">=</span> <span class="va">seed</span>, sd <span class="op">=</span> <span class="va">sigma</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, keepfirst <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
+<span><span class="va">feasible</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">p</span><span class="op">)</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/class.html" class="external-link">inherits</a></span><span class="op">(</span><span class="kw"><a href="https://rdrr.io/r/base/try.html" class="external-link">try</a></span><span class="op">(</span><span class="fu">objR</span><span class="op">(</span><span class="va">p</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, deriv <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span>, silent <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>                                  <span class="st">"try-error"</span><span class="op">)</span></span>
+<span><span class="va">starts</span> <span class="op">&lt;-</span> <span class="fu">draw</span><span class="op">(</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">spare</span> <span class="op">&lt;-</span> <span class="fu">draw</span><span class="op">(</span><span class="fl">3</span><span class="op">)</span></span>
+<span><span class="va">spare</span> <span class="op">&lt;-</span> <span class="va">spare</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">spare</span><span class="op">)</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span></span>
+<span>  <span class="fu">feasible</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">spare</span><span class="op">[</span><span class="va">i</span>, <span class="va">free</span><span class="op">]</span><span class="op">)</span>, <span class="va">free</span><span class="op">)</span><span class="op">)</span>, <span class="cn">TRUE</span><span class="op">)</span>, <span class="op">]</span></span>
+<span><span class="va">bad</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/which.html" class="external-link">which</a></span><span class="op">(</span><span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">starts</span><span class="op">)</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span></span>
+<span>  <span class="fu">feasible</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">starts</span><span class="op">[</span><span class="va">i</span>, <span class="va">free</span><span class="op">]</span><span class="op">)</span>, <span class="va">free</span><span class="op">)</span><span class="op">)</span>, <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">starts</span><span class="op">[</span><span class="va">bad</span>, <span class="op">]</span> <span class="op">&lt;-</span> <span class="va">spare</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_along</a></span><span class="op">(</span><span class="va">bad</span><span class="op">)</span>, <span class="op">]</span></span>
 <span><span class="va">methods</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>  `default (Fides hybrid)` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  `Gauss-Newton` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span><span class="op">)</span>,</span>
 <span>  BFGS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"bfgs"</span>, sweep <span class="op">=</span> <span class="st">"reverse"</span>, qnControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianInit <span class="op">=</span> <span class="st">"identity"</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  SR1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"sr1"</span>, sweep <span class="op">=</span> <span class="st">"reverse"</span>, qnControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianInit <span class="op">=</span> <span class="st">"identity"</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  exact <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"exact"</span>, sweep <span class="op">=</span> <span class="st">"reverse"</span><span class="op">)</span>,</span>
 <span>  `GN, then BFGS` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>phases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span>, iterlim <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span>
-<span>                                       <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"bfgs"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span>                                       <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"bfgs"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  `GN, then BFGS at stall 25` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>phases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span>, radiusStall <span class="op">=</span> <span class="fl">25</span><span class="op">)</span>,</span>
+<span>                                                   <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"bfgs"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  `GN, then BFGS at stall 50` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>phases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span>, radiusStall <span class="op">=</span> <span class="fl">50</span><span class="op">)</span>,</span>
+<span>                                                   <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"bfgs"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  SBFGS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"sbfgs"</span><span class="op">)</span>,</span>
+<span>  `SBFGS, scaled` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"sbfgs"</span>, qnControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>qnScaling <span class="op">=</span> <span class="st">"residual"</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  SSR1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"ssr1"</span><span class="op">)</span>,</span>
+<span>  `SSR1, scaled` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"ssr1"</span>, qnControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>qnScaling <span class="op">=</span> <span class="st">"residual"</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  GNSBFGS <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gnsbfgs"</span><span class="op">)</span>,</span>
+<span>  `GNSBFGS, shifted` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gnsbfgs"</span>, qnControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>qnHybridShift <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  GNSSR1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gnssr1"</span><span class="op">)</span>,</span>
+<span>  `GNSSR1, shifted` <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gnssr1"</span>, qnControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>qnHybridShift <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co"># one fit of start `i` by method `m`, with the wall time</span></span>
 <span><span class="va">fitOne</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">m</span>, <span class="va">i</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">t0</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html" class="external-link">proc.time</a></span><span class="op">(</span><span class="op">)</span><span class="op">[[</span><span class="st">"elapsed"</span><span class="op">]</span><span class="op">]</span></span>
@@ -458,6 +638,7 @@ the exact Hessian, and 20 Gauss-Newton iterations followed by BFGS:</p>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>method <span class="op">=</span> <span class="va">m</span>, start <span class="op">=</span> <span class="va">i</span>, value <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">)</span> <span class="cn">NA_real_</span> <span class="kw">else</span> <span class="va">fit</span><span class="op">$</span><span class="va">value</span>,</span>
 <span>             converged <span class="op">=</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span> <span class="op">&amp;&amp;</span> <span class="fu"><a href="https://rdrr.io/r/base/Logic.html" class="external-link">isTRUE</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">converged</span><span class="op">)</span>,</span>
 <span>             iterations <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">)</span> <span class="cn">NA_integer_</span> <span class="kw">else</span> <span class="fu"><a href="https://rdrr.io/r/base/integer.html" class="external-link">as.integer</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">iterations</span><span class="op">)</span>,</span>
+<span>             stopReason <span class="op">=</span> <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span><span class="op">)</span> <span class="cn">NA_character_</span> <span class="kw">else</span> <span class="va">fit</span><span class="op">$</span><span class="va">stopReason</span>,</span>
 <span>             elapsed <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/proc.time.html" class="external-link">proc.time</a></span><span class="op">(</span><span class="op">)</span><span class="op">[[</span><span class="st">"elapsed"</span><span class="op">]</span><span class="op">]</span> <span class="op">-</span> <span class="va">t0</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span><span class="va">tasks</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/expand.grid.html" class="external-link">expand.grid</a></span><span class="op">(</span>method <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">methods</span><span class="op">)</span>, start <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">starts</span><span class="op">)</span><span class="op">)</span>, stringsAsFactors <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
@@ -474,30 +655,143 @@ the exact Hessian, and 20 Gauss-Newton iterations followed by BFGS:</p>
 <span>  iterlim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">d</span><span class="op">$</span><span class="va">iterations</span> <span class="op">&gt;=</span> <span class="fl">1000</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>, seconds <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/median.html" class="external-link">median</a></span><span class="op">(</span><span class="va">d</span><span class="op">$</span><span class="va">elapsed</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>, <span class="fl">1</span><span class="op">)</span>,</span>
 <span>  secondsPerHit <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">d</span><span class="op">$</span><span class="va">elapsed</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">d</span><span class="op">$</span><span class="va">value</span> <span class="op">&lt;</span> <span class="va">top</span> <span class="op">+</span> <span class="fl">5</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">summary</span></span>
-<span><span class="co">#&gt;               starts failed converged hits iterations iterlim seconds</span></span>
-<span><span class="co">#&gt; Gauss-Newton     100      2        70   20      358.0      25    28.8</span></span>
-<span><span class="co">#&gt; BFGS             100      2        86   14      662.0       9    11.5</span></span>
-<span><span class="co">#&gt; SR1              100      2        59   13      903.5      36    14.7</span></span>
-<span><span class="co">#&gt; exact            100      2        82   11      281.0      14   138.2</span></span>
-<span><span class="co">#&gt; GN, then BFGS    100      2        49   11      807.0      45    13.8</span></span>
-<span><span class="co">#&gt;               secondsPerHit</span></span>
-<span><span class="co">#&gt; Gauss-Newton            239</span></span>
-<span><span class="co">#&gt; BFGS                     80</span></span>
-<span><span class="co">#&gt; SR1                     109</span></span>
-<span><span class="co">#&gt; exact                  3021</span></span>
-<span><span class="co">#&gt; GN, then BFGS           126</span></span></code></pre></div>
+<span><span class="co">#&gt;                           starts failed converged hits iterations iterlim</span></span>
+<span><span class="co">#&gt; default (Fides hybrid)       100      0        92   21      281.5       2</span></span>
+<span><span class="co">#&gt; Gauss-Newton                 100      0        84   21      279.5      15</span></span>
+<span><span class="co">#&gt; BFGS                         100      0        85   17      684.5       8</span></span>
+<span><span class="co">#&gt; SR1                          100      0        48   15      912.5      40</span></span>
+<span><span class="co">#&gt; exact                        100      2        97   15      295.0       1</span></span>
+<span><span class="co">#&gt; GN, then BFGS                100      0        91   21      614.0       1</span></span>
+<span><span class="co">#&gt; GN, then BFGS at stall 25    100      0        87   21      272.0       3</span></span>
+<span><span class="co">#&gt; GN, then BFGS at stall 50    100      0        85   21      274.5       2</span></span>
+<span><span class="co">#&gt; SBFGS                        100      0        83   18      689.5       9</span></span>
+<span><span class="co">#&gt; SBFGS, scaled                100      0        86   17      584.5       5</span></span>
+<span><span class="co">#&gt; SSR1                         100      0        92   19      414.0       2</span></span>
+<span><span class="co">#&gt; SSR1, scaled                 100      1        95   25      355.0       0</span></span>
+<span><span class="co">#&gt; GNSBFGS                      100      0        88   20      205.0       0</span></span>
+<span><span class="co">#&gt; GNSBFGS, shifted             100      0        10    1     1000.0      89</span></span>
+<span><span class="co">#&gt; GNSSR1                       100      0        88   21      431.0       1</span></span>
+<span><span class="co">#&gt; GNSSR1, shifted              100      0        88   21      431.0       1</span></span>
+<span><span class="co">#&gt;                           seconds secondsPerHit</span></span>
+<span><span class="co">#&gt; default (Fides hybrid)       25.0           238</span></span>
+<span><span class="co">#&gt; Gauss-Newton                 24.5           222</span></span>
+<span><span class="co">#&gt; BFGS                         13.0            91</span></span>
+<span><span class="co">#&gt; SR1                          16.7           111</span></span>
+<span><span class="co">#&gt; exact                       164.9          1247</span></span>
+<span><span class="co">#&gt; GN, then BFGS                12.7            64</span></span>
+<span><span class="co">#&gt; GN, then BFGS at stall 25    18.6           106</span></span>
+<span><span class="co">#&gt; GN, then BFGS at stall 50    19.7           114</span></span>
+<span><span class="co">#&gt; SBFGS                        61.2           706</span></span>
+<span><span class="co">#&gt; SBFGS, scaled                47.6           431</span></span>
+<span><span class="co">#&gt; SSR1                         34.5           361</span></span>
+<span><span class="co">#&gt; SSR1, scaled                 30.0           161</span></span>
+<span><span class="co">#&gt; GNSBFGS                      17.6           154</span></span>
+<span><span class="co">#&gt; GNSBFGS, shifted             55.8          6547</span></span>
+<span><span class="co">#&gt; GNSSR1                       38.8           212</span></span>
+<span><span class="co">#&gt; GNSSR1, shifted              38.3           209</span></span></code></pre></div>
 <p>Medians over starts; a hit ends within 5 of the best value;
 <code>iterlim</code> counts the runs stopped by the iteration limit;
-<code>failed</code> counts starts without result:</p>
+<code>failed</code> counts runs without result, which the time limit of
+a task ended. The stops by method, with a stagnation that ends away from
+a stationary point of the model counted apart:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">stop</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/ifelse.html" class="external-link">ifelse</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">stopReason</span><span class="op">)</span>, <span class="st">"failed"</span>, <span class="va">opt</span><span class="op">$</span><span class="va">stopReason</span><span class="op">)</span></span>
+<span><span class="va">stop</span><span class="op">[</span><span class="va">stop</span> <span class="op">==</span> <span class="st">"stagnation"</span> <span class="op">&amp;</span> <span class="op">!</span><span class="va">opt</span><span class="op">$</span><span class="va">converged</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"stagnation, not converged"</span></span>
+<span><span class="va">stops</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"gradient"</span>, <span class="st">"fvalue"</span>, <span class="st">"preddiff"</span>, <span class="st">"stagnation"</span>, <span class="st">"stagnation, not converged"</span>, <span class="st">"radius"</span>,</span>
+<span>           <span class="st">"iterlim"</span>, <span class="st">"failed"</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">method</span>, <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">stop</span>, <span class="va">stops</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;                            </span></span>
+<span><span class="co">#&gt;                             gradient fvalue preddiff stagnation</span></span>
+<span><span class="co">#&gt;   default (Fides hybrid)          23     51        3         15</span></span>
+<span><span class="co">#&gt;   Gauss-Newton                     0     66        4         14</span></span>
+<span><span class="co">#&gt;   BFGS                            30      0        0         55</span></span>
+<span><span class="co">#&gt;   SR1                             22      0        0         26</span></span>
+<span><span class="co">#&gt;   exact                            7     71       10          9</span></span>
+<span><span class="co">#&gt;   GN, then BFGS                   34      0        0         57</span></span>
+<span><span class="co">#&gt;   GN, then BFGS at stall 25       54      0        0         33</span></span>
+<span><span class="co">#&gt;   GN, then BFGS at stall 50       52      0        0         33</span></span>
+<span><span class="co">#&gt;   SBFGS                           66      0        0         17</span></span>
+<span><span class="co">#&gt;   SBFGS, scaled                   72      0        0         14</span></span>
+<span><span class="co">#&gt;   SSR1                            84      0        0          8</span></span>
+<span><span class="co">#&gt;   SSR1, scaled                    92      0        0          3</span></span>
+<span><span class="co">#&gt;   GNSBFGS                         78      0        0         10</span></span>
+<span><span class="co">#&gt;   GNSBFGS, shifted                 9      0        0          1</span></span>
+<span><span class="co">#&gt;   GNSSR1                          82      0        0          6</span></span>
+<span><span class="co">#&gt;   GNSSR1, shifted                 82      0        0          6</span></span>
+<span><span class="co">#&gt;                            </span></span>
+<span><span class="co">#&gt;                             stagnation, not converged radius iterlim failed</span></span>
+<span><span class="co">#&gt;   default (Fides hybrid)                            6      0       2      0</span></span>
+<span><span class="co">#&gt;   Gauss-Newton                                      1      0      15      0</span></span>
+<span><span class="co">#&gt;   BFGS                                              7      0       8      0</span></span>
+<span><span class="co">#&gt;   SR1                                              12      0      40      0</span></span>
+<span><span class="co">#&gt;   exact                                             0      0       1      2</span></span>
+<span><span class="co">#&gt;   GN, then BFGS                                     7      1       1      0</span></span>
+<span><span class="co">#&gt;   GN, then BFGS at stall 25                        10      0       3      0</span></span>
+<span><span class="co">#&gt;   GN, then BFGS at stall 50                        12      1       2      0</span></span>
+<span><span class="co">#&gt;   SBFGS                                             7      1       9      0</span></span>
+<span><span class="co">#&gt;   SBFGS, scaled                                     9      0       5      0</span></span>
+<span><span class="co">#&gt;   SSR1                                              5      1       2      0</span></span>
+<span><span class="co">#&gt;   SSR1, scaled                                      4      0       0      1</span></span>
+<span><span class="co">#&gt;   GNSBFGS                                          12      0       0      0</span></span>
+<span><span class="co">#&gt;   GNSBFGS, shifted                                  1      0      89      0</span></span>
+<span><span class="co">#&gt;   GNSSR1                                           10      0       1      0</span></span>
+<span><span class="co">#&gt;   GNSSR1, shifted                                  10      0       1      0</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotValues.html">plotValues</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/split.html" class="external-link">split</a></span><span class="op">(</span><span class="va">opt</span>, <span class="va">opt</span><span class="op">$</span><span class="va">method</span><span class="op">)</span>, pseudoLog <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">+</span> <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"bottom"</span><span class="op">)</span></span></code></pre></div>
-<p><img src="methods-trust_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
-<p>A reverse gradient costs about 1/7 of the forward sensitivities, an
-exact Hessian by forward over reverse about 7 times. Gauss-Newton
-reaches the lowest plateaus most often, BFGS converges most often, and
-BFGS needs the least time per hit. Gauss-Newton followed by BFGS stops
-at the iteration limit in 45 runs: the BFGS phase starts from the
-Gauss-Newton Hessian far from the optimum (<a href="#seed-and-memory">Seed and memory</a>).</p>
+<p><img src="methods-trust_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="1056"></p>
+<p>A reverse gradient costs about 1/8 of the forward sensitivities, an
+exact Hessian by forward over reverse about 5 times. SSR1, scaled
+reaches the lowest plateaus most often, exact converges most often, and
+GN, then BFGS needs the least time per hit.</p>
+<p>The switch to BFGS once the radius stays unchanged for 25 or 50
+iterations (<a href="#hessian-phases">Hessian phases</a>) reaches as
+many low plateaus as the switch after 20 Gauss-Newton iterations, at
+almost twice the time per hit: on this objective the radius seldom stays
+unchanged that long, and the Gauss-Newton phase, with forward
+sensitivities on every step, does most of the descent.</p>
+<p>The default, the hybrid of Fides with the switch at 20 iterations of
+unchanged radius, converges from more starts than Gauss-Newton and
+reaches as many low plateaus, at about the same time per hit. Half of
+the default runs end in the Gauss-Newton phase on the value stop, which
+<code>onStop = "end"</code> makes final, and the BFGS phase takes the
+forward gradient of the Gauss-Newton phase.</p>
+<p>The structured methods spend a forward Gauss-Newton Hessian on every
+step. <code>"gnsbfgs"</code> needs the fewest iterations of all methods,
+and SR1 on the residual-scaled correction converges from more starts
+than any method but the exact Hessian. The shift of the hybrids by <span class="math inline">\(\rho\, I\)</span> helps nowhere here: far from the
+minimum <span class="math inline">\(\rho\)</span> is large, the shifted
+Gauss-Newton branch of <code>"gnsbfgs"</code> takes short steps, and
+most runs end at the iteration limit; <code>"gnssr1"</code> ends where
+it ends without the shift.</p>
+<p>The runs that do not converge have three causes:</p>
+<ul>
+<li>The Gauss-Newton runs at the iteration limit end on plateaus 100 to
+1000 above the best value, with a slow oscillating mode at the onset of
+the stability ramp. There the Gauss-Newton model of the data term, which
+lacks the curvature of the residuals, predicts about 1.5 times the
+decrease that follows: steps are accepted, the radius stays between
+<code>1e-4</code> and <code>5e-3</code>, and the value falls by about
+<code>2e-4</code> per step. The exact Hessian and the BFGS phase after
+20 Gauss-Newton iterations converge from 13 of these 15 starts.</li>
+<li>SR1 from the identity builds the curvature of a Hessian whose
+eigenvalues span six orders of magnitude over hundreds of rejected and
+accepted steps; a converged SR1 run takes a median of 797 iterations, so
+<code>iterlim = 1000</code> ends the slower runs before
+convergence.</li>
+<li>On poor plateaus the value of the Oppelt objective scatters by about
+<code>2e-4</code> with the step-size control of the ODE solver, above
+<code>ftol</code>. A run there ends on stagnation, five rejected steps
+in a row, and counts as converged only where the full Newton step of the
+model predicts at most <code>mtol</code> (<a href="#termination-criteria">Termination criteria</a>).</li>
+</ul>
+<p>The stability term rises on a ramp a tenth of the inverse time span
+of the data wide, about <code>2.8e-4</code> per minute
+(<code>model.R</code>). On a ramp of <span class="math inline">\(10^{-6}\)</span> times the largest eigenvalue
+modulus, about <code>2e-5</code> here, the model of a step sees the
+boundary only after the step crosses it, and the runs creep along the
+boundary between rejected steps (<a href="methods-steady-states.html#stability">Methods &gt; Steady
+states</a>). The Hessian of the stability term is the Gauss-Newton one
+for every source, also for the exact Hessian.</p>
 </div>
 <div class="section level2">
 <h2 id="stored-results">Stored results<a class="anchor" aria-label="anchor" href="#stored-results"></a>
@@ -521,10 +815,9 @@ project.</li>
 <div class="csl-left-margin">[1] </div>
 <div class="csl-right-inline">D.
 Kaschek, W. Mader, M. Fehling-Kaschek, M. Rosenblatt, and J. Timmer,
-<span>“<span class="nocase">dMod</span>: <span>Efficient</span>
-parameter estimation and uncertainty analysis for dynamic
-models,”</span> <em>Journal of Statistical Software</em>, vol. 88, no.
-10, pp. 1–32, 2019, doi: <a href="https://doi.org/10.18637/jss.v088.i10" class="external-link">10.18637/jss.v088.i10</a>.</div>
+<span>“Dynamic modeling, parameter estimation, and uncertainty analysis
+in <span>R</span>,”</span> <em>Journal of Statistical Software</em>,
+vol. 88, no. 10, pp. 1–32, 2019, doi: <a href="https://doi.org/10.18637/jss.v088.i10" class="external-link">10.18637/jss.v088.i10</a>.</div>
 </div>
 <div id="ref-more1983computing" class="csl-entry">
 <div class="csl-left-margin">[2] </div>
@@ -540,65 +833,93 @@ Zhang and W. W. Hager, <span>“A nonmonotone line search technique and
 its application to unconstrained optimization,”</span> <em>SIAM Journal
 on Optimization</em>, vol. 14, no. 4, pp. 1043–1056, 2004, doi: <a href="https://doi.org/10.1137/S1052623403428208" class="external-link">10.1137/S1052623403428208</a>.</div>
 </div>
-<div id="ref-coleman1996interior" class="csl-entry">
+<div id="ref-coleman1994convergence" class="csl-entry">
 <div class="csl-left-margin">[4] </div>
 <div class="csl-right-inline">T.
-F. Coleman and Y. Li, <span>“An interior trust region approach for
-nonlinear minimization subject to bounds,”</span> <em>SIAM Journal on
-Optimization</em>, vol. 6, no. 2, pp. 418–445, 1996, doi: <a href="https://doi.org/10.1137/0806023" class="external-link">10.1137/0806023</a>.</div>
+F. Coleman and Y. Li, <span>“On the convergence of interior-reflective
+<span>Newton</span> methods for nonlinear minimization subject to
+bounds,”</span> <em>Mathematical Programming</em>, vol. 67, no. 1–3, pp.
+189–224, 1994, doi: <a href="https://doi.org/10.1007/BF01582221" class="external-link">10.1007/BF01582221</a>.</div>
 </div>
 <div id="ref-nocedal2006numerical" class="csl-entry">
 <div class="csl-left-margin">[5] </div>
 <div class="csl-right-inline">J.
-Nocedal and S. J. Wright, <em>Numerical optimization</em>, 2nd ed.
-Springer, 2006. doi: <a href="https://doi.org/10.1007/978-0-387-40065-5" class="external-link">10.1007/978-0-387-40065-5</a>.</div>
+Nocedal and S. J. Wright, <em>Numerical optimization</em>, 2nd ed. in
+Springer series in operations research and financial engineering. New
+York: Springer, 2006. doi: <a href="https://doi.org/10.1007/978-0-387-40065-5" class="external-link">10.1007/978-0-387-40065-5</a>.</div>
 </div>
 <div id="ref-powell1978fast" class="csl-entry">
 <div class="csl-left-margin">[6] </div>
 <div class="csl-right-inline">M.
 J. D. Powell, <span>“A fast algorithm for nonlinearly constrained
-optimization calculations,”</span> <em>Lecture Notes in
-Mathematics</em>, vol. 630, pp. 144–157, 1978, doi: <a href="https://doi.org/10.1007/BFb0067703" class="external-link">10.1007/BFb0067703</a>.</div>
+optimization calculations,”</span> in <em>Numerical analysis</em>, vol.
+630, G. A. Watson, Ed., in Lecture notes in mathematics, vol. 630.,
+Berlin, Heidelberg: Springer, 1978, pp. 144–157. doi: <a href="https://doi.org/10.1007/BFb0067703" class="external-link">10.1007/BFb0067703</a>.</div>
 </div>
-<div id="ref-li2001global" class="csl-entry">
+<div id="ref-dennis1989convergence" class="csl-entry">
 <div class="csl-left-margin">[7] </div>
-<div class="csl-right-inline">D.-H. Li and M. Fukushima, <span>“On the global
-convergence of the <span>BFGS</span> method for nonconvex unconstrained
-optimization problems,”</span> <em>SIAM Journal on Optimization</em>,
-vol. 11, no. 4, pp. 1054–1064, 2001, doi: <a href="https://doi.org/10.1137/S1052623499354242" class="external-link">10.1137/S1052623499354242</a>.</div>
-</div>
-<div id="ref-shanno1978matrix" class="csl-entry">
-<div class="csl-left-margin">[8] </div>
-<div class="csl-right-inline">D.
-F. Shanno and K.-H. Phua, <span>“Matrix conditioning and nonlinear
-optimization,”</span> <em>Mathematical Programming</em>, vol. 14, no. 1,
-pp. 149–160, 1978, doi: <a href="https://doi.org/10.1007/BF01588962" class="external-link">10.1007/BF01588962</a>.</div>
-</div>
-<div id="ref-gutenkunst2007universally" class="csl-entry">
-<div class="csl-left-margin">[9] </div>
-<div class="csl-right-inline">R.
-N. Gutenkunst, J. J. Waterfall, F. P. Casey, K. S. Brown, C. R. Myers,
-and J. P. Sethna, <span>“Universally sloppy parameter sensitivities in
-systems biology models,”</span> <em>PLOS Computational Biology</em>,
-vol. 3, no. 10, p. e189, 2007, doi: <a href="https://doi.org/10.1371/journal.pcbi.0030189" class="external-link">10.1371/journal.pcbi.0030189</a>.</div>
+<div class="csl-right-inline">J.
+E. Dennis, H. J. Martínez, and R. A. Tapia, <span>“Convergence theory
+for the structured <span>BFGS</span> secant method with an application
+to nonlinear least squares,”</span> <em>Journal of Optimization Theory
+and Applications</em>, vol. 61, no. 2, pp. 161–178, 1989, doi: <a href="https://doi.org/10.1007/BF00962795" class="external-link">10.1007/BF00962795</a>.</div>
 </div>
 <div id="ref-froehlich2022fides" class="csl-entry">
-<div class="csl-left-margin">[10] </div>
+<div class="csl-left-margin">[8] </div>
 <div class="csl-right-inline">F.
 Fröhlich and P. K. Sorger, <span>“Fides: <span>Reliable</span>
 trust-region optimization for parameter estimation of <span>ODE</span>
 models,”</span> <em>PLOS Computational Biology</em>, vol. 18, no. 7, p.
 e1010322, 2022, doi: <a href="https://doi.org/10.1371/journal.pcbi.1010322" class="external-link">10.1371/journal.pcbi.1010322</a>.</div>
 </div>
-<div id="ref-tibshirani1996regression" class="csl-entry">
+<div id="ref-yabe1998quadratic" class="csl-entry">
+<div class="csl-left-margin">[9] </div>
+<div class="csl-right-inline">H.
+Yabe and H. Ogasawara, <span>“Quadratic and superlinear convergence of
+the <span>Huschens</span> method for nonlinear least squares
+problems,”</span> <em>Computational Optimization and Applications</em>,
+vol. 10, no. 1, pp. 79–103, 1998, doi: <a href="https://doi.org/10.1023/A:1018391917880" class="external-link">10.1023/A:1018391917880</a>.</div>
+</div>
+<div id="ref-zhou2010global" class="csl-entry">
+<div class="csl-left-margin">[10] </div>
+<div class="csl-right-inline">W.
+Zhou and X. Chen, <span>“Global convergence of a new hybrid
+<span>Gauss-Newton</span> structured <span>BFGS</span> method for
+nonlinear least squares problems,”</span> <em>SIAM Journal on
+Optimization</em>, vol. 20, no. 5, pp. 2422–2441, 2010, doi: <a href="https://doi.org/10.1137/090748470" class="external-link">10.1137/090748470</a>.</div>
+</div>
+<div id="ref-shanno1978matrix" class="csl-entry">
 <div class="csl-left-margin">[11] </div>
+<div class="csl-right-inline">D.
+F. Shanno and K.-H. Phua, <span>“Matrix conditioning and nonlinear
+optimization,”</span> <em>Mathematical Programming</em>, vol. 14, no. 1,
+pp. 149–160, 1978, doi: <a href="https://doi.org/10.1007/BF01588962" class="external-link">10.1007/BF01588962</a>.</div>
+</div>
+<div id="ref-gutenkunst2007universally" class="csl-entry">
+<div class="csl-left-margin">[12] </div>
+<div class="csl-right-inline">R.
+N. Gutenkunst, J. J. Waterfall, F. P. Casey, K. S. Brown, C. R. Myers,
+and J. P. Sethna, <span>“Universally sloppy parameter sensitivities in
+systems biology models,”</span> <em>PLOS Computational Biology</em>,
+vol. 3, no. 10, p. e189, 2007, doi: <a href="https://doi.org/10.1371/journal.pcbi.0030189" class="external-link">10.1371/journal.pcbi.0030189</a>.</div>
+</div>
+<div id="ref-byrd1994representations" class="csl-entry">
+<div class="csl-left-margin">[13] </div>
+<div class="csl-right-inline">R.
+H. Byrd, J. Nocedal, and R. B. Schnabel, <span>“Representations of
+quasi-<span>Newton</span> matrices and their use in limited memory
+methods,”</span> <em>Mathematical Programming</em>, vol. 63, no. 1–3,
+pp. 129–156, 1994, doi: <a href="https://doi.org/10.1007/BF01582063" class="external-link">10.1007/BF01582063</a>.</div>
+</div>
+<div id="ref-tibshirani1996regression" class="csl-entry">
+<div class="csl-left-margin">[14] </div>
 <div class="csl-right-inline">R.
 Tibshirani, <span>“Regression shrinkage and selection via the
 lasso,”</span> <em>Journal of the Royal Statistical Society: Series
 B</em>, vol. 58, no. 1, pp. 267–288, 1996, doi: <a href="https://doi.org/10.1111/j.2517-6161.1996.tb02080.x" class="external-link">10.1111/j.2517-6161.1996.tb02080.x</a>.</div>
 </div>
 <div id="ref-hauber2023uncovering" class="csl-entry">
-<div class="csl-left-margin">[12] </div>
+<div class="csl-left-margin">[15] </div>
 <div class="csl-right-inline">A.
 L. Hauber, M. Rosenblatt, and J. Timmer, <span>“Uncovering specific
 mechanisms across cell types in dynamical models,”</span> <em>PLOS

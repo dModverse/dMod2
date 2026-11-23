@@ -91,10 +91,10 @@ summary(out)
 #> Best and worst fit
 #>       index     value converged iterations stopReason neval qnEval qnSkipped
 #> best      2 -10.24463      TRUE          8     fvalue     9      0         0
-#> worst     3 440.78695      TRUE         16     fvalue    17      0         0
-#>       nSwitch        a
-#> best        0 0.989118
-#> worst       0 2.363339
+#> worst     3 440.78695      TRUE         16     fvalue    17      0         4
+#>       nSwitch iterations.gn iterations.bfgs        a
+#> best        0             8               0 0.989118
+#> worst       0            16               0 2.363339
 #> 
 #> Statistics of fit outcome
 #> Fits aborted:       0

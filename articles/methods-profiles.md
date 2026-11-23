@@ -142,7 +142,7 @@ doi:
 
 C. Kreutz, A. Raue, and J. Timmer, “Likelihood based observability
 analysis and confidence intervals for predictions of dynamic models,”
-*BMC Systems Biology*, vol. 6, p. 120, 2012, doi:
+*BMC Systems Biology*, vol. 6, no. 1, p. 120, 2012, doi:
 [10.1186/1752-0509-6-120](https://doi.org/10.1186/1752-0509-6-120).
 
 \[3\]

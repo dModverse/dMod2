@@ -33,9 +33,7 @@ discreteSymmetries(
 - object:
 
   A `symmetrydetection` result from
-  [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
-  of a model with one condition and no events, switches or unknown
-  inputs, detected without `equilibrate` and `reduceCQ`.
+  [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md).
 
 - order:
 

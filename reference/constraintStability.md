@@ -7,21 +7,30 @@ right-hand side at the steady state, on the manifold of the conserved
 quantities, it adds the square of the residual \\\sqrt{w}\\ r^{3/2}\\
 for \\r \le 1\\ and \\\sqrt{w}\\ (1 + 3 (r - 1) / 2)\\ beyond, with \\r
 = \max(0, \mathrm{Re}\\\lambda - \lambda_0) / (\lambda\_{tol} -
-\lambda_0)\\. With \\s\\ the largest eigenvalue modulus there,
-\\\lambda\_{tol}\\ the `stabilityTol` and \\m\\ the `stabilityMargin` of
-the `controlsPTC` of `pSS`, the ramp begins at \\\lambda_0 =
-\lambda\_{tol} - m s\\. The term is zero on a steady state whose leading
-real part lies more than \\m s\\ below \\\lambda\_{tol}\\, reaches the
-weight \\w\\ for each eigenvalue, both of a complex pair, whose real
-part reaches \\\lambda\_{tol}\\, and grows quadratically beyond. Value,
-gradient and Gauss-Newton Hessian are continuous. Steady states that
-agree in the parameters, resting states and start values they read count
-once. The gradient is exact.
+\lambda_0)\\. With \\\lambda\_{tol}\\ the `stabilityTol` of the
+`controlsPTC` of `pSS`, the ramp begins at \\\lambda_0 =
+\lambda\_{tol} - \max(d, m s)\\, with \\d\\ the `width`, \\m\\ the
+`margin` and \\s\\ the largest eigenvalue modulus on the manifold. The
+term is zero on a steady state whose leading real part lies below
+\\\lambda_0\\, reaches the weight \\w\\ for each eigenvalue, both of a
+complex pair, whose real part reaches \\\lambda\_{tol}\\, and grows
+quadratically beyond. Value, gradient and Gauss-Newton Hessian are
+continuous. Steady states that agree in the parameters, resting states
+and start values they read count once. The gradient is exact;
+eigenvalues that coincide within the precision of the eigenvalues take
+the mean of their derivatives, exact where they stay equal.
 
 ## Usage
 
 ``` r
-constraintStability(pSS, p = NULL, weight = 100, attrName = "stability")
+constraintStability(
+  pSS,
+  p = NULL,
+  weight = 100,
+  width = 0,
+  margin = 1e-06,
+  attrName = "stability"
+)
 ```
 
 ## Arguments
@@ -42,6 +51,19 @@ constraintStability(pSS, p = NULL, weight = 100, attrName = "stability")
   \\w\\, the value of the term where the real part of an eigenvalue
   reaches the stability tolerance, in units of \\-2 \log L\\. Default
   100.
+
+- width:
+
+  \\d\\, the least width of the ramp in the units of the rates, default
+  `0`. A ramp wide against the change of the real parts over a step
+  shows the boundary to the model of a trust-region step before the step
+  crosses it; a resting state whose slowest mode decays faster than
+  `width` is not affected.
+
+- margin:
+
+  \\m\\, the least width of the ramp relative to the largest eigenvalue
+  modulus, the precision of the eigenvalues; default `1e-6`.
 
 - attrName:
 

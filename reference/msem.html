@@ -19,7 +19,7 @@ for slab probabilities), and returns the best fit."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -164,13 +164,35 @@ the inner modes.</p></dd>
 <dd><p>start of the standard deviations of the random effects,
 default 0.3.</p></dd>
 
+<dt><code>inner</code></dt>
+<dd><p><code>"nested"</code> (default) solves the modes at every
+evaluation of the outer search; <code>"sqp"</code> takes <code>sqpIterlim</code> iterations of
+the inner search from the modes predicted along d eta / d theta, with
+value and gradient corrected to first order for the eta gradient left
+over, until the outer search stops, and then goes on nested from there,
+so that the estimates are those of the nested search. Applies to FOCEI
+and to spike-and-slab and Dirichlet-process random effects.</p></dd>
+
 <dt><code>innerControl</code></dt>
-<dd><p>the trust region of the modes; it stops where the
-Newton step is below <code>steptol</code>, default 1e-8.</p></dd>
+<dd><p>the trust region of the modes: <code>rinit</code> and <code>rmax</code>,
+the initial and largest radius (default 1 and 10); <code>iterlim</code>, default
+30 and over several groupings 100; <code>steptol</code>, default 1e-8, the Newton
+step at which it stops; <code>mtol</code>, default 1e-12, the predicted change of
+-2 log L, relative to -2 log L, at which a step on the boundary of the
+region stops it; <code>eigenFloorRelative</code>, default 1e-10, the floor of the
+eigenvalues of the inner Hessian relative to their mean (one grouping);
+<code>sqpIterlim</code>, default 2, the inner iterations per evaluation with
+<code>inner = "sqp"</code>. With spike-and-slab and Dirichlet-process random
+effects only <code>sqpIterlim</code> applies. Other entries are an error.</p></dd>
 
 <dt><code>trustControl</code></dt>
 <dd><p>the outer trust region; it stops where the
-predicted change of -2 log L is below <code>mtol</code>, default 1e-5.</p></dd>
+predicted change of -2 log L is below <code>mtol</code>, default 1e-5. Takes
+<code>ftol</code>, <code>mtol</code>, <code>gtol</code> and <code>xtol</code> flat or in <code>tolControl</code>. With random
+effects over several groupings the outer search is <code><a href="trust.html">trust()</a></code>, and
+every argument of <code><a href="trust.html">trust()</a></code> passes, <code>hessianMethod</code>, <code>phases</code> and
+<code>qnControl</code> included; FOCEI of one grouping reads <code>rinit</code>, <code>rmax</code>,
+<code>iterlim</code>, <code>ftol</code> and <code>mtol</code>. Other entries are an error.</p></dd>
 
 <dt><code>secondOrderCorrection</code></dt>
 <dd><p>the derivative of the volume term,
@@ -194,7 +216,7 @@ returned and names the hyperparameter in <code>boundary</code>.</p></dd>
 
 <dt><code>quadrature</code>, <code>saem</code>, <code>sparseFit</code></dt>
 <dd><p>lists of the sections
-Quadrature, SAEM and Sparse random effects.</p></dd>
+Quadrature, SAEM and Sparse random effects; other entries are an error.</p></dd>
 
 
 </dl></dd>
@@ -301,10 +323,10 @@ the fit set to 0.</p></dd>
 <span class="r-in"><span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>       states <span class="op">=</span> <span class="st">"time"</span>, modelname <span class="op">=</span> <span class="st">"theoph_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, derivMode <span class="op">=</span> <span class="va">dm</span>,</span></span>
 <span class="r-in"><span>       outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/Rtmp6aiYxR/theoph_obs.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp</span>
 <span class="r-in"><span><span class="va">err</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"sigma_add"</span><span class="op">)</span>, <span class="va">g</span>, attachInput <span class="op">=</span> <span class="cn">FALSE</span>, modelname <span class="op">=</span> <span class="st">"theoph_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
 <span class="r-in"><span>         derivMode <span class="op">=</span> <span class="va">dm</span>, outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/Rtmp6aiYxR/theoph_err.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp</span>
 <span class="r-in"><span><span class="co">## one condition per subject with the subject dose; the effect formula replaces each log parameter</span></span></span>
 <span class="r-in"><span><span class="co">## by an intercept plus a random effect per subject</span></span></span>
 <span class="r-in"><span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">th</span><span class="op">$</span><span class="va">Dose</span> <span class="op">*</span> <span class="va">th</span><span class="op">$</span><span class="va">Wt</span>, <span class="va">th</span><span class="op">$</span><span class="va">Subject</span>, <span class="va">`[`</span>, <span class="fl">1</span><span class="op">)</span><span class="op">[</span><span class="va">subjects</span><span class="op">]</span></span></span>

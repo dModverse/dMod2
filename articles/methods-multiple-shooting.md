@@ -6,10 +6,48 @@ parameter change shifts every later period, and a peak moved by more
 than the peak width leaves the residuals without direction, so few
 starts reach the narrow valleys.
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) offers
-multiple shooting instead ([switching it
-on](https://dmodverse.github.io/dMod2/articles/guide-optimization.html#multiple-shooting),
-[trust
+multiple shooting instead ([trust
 region](https://dmodverse.github.io/dMod2/articles/methods-trust.md)).
+
+## Usage
+
+Multiple shooting is a control of the objective:
+
+``` r
+
+obj <- normL2(data, g * x * p, multipleShootingControl = TRUE)
+fit <- trust(obj, start)
+fit$multipleShooting$violation
+controls(obj, "multipleShootingControl") <- NULL   # single shooting again
+```
+
+The chain must be `g * x * p` with one
+[`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) built on
+`odemodel(..., includeTimeZero = FALSE)`. Not available with it:
+`hessianMethod = "exact"`, `qnControl$hessianInit = "exact"`, several
+phases, `switches`, `hessianReseed`, `qnMemory`, `nonmonotone`,
+`boundary = "clip"`, `minimize = FALSE`, `traceFile`.
+
+| entry of `multipleShootingControl` | default | controls |
+|----|----|----|
+| `nodes` | `"auto"` | `"auto"`, `"transitions"`, or node times |
+| `growth`, `misfit` | `10`, `3` | thresholds at which `"auto"` cuts a segment |
+| `minPoints` | states + 1 | data points per half of a cut |
+| `charts` | all linear | `"log10"`, `"linear"` or `"angle"` per state |
+| `scale` | from the data | scale of the gaps and node steps |
+| `init` | `"data"` | node values: `"data"`, `"spline"`, `"simulation"` or a list |
+| `breaks` | none | node times without continuity |
+
+| entry of `stepControl` | default | controls |
+|----|----|----|
+| `acceptance` | `"filter"` | `"filter"`, `"merit"` or `"natural"` |
+| `soc` | `TRUE` | second-order correction of a rejected step |
+| `anneal` | `TRUE` | penalty on the gaps raised in stages |
+| `twoPhase`, `restore`, `regularize` | off | further globalizations |
+
+`converged = TRUE` requires the scaled gaps below `tolControl$ctol`. The
+result has a list `multipleShooting` with `nodes`, `gaps`, `violation`
+and the counts of the globalization.
 
 ## Segments and gaps
 
@@ -252,7 +290,8 @@ H. G. Bock, “Recent advances in parameter identification techniques for
 O.D.E.” in *Numerical treatment of inverse problems in differential and
 integral equations*, vol. 2, P. Deuflhard and E. Hairer, Eds., in
 Progress in scientific computing, vol. 2., Boston: Birkhäuser, 1983, pp.
-95–121.
+95–121. doi:
+[10.1007/978-1-4684-7324-7_7](https://doi.org/10.1007/978-1-4684-7324-7_7).
 
 \[2\]
 
@@ -285,7 +324,8 @@ L. M. Pecora and T. L. Carroll, “Synchronization in chaotic systems,”
 
 W. Horbelt, J. Timmer, and H. U. Voss, “Parameter estimation in
 nonlinear delayed feedback systems from noisy data,” *Physics Letters
-A*, vol. 299, no. 5–6, pp. 513–521, 2002.
+A*, vol. 299, no. 5–6, pp. 513–521, 2002, doi:
+[10.1016/S0375-9601(02)00748-X](https://doi.org/10.1016/S0375-9601(02)00748-X).
 
 \[7\]
 

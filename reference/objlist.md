@@ -40,6 +40,18 @@ Asked for `hessian = "sparse"`, an objective may return part of the
 Hessian in an entry `lowrank`, a list of a matrix `U` with parameter
 rows and a vector `d`: the Hessian is then `hessian + U diag(d) U'`.
 
+Asked for `hessian = "structured"`, a data term such as
+[`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
+returns the Gauss-Newton Hessian and an entry `structure`, a list of the
+matrix `jacobian`, one row per data point with the derivatives of the
+prediction, and one more for a sigma that depends on parameters, the
+vector `seeds` of the derivatives of the value in these predictions and
+sigmas, and the Gauss-Newton Hessian `hessian` of the data term. `+`
+stacks the rows and adds the Hessians; a term without data rows has
+none. The structured methods of
+[`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) read
+it.
+
 ## See also
 
 [`as.objlist()`](https://dmodverse.github.io/dMod2/reference/as.objlist.md)

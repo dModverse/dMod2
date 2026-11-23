@@ -8,6 +8,7 @@ Shows:
 [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md),
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
+[`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md),
 [`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md),
 [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md),
@@ -15,15 +16,15 @@ Shows:
 [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md),
 [`importPEtab()`](https://dmodverse.github.io/dMod2/reference/importPEtab.md).
 
-NFκB signaling in HepG2 cells after TNFα and the effects of five
-hepatotoxic compounds, after Oppelt et al. (2018), npj Syst Biol Appl
-4:23. The full model has 38 reactions in cytoplasm and nucleus and
-starts from a steady state solved by
+NFκB signaling in HepG2 cells after TNFα and the effects of diclofenac
+(DCF), after Oppelt et al. (2018), npj Syst Biol Appl 4:23. The full
+model has 38 reactions in cytoplasm and nucleus and starts from a steady
+state solved by
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md); the
 symmetries are removed by a gauge, and the profiles reduce it to the
 core model of the publication. 312 measurements of untreated and
-stimulated cells determine the model, 444 further ones the effects of
-the compounds. Data of the publication; model after Daniel Kaschek’s
+stimulated cells determine the model, 182 further ones under DCF the
+effects of DCF. Data of the publication; model after Daniel Kaschek’s
 dMod implementation (dkaschek/dMod_Examples, TNFa). The
 [guide](https://dmodverse.github.io/dMod2/articles/guide-model.html)
 explains the code.
@@ -42,10 +43,12 @@ explains the code.
 | `profiles.R` | profiles of all parameters, saves `results/profiles.rds` |
 | `variants.R` | core model of the publication and variants that release one setting, likelihood ratios, saves `results/variants.rds` |
 | `reduced.R` | the model reduced by the limits the profiles point to |
+| `discrete.R` | the discrete symmetry of the reduced model and the chart of a fundamental domain, saves `results/discrete.rds` |
+| `fundamental.R` | fit and profiles of the reduced model in the chart of the fundamental domain, saves `results/fundamental.rds` |
 | `refit.R` | fit and profiles of the reduced model, likelihood ratio, saves `results/reduced.rds` |
 | `prediction.R` | prediction band of nuclear IκBα, saves `results/prediction.rds` |
-| `compounds.R` | the changes the compounds cause, by spike-and-slab random effects, saves `results/compounds.rds` |
-| `helix.R` | the expensive runs (multistarts, profiles, optimizers, compounds, the profiles of the reduced model and the prediction profiles) as array jobs of one or two cores per task on the Helix cluster |
+| `dcf.R` | the changes by DCF as in the publication, by the L1 scan and by spike-and-slab random effects, saves `results/dcf.rds` and `results/dcfL1.rds` |
+| `helix.R` | the expensive runs (multistarts, profiles, optimizers, the L1 scan and spike and slab of DCF, the profiles of the reduced model and the prediction profiles) as array jobs of one or two cores per task on the Helix cluster |
 | `petab.R` | the model as a PEtab problem with the resting state as a pre-equilibration, written to `results/petab/` and read back |
 | `plots.R` | figures from the saved results |
 | `results/` | saved results, each with the md5 of the files it is computed from in the attribute `"stamp"` |
@@ -66,7 +69,7 @@ source("profiles.R")
 source("variants.R")
 source("refit.R")
 source("prediction.R")
-source("compounds.R")
+source("dcf.R")
 source("petab.R")
 source("plots.R")
 ```
@@ -77,7 +80,7 @@ compiled models.
 
 ## Fit
 
-200 fits, 180 converged. The best value is -488.675, reached by 9 fits
+200 fits, 187 converged. The best value is -488.677, reached by 10 fits
 within 0.1.
 
 ![Output of the code above](oppeltNPJSystBiolAppl2018-waterfall-1.png)
@@ -105,10 +108,10 @@ model:
 
 ![Output of the code above](oppeltNPJSystBiolAppl2018-band-1.png)
 
-## Compounds
+## DCF
 
-Changes of the rate constants by the five compounds from spike-and-slab
-random effects; color: mode on the log scale, opacity: evidence against
-no change:
+The differences by DCF over the strength of the L1 penalty, as in Fig.
+2a of the publication; in color those kept at the selected strength
+(dashed):
 
-![Output of the code above](oppeltNPJSystBiolAppl2018-changes-1.png)
+![Output of the code above](oppeltNPJSystBiolAppl2018-dcfpaths-1.png)

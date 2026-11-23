@@ -8,7 +8,7 @@ with exact derivatives, and estimates their parameters from data.
 remotes::install_github("dModverse/dMod2")
 ```
 
-## Where to go
+## Documentation
 
 - [Get started](https://dmodverse.github.io/dMod2/articles/dMod2.md): a
   model of bile acid transport from reactions to profile likelihoods.
@@ -450,29 +450,29 @@ Measurements on unknown scales aligned to common values.
   [`plot(`*`<prdlist>`*`)`](https://dmodverse.github.io/dMod2/reference/plotCombined.md)
   [`plot(`*`<prdframe>`*`)`](https://dmodverse.github.io/dMod2/reference/plotCombined.md)
   : Plot Model Predictions and Data in One Plot
-- [`theme_dMod()`](https://dmodverse.github.io/dMod2/reference/theme_dMod.md)
-  : Standard Plotting Theme of dMod
-- [`scale_color_dMod()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod.md)
-  [`scale_fill_dMod()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod.md)
-  : Discrete dMod Color Scales
-- [`scale_color_dMod_c()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod_c.md)
-  [`scale_fill_dMod_c()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod_c.md)
-  [`scale_color_dMod_div()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod_c.md)
-  [`scale_fill_dMod_div()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod_c.md)
-  : Continuous dMod Color Scales
-- [`dMod_colors`](https://dmodverse.github.io/dMod2/reference/dMod_colors.md)
-  : Seed Colors of the dMod Palette
-- [`dMod_colors_cb`](https://dmodverse.github.io/dMod2/reference/dMod_colors_cb.md)
+- [`theme_dMod2()`](https://dmodverse.github.io/dMod2/reference/theme_dMod2.md)
+  : Standard Plotting Theme of dMod2
+- [`scale_color_dMod2()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod2.md)
+  [`scale_fill_dMod2()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod2.md)
+  : Discrete dMod2 Color Scales
+- [`scale_color_dMod2_c()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod2_c.md)
+  [`scale_fill_dMod2_c()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod2_c.md)
+  [`scale_color_dMod2_div()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod2_c.md)
+  [`scale_fill_dMod2_div()`](https://dmodverse.github.io/dMod2/reference/scale_color_dMod2_c.md)
+  : Continuous dMod2 Color Scales
+- [`dMod2_colors`](https://dmodverse.github.io/dMod2/reference/dMod2_colors.md)
+  : Seed Colors of the dMod2 Palette
+- [`dMod2_colors_cb`](https://dmodverse.github.io/dMod2/reference/dMod2_colors_cb.md)
   : Colorblind-Safe Seed Colors
-- [`dMod_palette()`](https://dmodverse.github.io/dMod2/reference/dMod_palette.md)
-  : Generate Distinct Colors from a dMod Palette
-- [`dMod_palettes()`](https://dmodverse.github.io/dMod2/reference/dMod_palettes.md)
-  : Overview of the dMod Palettes
-- [`dMod_gradient`](https://dmodverse.github.io/dMod2/reference/dMod_gradient.md)
-  [`dMod_gradient_cb`](https://dmodverse.github.io/dMod2/reference/dMod_gradient.md)
-  [`dMod_divergent`](https://dmodverse.github.io/dMod2/reference/dMod_gradient.md)
-  [`dMod_divergent_cb`](https://dmodverse.github.io/dMod2/reference/dMod_gradient.md)
-  : Continuous dMod Color Ramps
+- [`dMod2_palette()`](https://dmodverse.github.io/dMod2/reference/dMod2_palette.md)
+  : Generate Distinct Colors from a dMod2 Palette
+- [`dMod2_palettes()`](https://dmodverse.github.io/dMod2/reference/dMod2_palettes.md)
+  : Overview of the dMod2 Palettes
+- [`dMod2_gradient`](https://dmodverse.github.io/dMod2/reference/dMod2_gradient.md)
+  [`dMod2_gradient_cb`](https://dmodverse.github.io/dMod2/reference/dMod2_gradient.md)
+  [`dMod2_divergent`](https://dmodverse.github.io/dMod2/reference/dMod2_gradient.md)
+  [`dMod2_divergent_cb`](https://dmodverse.github.io/dMod2/reference/dMod2_gradient.md)
+  : Continuous dMod2 Color Ramps
 
 ## Data sets
 

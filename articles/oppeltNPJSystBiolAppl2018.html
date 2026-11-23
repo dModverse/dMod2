@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -121,19 +121,19 @@
 <p>[1] TRUE TRUE TRUE TRUE</p>
 <p>Shows: <code><a href="../reference/Pimpl.html">Pimpl()</a></code>, <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>,
 <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code>, <code><a href="../reference/mstrust.html">mstrust()</a></code>,
-<code><a href="../reference/trust.html">trust()</a></code>, <code><a href="../reference/profile.html">profile()</a></code>,
+<code><a href="../reference/trust.html">trust()</a></code>, <code><a href="../reference/trust.html">trustL1()</a></code>, <code><a href="../reference/profile.html">profile()</a></code>,
 <code><a href="../reference/constraintStability.html">constraintStability()</a></code>, <code><a href="../reference/randomEffects.html">randomEffects()</a></code>,
 <code><a href="../reference/msem.html">msem()</a></code>, <code><a href="../reference/exportPEtab.html">exportPEtab()</a></code>,
 <code><a href="../reference/importPEtab.html">importPEtab()</a></code>.</p>
-<p>NFκB signaling in HepG2 cells after TNFα and the effects of five
-hepatotoxic compounds, after Oppelt et al. (2018), npj Syst Biol Appl
-4:23. The full model has 38 reactions in cytoplasm and nucleus and
-starts from a steady state solved by <code><a href="../reference/Pimpl.html">Pimpl()</a></code>; the
-symmetries are removed by a gauge, and the profiles reduce it to the
-core model of the publication. 312 measurements of untreated and
-stimulated cells determine the model, 444 further ones the effects of
-the compounds. Data of the publication; model after Daniel Kaschek’s
-dMod implementation (dkaschek/dMod_Examples, TNFa). The <a href="https://dmodverse.github.io/dMod2/articles/guide-model.html">guide</a>
+<p>NFκB signaling in HepG2 cells after TNFα and the effects of
+diclofenac (DCF), after Oppelt et al. (2018), npj Syst Biol Appl 4:23.
+The full model has 38 reactions in cytoplasm and nucleus and starts from
+a steady state solved by <code><a href="../reference/Pimpl.html">Pimpl()</a></code>; the symmetries are
+removed by a gauge, and the profiles reduce it to the core model of the
+publication. 312 measurements of untreated and stimulated cells
+determine the model, 182 further ones under DCF the effects of DCF. Data
+of the publication; model after Daniel Kaschek’s dMod implementation
+(dkaschek/dMod_Examples, TNFa). The <a href="https://dmodverse.github.io/dMod2/articles/guide-model.html">guide</a>
 explains the code.</p>
 <div class="section level2">
 <h2 id="files">Files<a class="anchor" aria-label="anchor" href="#files"></a>
@@ -201,6 +201,18 @@ likelihood ratios, saves <code>results/variants.rds</code>
 <td>the model reduced by the limits the profiles point to</td>
 </tr>
 <tr class="odd">
+<td><code>discrete.R</code></td>
+<td>the discrete symmetry of the reduced model and the chart of a
+fundamental domain, saves <code>results/discrete.rds</code>
+</td>
+</tr>
+<tr class="even">
+<td><code>fundamental.R</code></td>
+<td>fit and profiles of the reduced model in the chart of the
+fundamental domain, saves <code>results/fundamental.rds</code>
+</td>
+</tr>
+<tr class="odd">
 <td><code>refit.R</code></td>
 <td>fit and profiles of the reduced model, likelihood ratio, saves
 <code>results/reduced.rds</code>
@@ -213,16 +225,18 @@ likelihood ratios, saves <code>results/variants.rds</code>
 </td>
 </tr>
 <tr class="odd">
-<td><code>compounds.R</code></td>
-<td>the changes the compounds cause, by spike-and-slab random effects,
-saves <code>results/compounds.rds</code>
+<td><code>dcf.R</code></td>
+<td>the changes by DCF as in the publication, by the L1 scan and by
+spike-and-slab random effects, saves <code>results/dcf.rds</code> and
+<code>results/dcfL1.rds</code>
 </td>
 </tr>
 <tr class="even">
 <td><code>helix.R</code></td>
-<td>the expensive runs (multistarts, profiles, optimizers, compounds,
-the profiles of the reduced model and the prediction profiles) as array
-jobs of one or two cores per task on the Helix cluster</td>
+<td>the expensive runs (multistarts, profiles, optimizers, the L1 scan
+and spike and slab of DCF, the profiles of the reduced model and the
+prediction profiles) as array jobs of one or two cores per task on the
+Helix cluster</td>
 </tr>
 <tr class="odd">
 <td><code>petab.R</code></td>
@@ -258,7 +272,7 @@ the attribute <code>"stamp"</code>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"variants.R"</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"refit.R"</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"prediction.R"</span><span class="op">)</span></span>
-<span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"compounds.R"</span><span class="op">)</span></span>
+<span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"dcf.R"</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"petab.R"</span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/source.html" class="external-link">source</a></span><span class="op">(</span><span class="st">"plots.R"</span><span class="op">)</span></span></code></pre></div>
 <p><code>model.R</code> evaluates on the free cores of the machine and
@@ -268,7 +282,7 @@ compiles on six. <code>plots.R</code> fits nothing: it reads
 <div class="section level2">
 <h2 id="fit">Fit<a class="anchor" aria-label="anchor" href="#fit"></a>
 </h2>
-<p>200 fits, 180 converged. The best value is -488.675, reached by 9
+<p>200 fits, 187 converged. The best value is -488.677, reached by 10
 fits within 0.1.</p>
 <p><img alt="Output of the code above" src="oppeltNPJSystBiolAppl2018-waterfall-1.png" width="768"></p>
 <p><img alt="Output of the code above" src="oppeltNPJSystBiolAppl2018-prediction-1.png" width="768"></p>
@@ -294,12 +308,12 @@ model:</p>
 <p><img alt="Output of the code above" src="oppeltNPJSystBiolAppl2018-band-1.png" width="768"></p>
 </div>
 <div class="section level2">
-<h2 id="compounds">Compounds<a class="anchor" aria-label="anchor" href="#compounds"></a>
+<h2 id="dcf">DCF<a class="anchor" aria-label="anchor" href="#dcf"></a>
 </h2>
-<p>Changes of the rate constants by the five compounds from
-spike-and-slab random effects; color: mode on the log scale, opacity:
-evidence against no change:</p>
-<p><img alt="Output of the code above" src="oppeltNPJSystBiolAppl2018-changes-1.png" width="768"></p>
+<p>The differences by DCF over the strength of the L1 penalty, as in
+Fig. 2a of the publication; in color those kept at the selected strength
+(dashed):</p>
+<p><img alt="Output of the code above" src="oppeltNPJSystBiolAppl2018-dcfpaths-1.png" width="768"></p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside>

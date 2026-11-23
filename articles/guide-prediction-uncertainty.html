@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -119,21 +119,17 @@
     
     
 <p>The prediction profile likelihood <span class="citation"><a href="#ref-kreutz2012likelihood">[1]</a></span> gives the confidence
-band of a model prediction directly, without parameter intervals. This
-chapter computes the band of nuclear IκBα after TNFα in the reduced
-model of <a href="guide-profiles.html">Profile likelihood</a>; nuclear
-IκBα is not measured and decides when NFκB leaves the nucleus <span class="citation"><a href="#ref-oppelt2018model">[2, Fig. 5]</a></span>.
-The code is <code>prediction.R</code>.</p>
+band of a prediction, here of unmeasured nuclear IκBα after TNFα <span class="citation"><a href="#ref-oppelt2018model">[2, Fig. 5]</a></span>
+in the reduced model of <a href="guide-profiles.html">Profile
+likelihood</a>. Code: <code>prediction.R</code>.</p>
 <div class="section level2">
 <h2 id="prediction-profiles-and-validation-data-points">Prediction profiles and validation data points<a class="anchor" aria-label="anchor" href="#prediction-profiles-and-validation-data-points"></a>
 </h2>
-<p>The prediction profile is the objective minimized over all parameters
-with the prediction held at a value; the values within the <span class="math inline">\(\chi^2_1\)</span> threshold form the confidence
-interval. <code><a href="../reference/datapointL2.html">datapointL2()</a></code> turns the prediction into a
-parameter <code>v</code>, tied to the model by a validation data point
-of small standard deviation; the profile of <code>v</code> is the
-prediction profile. <code><a href="../reference/normL2.html">normL2()</a></code> predicts at the time of the
-point (<code>times = t</code>); <code>attrName = "data"</code> adds the
+<p><code><a href="../reference/datapointL2.html">datapointL2()</a></code> ties a parameter <code>v</code> to the
+prediction by a validation data point of small standard deviation; the
+profile of <code>v</code> is the prediction profile, and the values
+within the <span class="math inline">\(\chi^2_1\)</span> threshold form
+the confidence interval. <code>attrName = "data"</code> adds the
 validation term to the data term, so <code>stop = "data"</code> and
 <code>confint(val.column = "data")</code> leave the prior out (<a href="methods-profiles.html#prediction-profiles">Methods &gt; Prediction
 profiles</a>).</p>
@@ -141,13 +137,11 @@ profiles</a>).</p>
 <div class="section level2">
 <h2 id="prediction-band">Prediction band<a class="anchor" aria-label="anchor" href="#prediction-band"></a>
 </h2>
-<p><code>prediction.R</code> computes the profile in the stimulated
-condition at 44 times, densest at the flanks of the pulse. The
-prediction spans seven orders of magnitude, so the validation point has
-standard deviation <span class="math inline">\(0.01\,\hat v(t)\)</span>
-and the steps are fractions of <span class="math inline">\(\hat
-v(t)\)</span>. The profiles run on the linear scale since the resting
-state holds no nuclear IκBα; the times start at 2 minutes.</p>
+<p><code>prediction.R</code> computes the profile at 44 times of the
+stimulated condition, from 2 minutes on; the results are loaded from
+<code>results/prediction.rds</code>. The prediction spans seven orders
+of magnitude, so the validation point has standard deviation <span class="math inline">\(0.01\,\hat v(t)\)</span>. The profiles run on
+linear scale, since the resting state holds no nuclear IκBα.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the readouts of the reduced model and nuclear IκBα, which is 0 at rest</span></span>
 <span><span class="va">gPrediction</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">observablesReduced</span>, nIkb <span class="op">=</span> <span class="st">"nIkb"</span><span class="op">)</span>, <span class="va">xReduced</span>,</span>
@@ -179,7 +173,6 @@ state holds no nuclear IκBα; the times start at 2 minutes.</p>
 <span><span class="op">}</span></span>
 <span><span class="va">predictionProfiles</span> <span class="op">&lt;-</span> <span class="fu">parallel</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/parallel/mclapply.html" class="external-link">mclapply</a></span><span class="op">(</span><span class="va">times</span>, <span class="va">predictionProfile</span>, mc.cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span>,</span>
 <span>                                         mc.preschedule <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> reads the interval from the data term:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">band</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">t</span>, <span class="va">pr</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">ci</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">pr</span>, level <span class="op">=</span> <span class="fl">0.95</span>, val.column <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span></span>
@@ -190,17 +183,17 @@ state holds no nuclear IκBα; the times start at 2 minutes.</p>
 <span><span class="va">band</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">band</span></span>
 <span><span class="va">band</span><span class="op">[</span><span class="va">band</span><span class="op">$</span><span class="va">time</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span>, <span class="fl">30</span>, <span class="fl">55</span>, <span class="fl">60</span>, <span class="fl">70</span>, <span class="fl">85</span>, <span class="fl">90</span>, <span class="fl">120</span>, <span class="fl">240</span>, <span class="fl">360</span><span class="op">)</span>, <span class="op">]</span></span>
 <span><span class="co">#&gt;    time        value        lower        upper</span></span>
-<span><span class="co">#&gt; 3    10 2.020029e-06 2.721436e-07 2.994902e-06</span></span>
-<span><span class="co">#&gt; 7    30 4.396882e-05 3.661270e-05 5.001127e-05</span></span>
-<span><span class="co">#&gt; 12   55 6.834805e-04 4.412855e-04 1.179841e-03</span></span>
-<span><span class="co">#&gt; 16   60 2.175955e-02 2.696508e-03 4.596137e-02</span></span>
-<span><span class="co">#&gt; 18   70 9.074760e-02 6.450871e-02 1.169971e-01</span></span>
-<span><span class="co">#&gt; 21   85 3.227699e-02 4.502765e-03 6.094911e-02</span></span>
-<span><span class="co">#&gt; 26   90 4.751146e-04 9.354330e-05 1.186641e-02</span></span>
-<span><span class="co">#&gt; 32  120 3.424293e-05 1.782673e-05 5.057483e-05</span></span>
-<span><span class="co">#&gt; 38  240 1.082623e-04 8.057790e-05 1.395210e-04</span></span>
-<span><span class="co">#&gt; 44  360 8.493755e-05 5.923270e-05 1.124127e-04</span></span></code></pre></div>
-<p>Prediction profiles at three times; all times are in <a href="#all-prediction-profiles">All prediction profiles</a>:</p>
+<span><span class="co">#&gt; 3    10 2.020525e-06 2.717045e-07 2.995184e-06</span></span>
+<span><span class="co">#&gt; 7    30 4.396870e-05 3.661171e-05 5.001264e-05</span></span>
+<span><span class="co">#&gt; 12   55 6.834861e-04 4.412469e-04 1.180039e-03</span></span>
+<span><span class="co">#&gt; 16   60 2.175954e-02 2.695389e-03 4.596583e-02</span></span>
+<span><span class="co">#&gt; 18   70 9.074657e-02 6.449853e-02 1.169932e-01</span></span>
+<span><span class="co">#&gt; 21   85 3.227577e-02 4.503377e-03 6.095573e-02</span></span>
+<span><span class="co">#&gt; 26   90 4.750976e-04 9.351126e-05 1.187016e-02</span></span>
+<span><span class="co">#&gt; 32  120 3.424331e-05 1.782182e-05 5.057914e-05</span></span>
+<span><span class="co">#&gt; 38  240 1.082636e-04 8.056947e-05 1.395295e-04</span></span>
+<span><span class="co">#&gt; 44  360 8.493785e-05 5.922719e-05 1.124198e-04</span></span></code></pre></div>
+<p>Profiles at three times, all in <a href="#all-prediction-profiles">All prediction profiles</a>:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">10</span>, <span class="fl">70</span>, <span class="fl">240</span><span class="op">)</span></span>
 <span><span class="va">shown</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">profiles</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/match.html" class="external-link">match</a></span><span class="op">(</span><span class="va">times</span>, <span class="va">band</span><span class="op">$</span><span class="va">time</span><span class="op">)</span><span class="op">]</span>, <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">times</span>, <span class="st">"min"</span><span class="op">)</span><span class="op">)</span></span>
@@ -211,7 +204,7 @@ state holds no nuclear IκBα; the times start at 2 minutes.</p>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>panel.spacing.x <span class="op">=</span> <span class="fu">grid</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/grid/unit.html" class="external-link">unit</a></span><span class="op">(</span><span class="fl">1.5</span>, <span class="st">"lines"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"nuclear IκBα [total NFκB]"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-prediction-uncertainty_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="768"></p>
-<p>The band around the prediction of the best fit:</p>
+<p>Band and prediction of the best fit:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/controls.html">controls</a></span><span class="op">(</span><span class="va">gReduced</span>, name <span class="op">=</span> <span class="st">"attachInput"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">TRUE</span></span>
 <span><span class="va">bestReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/reduced.rds"</span><span class="op">)</span><span class="op">$</span><span class="va">fits</span><span class="op">)</span></span>
@@ -227,14 +220,15 @@ state holds no nuclear IκBα; the times start at 2 minutes.</p>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_x_continuous</a></span><span class="op">(</span>breaks <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">360</span>, <span class="fl">60</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_continuous.html" class="external-link">scale_y_log10</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"nuclear IκBα [total NFκB]"</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="../reference/theme_dMod.html">theme_dMod</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
+<span>  <span class="fu"><a href="../reference/theme_dMod2.html">theme_dMod2</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-prediction-uncertainty_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="768"></p>
-<p>Concentrations are in units of total NFκB, set by the gauge of <a href="guide-symmetries.html">Symmetries</a>.</p>
+<p>Units of total NFκB follow from the gauge of <a href="guide-symmetries.html">Symmetries</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="all-prediction-profiles">All prediction profiles<a class="anchor" aria-label="anchor" href="#all-prediction-profiles"></a>
 </h2>
-<p>The axis is in units of the prediction <span class="math inline">\(\hat v(t)\)</span> of the best fit:</p>
+<p>In units of the prediction <span class="math inline">\(\hat
+v(t)\)</span> of the best fit:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">relative</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">pr</span>, <span class="va">v</span><span class="op">)</span> <span class="op">{</span> <span class="va">pr</span><span class="op">$</span><span class="va">v</span> <span class="op">&lt;-</span> <span class="va">pr</span><span class="op">$</span><span class="va">v</span> <span class="op">/</span> <span class="va">v</span>; <span class="va">pr</span> <span class="op">}</span>, <span class="va">saved</span><span class="op">$</span><span class="va">profiles</span>, <span class="va">band</span><span class="op">$</span><span class="va">value</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">relative</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste</a></span><span class="op">(</span><span class="va">band</span><span class="op">$</span><span class="va">time</span>, <span class="st">"min"</span><span class="op">)</span></span>
@@ -258,8 +252,8 @@ state holds no nuclear IκBα; the times start at 2 minutes.</p>
 <div class="csl-right-inline">C.
 Kreutz, A. Raue, and J. Timmer, <span>“Likelihood based observability
 analysis and confidence intervals for predictions of dynamic
-models,”</span> <em>BMC Systems Biology</em>, vol. 6, p. 120, 2012, doi:
-<a href="https://doi.org/10.1186/1752-0509-6-120" class="external-link">10.1186/1752-0509-6-120</a>.</div>
+models,”</span> <em>BMC Systems Biology</em>, vol. 6, no. 1, p. 120,
+2012, doi: <a href="https://doi.org/10.1186/1752-0509-6-120" class="external-link">10.1186/1752-0509-6-120</a>.</div>
 </div>
 <div id="ref-oppelt2018model" class="csl-entry">
 <div class="csl-left-margin">[2] </div>
@@ -269,7 +263,7 @@ Oppelt <em>et al.</em>, <span>“Model-based identification of
 <span>IκBα</span>-mediated regulation of <span>NFκB</span> signal
 transduction as a tool to quantify the impact of drug-induced liver
 injury compounds,”</span> <em>npj Systems Biology and Applications</em>,
-vol. 4, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
+vol. 4, no. 1, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
 </div>
 </div>
 </div>

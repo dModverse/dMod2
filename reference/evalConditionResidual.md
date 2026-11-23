@@ -9,7 +9,6 @@ Computes the contribution of one condition to
 evalConditionResidual(
   dataI,
   predictionI,
-  pars,
   errfn = NULL,
   fixed = NULL,
   cn = NULL,
@@ -33,10 +32,6 @@ evalConditionResidual(
 
   [prdframe](https://dmodverse.github.io/dMod2/reference/prdframe.md) of
   that condition.
-
-- pars:
-
-  Named numeric parameter vector.
 
 - errfn:
 

@@ -176,6 +176,14 @@ factorizes it where the argument `sparse` takes the sparse path, and
 [`vcov()`](https://dmodverse.github.io/dMod2/reference/vcov.objlist.md)
 solves it for the columns of `which`.
 
+`hessian = "expected"` returns, in place of the Gauss-Newton Hessian of
+the forward sweep, the expected (Fisher) information of the likelihood:
+`2 / sigma^2` in the prediction and `4 / sigma^2` in sigma per data
+point, positive semidefinite also where an error model depends on the
+parameters. The Gauss-Newton Hessian keeps the exact curvature of the
+loss in the prediction and sigma, which is indefinite there and shows
+the optimizer a saddle.
+
 With `deriv = FALSE` it returns the value alone.
 
 ## See also

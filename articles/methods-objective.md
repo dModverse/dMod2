@@ -76,14 +76,13 @@ Reference:
 \[1\]
 
 D. Kaschek, W. Mader, M. Fehling-Kaschek, M. Rosenblatt, and J. Timmer,
-“dMod: Efficient parameter estimation and uncertainty analysis for
-dynamic models,” *Journal of Statistical Software*, vol. 88, no. 10, pp.
-1–32, 2019, doi:
+“Dynamic modeling, parameter estimation, and uncertainty analysis in R,”
+*Journal of Statistical Software*, vol. 88, no. 10, pp. 1–32, 2019, doi:
 [10.18637/jss.v088.i10](https://doi.org/10.18637/jss.v088.i10).
 
 \[2\]
 
 C. Kreutz, A. Raue, and J. Timmer, “Likelihood based observability
 analysis and confidence intervals for predictions of dynamic models,”
-*BMC Systems Biology*, vol. 6, p. 120, 2012, doi:
+*BMC Systems Biology*, vol. 6, no. 1, p. 120, 2012, doi:
 [10.1186/1752-0509-6-120](https://doi.org/10.1186/1752-0509-6-120).

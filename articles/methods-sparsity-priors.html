@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -705,8 +705,8 @@ that would make the model indefinite, drops the correction. Far from the
 optimum a step is an EM step in the hyperparameters and a Gauss-Newton
 step in the fixed parameters, at one marginal evaluation; near it the
 model approaches the marginal Hessian and convergence is superlinear.
-Gradient and bounded Hessian suffice for convergence <span class="citation"><a href="#ref-conn2000trust">[8]</a></span>, and no
-number of EM iterations is chosen.</p>
+Gradient and bounded Hessian suffice for convergence <span class="citation"><a href="#ref-nocedal2006numerical">[8]</a></span>, and
+no number of EM iterations is chosen.</p>
 <p>The trust region stops at a predicted reduction below
 <code>mtol</code>; a run ending short of it restarts with a fresh
 correction while runs lower <span class="math inline">\(-2 \log
@@ -800,7 +800,8 @@ and, for coupled coordinates, on the test order.</p>
 selected one by the same amount, and compensates by selecting more small
 ones. Of coordinates the data tie together it keeps one, unstably, since
 the lasso condition for the right set fails for such correlations. It
-gives no probability of a deviation.</p>
+gives no probability of a deviation. Both on one data set: <a href="guide-sparse-deviations.html#l1-scan">Sparse deviations &gt; L1
+scan</a>.</p>
 <p>The spike and slab separates decision and size: a deviation is 0 or
 from the slab, which shrinks little, and (7) weighs every structure by
 the marginal likelihood, with <span class="math inline">\(\rho\)</span>
@@ -868,10 +869,10 @@ fitted without it.</p>
 </h3>
 <p>The partitions <span class="math inline">\(\mathcal{C}\)</span> of
 the <span class="math inline">\(G\)</span> groups and the anchor follow
-the Ewens distribution <span class="citation"><a href="#ref-ewens1972sampling">[11]</a></span> of the Chinese restaurant
-process, anchor seated first: a group joins a cluster with probability
-proportional to the size, anchor counted, or opens one with probability
-proportional to <span class="math inline">\(\alpha\)</span>,</p>
+the Ewens distribution <span class="citation"><a href="#ref-pitman2006combinatorial">[11]</a></span> of the Chinese
+restaurant process, anchor seated first: a group joins a cluster with
+probability proportional to the size, anchor counted, or opens one with
+probability proportional to <span class="math inline">\(\alpha\)</span>,</p>
 <p><span class="math display">\[\Pr(\mathcal{C}) = \frac{\alpha^{\lvert
 \mathcal{C} \rvert - 1} \prod_{T \in \mathcal{C}} (\lvert T \rvert -
 1)!}
@@ -1042,7 +1043,8 @@ Statistical Association</em>, vol. 88, no. 423, pp. 881–889, 1993, doi:
 <div class="csl-right-inline">M.
 Opper and O. Winther, <span>“Expectation consistent approximate
 inference,”</span> <em>Journal of Machine Learning Research</em>, vol.
-6, pp. 2177–2204, 2005.</div>
+6, pp. 2177–2204, 2005, Available: <a href="https://jmlr.org/papers/v6/opper05a.html" class="external-link">https://jmlr.org/papers/v6/opper05a.html</a>
+</div>
 </div>
 <div id="ref-heskes2005approximate" class="csl-entry">
 <div class="csl-left-margin">[4] </div>
@@ -1050,7 +1052,7 @@ inference,”</span> <em>Journal of Machine Learning Research</em>, vol.
 Heskes, M. Opper, W. Wiegerinck, O. Winther, and O. Zoeter,
 <span>“Approximate inference techniques with expectation
 constraints,”</span> <em>Journal of Statistical Mechanics: Theory and
-Experiment</em>, p. P11015, 2005, doi: <a href="https://doi.org/10.1088/1742-5468/2005/11/P11015" class="external-link">10.1088/1742-5468/2005/11/P11015</a>.</div>
+Experiment</em>, vol. 2005, no. 11, p. P11015, 2005, doi: <a href="https://doi.org/10.1088/1742-5468/2005/11/P11015" class="external-link">10.1088/1742-5468/2005/11/P11015</a>.</div>
 </div>
 <div id="ref-dempster1977maximum" class="csl-entry">
 <div class="csl-left-margin">[5] </div>
@@ -1065,7 +1067,8 @@ no. 1, pp. 1–38, 1977, doi: <a href="https://doi.org/10.1111/j.2517-6161.1977.
 <div class="csl-right-inline">K.
 Lange, <span>“A quasi-<span>Newton</span> acceleration of the
 <span>EM</span> algorithm,”</span> <em>Statistica Sinica</em>, vol. 5,
-no. 1, pp. 1–18, 1995.</div>
+no. 1, pp. 1–18, 1995, Available: <a href="https://www3.stat.sinica.edu.tw/statistica/j5n1/j5n11/j5n11.htm" class="external-link">https://www3.stat.sinica.edu.tw/statistica/j5n1/j5n11/j5n11.htm</a>
+</div>
 </div>
 <div id="ref-jamshidian1997acceleration" class="csl-entry">
 <div class="csl-left-margin">[7] </div>
@@ -1075,11 +1078,12 @@ Jamshidian and R. I. Jennrich, <span>“Acceleration of the
 methods,”</span> <em>Journal of the Royal Statistical Society: Series
 B</em>, vol. 59, no. 3, pp. 569–587, 1997, doi: <a href="https://doi.org/10.1111/1467-9868.00083" class="external-link">10.1111/1467-9868.00083</a>.</div>
 </div>
-<div id="ref-conn2000trust" class="csl-entry">
+<div id="ref-nocedal2006numerical" class="csl-entry">
 <div class="csl-left-margin">[8] </div>
-<div class="csl-right-inline">A.
-R. Conn, N. I. M. Gould, and P. L. Toint, <em>Trust-region methods</em>.
-Philadelphia: SIAM, 2000. doi: <a href="https://doi.org/10.1137/1.9780898719857" class="external-link">10.1137/1.9780898719857</a>.</div>
+<div class="csl-right-inline">J.
+Nocedal and S. J. Wright, <em>Numerical optimization</em>, 2nd ed. in
+Springer series in operations research and financial engineering. New
+York: Springer, 2006. doi: <a href="https://doi.org/10.1007/978-0-387-40065-5" class="external-link">10.1007/978-0-387-40065-5</a>.</div>
 </div>
 <div id="ref-tibshirani1996regression" class="csl-entry">
 <div class="csl-left-margin">[9] </div>
@@ -1095,12 +1099,12 @@ L. Hauber, M. Rosenblatt, and J. Timmer, <span>“Uncovering specific
 mechanisms across cell types in dynamical models,”</span> <em>PLOS
 Computational Biology</em>, vol. 19, no. 9, p. e1010867, 2023, doi: <a href="https://doi.org/10.1371/journal.pcbi.1010867" class="external-link">10.1371/journal.pcbi.1010867</a>.</div>
 </div>
-<div id="ref-ewens1972sampling" class="csl-entry">
+<div id="ref-pitman2006combinatorial" class="csl-entry">
 <div class="csl-left-margin">[11] </div>
-<div class="csl-right-inline">W.
-J. Ewens, <span>“The sampling theory of selectively neutral
-alleles,”</span> <em>Theoretical Population Biology</em>, vol. 3, no. 1,
-pp. 87–112, 1972, doi: <a href="https://doi.org/10.1016/0040-5809(72)90035-4" class="external-link">10.1016/0040-5809(72)90035-4</a>.</div>
+<div class="csl-right-inline">J.
+Pitman, <em>Combinatorial stochastic processes</em>, vol. 1875. in
+Lecture notes in mathematics, vol. 1875. Berlin, Heidelberg: Springer,
+2006. doi: <a href="https://doi.org/10.1007/b11601500" class="external-link">10.1007/b11601500</a>.</div>
 </div>
 <div id="ref-neal2000markov" class="csl-entry">
 <div class="csl-left-margin">[12] </div>

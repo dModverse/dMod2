@@ -21,7 +21,7 @@ nodes need a POSIX shell."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -249,7 +249,9 @@ tasks of a SLURM job, and a worker runs the tasks dealt to it one after the othe
 for <code>"localhost"</code> and in the home directory of a remote node. The job manifest
 <code>job.rds</code> lies in the local <code>&lt;jobname&gt;_folder</code> and in that of every remote
 node. A job of the same name that still runs there is an error, also when it
-was submitted from another machine. Every job is registered in
+was submitted from another machine, and so is a job of the same name in the
+folder of a remote node that was submitted from another working directory,
+until it is purged. Every job is registered in
 <code>tools::R_user_dir("dMod2", "data")</code> until <code>purge(local = TRUE)</code>, and
 <code><a href="dMod2Jobs.html">dMod2Jobs()</a></code> lists them.</p>
 <p>The model files are those of the <a href="obsfn.html">obsfn</a>, <a href="parfn.html">parfn</a>, <a href="prdfn.html">prdfn</a> and objective
@@ -285,7 +287,7 @@ guide chapter <a href="https://dmodverse.github.io/dMod2/articles/guide-remote-c
 <span class="r-in"><span>  <span class="va">job</span><span class="op">$</span><span class="fu">purge</span><span class="op">(</span>local <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-in"><span>  <span class="fu"><a href="https://rdrr.io/r/base/getwd.html" class="external-link">setwd</a></span><span class="op">(</span><span class="va">old</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="op">}</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> example: 2 tasks started on localhost (3 cores)</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> example: 2 tasks started on localhost (2 cores)</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> example: 0 of 2 tasks done, 2 running</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> example: 1 of 2 tasks done, 1 running</span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> example: 2 of 2 tasks done</span>

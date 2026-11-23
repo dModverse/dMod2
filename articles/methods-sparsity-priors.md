@@ -464,8 +464,9 @@ the model indefinite, drops the correction. Far from the optimum a step
 is an EM step in the hyperparameters and a Gauss-Newton step in the
 fixed parameters, at one marginal evaluation; near it the model
 approaches the marginal Hessian and convergence is superlinear. Gradient
-and bounded Hessian suffice for convergence [\[8\]](#ref-conn2000trust),
-and no number of EM iterations is chosen.
+and bounded Hessian suffice for convergence
+[\[8\]](#ref-nocedal2006numerical), and no number of EM iterations is
+chosen.
 
 The trust region stops at a predicted reduction below `mtol`; a run
 ending short of it restarts with a fresh correction while runs lower
@@ -534,7 +535,8 @@ sets small deviations to 0, shrinks every selected one by the same
 amount, and compensates by selecting more small ones. Of coordinates the
 data tie together it keeps one, unstably, since the lasso condition for
 the right set fails for such correlations. It gives no probability of a
-deviation.
+deviation. Both on one data set: [Sparse deviations \> L1
+scan](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html#l1-scan).
 
 The spike and slab separates decision and size: a deviation is 0 or from
 the slab, which shrinks little, and (7) weighs every structure by the
@@ -599,10 +601,10 @@ clusters for deviations. The guide compounds are fitted without it.
 ### Ewens prior
 
 The partitions \\\mathcal{C}\\ of the \\G\\ groups and the anchor follow
-the Ewens distribution [\[11\]](#ref-ewens1972sampling) of the Chinese
-restaurant process, anchor seated first: a group joins a cluster with
-probability proportional to the size, anchor counted, or opens one with
-probability proportional to \\\alpha\\,
+the Ewens distribution [\[11\]](#ref-pitman2006combinatorial) of the
+Chinese restaurant process, anchor seated first: a group joins a cluster
+with probability proportional to the size, anchor counted, or opens one
+with probability proportional to \\\alpha\\,
 
 \\\Pr(\mathcal{C}) = \frac{\alpha^{\lvert \mathcal{C} \rvert - 1}
 \prod\_{T \in \mathcal{C}} (\lvert T \rvert - 1)!} {\prod\_{i=1}^{G}
@@ -739,14 +741,15 @@ no. 423, pp. 881–889, 1993, doi:
 \[3\]
 
 M. Opper and O. Winther, “Expectation consistent approximate inference,”
-*Journal of Machine Learning Research*, vol. 6, pp. 2177–2204, 2005.
+*Journal of Machine Learning Research*, vol. 6, pp. 2177–2204, 2005,
+Available: <https://jmlr.org/papers/v6/opper05a.html>
 
 \[4\]
 
 T. Heskes, M. Opper, W. Wiegerinck, O. Winther, and O. Zoeter,
 “Approximate inference techniques with expectation constraints,”
-*Journal of Statistical Mechanics: Theory and Experiment*, p. P11015,
-2005, doi:
+*Journal of Statistical Mechanics: Theory and Experiment*, vol. 2005,
+no. 11, p. P11015, 2005, doi:
 [10.1088/1742-5468/2005/11/P11015](https://doi.org/10.1088/1742-5468/2005/11/P11015).
 
 \[5\]
@@ -759,7 +762,8 @@ Society: Series B*, vol. 39, no. 1, pp. 1–38, 1977, doi:
 \[6\]
 
 K. Lange, “A quasi-Newton acceleration of the EM algorithm,” *Statistica
-Sinica*, vol. 5, no. 1, pp. 1–18, 1995.
+Sinica*, vol. 5, no. 1, pp. 1–18, 1995, Available:
+<https://www3.stat.sinica.edu.tw/statistica/j5n1/j5n11/j5n11.htm>
 
 \[7\]
 
@@ -770,9 +774,10 @@ Series B*, vol. 59, no. 3, pp. 569–587, 1997, doi:
 
 \[8\]
 
-A. R. Conn, N. I. M. Gould, and P. L. Toint, *Trust-region methods*.
-Philadelphia: SIAM, 2000. doi:
-[10.1137/1.9780898719857](https://doi.org/10.1137/1.9780898719857).
+J. Nocedal and S. J. Wright, *Numerical optimization*, 2nd ed. in
+Springer series in operations research and financial engineering. New
+York: Springer, 2006. doi:
+[10.1007/978-0-387-40065-5](https://doi.org/10.1007/978-0-387-40065-5).
 
 \[9\]
 
@@ -790,9 +795,9 @@ Biology*, vol. 19, no. 9, p. e1010867, 2023, doi:
 
 \[11\]
 
-W. J. Ewens, “The sampling theory of selectively neutral alleles,”
-*Theoretical Population Biology*, vol. 3, no. 1, pp. 87–112, 1972, doi:
-[10.1016/0040-5809(72)90035-4](https://doi.org/10.1016/0040-5809(72)90035-4).
+J. Pitman, *Combinatorial stochastic processes*, vol. 1875. in Lecture
+notes in mathematics, vol. 1875. Berlin, Heidelberg: Springer, 2006.
+doi: [10.1007/b11601500](https://doi.org/10.1007/b11601500).
 
 \[12\]
 

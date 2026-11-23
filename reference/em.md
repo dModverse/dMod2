@@ -18,9 +18,9 @@ Methods:
 - `"focei"`:
 
   Laplace approximation at the conditional modes with the exact
-  derivative of the volume term. The default, and the method for
-  spike-and-slab and Dirichlet-process random effects (at most 14
-  groups) and for several groupings.
+  derivative of the volume term. The default, and the method for several
+  groupings; also for spike-and-slab and Dirichlet-process random
+  effects (at most 14 groups).
 
 - `"quadrature"`:
 
@@ -34,8 +34,8 @@ Methods:
 
 - `"saem"`:
 
-  stochastic-approximation EM, also for Dirichlet-process random
-  effects; section SAEM.
+  stochastic-approximation EM, also for spike-and-slab and
+  Dirichlet-process random effects; section SAEM.
 
 ## Usage
 
@@ -101,15 +101,43 @@ em(
   :   start of the standard deviations of the random effects, default
       0.3.
 
+  `inner`
+
+  :   `"nested"` (default) solves the modes at every evaluation of the
+      outer search; `"sqp"` takes `sqpIterlim` iterations of the inner
+      search from the modes predicted along d eta / d theta, with value
+      and gradient corrected to first order for the eta gradient left
+      over, until the outer search stops, and then goes on nested from
+      there, so that the estimates are those of the nested search.
+      Applies to FOCEI and to spike-and-slab and Dirichlet-process
+      random effects.
+
   `innerControl`
 
-  :   the trust region of the modes; it stops where the Newton step is
-      below `steptol`, default 1e-8.
+  :   the trust region of the modes: `rinit` and `rmax`, the initial and
+      largest radius (default 1 and 10); `iterlim`, default 30 and over
+      several groupings 100; `steptol`, default 1e-8, the Newton step at
+      which it stops; `mtol`, default 1e-12, the predicted change of -2
+      log L, relative to -2 log L, at which a step on the boundary of
+      the region stops it; `eigenFloorRelative`, default 1e-10, the
+      floor of the eigenvalues of the inner Hessian relative to their
+      mean (one grouping); `sqpIterlim`, default 2, the inner iterations
+      per evaluation with `inner = "sqp"`. With spike-and-slab and
+      Dirichlet-process random effects only `sqpIterlim` applies. Other
+      entries are an error.
 
   `trustControl`
 
   :   the outer trust region; it stops where the predicted change of -2
-      log L is below `mtol`, default 1e-5.
+      log L is below `mtol`, default 1e-5. Takes `ftol`, `mtol`, `gtol`
+      and `xtol` flat or in `tolControl`. With random effects over
+      several groupings the outer search is
+      [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
+      and every argument of
+      [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+      passes, `hessianMethod`, `phases` and `qnControl` included; FOCEI
+      of one grouping reads `rinit`, `rmax`, `iterlim`, `ftol` and
+      `mtol`. Other entries are an error.
 
   `secondOrderCorrection`
 
@@ -135,7 +163,8 @@ em(
 
   `quadrature`, `saem`, `sparseFit`
 
-  :   lists of the sections Quadrature, SAEM and Sparse random effects.
+  :   lists of the sections Quadrature, SAEM and Sparse random effects;
+      other entries are an error.
 
 - cores:
 
@@ -170,10 +199,28 @@ An object of class `em` with, among others:
 
   with spike-and-slab random effects the empirical information that
   gives the standard errors: `G / (G - 1)` times the sum of the outer
-  products of the centered scores of the `G` groups, plus half the
-  Hessian of the conditions without random effects.
+  products of the centered scores of the `G` groups, of rank at most
+  `G - 1`, plus half the curvature of the terms without random effects
+  (conditions outside every group, priors) by their expected information
+  (`hessian = "expected"`, see
+  [dModfn](https://dmodverse.github.io/dMod2/reference/dModfn.md)),
+  positive semidefinite. It is not the Hessian of the marginal -2 log L
+  and is singular where the scores and those terms span fewer directions
+  than there are parameters.
+  [vcov()](https://dmodverse.github.io/dMod2/reference/vcov.em.md)
+  inverts it where it is positive definite.
 
 - `converged`, `iterations`:
+
+  the convergence of the outer search and the iterations; with several
+  groupings also `phaseIterations` of
+  [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md).
+
+- `innerIterations`, `sqpIterations`:
+
+  with FOCEI and sparse random effects the iterations of the inner
+  searches summed over the groups and evaluations, and with
+  `control$inner = "sqp"` the outer iterations on inexact modes.
 
 - `Omega`, `omega`:
 
@@ -231,7 +278,8 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
   allowed change of -2 log L by the next level, default 0.1, split over
   the groups; each group takes the lowest level from the current stage
   of the group up within `tol / G` and never a lower one than before.
-  `Inf` keeps the levels of the stages.
+  Where the next level exceeds `maxNodes`, the change from the level
+  below is the estimate. `Inf` keeps the levels of the stages.
 
 - `levels`:
 
@@ -239,18 +287,27 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
   group; level `K + s` integrates polynomials of total degree `2 s + 1`
   exactly.
 
-- `maxLevel`:
+- `maxLevel`, `maxNodes`:
 
-  highest level, default `K + 8`.
+  highest level, default `K + 8`, and the largest node count of a level
+  per group, default 1000. A group whose error exceeds `tol / G` at the
+  highest level within both is capped. Column `capped` of `stageTrace`
+  counts the capped groups; attribute `"levels"` of `stageTrace` and the
+  `certificate` list level, level error and cap per group.
 
 - `tolDecrement`:
 
   a stage ends when a Newton step on the rebuilt nodes would lower -2
-  log L by less than this, default 1e-4, or than the nodes resolve.
+  log L by less than this, default 1e-4 (`stopReason` `"decrement"`), or
+  when -2 log L rose after a step on nodes of unchanged levels, so the
+  step lies below what the levels resolve (`"resolution"`). `converged`
+  means stationary at the levels reached, capped ones included; the fit
+  returns the iterate of lowest -2 log L on the highest levels.
 
 - `maxEcmPerStage`, `cm1Control`, `maxCm1Iter`:
 
-  rebuilds per stage (default 10),
+  rebuilds per stage (default 10, `stopReason` `"iterlim"` where they
+  run out),
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
   settings and iterations of a step (default 30).
 
@@ -287,12 +344,14 @@ models. Entries of `control$saem`:
 
 - `nMcmc`, `nLaplace`:
 
-  random-walk and independence steps per iteration, default 3 each.
+  random-walk and independence steps per iteration, default 3 each;
+  `nLaplace` with normal random effects alone.
 
 - `laplaceEvery`, `laplaceScale`:
 
-  iterations between refreshes of the modes, default 5, and the factor
-  of the proposal covariance, default 1.5.
+  iterations between refreshes of the modes, default 5, with normal
+  random effects alone, and the factor of the proposal covariance,
+  default 1.5, also of the slab value of an indicator move.
 
 - `window`, `mcTol`:
 
@@ -303,8 +362,8 @@ models. Entries of `control$saem`:
 
 - `particles`:
 
-  with Dirichlet-process random effects the particles of the sequential
-  importance sampling of -2 log L, default 500.
+  the particles of the sequential importance sampling of -2 log L with
+  Dirichlet-process random effects, default 500.
 
 - `cm1Control`:
 
@@ -312,10 +371,50 @@ models. Entries of `control$saem`:
   settings of the Newton steps of the other parameters, default one
   iteration per SAEM iteration.
 
-With Dirichlet-process random effects a Gibbs sweep draws the clusters
-of the groups (Neal 2000, algorithm 8), the averaging runs `nEM`
-iterations, and the reported clusters are the most frequent partition of
-the late draws.
+- `nFlip`:
+
+  with spike-and-slab random effects the sweeps over the indicators per
+  iteration, default 1.
+
+- `nodes`:
+
+  Gauss-Hermite nodes of the slab mass of an indicator, 3 (default) or
+  5.
+
+- `integral`:
+
+  `"importance"` takes -2 log L by importance sampling over the
+  partitions also where Dirichlet-process random effects beside
+  spike-and-slab ones allow the exact sum.
+
+With normal random effects alone, -2 log L at the estimate is the
+quadrature of level `K + 2`, and `maxLevel`, `maxNodes` and `pruneTol`
+of `control$quadrature` apply to it. With spike-and-slab or
+Dirichlet-process random effects the averaging runs `nEM` iterations. A
+sweep of Metropolis-Hastings moves visits every indicator of a group
+once, in random order and for all groups at once, with the slab value
+integrated out: the other slab values of the group follow along the
+regression of the local quadratic model of the data, the slab mass on
+that line is a Gauss-Hermite sum with the exact model at the nodes, and
+the proposal draws the indicator from the resulting conditional
+inclusion probability and the slab value from the local Gaussian; the
+independence Metropolis-Hastings step keeps the posterior exact. `nMcmc`
+random-walk steps move the slab values of every group jointly. `prob`
+and `tau` follow in closed form from the averaged conditional inclusion
+probabilities and slab second moments of the sweeps, not from the drawn
+indicators; an estimated `tau` starts at least at the largest group mode
+under the slab alone. An `em` fit as `init` starts the chain at the
+selected random effects of that fit instead, the way to check a FOCEI
+optimum by SAEM. The acceptance rates of births, deaths and random-walk
+steps per iteration are columns of `stageTrace`. A Gibbs sweep draws the
+clusters of the Dirichlet-process random effects (Neal 2000, algorithm
+8). The reported clusters are the most frequent partition of the late
+draws, a spike-and-slab random effect is selected where the mean
+conditional inclusion probability of the late sweeps is above 1/2, `p0`
+one minus that mean. -2 log L is that of `method = "focei"` at the
+estimate; with Dirichlet-process random effects alone, or beside
+spike-and-slab ones on more than 14 groups, by importance sampling over
+the partitions, with `valueSE`.
 
 ## Sparse random effects
 
@@ -334,8 +433,9 @@ failed evaluation. Entries of `control$sparseFit`:
 - `trustControl`:
 
   the [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
-  settings; `ftol`, `mtol` and `gtol` of the `tolControl` there also end
-  the search of the modes (else 1e-10).
+  settings of the outer search. The modes are found as by FOCEI, by the
+  group kernel, where the Gauss-Newton step is below 1e-8; of
+  `control$innerControl` only `sqpIterlim` applies.
 
 ## See also
 
@@ -368,10 +468,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_err.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -441,7 +541,7 @@ fitQ <- em(obj, randomEffects(p), init = fit, method = "quadrature", verbose = F
 fitS <- em(obj, randomEffects(p), init = init, method = "saem", verbose = FALSE)
 c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 #>      focei quadrature       saem 
-#>   359.4032   360.7548   360.7588 
+#>   359.4032   360.7370   360.7588 
 # }
 if (FALSE) { # \dontrun{
 ## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation

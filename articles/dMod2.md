@@ -250,20 +250,5 @@ conditions; `*` composes function objects by the chain rule, so every
 call returns values with their derivatives in the outer parameters, the
 objective value, gradient and Hessian.
 
-## Next steps
-
-- [Setting up
-  models](https://dmodverse.github.io/dMod2/articles/guide-model.md):
-  reactions, compartments, error models, steady states and events on the
-  NFκB model.
-- [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
-  and [Profile
-  likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md):
-  fits and identifiability.
-- [Nonlinear mixed-effects
-  models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md):
-  random effects with
-  [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
-- [Installation and
-  troubleshooting](https://dmodverse.github.io/dMod2/articles/installation.md):
-  compilers and Python.
+[1. Setting up models
+→](https://dmodverse.github.io/dMod2/articles/guide-model.md)

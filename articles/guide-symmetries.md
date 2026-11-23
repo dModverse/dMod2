@@ -1,46 +1,39 @@
 # 2. Symmetries
 
-If a continuous family of parameter values gives the same prediction for
-every observable, no data of these observables can tell the members
-apart.
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md),
 through the Python package
-[symident](https://dmodverse.github.io/symident/), finds such families
-in the model of [Setting up
-models](https://dmodverse.github.io/dMod2/articles/guide-model.md); they
-are removed before the fit. Code: `symmetries.R` and the end of
-`model.R`.
+[symident](https://dmodverse.github.io/symident/), finds continuous
+families of parameter values with identical observables in the model of
+[Setting up
+models](https://dmodverse.github.io/dMod2/articles/guide-model.md).
+Code: `symmetries.R` and the end of `model.R`.
 
 ## Lie symmetries and detection
 
-Such a family is the orbit of a Lie symmetry with a generator, a vector
-field on the parameters. Most symmetries of reaction networks are
-scalings: the moved parameters are multiplied by powers of one factor,
-and on log scale an orbit is a straight line. symident obtains the
-generators as the kernel of the observability-identifiability matrix,
-built from the Lie derivatives of the observables, and proves scalings
-exactly; see [Methods \> Structural identifiability and Lie
-symmetries](https://dmodverse.github.io/dMod2/articles/methods-symmetries.md).
+Each family is the orbit of a Lie symmetry. symident obtains the
+generators as the kernel of the observability-identifiability matrix and
+proves scalings exactly ([Methods \> Structural identifiability and Lie
+symmetries](https://dmodverse.github.io/dMod2/articles/methods-symmetries.md)).
 
 ## Detection settings
 
-- `equilibrate = TRUE`: the cells start at the steady state without
-  TNFα, so initial values are functions of the parameters.
-- `reduceCQ = TRUE`: one species per conserved moiety is eliminated,
-  symmetries act on the totals, the parameters of
+- `equilibrate = TRUE`: initial values are the steady state without
+  TNFα.
+- `reduceCQ = TRUE`: symmetries act on the conserved totals, the
+  parameters of
   [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md).
-- `forcings = "TNF"`: TNFα is an input state, 0 at rest and set by the
-  event at time 0.
-- `conditions`: the two doses; a direction is non-identifiable only if
-  it is so in both.
+- `forcings = "TNF"`: TNFα is an input state, set by the event at time
+  0.
+- `conditions`: a direction is non-identifiable only if it is so in both
+  doses.
 
-The imaging readouts bleach, \\y = \log(s x + o) - \tau t\\; \\e^{-\tau
-t}\\ is no function of the states of a model at rest. In the control the
-states are constant and the slope of an imaging readout is \\-\tau\\
-alone, so the bleaching rates are in no symmetry, and `symmetries.R`
-drops the bleaching terms.
+The imaging readouts bleach, \\y = \log(s x + o) - \tau t\\. In the
+control the states are constant, so the bleaching rates are in no
+symmetry, and `symmetries.R` drops the bleaching terms.
 
 ## Symmetries of the full model
+
+Computed by `symmetries.R`, loaded from `results/symmetries.rds`:
 
 ``` r
 
@@ -49,7 +42,7 @@ drops the bleaching terms.
 doses <- data.frame(dose_TNF = c(0, 1), row.names = c("control", "TNF"))
 # without the bleaching terms: in the resting control the states are constant, and the slope of
 # an imaging readout is the bleaching rate alone
-unbleached <- eqnvec(sub(" - tau_.*$", "", observables), names = names(observables))
+unbleached <- setNames(eqnvec(sub(" - tau_.*$", "", observables)), names(observables))
 symmetries <- symmetryDetection(reactions, unbleached, events = events, forcings = "TNF",
                                 conditions = doses, equilibrate = TRUE, reduceCQ = TRUE, reconstruct = TRUE,
                                 cores = getOption("dMod2.cores"))
@@ -59,7 +52,7 @@ symmetries <- symmetryDetection(reactions, unbleached, events = events, forcings
 
 symmetries <- readRDS("results/symmetries.rds")
 symmetries
-#> Result:  rank 71 / 79  |  8 non-identifiable directions
+#> Result:  rank 57 / 65  |  8 non-identifiable directions
 #> 
 #> Generators  X = Σᵢ ξ(i) ∂ᵢ
 #> 
@@ -121,44 +114,27 @@ symmetries
 #> Discrete symmetries: 0
 ```
 
-The rank of the observability-identifiability matrix is 71 of 79
-coordinates, proven; the kernel is spanned by eight scalings, each
-proven over the rationals. The eight printed generators are one basis,
-sums of them are symmetries too. Up to such sums there are four kinds.
+The rank is 57 of 65 coordinates, proven; the kernel is spanned by eight
+scalings, each proven over the rationals. The generators are one basis;
+up to sums there are four kinds.
 
-- **Unobserved intermediates.** Active receptor `TNFR`, IκBα transcript
-  `mIkb`, A20 transcript and A20 protein are unmeasured, A20 only up to
-  a scale. Each acts through the product of level and driven rate
-  constant: level and production rate times \\\lambda\\, driven rate
-  divided by \\\lambda\\. \\X_1\\: receptor (`uptake`,
-  `act_Ikk_by_TNF`); \\X_4\\: IκBα transcript (`prod_mIkb_by_nNfk`,
-  `prod_Ikb`); \\X_6\\: A20 transcript (`build_RnaA20`, `build_A20`).
-  \\X_7\\ moves A20 with the A20 production, the IKK inhibition constant
-  `inh_Ikk` (entering as `A20 / inh_Ikk`) and the scale of the A20
-  imaging readout.
-- **Relative measurements.** Blots and imaging give no absolute amounts.
-  \\X_2\\ divides the IKK total and every IKK form by \\\lambda\\ and
-  multiplies the IKK-catalyzed phosphorylation rates and the pIKK blot
-  scale by \\\lambda\\; the IKK cycle is linear in IKK. NFκB and IκBα
-  scale together: every form times \\\lambda\\; complex formation
-  (second order), the readout scales and the A20 transcription driven by
-  nuclear NFκB divided by \\\lambda\\. The printed \\X_3\\ is this
-  direction plus \\X_4\\ and \\X_5\\, hence it also moves nuclear volume
-  and IκBα production.
-- **Nuclear volume.** In \\X_5\\ `Vnuc` grows at fixed amounts, nuclear
-  concentrations fall, and the rates reading them (transcription of IκBα
-  and A20, nuclear complex formation) and the scale of nuclear NFκB grow
-  to compensate.
-- **A product.** `split_NfkIkb` appears only multiplied by
-  `eta_split_pNfkpIkb` (\\X_8\\).
+- **Unobserved intermediates**, level against driven rate: receptor
+  \\X_1\\, IκBα transcript \\X_4\\, A20 transcript \\X_6\\, A20 \\X_7\\
+  (with `inh_Ikk` and the A20 imaging scale).
+- **Relative measurements**: IKK \\X_2\\; NFκB and IκBα together,
+  printed as \\X_3\\ plus \\X_4\\ and \\X_5\\.
+- **Nuclear volume** `Vnuc` against the rates reading nuclear
+  concentrations, \\X_5\\.
+- **A product**: `split_NfkIkb` appears only times `eta_split_pNfkpIkb`,
+  \\X_8\\.
 
 ## Symmetry reduction
 
 [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
-returns in `$trafo` a parameter transformation that removes the
-directions, for scalings by fixing one coordinate per direction
-([Methods \> Gauge and
+returns in `$trafo` a transformation without the directions, for
+scalings by fixing one coordinate per direction ([Methods \> Gauge and
 reduction](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction)).
+Loaded from `results/reduction.rds`:
 
 ``` r
 
@@ -194,10 +170,8 @@ reduction
 
 ## Gauge fixing
 
-The objective is flat along every orbit, so the fit fixes one moved
-coordinate per symmetry, the gauge. This chooses units and leaves the
-fit unchanged. `model.R` fixes one parameter per scaling at 1, 0 on log
-scale:
+`model.R` fixes one moved parameter per scaling at 1, 0 on log scale,
+the gauge:
 
 ``` r
 
@@ -229,13 +203,10 @@ det(W)
 #> [1] -1
 ```
 
-This is the gauge of Oppelt et al. [\[1\]](#ref-oppelt2018model): NFκB
-and IKK totals and nuclear volume set the concentration units, so a
-concentration is a fraction of the moiety total; receptor and A20
-transcript are in units of their production rates, the IκBα transcript
-in units of the translation it drives, A20 in units of the A20 imaging
-scale. The reduction fixes other coordinates, a different choice of
-units.
+This is the gauge of Oppelt et al. [\[1\]](#ref-oppelt2018model):
+concentrations are fractions of the NFκB and IKK totals, receptor and
+transcripts are in units of the rates they drive, A20 in units of the
+A20 imaging scale.
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
 fits the remaining 63 parameters, [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md)
@@ -243,40 +214,91 @@ checks which the data determine.
 
 ## Discrete symmetries
 
-A locally identifiable model can still give the output of a parameter
-value at other, isolated values: a discrete symmetry.
-`symmetryDetection(discrete = TRUE)`, or
-[`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
-on a result, counts these values in the domain and reconstructs the maps
-between them where they are rational functions of the coordinates; the
-search needs msolve and a model with one condition and no events. In the
-two-compartment model of Godfrey [\[2\]](#ref-godfrey1983compartmental),
-with the amounts \\x_1\\ and \\x_2\\, an input \\u\\ into the first
-compartment and the second observed,
+A discrete symmetry maps a parameter value to isolated other values with
+the same output. `symmetryDetection(mode = "global")` counts these
+values and reconstructs rational maps between them (requires msolve).
+`discrete.R` applies it to the reduced model of [Profile
+likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.html#reduced-model),
+passed as `trafo`; loaded from `results/discrete.rds`:
 
 ``` r
 
-f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
-compartments <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
+# the settings of symmetries.R; the resting state and the fixed values of reduced.R enter as
+# initial values and parameters of the detection
+doses <- data.frame(dose_TNF = c(0, 1), row.names = c("control", "TNF"))
+unbleachedReduced <- setNames(eqnvec(sub(" - tau_.*$", "", observablesReduced)),
+                              names(observablesReduced))
+known <- c(fixedReduced[names(fixedReduced) != "tau_A20GFP"], resting[names(resting) != "TNF"])
+discrete <- symmetryDetection(reactionsReduced, unbleachedReduced,
+                              trafo = setNames(as.character(known), names(known)), events = events,
+                              forcings = "TNF", conditions = doses, mode = "global",
+                              cores = getOption("dMod2.cores"))
 ```
 
 ``` r
 
-compartments
-#> Result:  structurally locally identifiable (rank 5 / 5)
+saved <- readRDS("results/discrete.rds")
+discrete <- saved$discrete
+discrete$info$discrete[c("count", "countFinal", "fundamentalDomain")]
+#> $count
+#> [1] 2
 #> 
-#> Discrete symmetries: 1, 2 solutions over the algebraic closure
-#>   k01 -> k12, x1 -> (k01*x2 - k12*x2 + k21*x1)/k21, k12 -> k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 > 0]
-#>   fundamental domain: k01 < k12
+#> $countFinal
+#> [1] TRUE
+#> 
+#> $fundamentalDomain
+#> [1] "degrad_A20 < degrad_RnaA20"
+swap <- discrete$discreteSymmetries[[1]]
+swap[c("map", "level", "stateMaps")]
+#> $map
+#> Idx         Inner <- Outer
+#>   1    degrad_A20 <- degrad_RnaA20
+#>   2 degrad_RnaA20 <- degrad_A20
+#> 
+#> $level
+#> [1] "exact"
+#> 
+#> $stateMaps
+#> $stateMaps[[1]]
+#> $stateMaps[[1]]$RnaA20
+#> [1] "-A20*degrad_A20 + A20*degrad_RnaA20 + RnaA20"
+#> 
+#> 
+#> $stateMaps[[2]]
+#> $stateMaps[[2]]$RnaA20
+#> [1] "-A20*degrad_A20 + A20*degrad_RnaA20 + RnaA20"
 ```
 
-the map exchanges the elimination rate \\k\_{01}\\ and the return rate
-\\k\_{12}\\ and moves the initial value of \\x_1\\, so the model is
-locally but not globally identifiable. `exact` means proven by a map of
-the states. The fundamental domain \\k\_{01} \< k\_{12}\\ keeps one of
-the two points; a fit restricted to it has a unique optimum. A model
-with directions is reduced first, and the maps are stated in the
-coordinates of the reduced model.
+There are two values with the output of a generic one; the map exchanges
+the degradation rates of the A20 transcript and of A20, `exact` means
+proven by the map of the states. The map moves no coordinate of the
+scalings and holds in the original coordinates as well.
+
+The publication does not name the swap and reports both rates with the
+same 95 % interval, \\-5.97\\ to \\-3.32\\ on log scale
+[\[1\]](#ref-oppelt2018model), Table S7, the union of the two images.
+`symmetryReduction(branch = )` gives a chart of the fundamental domain
+`degrad_A20 < degrad_RnaA20`:
+
+``` r
+
+# the side degrad_A20 < degrad_RnaA20 of the fixed set, in a chart of positive coordinates
+fundamental <- symmetryReduction(discrete, branch = "degrad_A20 < degrad_RnaA20")
+```
+
+``` r
+
+fundamental <- saved$fundamental
+fundamental$trafo[c("degrad_A20", "degrad_RnaA20")]
+#> Idx         Inner <- Outer
+#>   1    degrad_A20 <- degrad_A20
+#>   2 degrad_RnaA20 <- degrad_A20+delta
+```
+
+`delta` is the positive difference of the two rates; in this chart a fit
+has one optimum instead of two ([Profile likelihood \> Profiles in the
+fundamental
+domain](https://dmodverse.github.io/dMod2/articles/guide-profiles.html#profiles-in-the-fundamental-domain)).
 
 Reference:
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md),
@@ -295,11 +317,6 @@ models](https://dmodverse.github.io/dMod2/articles/guide-model.md) \|
 A. Oppelt *et al.*, “Model-based identification of TNFα-induced
 IKKβ-mediated and IκBα-mediated regulation of NFκB signal transduction
 as a tool to quantify the impact of drug-induced liver injury
-compounds,” *npj Systems Biology and Applications*, vol. 4, p. 23, 2018,
-doi:
+compounds,” *npj Systems Biology and Applications*, vol. 4, no. 1, p.
+23, 2018, doi:
 [10.1038/s41540-018-0058-z](https://doi.org/10.1038/s41540-018-0058-z).
-
-\[2\]
-
-K. Godfrey, *Compartmental models and their application*. London:
-Academic Press, 1983.

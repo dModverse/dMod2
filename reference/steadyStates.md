@@ -1,12 +1,18 @@
 # Analytical Steady States
 
 Computes symbolic steady-state expressions for use in a parameter
-transformation, following the AlyssaPetit method \[1\], \[2\]. Each
-balance equation, or a combination of balances, is solved for a state or
-a rate constant such that the result is a ratio of sums of positive
-terms. A state whose equation was spent on a rate constant stays a free
-parameter; compartment volumes are fixed. The solver is a Python module
-called through reticulate; it needs numpy, sympy and scipy.
+transformation, following the AlyssaPetit method \[1\], \[2\]. States
+whose own balance gives a ratio of positive sums are solved from it
+first. The cycles of the graph of states left are cut then: at a state
+of a conserved quantity, or at a state whose balance is solved for a
+rate constant of one flux side instead. Each cut state stays a free
+parameter. The remaining states and the rate constants of the cuts are
+then solved, each from a balance or a combination of balances in
+amounts, such that the result is a ratio of sums of positive terms. Only
+if that fails, a flux side with separate rate constants is cut as well:
+the fluxes of the side keep free ratios, the new parameters
+`r_<state>_<j>`. Compartment volumes are fixed. The solver is a Python
+module called through reticulate; it needs numpy, sympy and scipy.
 
 ## Usage
 
@@ -54,7 +60,7 @@ steadyStates(
   Default `NULL`: a basis is derived, or taken from
   [`customTotals()`](https://dmodverse.github.io/dMod2/reference/customTotals.md)
   when the `eqnlist` has them. Each given quantity keeps one of the
-  states in it free, the first where possible.
+  states in it free, the first one on a cycle of the graph of states.
 
 - neglect:
 
@@ -85,8 +91,9 @@ steadyStates(
 - priority:
 
   Character vector of state and rate-parameter names, most preferred
-  first: named states are solved earlier, named rate parameters are
-  preferred as pivots. Default `NULL`.
+  first: named states are solved rather than kept free and solved
+  earlier, named rate parameters are preferred as pivots. Default
+  `NULL`.
 
 - resolve:
 
@@ -135,16 +142,12 @@ reactions <- addReaction(reactions, "Tca_canalicular", "Tca_buffer",
 
 steadies <- steadyStates(reactions)
 steadies
-#>                                                         export_Tca_cana 
-#>                                "Tca_canalicular*transport_Tca/Tca_cyto" 
-#>                                                              import_Tca 
-#> "(Tca_canalicular*transport_Tca + Tca_cyto*export_Tca_baso)/Tca_buffer" 
-#>                                                              Tca_buffer 
-#>                                                            "Tca_buffer" 
-#>                                                                Tca_cyto 
-#>                                                              "Tca_cyto" 
-#>                                                         Tca_canalicular 
-#>                                                       "Tca_canalicular" 
+#>                                                                                    Tca_cyto 
+#>                                 "Tca_buffer*import_Tca/(export_Tca_baso + export_Tca_cana)" 
+#>                                                                             Tca_canalicular 
+#> "Tca_buffer*export_Tca_cana*import_Tca/(transport_Tca*(export_Tca_baso + export_Tca_cana))" 
+#>                                                                                  Tca_buffer 
+#>                                                                                "Tca_buffer" 
 
 # Parameter transformation that puts the model in steady state
 parameters <- getParameters(reactions)
@@ -153,10 +156,10 @@ trafo <- repar(eqnvec(setNames(parameters, parameters)), "x <- y",
 trafo
 #> Idx           Inner <- Outer
 #>   1      Tca_buffer <- Tca_buffer
-#>   2 Tca_canalicular <- Tca_canalicular
-#>   3        Tca_cyto <- Tca_cyto
+#>   2 Tca_canalicular <- Tca_buffer*export_Tca_cana*import_Tca/(transport_Tca*(export_Tca_baso+export_Tca_cana))
+#>   3        Tca_cyto <- Tca_buffer*import_Tca/(export_Tca_baso+export_Tca_cana)
 #>   4 export_Tca_baso <- export_Tca_baso
-#>   5 export_Tca_cana <- Tca_canalicular*transport_Tca/Tca_cyto
-#>   6      import_Tca <- (Tca_canalicular*transport_Tca+Tca_cyto*export_Tca_baso)/Tca_buffer
+#>   5 export_Tca_cana <- export_Tca_cana
+#>   6      import_Tca <- import_Tca
 #>   7   transport_Tca <- transport_Tca
 ```

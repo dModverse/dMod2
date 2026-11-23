@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,66 +118,59 @@
 
     
     
-<p>If a continuous family of parameter values gives the same prediction
-for every observable, no data of these observables can tell the members
-apart. <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>, through the Python package <a href="https://dmodverse.github.io/symident/" class="external-link">symident</a>, finds such
-families in the model of <a href="guide-model.html">Setting up
-models</a>; they are removed before the fit. Code:
+<p><code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>, through the Python package <a href="https://dmodverse.github.io/symident/" class="external-link">symident</a>, finds
+continuous families of parameter values with identical observables in
+the model of <a href="guide-model.html">Setting up models</a>. Code:
 <code>symmetries.R</code> and the end of <code>model.R</code>.</p>
 <div class="section level2">
 <h2 id="lie-symmetries-and-detection">Lie symmetries and detection<a class="anchor" aria-label="anchor" href="#lie-symmetries-and-detection"></a>
 </h2>
-<p>Such a family is the orbit of a Lie symmetry with a generator, a
-vector field on the parameters. Most symmetries of reaction networks are
-scalings: the moved parameters are multiplied by powers of one factor,
-and on log scale an orbit is a straight line. symident obtains the
-generators as the kernel of the observability-identifiability matrix,
-built from the Lie derivatives of the observables, and proves scalings
-exactly; see <a href="methods-symmetries.html">Methods &gt; Structural
-identifiability and Lie symmetries</a>.</p>
+<p>Each family is the orbit of a Lie symmetry. symident obtains the
+generators as the kernel of the observability-identifiability matrix and
+proves scalings exactly (<a href="methods-symmetries.html">Methods &gt;
+Structural identifiability and Lie symmetries</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="detection-settings">Detection settings<a class="anchor" aria-label="anchor" href="#detection-settings"></a>
 </h2>
 <ul>
 <li>
-<code>equilibrate = TRUE</code>: the cells start at the steady state
-without TNFα, so initial values are functions of the parameters.</li>
+<code>equilibrate = TRUE</code>: initial values are the steady state
+without TNFα.</li>
 <li>
-<code>reduceCQ = TRUE</code>: one species per conserved moiety is
-eliminated, symmetries act on the totals, the parameters of
-<code><a href="../reference/Pimpl.html">Pimpl()</a></code>.</li>
+<code>reduceCQ = TRUE</code>: symmetries act on the conserved
+totals, the parameters of <code><a href="../reference/Pimpl.html">Pimpl()</a></code>.</li>
 <li>
-<code>forcings = "TNF"</code>: TNFα is an input state, 0 at rest and
-set by the event at time 0.</li>
+<code>forcings = "TNF"</code>: TNFα is an input state, set by the
+event at time 0.</li>
 <li>
-<code>conditions</code>: the two doses; a direction is
-non-identifiable only if it is so in both.</li>
+<code>conditions</code>: a direction is non-identifiable only if it
+is so in both doses.</li>
 </ul>
 <p>The imaging readouts bleach, <span class="math inline">\(y = \log(s x
-+ o) - \tau t\)</span>; <span class="math inline">\(e^{-\tau t}\)</span>
-is no function of the states of a model at rest. In the control the
-states are constant and the slope of an imaging readout is <span class="math inline">\(-\tau\)</span> alone, so the bleaching rates are
-in no symmetry, and <code>symmetries.R</code> drops the bleaching
-terms.</p>
++ o) - \tau t\)</span>. In the control the states are constant, so the
+bleaching rates are in no symmetry, and <code>symmetries.R</code> drops
+the bleaching terms.</p>
 </div>
 <div class="section level2">
 <h2 id="symmetries-of-the-full-model">Symmetries of the full model<a class="anchor" aria-label="anchor" href="#symmetries-of-the-full-model"></a>
 </h2>
+<p>Computed by <code>symmetries.R</code>, loaded from
+<code>results/symmetries.rds</code>:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># at rest without TNFα, which an event adds at time 0 in the stimulated condition; the moieties</span></span>
 <span><span class="co"># of NFκB and IKK by their totals, the parameters of Pimpl()</span></span>
 <span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>dose_TNF <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, row.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"control"</span>, <span class="st">"TNF"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co"># without the bleaching terms: in the resting control the states are constant, and the slope of</span></span>
 <span><span class="co"># an imaging readout is the bleaching rate alone</span></span>
-<span><span class="va">unbleached</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">sub</a></span><span class="op">(</span><span class="st">" - tau_.*$"</span>, <span class="st">""</span>, <span class="va">observables</span><span class="op">)</span>, names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">observables</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">unbleached</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">sub</a></span><span class="op">(</span><span class="st">" - tau_.*$"</span>, <span class="st">""</span>, <span class="va">observables</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">observables</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">symmetries</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">reactions</span>, <span class="va">unbleached</span>, events <span class="op">=</span> <span class="va">events</span>, forcings <span class="op">=</span> <span class="st">"TNF"</span>,</span>
 <span>                                conditions <span class="op">=</span> <span class="va">doses</span>, equilibrate <span class="op">=</span> <span class="cn">TRUE</span>, reduceCQ <span class="op">=</span> <span class="cn">TRUE</span>, reconstruct <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>                                cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">symmetries</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/symmetries.rds"</span><span class="op">)</span></span>
 <span><span class="va">symmetries</span></span>
-<span><span class="co">#&gt; Result:  rank 71 / 79  |  8 non-identifiable directions</span></span>
+<span><span class="co">#&gt; Result:  rank 57 / 65  |  8 non-identifiable directions</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Generators  X = Σᵢ ξ(i) ∂ᵢ</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -237,54 +230,33 @@ terms.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Discrete symmetries: 0</span></span></code></pre></div>
-<p>The rank of the observability-identifiability matrix is 71 of 79
-coordinates, proven; the kernel is spanned by eight scalings, each
-proven over the rationals. The eight printed generators are one basis,
-sums of them are symmetries too. Up to such sums there are four
-kinds.</p>
+<p>The rank is 57 of 65 coordinates, proven; the kernel is spanned by
+eight scalings, each proven over the rationals. The generators are one
+basis; up to sums there are four kinds.</p>
 <ul>
 <li>
-<strong>Unobserved intermediates.</strong> Active receptor
-<code>TNFR</code>, IκBα transcript <code>mIkb</code>, A20 transcript and
-A20 protein are unmeasured, A20 only up to a scale. Each acts through
-the product of level and driven rate constant: level and production rate
-times <span class="math inline">\(\lambda\)</span>, driven rate divided
-by <span class="math inline">\(\lambda\)</span>. <span class="math inline">\(X_1\)</span>: receptor (<code>uptake</code>,
-<code>act_Ikk_by_TNF</code>); <span class="math inline">\(X_4\)</span>:
-IκBα transcript (<code>prod_mIkb_by_nNfk</code>, <code>prod_Ikb</code>);
-<span class="math inline">\(X_6\)</span>: A20 transcript
-(<code>build_RnaA20</code>, <code>build_A20</code>). <span class="math inline">\(X_7\)</span> moves A20 with the A20 production,
-the IKK inhibition constant <code>inh_Ikk</code> (entering as
-<code>A20 / inh_Ikk</code>) and the scale of the A20 imaging
-readout.</li>
+<strong>Unobserved intermediates</strong>, level against driven
+rate: receptor <span class="math inline">\(X_1\)</span>, IκBα transcript
+<span class="math inline">\(X_4\)</span>, A20 transcript <span class="math inline">\(X_6\)</span>, A20 <span class="math inline">\(X_7\)</span> (with <code>inh_Ikk</code> and the
+A20 imaging scale).</li>
 <li>
-<strong>Relative measurements.</strong> Blots and imaging give no
-absolute amounts. <span class="math inline">\(X_2\)</span> divides the
-IKK total and every IKK form by <span class="math inline">\(\lambda\)</span> and multiplies the IKK-catalyzed
-phosphorylation rates and the pIKK blot scale by <span class="math inline">\(\lambda\)</span>; the IKK cycle is linear in IKK.
-NFκB and IκBα scale together: every form times <span class="math inline">\(\lambda\)</span>; complex formation (second
-order), the readout scales and the A20 transcription driven by nuclear
-NFκB divided by <span class="math inline">\(\lambda\)</span>. The
-printed <span class="math inline">\(X_3\)</span> is this direction plus
-<span class="math inline">\(X_4\)</span> and <span class="math inline">\(X_5\)</span>, hence it also moves nuclear volume
-and IκBα production.</li>
+<strong>Relative measurements</strong>: IKK <span class="math inline">\(X_2\)</span>; NFκB and IκBα together, printed as
+<span class="math inline">\(X_3\)</span> plus <span class="math inline">\(X_4\)</span> and <span class="math inline">\(X_5\)</span>.</li>
 <li>
-<strong>Nuclear volume.</strong> In <span class="math inline">\(X_5\)</span> <code>Vnuc</code> grows at fixed
-amounts, nuclear concentrations fall, and the rates reading them
-(transcription of IκBα and A20, nuclear complex formation) and the scale
-of nuclear NFκB grow to compensate.</li>
+<strong>Nuclear volume</strong> <code>Vnuc</code> against the rates
+reading nuclear concentrations, <span class="math inline">\(X_5\)</span>.</li>
 <li>
-<strong>A product.</strong> <code>split_NfkIkb</code> appears only
-multiplied by <code>eta_split_pNfkpIkb</code> (<span class="math inline">\(X_8\)</span>).</li>
+<strong>A product</strong>: <code>split_NfkIkb</code> appears only
+times <code>eta_split_pNfkpIkb</code>, <span class="math inline">\(X_8\)</span>.</li>
 </ul>
 </div>
 <div class="section level2">
 <h2 id="symmetry-reduction">Symmetry reduction<a class="anchor" aria-label="anchor" href="#symmetry-reduction"></a>
 </h2>
 <p><code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> returns in <code>$trafo</code> a
-parameter transformation that removes the directions, for scalings by
-fixing one coordinate per direction (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
-and reduction</a>).</p>
+transformation without the directions, for scalings by fixing one
+coordinate per direction (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
+and reduction</a>). Loaded from <code>results/reduction.rds</code>:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># a section of every orbit of the scalings</span></span>
 <span><span class="va">reduction</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryReduction.html">symmetryReduction</a></span><span class="op">(</span><span class="va">symmetries</span>, timeout <span class="op">=</span> <span class="fl">120</span><span class="op">)</span></span></code></pre></div>
@@ -315,10 +287,8 @@ and reduction</a>).</p>
 <div class="section level2">
 <h2 id="gauge-fixing">Gauge fixing<a class="anchor" aria-label="anchor" href="#gauge-fixing"></a>
 </h2>
-<p>The objective is flat along every orbit, so the fit fixes one moved
-coordinate per symmetry, the gauge. This chooses units and leaves the
-fit unchanged. <code>model.R</code> fixes one parameter per scaling at
-1, 0 on log scale:</p>
+<p><code>model.R</code> fixes one moved parameter per scaling at 1, 0 on
+log scale, the gauge:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># one coordinate of each scaling (symmetries.R) fixed at 1, at 0 on the log scale</span></span>
 <span><span class="va">gauge</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>Vnuc <span class="op">=</span> <span class="fl">0</span>, totalNfk <span class="op">=</span> <span class="fl">0</span>, totalIkk <span class="op">=</span> <span class="fl">0</span>, uptake <span class="op">=</span> <span class="fl">0</span>, prod_Ikb <span class="op">=</span> <span class="fl">0</span>, build_RnaA20 <span class="op">=</span> <span class="fl">0</span>,</span>
@@ -342,45 +312,87 @@ and reduction</a>):</p>
 <span><span class="co">#&gt; X8    0        0        0      0        0            0           -1        0</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/det.html" class="external-link">det</a></span><span class="op">(</span><span class="va">W</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] -1</span></span></code></pre></div>
-<p>This is the gauge of Oppelt et al. <span class="citation"><a href="#ref-oppelt2018model">[1]</a></span>: NFκB and IKK totals and
-nuclear volume set the concentration units, so a concentration is a
-fraction of the moiety total; receptor and A20 transcript are in units
-of their production rates, the IκBα transcript in units of the
-translation it drives, A20 in units of the A20 imaging scale. The
-reduction fixes other coordinates, a different choice of units. <a href="guide-optimization.html">Optimization</a> fits the remaining 63
+<p>This is the gauge of Oppelt et al. <span class="citation"><a href="#ref-oppelt2018model">[1]</a></span>: concentrations are fractions
+of the NFκB and IKK totals, receptor and transcripts are in units of the
+rates they drive, A20 in units of the A20 imaging scale. <a href="guide-optimization.html">Optimization</a> fits the remaining 63
 parameters, <a href="guide-profiles.html">Profile likelihood</a> checks
 which the data determine.</p>
 </div>
 <div class="section level2">
 <h2 id="discrete-symmetries">Discrete symmetries<a class="anchor" aria-label="anchor" href="#discrete-symmetries"></a>
 </h2>
-<p>A locally identifiable model can still give the output of a parameter
-value at other, isolated values: a discrete symmetry.
-<code>symmetryDetection(discrete = TRUE)</code>, or
-<code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code> on a result, counts these values in
-the domain and reconstructs the maps between them where they are
-rational functions of the coordinates; the search needs msolve and a
-model with one condition and no events. In the two-compartment model of
-Godfrey <span class="citation"><a href="#ref-godfrey1983compartmental">[2]</a></span>, with the amounts
-<span class="math inline">\(x_1\)</span> and <span class="math inline">\(x_2\)</span>, an input <span class="math inline">\(u\)</span> into the first compartment and the
-second observed,</p>
+<p>A discrete symmetry maps a parameter value to isolated other values
+with the same output. <code>symmetryDetection(mode = "global")</code>
+counts these values and reconstructs rational maps between them
+(requires msolve). <code>discrete.R</code> applies it to the reduced
+model of <a href="guide-profiles.html#reduced-model">Profile
+likelihood</a>, passed as <code>trafo</code>; loaded from
+<code>results/discrete.rds</code>:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>x1 <span class="op">=</span> <span class="st">"-(k21 + k01)*x1 + k12*x2 + u"</span>, x2 <span class="op">=</span> <span class="st">"k21*x1 - k12*x2"</span><span class="op">)</span></span>
-<span><span class="va">compartments</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">f</span>, <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"x2"</span><span class="op">)</span>, knownInputs <span class="op">=</span> <span class="st">"u"</span>, discrete <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
+<code class="sourceCode R"><span><span class="co"># the settings of symmetries.R; the resting state and the fixed values of reduced.R enter as</span></span>
+<span><span class="co"># initial values and parameters of the detection</span></span>
+<span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>dose_TNF <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, row.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"control"</span>, <span class="st">"TNF"</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">unbleachedReduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">sub</a></span><span class="op">(</span><span class="st">" - tau_.*$"</span>, <span class="st">""</span>, <span class="va">observablesReduced</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>                              <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">observablesReduced</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">known</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">fixedReduced</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">fixedReduced</span><span class="op">)</span> <span class="op">!=</span> <span class="st">"tau_A20GFP"</span><span class="op">]</span>, <span class="va">resting</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">resting</span><span class="op">)</span> <span class="op">!=</span> <span class="st">"TNF"</span><span class="op">]</span><span class="op">)</span></span>
+<span><span class="va">discrete</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">reactionsReduced</span>, <span class="va">unbleachedReduced</span>,</span>
+<span>                              trafo <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">known</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">known</span><span class="op">)</span><span class="op">)</span>, events <span class="op">=</span> <span class="va">events</span>,</span>
+<span>                              forcings <span class="op">=</span> <span class="st">"TNF"</span>, conditions <span class="op">=</span> <span class="va">doses</span>, mode <span class="op">=</span> <span class="st">"global"</span>,</span>
+<span>                              cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">compartments</span></span>
-<span><span class="co">#&gt; Result:  structurally locally identifiable (rank 5 / 5)</span></span>
+<code class="sourceCode R"><span><span class="va">saved</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/discrete.rds"</span><span class="op">)</span></span>
+<span><span class="va">discrete</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">discrete</span></span>
+<span><span class="va">discrete</span><span class="op">$</span><span class="va">info</span><span class="op">$</span><span class="va">discrete</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"count"</span>, <span class="st">"countFinal"</span>, <span class="st">"fundamentalDomain"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; $count</span></span>
+<span><span class="co">#&gt; [1] 2</span></span>
 <span><span class="co">#&gt; </span></span>
-<span><span class="co">#&gt; Discrete symmetries: 1, 2 solutions over the algebraic closure</span></span>
-<span><span class="co">#&gt;   k01 -&gt; k12, x1 -&gt; (k01*x2 - k12*x2 + k21*x1)/k21, k12 -&gt; k01 [exact, in the domain where (k01*x2 - k12*x2 + k21*x1)/k21 &gt; 0]</span></span>
-<span><span class="co">#&gt;   fundamental domain: k01 &lt; k12</span></span></code></pre></div>
-<p>the map exchanges the elimination rate <span class="math inline">\(k_{01}\)</span> and the return rate <span class="math inline">\(k_{12}\)</span> and moves the initial value of
-<span class="math inline">\(x_1\)</span>, so the model is locally but
-not globally identifiable. <code>exact</code> means proven by a map of
-the states. The fundamental domain <span class="math inline">\(k_{01}
-&lt; k_{12}\)</span> keeps one of the two points; a fit restricted to it
-has a unique optimum. A model with directions is reduced first, and the
-maps are stated in the coordinates of the reduced model.</p>
+<span><span class="co">#&gt; $countFinal</span></span>
+<span><span class="co">#&gt; [1] TRUE</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $fundamentalDomain</span></span>
+<span><span class="co">#&gt; [1] "degrad_A20 &lt; degrad_RnaA20"</span></span>
+<span><span class="va">swap</span> <span class="op">&lt;-</span> <span class="va">discrete</span><span class="op">$</span><span class="va">discreteSymmetries</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span></span>
+<span><span class="va">swap</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"map"</span>, <span class="st">"level"</span>, <span class="st">"stateMaps"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; $map</span></span>
+<span><span class="co">#&gt; Idx         Inner &lt;- Outer</span></span>
+<span><span class="co">#&gt;   1    degrad_A20 &lt;- degrad_RnaA20</span></span>
+<span><span class="co">#&gt;   2 degrad_RnaA20 &lt;- degrad_A20</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $level</span></span>
+<span><span class="co">#&gt; [1] "exact"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $stateMaps</span></span>
+<span><span class="co">#&gt; $stateMaps[[1]]</span></span>
+<span><span class="co">#&gt; $stateMaps[[1]]$RnaA20</span></span>
+<span><span class="co">#&gt; [1] "-A20*degrad_A20 + A20*degrad_RnaA20 + RnaA20"</span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; </span></span>
+<span><span class="co">#&gt; $stateMaps[[2]]</span></span>
+<span><span class="co">#&gt; $stateMaps[[2]]$RnaA20</span></span>
+<span><span class="co">#&gt; [1] "-A20*degrad_A20 + A20*degrad_RnaA20 + RnaA20"</span></span></code></pre></div>
+<p>There are two values with the output of a generic one; the map
+exchanges the degradation rates of the A20 transcript and of A20,
+<code>exact</code> means proven by the map of the states. The map moves
+no coordinate of the scalings and holds in the original coordinates as
+well.</p>
+<p>The publication does not name the swap and reports both rates with
+the same 95 % interval, <span class="math inline">\(-5.97\)</span> to
+<span class="math inline">\(-3.32\)</span> on log scale <span class="citation"><a href="#ref-oppelt2018model">[1]</a>, Table
+S7</span>, the union of the two images.
+<code>symmetryReduction(branch = )</code> gives a chart of the
+fundamental domain <code>degrad_A20 &lt; degrad_RnaA20</code>:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># the side degrad_A20 &lt; degrad_RnaA20 of the fixed set, in a chart of positive coordinates</span></span>
+<span><span class="va">fundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryReduction.html">symmetryReduction</a></span><span class="op">(</span><span class="va">discrete</span>, branch <span class="op">=</span> <span class="st">"degrad_A20 &lt; degrad_RnaA20"</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">fundamental</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">fundamental</span></span>
+<span><span class="va">fundamental</span><span class="op">$</span><span class="va">trafo</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"degrad_A20"</span>, <span class="st">"degrad_RnaA20"</span><span class="op">)</span><span class="op">]</span></span>
+<span><span class="co">#&gt; Idx         Inner &lt;- Outer</span></span>
+<span><span class="co">#&gt;   1    degrad_A20 &lt;- degrad_A20</span></span>
+<span><span class="co">#&gt;   2 degrad_RnaA20 &lt;- degrad_A20+delta</span></span></code></pre></div>
+<p><code>delta</code> is the positive difference of the two rates; in
+this chart a fit has one optimum instead of two (<a href="guide-profiles.html#profiles-in-the-fundamental-domain">Profile
+likelihood &gt; Profiles in the fundamental domain</a>).</p>
 <p>Reference: <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>,
 <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code>, <code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code></p>
 <p><a href="guide-model.html">← 1. Setting up models</a> | <a href="guide-sensitivities.html">3. Sensitivities →</a></p>
@@ -397,13 +409,7 @@ Oppelt <em>et al.</em>, <span>“Model-based identification of
 <span>IκBα</span>-mediated regulation of <span>NFκB</span> signal
 transduction as a tool to quantify the impact of drug-induced liver
 injury compounds,”</span> <em>npj Systems Biology and Applications</em>,
-vol. 4, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
-</div>
-<div id="ref-godfrey1983compartmental" class="csl-entry">
-<div class="csl-left-margin">[2] </div>
-<div class="csl-right-inline">K.
-Godfrey, <em>Compartmental models and their application</em>. London:
-Academic Press, 1983.</div>
+vol. 4, no. 1, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
 </div>
 </div>
 </div>

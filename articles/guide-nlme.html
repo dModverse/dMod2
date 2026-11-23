@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,13 +118,11 @@
 
     
     
-<p>A mixed-effects model writes each individual parameter (subject,
-cell, cell line) as a population value plus a random deviation,
-estimates population values and spread, and integrates the deviations
-out of the likelihood. In dMod2 random effects are declared in the
-<code>parfn</code>; <code><a href="../reference/em.html">em()</a></code> fits by the EM algorithm with one
-of four approximations of the integral. Example: theophylline, twelve
-subjects, one oral dose each, plasma concentrations over a day.</p>
+<p>A mixed-effects model writes each individual parameter as a
+population value plus a random deviation and integrates the deviations
+out of the likelihood. Random effects are declared in the
+<code>parfn</code>; <code><a href="../reference/em.html">em()</a></code> fits the model. Example:
+theophylline, twelve subjects, one oral dose each.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dmodverse.github.io/dMod2/">dMod2</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>dMod2.outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"guide-mixed-effects"</span><span class="op">)</span><span class="op">)</span></span>
@@ -132,11 +130,7 @@ subjects, one oral dose each, plasma concentrations over a day.</p>
 <div class="section level2">
 <h2 id="pharmacokinetic-model">Pharmacokinetic model<a class="anchor" aria-label="anchor" href="#pharmacokinetic-model"></a>
 </h2>
-<p>The dose enters a depot, is absorbed into the central compartment of
-volume <span class="math inline">\(V\)</span> and cleared by the flux
-<span class="math inline">\(\mathrm{Cl}\, C_c\)</span> in the unit
-frame: clearance <span class="math inline">\(\mathrm{Cl}\)</span> is a
-volume per time, the concentration falls at rate <span class="math inline">\(\mathrm{Cl}/V\)</span>.</p>
+<p>Depot, central compartment of volume <span class="math inline">\(V\)</span>, clearance <span class="math inline">\(\mathrm{Cl}\)</span> (volume per time).</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">reactions</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnlist.html">eqnlist</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/assignCompartment.html">assignCompartment</a></span><span class="op">(</span>Ag <span class="op">=</span> <span class="st">"depot"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -148,7 +142,7 @@ volume per time, the concentration falls at rate <span class="math inline">\(\ma
 <span><span class="co">#&gt; Idx Inner &lt;- Outer</span></span>
 <span><span class="co">#&gt;   1    Ag &lt;- -1*(Ka*Ag)</span></span>
 <span><span class="co">#&gt;   2    Cc &lt;- 1*(Ka*Ag)*(1/V)-1*(Cl*Cc)*(1/V)</span></span></code></pre></div>
-<p><code><a href="../reference/em.html">em()</a></code> needs second derivatives: build with
+<p><code><a href="../reference/em.html">em()</a></code> needs second derivatives:
 <code>deriv2 = TRUE</code> and the forward-over-reverse derivative
 modes.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -161,7 +155,7 @@ modes.</p>
 <div class="section level2">
 <h2 id="theophylline-data">Theophylline data<a class="anchor" aria-label="anchor" href="#theophylline-data"></a>
 </h2>
-<p>Each subject is a condition; the condition table holds dose in mg and
+<p>One condition per subject; the condition table holds dose in mg and
 body weight.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">Theoph</span>, package <span class="op">=</span> <span class="st">"datasets"</span><span class="op">)</span></span>
@@ -187,12 +181,10 @@ body weight.</p>
 <div class="section level2">
 <h2 id="random-effect-formulas">Random-effect formulas<a class="anchor" aria-label="anchor" href="#random-effect-formulas"></a>
 </h2>
-<p><code>define("x &lt;- x", x = ...)</code> starts the transformation
-as in <a href="guide-model.html">Setting up models</a>,
-<code><a href="../reference/define.html">branch()</a></code> copies it per table row, and <code><a href="../reference/define.html">insert()</a></code>
-sets the dose into the depot, an empty central compartment and log-scale
-parameters. An effect formula turns a symbol into a linear predictor
-with fixed and random effects in lme4 notation:</p>
+<p><code><a href="../reference/define.html">define()</a></code> starts the transformation as in <a href="guide-model.html">Setting up models</a>, <code><a href="../reference/define.html">branch()</a></code>
+copies it per table row, <code><a href="../reference/define.html">insert()</a></code> sets dose, initial values
+and log parameters. Effect formulas in lme4 notation give the linear
+predictors:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"x &lt;- x"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Ka"</span>, <span class="st">"V"</span>, <span class="st">"Cl"</span>, <span class="st">"Ag"</span>, <span class="st">"Cc"</span>, <span class="st">"sigma"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -210,10 +202,9 @@ with fixed and random effects in lme4 notation:</p>
 <span><span class="co">#&gt;   block 2 (normal, ID): eta_V</span></span>
 <span><span class="co">#&gt;   block 3 (normal, ID): eta_Cl</span></span>
 <span><span class="co">#&gt;   fixed effects: Ka, V, Cl</span></span></code></pre></div>
-<p>The formula acts after the log transformation, so <span class="math inline">\(\log \mathrm{Cl}_i = \mathrm{Cl} +
+<p>The formula acts after the log transformation: <span class="math inline">\(\log \mathrm{Cl}_i = \mathrm{Cl} +
 \eta_{\mathrm{Cl},i}\)</span>, <span class="math inline">\(\eta_{\mathrm{Cl},i} \sim \mathcal{N}(0,
-\omega_{\mathrm{Cl}}^2)\)</span>: log-normal individual parameters.
-Further forms:</p>
+\omega_{\mathrm{Cl}}^2)\)</span>. Further forms:</p>
 <ul>
 <li>
 <code>Cl ~ 1 + (1 | ID)</code>: random intercept per subject.</li>
@@ -234,25 +225,20 @@ subjects and between occasions.</li>
 <code>Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))</code>:
 spike-and-slab instead of normal random effects.</li>
 </ul>
-<p>A group (a level of the grouping, such as a subject) may own several
-conditions, which share the group random effects; a condition outside
-every group has none. The random effects of one ID, or of one term
-without ID, form a block with full covariance, so <span class="math inline">\(\Omega\)</span> is block diagonal;
+<p>Conditions of one group share the group random effects. The random
+effects of one ID form a block with full covariance;
 <code>omega_&lt;a&gt;_&lt;b&gt;</code> are the entries of the Cholesky
-factor of each block, with the log of the factor diagonal on the
-diagonal, for a random effect alone in a block the log of the standard
-deviation of that effect. This chapter treats normal random effects;
-spike-and-slab and Dirichlet-process ones are in <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
+factor of the block, with the log of the diagonal. Spike-and-slab and
+Dirichlet-process random effects: <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="marginal-likelihood">Marginal likelihood<a class="anchor" aria-label="anchor" href="#marginal-likelihood"></a>
 </h2>
 <p><code><a href="../reference/em.html">em()</a></code> maximizes the likelihood of fixed effects, <span class="math inline">\(\Omega\)</span> and error parameters with the
-random effects of every group integrated out. It takes the data
-objective <code>normL2(data, g * x * p, errmodel = e)</code> and builds
-the random-effect prior from <code>randomEffects(p)</code>;
-<code>normT(..., df = 4)</code> instead of <code><a href="../reference/normL2.html">normL2()</a></code> gives
-Student-t residuals. <code>method</code> picks the approximation:</p>
+random effects integrated out. It takes
+<code>normL2(data, g * x * p, errmodel = e)</code>, or
+<code>normT(..., df = 4)</code> for Student-t residuals, and builds the
+prior from <code>randomEffects(p)</code>. <code>method</code>:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -292,25 +278,25 @@ Student-t residuals. <code>method</code> picks the approximation:</p>
 </table>
 <p><span class="math inline">\(K\)</span> is the number of random
 effects of a group. Derivations: <a href="methods-nlme.html#marginal-likelihood">Methods &gt; Marginal
-likelihood</a> and <a href="methods-nlme.html#em-algorithm">Methods &gt;
-EM algorithm</a>.</p>
+likelihood</a>, <a href="methods-nlme.html#em-algorithm">Methods &gt; EM
+algorithm</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="first-order-conditional-estimation-focei">First-order conditional estimation (FOCEI)<a class="anchor" aria-label="anchor" href="#first-order-conditional-estimation-focei"></a>
 </h2>
-<p>First-order conditional estimation with interaction replaces each
-integral by Laplace’s approximation at the mode of the group; <span class="math inline">\(-2 \log L\)</span> may lie above or below the
-exact one. Inner and outer trust regions and gradient: <a href="methods-nlme.html#focei">Methods &gt; FOCEI</a>.</p>
+<p>Laplace’s approximation at the mode of each group, <a href="methods-nlme.html#focei">Methods &gt; FOCEI</a>.</p>
 <div class="section level3">
 <h3 id="focei-fit">FOCEI fit<a class="anchor" aria-label="anchor" href="#focei-fit"></a>
 </h3>
-<p><code>init</code> holds the parameters that are neither random
-effects nor created by effect formulas (those start at 0); random-effect
-standard deviations start at <code>control$sd</code>.</p>
+<p><code>init</code> holds the parameters other than random effects and
+effect-formula coefficients (those start at 0); standard deviations
+start at <code>control$sd</code>.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">init</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>Ka <span class="op">=</span> <span class="fl">0</span>, V <span class="op">=</span> <span class="fl">3</span>, Cl <span class="op">=</span> <span class="fl">0.7</span>, sigma <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">0.5</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/em.html">em</a></span><span class="op">(</span>obj <span class="op">=</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">g</span> <span class="op">*</span> <span class="va">x</span> <span class="op">*</span> <span class="va">p</span>, errmodel <span class="op">=</span> <span class="va">e</span><span class="op">)</span>, random <span class="op">=</span> <span class="va">random</span>, init <span class="op">=</span> <span class="va">init</span>, verbose <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
+<p>The fit is loaded from <code>results/guide-nlme.rds</code>, computed
+by <code>results/guide-nlme.R</code>.</p>
 <pre><code><span><span class="co">#&gt; EM summary (focei): -2 log L 359.403232, converged TRUE, 10 iterations</span></span>
 <span><span class="co">#&gt;   without the 2 pi constant of the data (NONMEM OBJ): 116.803459</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -331,25 +317,18 @@ standard deviations start at <code>control$sd</code>.</p>
 <span><span class="co">#&gt;    sd   Cl   Cl   0.2629 0.06521</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Shrinkage: eta_Ka = 0.018, eta_V = 0.103, eta_Cl = 0.039</span></span></code></pre>
-<p>Every block here holds one random effect, so <code>omega_*</code> are
-log standard deviations, shown on natural scale in the random-effects
-table. Shrinkage near 0 means the modes spread as widely as the random
-effects, near 1 that the data of a subject hardly move the individual
-parameter.</p>
-<p><code>value</code> is <span class="math inline">\(-2 \log L\)</span>
-with all data constants; <code>valueNonmem</code>, <span class="math inline">\(-2 \log L\)</span> less <span class="math inline">\(\log(2\pi)\)</span> per reading above the limit of
-quantification, compares with the NONMEM <code>OBJ</code>
+<p><code>omega_*</code> are log standard deviations here. Shrinkage near
+1 means the data of a subject hardly move the individual parameter.</p>
+<p><code>value</code> is <span class="math inline">\(-2 \log L\)</span>;
+<code>valueNonmem</code> compares with the NONMEM <code>OBJ</code>
 (<code>NA</code> for <code><a href="../reference/normT.html">normT()</a></code>). The fit holds
-<code>argument</code>, <code>Omega</code>, <code>omega</code> (standard
-deviations and correlations with standard errors), <code>random</code>
-(modes per group with conditional standard errors),
+<code>Omega</code>, <code>omega</code>, <code>random</code>,
 <code>etaModes</code>, <code>etaSE</code> and <code>shrinkage</code>.
 Methods: <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>,
 <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> (Wald or <code>method = "profile"</code>),
 <code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC()</a></code>,
-<code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> of nested fits, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code> (individual
-and population), <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>, <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> and
-the plots below.</p>
+<code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>,
+<code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> and the plots below.</p>
 </div>
 <div class="section level3">
 <h3 id="focei-settings">FOCEI settings<a class="anchor" aria-label="anchor" href="#focei-settings"></a>
@@ -405,29 +384,20 @@ the plots below.</p>
 </tr>
 </tbody>
 </table>
-<p><code>"forward-forward"</code> needs <code>deriv2 = TRUE</code>;
-<code><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary()</a></code> says whether the Hessian is exact;
+<p><code>"forward-forward"</code> needs <code>deriv2 = TRUE</code>.
 <code>secondOrderCorrection = FALSE</code> biases the estimates (<a href="methods-nlme.html#volume-term">Methods &gt; Volume term</a>).
-<code>fixed</code> holds parameters at given values.
-<code>sparse = TRUE</code> uses sparse Hessians for many fixed effects,
-<code>"auto"</code> decides as <code><a href="../reference/trust.html">trust()</a></code>. The outer
-<code>mtol</code> is a predicted change of <span class="math inline">\(10^{-5}\)</span> in <span class="math inline">\(-2
-\log L\)</span>, the inner tolerances are tighter; the solver error must
-stay below them. <code>em(cores = )</code> spreads groups and conditions
-over threads, <a href="guide-remote-computing.html#threads-and-processes">Remote
+<code>fixed</code> holds parameters at given values,
+<code>sparse = TRUE</code> uses sparse Hessians. The solver error must
+stay below the tolerances. <code>em(cores = )</code>: <a href="guide-remote-computing.html#threads-and-processes">Remote
 computing</a>.</p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="adaptive-sparse-grid-quadrature">Adaptive sparse-grid quadrature<a class="anchor" aria-label="anchor" href="#adaptive-sparse-grid-quadrature"></a>
 </h2>
-<p>Laplace’s approximation biases <span class="math inline">\(\Omega\)</span> most for skewed posteriors,
-e.g. oral doses sampled near absorption.
-<code>method = "quadrature"</code> starts from the converged FOCEI fit
-and integrates on a sparse grid around each group mode at the level
-<code>tol</code> requires; level <span class="math inline">\(K\)</span>
-is Laplace’s approximation. A certificate flags groups whose posterior
-the grid does not resolve. Grid, stages and certificate: <a href="methods-nlme.html#adaptive-sparse-grid-quadrature">Methods &gt;
+<p><code>method = "quadrature"</code> starts from the FOCEI fit and
+integrates on a sparse grid around each group mode; level <span class="math inline">\(K\)</span> is Laplace’s approximation. A
+certificate flags groups whose posterior the grid does not resolve. <a href="methods-nlme.html#adaptive-sparse-grid-quadrature">Methods &gt;
 Adaptive sparse-grid quadrature</a>.</p>
 <table class="table">
 <colgroup>
@@ -496,39 +466,30 @@ levels</td>
 </tr>
 </tbody>
 </table>
-<p>A quadrature fit holds <code>stageTrace</code> (per rebuild: stage
-level, value, Newton decrement, resolution, highest level, node count),
-<code>etaCov</code> (posterior covariance <span class="math inline">\(\hat M_i - \hat m_i \hat m_i^\top\)</span> per
-group) and <code>certificate</code>. <code>plotTrace(fit)</code> draws
-the trace, <code>plotRandomEffects(fit)</code> histograms and QQ plots
-of conditional draws, or with <code>type = "modes"</code> of the modes,
-against the fitted <span class="math inline">\(\mathcal{N}(0,
-\Omega_{kk})\)</span> (see <a href="#model-diagnostics">Model
-diagnostics</a>).</p>
+<p>The fit holds <code>stageTrace</code>, <code>etaCov</code> (posterior
+covariance per group) and <code>certificate</code>;
+<code>plotTrace(fit)</code> draws the trace.</p>
 </div>
 <div class="section level2">
 <h2 id="laplace-em">Laplace EM<a class="anchor" aria-label="anchor" href="#laplace-em"></a>
 </h2>
-<p><code>method = "laplaceEM"</code> runs expectation conditional
-maximization on the Laplace approximation and reports the quadrature of
-level <span class="math inline">\(K + 2\)</span>. Settings in
-<code>control$quadrature</code>: convergence tolerance
-<code>epsEcm</code> (default <code>1e-5</code>), iterations
-<code>maxEcm</code> (default 200), and of the quadrature above
-<code>cm1Control</code>, <code>maxCm1Iter</code>, <code>pruneTol</code>
-and <code>maxLevel</code>; the levels are <span class="math inline">\(K
-+ 1\)</span> and <span class="math inline">\(K + 2\)</span>, and the fit
-has no certificate. Details: <a href="methods-nlme.html#laplace-em">Methods &gt; Laplace EM</a>.</p>
+<p><code>method = "laplaceEM"</code>: expectation conditional
+maximization on the Laplace approximation, reporting the quadrature of
+level <span class="math inline">\(K + 2\)</span>, without certificate.
+<code>control$quadrature</code> takes <code>epsEcm</code> (default
+<code>1e-5</code>), <code>maxEcm</code> (default 200) and
+<code>cm1Control</code>, <code>maxCm1Iter</code>, <code>pruneTol</code>,
+<code>maxLevel</code>. <a href="methods-nlme.html#laplace-em">Methods
+&gt; Laplace EM</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="stochastic-approximation-em-saem">Stochastic approximation EM (SAEM)<a class="anchor" aria-label="anchor" href="#stochastic-approximation-em-saem"></a>
 </h2>
-<p><code>method = "saem"</code> draws the random effects from the
-posterior and averages over iterations, after a burn-in with falling
-step sizes; suited to many random effects and skewed, heavy-tailed or
-multimodal posteriors. <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> reproduces a fit.
-<code><a href="../reference/em.html">em()</a></code> reports the quadrature of level <span class="math inline">\(K + 2\)</span> at the estimate, with standard
-errors from the Hessian of that quadrature. Details: <a href="methods-nlme.html#saem">Methods &gt; SAEM</a>.</p>
+<p><code>method = "saem"</code> samples the random effects from the
+posterior and averages over iterations after a burn-in;
+<code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> reproduces a fit. Value and standard errors come
+from the quadrature of level <span class="math inline">\(K + 2\)</span>.
+<a href="methods-nlme.html#saem">Methods &gt; SAEM</a>.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -611,10 +572,8 @@ L\)</span> that ends averaging</td>
 <span><span class="co">#&gt;       0.459       3.453       1.008      -0.357      -0.475      -2.000 </span></span>
 <span><span class="co">#&gt; omega_Cl_Cl  minus2logL </span></span>
 <span><span class="co">#&gt;      -1.330     360.745</span></span></code></pre>
-<p>Estimates agree within their standard errors. Each <span class="math inline">\(-2 \log L\)</span> approximates the same integral;
-Laplace EM and SAEM report the quadrature. FOCEI may lie below it:
-Laplace’s method is no bound, and a lower value is approximation error,
-not a better fit. Stage trace and certificate of the quadrature fit:</p>
+<p>Estimates agree within their standard errors. FOCEI may lie below the
+quadrature: Laplace’s method is no bound.</p>
 <div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fits</span><span class="op">$</span><span class="va">quadrature</span><span class="op">$</span><span class="va">stageTrace</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"level"</span>, <span class="st">"ecmIter"</span>, <span class="st">"OFV"</span>, <span class="st">"decrement"</span>, <span class="st">"resolution"</span>, <span class="st">"maxLevel"</span>, <span class="st">"nodes"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;   level ecmIter      OFV  decrement resolution maxLevel nodes</span></span>
@@ -635,39 +594,32 @@ not a better fit. Stage trace and certificate of the quadrature fit:</p>
 <span><span class="co">#&gt; 12     9     5   28.91073   28.91295 0.02755326  0.06009504 4.846870e-03 FALSE</span></span></code></pre></div>
 <p>Here one rebuild ends the fit: the Newton decrement on the rebuilt
 nodes lies below what the nodes resolve, so the estimate of FOCEI
-stands, with the value of the quadrature. No group is flagged.
-<code><a href="../reference/plotTrace.html">plotTrace()</a></code> draws the trace of a fit with several
-rebuilds.</p>
+stands, with the value of the quadrature. No group is flagged.</p>
 </div>
 <div class="section level2">
 <h2 id="model-diagnostics">Model diagnostics<a class="anchor" aria-label="anchor" href="#model-diagnostics"></a>
 </h2>
-<p><code><a href="../reference/plotCombined.html">plotCombined()</a></code> draws each subject with individual
-(IPRED, random effects at the modes) and population prediction (PRED,
-random effects 0):</p>
+<p>Individual (IPRED, random effects at the modes) and population
+prediction (PRED, random effects 0):</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotCombined.html">plotCombined</a></span><span class="op">(</span><span class="va">fit</span>, ncol <span class="op">=</span> <span class="fl">4</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [h]"</span>, y <span class="op">=</span> <span class="st">"concentration [mg/L]"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="768"></p>
 <p>Conditional weighted residuals (CWRES) linearize around the modes;
-normalized prediction distribution errors (NPDE) come from simulations,
-decorrelated per subject, without linearization. Both should look like
-standard normal noise against prediction and time.</p>
+normalized prediction distribution errors (NPDE) come from simulations.
+Both should be standard normal.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotResiduals.html">plotResiduals</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"CWRES"</span>, <span class="st">"NPDE"</span><span class="op">)</span>, nsim <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-9-1.png" class="r-plt" alt="" width="768"></p>
-<p>The visual predictive check compares data percentiles with simulated
-prediction intervals per time bin.</p>
+<p>Visual predictive check:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotVPC.html">plotVPC</a></span><span class="op">(</span><span class="va">fit</span>, nsim <span class="op">=</span> <span class="fl">200</span>, bins <span class="op">=</span> <span class="fl">8</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-10-1.png" class="r-plt" alt="" width="768"></p>
-<p>Histograms and QQ plots of draws from the conditional distributions
-of the random effects against the fitted <span class="math inline">\(\mathcal{N}(0, \Omega_{kk})\)</span>:</p>
+<p>Conditional draws of the random effects against the fitted <span class="math inline">\(\mathcal{N}(0, \Omega_{kk})\)</span>:</p>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotRandomEffects.html">plotRandomEffects</a></span><span class="op">(</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-11-1.png" class="r-plt" alt="" width="768"></p>
-<p>Against a covariate, random effects show whether it explains part of
-the variability:</p>
+<p>Random effects against a covariate:</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotRandomEffects.html">plotRandomEffects</a></span><span class="op">(</span><span class="va">fit</span>, covariates <span class="op">=</span> <span class="va">table</span><span class="op">[</span><span class="st">"weight"</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-12-1.png" class="r-plt" alt="" width="768"></p>
@@ -675,8 +627,8 @@ the variability:</p>
 <div class="section level2">
 <h2 id="covariate-effects">Covariate effects<a class="anchor" aria-label="anchor" href="#covariate-effects"></a>
 </h2>
-<p>Clearance and volume usually scale with body weight, entered as a
-fixed effect on a table column, centered on log scale:</p>
+<p>Body weight as a fixed effect on a table column, centered on log
+scale:</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">table</span><span class="op">$</span><span class="va">logWeight</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="va">table</span><span class="op">$</span><span class="va">weight</span> <span class="op">/</span> <span class="fl">70</span><span class="op">)</span></span>
 <span><span class="va">trafo2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -697,31 +649,29 @@ fixed effect on a table column, centered on log scale:</p>
 <span><span class="co">#&gt; 2     2    8 358.6210 374.6210 397.6834 0.7822652  1 0.3764493</span></span></code></pre>
 <p><code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code> compares nested fits by likelihood ratio. Weight
 lowers <span class="math inline">\(-2 \log L\)</span> by 0.78, p-value
-0.38: among twelve subjects of similar weight it explains little
-clearance spread, and the simpler model stays.</p>
+0.38; the simpler model stays.</p>
 </div>
 <div class="section level2">
 <h2 id="nested-and-crossed-groups">Nested and crossed groups<a class="anchor" aria-label="anchor" href="#nested-and-crossed-groups"></a>
 </h2>
-<p>Further groupings, nested (occasions within subjects) or crossed
-(patients and centers), are further formula terms. <code><a href="../reference/em.html">em()</a></code>
-integrates them by FOCEI per connected component of the conditions; the
-<a href="pharmacometrics.html">pharmacometrics project</a> fits
-mavoglurant with between-occasion variability this way:</p>
+<p>Nested groupings (occasions within subjects) or crossed ones
+(patients and centers) are further formula terms, integrated by FOCEI
+per connected component of the conditions. The <a href="pharmacometrics.html">pharmacometrics project</a> fits mavoglurant
+with between-occasion variability:</p>
 <div class="sourceCode" id="cb21"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/define.html">insert</a></span><span class="op">(</span><span class="va">trafo</span>, <span class="va">Cl</span> <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">ID</span><span class="op">)</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">ID</span><span class="op">:</span><span class="va">OCC</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>Which groups differ at all, rather than by how much: <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
+<p>Which groups differ at all: <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="multistart-optimization">Multistart optimization<a class="anchor" aria-label="anchor" href="#multistart-optimization"></a>
 </h2>
 <p><code><a href="../reference/msem.html">msem()</a></code> runs <code><a href="../reference/em.html">em()</a></code> from <code>fits</code>
-starts, the first at <code>init</code>, the others perturbed around it
-with standard deviation <code>sd</code>, and returns the best fit, all
-starts in <code>$multistart</code>.
-<code>theophyllineMultistart.R</code> of the project
-<code>pharmacometrics</code> runs 200 starts each for FOCEI, quadrature
-and SAEM from the same draws:</p>
+starts, the first at <code>init</code>, the others perturbed with
+standard deviation <code>sd</code>, and returns the best fit, all starts
+in <code>$multistart</code>. <code>theophyllineMultistart.R</code> of
+the project <code>pharmacometrics</code> runs 200 starts each for FOCEI,
+quadrature and SAEM; the result is loaded from
+<code>results/multistart.rds</code> of the project.</p>
 <div class="sourceCode" id="cb22"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># 200 starts per method, from the same draws, each run to the end; SAEM with up to 500 burn-in and</span></span>
 <span><span class="co"># 1000 averaging iterations</span></span>
@@ -733,19 +683,16 @@ and SAEM from the same draws:</p>
 <span>       control <span class="op">=</span> <span class="va">controls</span><span class="op">[[</span><span class="va">m</span><span class="op">]</span><span class="op">]</span>, cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="op">}</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">ms</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">methods</span><span class="op">)</span></span></code></pre></div>
-<p>FOCEI waterfall of all 200 starts:</p>
+<p>FOCEI:</p>
 <div class="sourceCode" id="cb23"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotValues.html">plotValues</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">multistart</span><span class="op">$</span><span class="va">FOCEI</span>, pseudoLog <span class="op">=</span> <span class="va">wide</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-16-1.png" class="r-plt" alt="" width="768"></p>
-<p>Quadrature and SAEM, both valued by the quadrature, so
-comparable:</p>
+<p>Quadrature and SAEM, both valued by the quadrature:</p>
 <div class="sourceCode" id="cb24"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotValues.html">plotValues</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">multistart</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"quadrature"</span>, <span class="st">"SAEM"</span><span class="op">)</span><span class="op">]</span>, pseudoLog <span class="op">=</span> <span class="va">wide</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-17-1.png" class="r-plt" alt="" width="768"></p>
-<p>All three methods find the same two optima, with method-specific
-<span class="math inline">\(-2 \log L\)</span>. Most starts end on the
-upper plateau, the fit above; about 21 of 200 per method reach the lower
-one, the flip-flop solution:</p>
+<p>All three methods find the same two optima. About 21 of 200 starts
+per method reach the lower one, the flip-flop solution:</p>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">flipflop</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">best</span><span class="op">$</span><span class="va">FOCEI</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">signif</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span>fit <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">argument</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"Ka"</span>, <span class="st">"V"</span>, <span class="st">"Cl"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>, minus2logL <span class="op">=</span> <span class="va">fit</span><span class="op">$</span><span class="va">value</span><span class="op">)</span>,</span>
@@ -754,20 +701,18 @@ one, the flip-flop solution:</p>
 <span><span class="co">#&gt;               Ka      V    Cl minus2logL</span></span>
 <span><span class="co">#&gt; fit      1.59000 31.810 2.752      359.4</span></span>
 <span><span class="co">#&gt; flipflop 0.08483  1.682 2.724      352.9</span></span></code></pre></div>
-<p>With one oral dose and no intravenous data, absorption and
-elimination can swap. In the flip-flop solution absorption is the slow
-step, the volume shrinks to 1.7 L and the <code>Ka</code> random effect
-vanishes. The likelihood prefers it by 6.5, but theophylline spreads
-through the body water, about 0.5 L/kg, not a few liters; drug knowledge
-or a prior on <code>V</code> selects the upper plateau.</p>
+<p>With one oral dose, absorption and elimination can swap: absorption
+becomes the slow step, the volume shrinks to 1.7 L and the
+<code>Ka</code> random effect vanishes. The likelihood prefers it by
+6.5, but theophylline spreads through the body water, about 0.5 L/kg; a
+prior on <code>V</code> selects the upper plateau.</p>
 <div class="section level3">
 <h3 id="zero-variance-components">Zero variance components<a class="anchor" aria-label="anchor" href="#zero-variance-components"></a>
 </h3>
-<p>At the flip-flop solution the <code>Ka</code> variance runs to 0.
-<code><a href="../reference/em.html">em()</a></code> returns the fit with that variance at 0 and names it
-in <code>fit$boundary</code>; <code>control$boundary</code> (default
-0.1) is the accepted rise of <span class="math inline">\(-2 \log
-L\)</span>, <code>FALSE</code> switches it off (<a href="methods-nlme.html#variance-at-the-boundary">Methods &gt; Zero
+<p>A variance that runs to 0 is returned at 0 and named in
+<code>fit$boundary</code>; <code>control$boundary</code> (default 0.1)
+is the accepted rise of <span class="math inline">\(-2 \log L\)</span>,
+<code>FALSE</code> switches it off (<a href="methods-nlme.html#variance-at-the-boundary">Methods &gt; Zero
 variance components</a>). On the lower plateau every method does so:</p>
 <div class="sourceCode" id="cb26"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">sapply</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">multistart</span>, <span class="kw">function</span><span class="op">(</span><span class="va">t</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">t</span><span class="op">$</span><span class="va">boundary</span> <span class="op">==</span> <span class="st">"omega_Ka_Ka"</span><span class="op">)</span><span class="op">)</span></span>
@@ -779,7 +724,7 @@ variance components</a>). On the lower plateau every method does so:</p>
 <span><span class="co">#&gt; V   0.5201     0.5201  0.5263</span></span>
 <span><span class="co">#&gt; Cl  1.0020     1.0020  1.0060</span></span></code></pre></div>
 <p><code>theophyllineMultistart.R</code> refits the best fit of each
-method by every other method from the estimates of that fit:</p>
+method by every other method:</p>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the best fit of every method refitted by every other method from the estimates of that fit, so that the</span></span>
 <span><span class="co"># values of the optima compare on the scale of each method</span></span>
@@ -805,18 +750,12 @@ method by every other method from the estimates of that fit:</p>
 <span><span class="co">#&gt; 7       SAEM      FOCEI 352.9345      TRUE 0.08483010 1.682227</span></span>
 <span><span class="co">#&gt; 8       SAEM quadrature 354.4876      TRUE 0.08483021 1.682224</span></span>
 <span><span class="co">#&gt; 9       SAEM       SAEM 354.4930      TRUE 0.08446507 1.670658</span></span></code></pre></div>
-<p>From every start each method reaches the same estimates, with
-method-specific <span class="math inline">\(-2 \log L\)</span>: FOCEI
-about 1.6 below the quadrature, which integrates more accurately than
-Laplace’s method; SAEM, valued by the quadrature of level <span class="math inline">\(K + 2\)</span> at the SAEM estimate, within 0.05
-of it.</p>
+<p>Each method reaches the same estimates from every start. FOCEI lies
+about 1.6 below the quadrature, SAEM within 0.05 of it.</p>
 <p><code><a href="../reference/msem.html">msem()</a></code> draws all starts and seeds before spreading fits
 over <code>cores</code>, so <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> reproduces a run;
-<code>cores = c(fits = , conditions = )</code> splits cores between
-parallel fits and threads, see <a href="guide-remote-computing.html#threads-and-processes">Remote
-computing</a>. Every start runs to convergence;
-<code><a href="../reference/plotValues.html">plotValues()</a></code> draws <code>$multistart</code> as a
-waterfall.</p>
+<code>cores = c(fits = , conditions = )</code>: see <a href="guide-remote-computing.html#threads-and-processes">Remote
+computing</a>.</p>
 <p>Reference: <code><a href="../reference/randomEffects.html">randomEffects()</a></code>, <code><a href="../reference/em.html">em()</a></code>,
 <code><a href="../reference/msem.html">msem()</a></code>, <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, <code><a href="../reference/plotResiduals.html">plotResiduals()</a></code>,
 <code><a href="../reference/plotVPC.html">plotVPC()</a></code>, <code><a href="../reference/plotRandomEffects.html">plotRandomEffects()</a></code>,

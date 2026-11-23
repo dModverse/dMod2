@@ -1,34 +1,26 @@
 # 11. Remote computing
 
-dMod2 parallelizes along two axes: conditions of one objective
-evaluation in threads, independent fits and profiles in processes.
+Conditions of one evaluation run in threads, independent fits and
+profiles in processes.
 [`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md)
-runs any R code as tasks in processes detached from the session,
-locally, over ssh or as a SLURM array job. The local job below runs at
-page build; commands for other machines are shown, not run.
+runs R code as tasks in detached processes, locally, over ssh or as a
+SLURM array job. Only the local job below runs at page build.
 
 ## Threads and processes
 
 `options(dMod2.cores = n)`, or `obj(pars, cores = n)` for one call,
-solves the conditions of an evaluation in `n` threads of an OpenMP team
-inside cppDE, constant in size within a session. The guide model has two
-conditions, so this axis uses at most two threads; many conditions, or
-[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) with many
-groups, gain in proportion. A single condition never uses it.
-Predictions do not pass through forked processes: sending back the
-arrays of states and sensitivities costs more than computing them.
+solves the conditions of an evaluation in `n` OpenMP threads inside
+cppDE; a single condition uses one.
 
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) and
 [`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
-run independent fits as processes through `cores`. With one number, fits
-are forks of the session, each solving conditions in one thread: a
-forked child never starts the thread team, and BLAS and OpenMP stay at
-one thread across the fork. `cores = c(fits = 4, conditions = 2)` runs
-four fits with two threads each in fresh R processes (a PSOCK cluster),
-as always on Windows. Each process holds a copy of the predictions, so
-memory grows with the process count; keep the product of both below the
-core count.
+run fits as processes through `cores`. With one number, fits are forks
+of the session with one thread each.
+`cores = c(fits = 4, conditions = 2)` runs four fits with two threads
+each in fresh R processes (a PSOCK cluster, always on Windows). Memory
+grows with the process count; keep the product of both below the core
+count.
 
 | where | argument | axis |
 |----|----|----|
@@ -61,13 +53,12 @@ per task. Inside `expr`:
   `options(dMod2.cores = cores)`,
 - `jobname`: the job name.
 
-`input` names the session objects the code reads, functions included, by
-default all objects of the calling environment. The process attaches
-dMod2 and the R defaults; other packages are loaded by the code, and
-session options such as `dMod2.cores` do not reach it.
+`input` names the session objects the code reads, by default all objects
+of the calling environment. The process attaches dMod2 and the R
+defaults; session options do not reach it.
 
-Example: coverage of the 95% t interval for the mean of exponential
-samples, one task per sample size, on the local machine:
+Example: coverage of the 95% t interval for exponential samples, one
+task per sample size:
 
 ``` r
 
@@ -91,9 +82,6 @@ job
 ```
 
 The call returns once tasks have started. `job` is a list of functions:
-`check()` reports task states, `wait()` polls until none runs,
-[`get()`](https://rdrr.io/r/base/get.html) joins the results, here into
-one data frame.
 
 ``` r
 
@@ -113,17 +101,14 @@ job$get()
 #> 4 50   0.9445
 ```
 
-Task `i` uses seed `seed + i`, independent of worker and order; without
-`seed` one is drawn. A task that errors returns the `try-error`, the
-others go on.
+Task `i` uses seed `seed + i`. A task that errors returns the
+`try-error`, the others go on.
 
 ## Job folder layout
 
-At submission the job files go into a temporary stage, copied to every
-node as one `tar` stream over ssh into `<jobname>_folder/<k>` of the
-home directory, `k` the node number. On `"localhost"` the folder is in
-the working directory and no ssh is used. The local `<jobname>_folder`
-also holds the manifest `job.rds`. After the local job:
+The job files go to `<jobname>_folder/<k>` in the home directory of node
+`k`, on `"localhost"` in the working directory. The local
+`<jobname>_folder` also holds the manifest `job.rds`:
 
 ``` r
 
@@ -146,8 +131,7 @@ list.files("coverage_folder", recursive = TRUE)
 | `job.sh`, `env.sh` | SLURM only: job script from the template, job environment |
 | `task_<i>.out`, `task_<i>.rds` | output and result of task `i` |
 
-`job.R` is the same for every task, called as
-`Rscript job.R <taskId> <cores>` with output in `task_<taskId>.out`:
+Every task runs `Rscript job.R <taskId> <cores>`:
 
 ``` r
 
@@ -174,12 +158,8 @@ writeLines(readLines("coverage_folder/1/job.R"))
 #> invisible(file.rename(paste0('task_', taskId, '.part'), paste0('task_', taskId, '.rds')))
 ```
 
-It attaches dMod2, loads workspace and shared objects, reads the task,
-sets the seed and evaluates the code in
-[`try()`](https://rdrr.io/r/base/try.html), writing `task_<taskId>.rds`
-for [`get()`](https://rdrr.io/r/base/get.html). Tasks share nothing but
-files. The code runs in the job folder of the node; files written there
-come back with `get(all = TRUE)`.
+The code runs in the job folder of the node; files written there come
+back with `get(all = TRUE)`.
 
 ## Nodes and workers
 
@@ -197,65 +177,47 @@ on <- slurmCluster("mycluster", cores = 8, walltime = "12:00:00")
 ```
 
 A node is an ssh destination (`"host"`, `"user@host"`) with key
-authentication, since no terminal takes a password. `"localhost"` runs
-without ssh, in the session shell and working directory, with the R and
-library paths of the session, so no second dMod2 install is needed;
+authentication. `"localhost"` runs without ssh, with the R and library
+paths of the session;
 [`localNode()`](https://dmodverse.github.io/dMod2/reference/localNode.md)
 is `sshNodes("localhost")`.
 
 Each node is one worker. Task `i` goes to worker `(i - 1) %% W + 1` of
-`W`; a worker runs the assigned tasks in sequence, each with the `cores`
-of the node. `tasks = NULL`, the default, gives one task per worker.
-
-`cores` per task is one number, a vector named by node, or `NULL` for
-the free cores at submission.
+`W`; a worker runs the assigned tasks in sequence with the `cores` of
+the node. `tasks = NULL`, the default, gives one task per worker.
+`cores` is one number, a vector named by node, or `NULL` for the free
+cores, which
 [`detectFreeCores()`](https://dmodverse.github.io/dMod2/reference/detectFreeCores.md)
-counts cores minus the one-minute load average, on a local Windows
-machine minus the processor load since the previous call, at least 1,
-locally or over ssh; a node gets at most the free cores, with a warning
-if given more.
+counts as cores minus the load average.
 
 ``` r
 
 detectFreeCores(c("localhost", "server1", "server2"))
 ```
 
-On each node `slot_<k>.sh` calls `Rscript job.R` for each task of the
-node in turn, started as `nohup setsid sh slot_<k>.sh &`, so it survives
-the end of the ssh connection or the session. Tasks run with
-`OMP_NUM_THREADS=1` and `MKL_NUM_THREADS=1`, so BLAS and OpenMP start
-only threads the code asks for, and with `libs` first in the library
-paths.
+Tasks survive the end of the ssh connection and the session, and run
+with `OMP_NUM_THREADS=1`, `MKL_NUM_THREADS=1` and `libs` first in the
+library paths.
 
 ## Model files and builds
 
-The model files of a job are those of the model objects in `input`
-(`obsfn`, `parfn`, `prdfn`, objectives), found through their sources;
+The model files of a job are those of the model objects in `input`;
 without any, all model files of `getOption("dMod2.outdir")`, else of the
-working directory. `build` sets how they reach the nodes:
+working directory. `build`:
 
-- `"compile"`: sources are copied and `build.sh` compiles them into one
-  shared object against the cppDE installed on the node, with cppDE
-  headers, SUNDIALS, KLU, the model `-D` switches and `-O2`.
-  `buildCores` compilers run at once, by default the node cores, at
-  most 16. Past the command-line limit objects go through a static
-  archive, `buildBundle` sources per translation unit.
+- `"compile"`: sources are compiled on the node into one shared object
+  against the cppDE installed there, with `buildCores` compilers
+  (default the node cores, at most 16) and `buildBundle` sources per
+  translation unit.
 - `"link"`: object files are copied and linked, which needs a compatible
   compiler on the node.
 - `"copy"`: shared objects are copied, which needs a compatible node.
 - `"auto"`, the default: `"copy"` when all nodes are `"localhost"`, else
   `"compile"`.
 
-The build runs once per node before the first task; `job.R` points every
-model object of the workspace at the one shared object
-([`modelname()`](https://dmodverse.github.io/dMod2/reference/modelname.md)).
-On SLURM it runs once on the login node for all array tasks. Output goes
-to `build.log`; a failed build stops the submission and shows the end of
-the log. `libs` prepends library paths on the nodes for build and tasks,
-expanded remotely, so `~` is the remote home.
-
-The coverage job has no model files: no model object in `input`, no
-shared object in the working directory.
+The build runs once per node, on SLURM once on the login node. A failed
+build stops the submission and shows the end of `build.log`. `libs`
+prepends library paths on the nodes; `~` is the remote home.
 
 ## Job monitoring and recovery
 
@@ -268,18 +230,14 @@ shared object in the working directory.
 | `purge(local = FALSE)` | deletes the job folders on the nodes, on `"localhost"` the local `<jobname>_folder/<k>`, with `local = TRUE` also local folder and registry entry |
 | `terminate()` | stops the tasks |
 
-A task is done when the result file exists, running while the worker
-runs (also while waiting), failed when the worker ended without a
-result. [`get()`](https://rdrr.io/r/base/get.html) copies remote results
-over ssh into the local `<jobname>_folder/<k>`, with `all = TRUE` all
-files. It joins parlists with [`c()`](https://rdrr.io/r/base/c.html) and
-data frames, parameter frames included, with
-[`rbind()`](https://rdrr.io/r/base/cbind.html), which merges the two
-sides of a profile; other results come as a list. Missing results are
-dropped with a warning. `get(combine = FALSE)` returns one entry per
-task, named like `tasks`: `NULL` if not done, the `try-error` if failed.
-`terminate()` ends the process group of every slot, on SLURM the job by
-`scancel`.
+A task is failed when the worker ended without a result.
+[`get()`](https://rdrr.io/r/base/get.html) copies remote results into
+the local `<jobname>_folder/<k>`, with `all = TRUE` all files. It joins
+parlists with [`c()`](https://rdrr.io/r/base/c.html) and data frames
+with [`rbind()`](https://rdrr.io/r/base/cbind.html), which merges the
+two sides of a profile; other results come as a list.
+`get(combine = FALSE)` returns one entry per task: `NULL` if not done,
+the `try-error` if failed.
 
 Output of the second task, then deletion:
 
@@ -295,18 +253,15 @@ job$purge(local = TRUE)
 with failed tasks is kept for
 [`log()`](https://rdrr.io/r/base/Log.html).
 
-A job outlives the session. The manifest is in the local
-`<jobname>_folder`, in the `<jobname>_folder` of every remote node until
-`purge()`, and in the registry `tools::R_user_dir("dMod2", "data")`
-until `purge(local = TRUE)`;
+A job outlives the session. The manifest is in the local and remote
+`<jobname>_folder` and in the registry
+`tools::R_user_dir("dMod2", "data")`;
 [`dMod2Jobs()`](https://dmodverse.github.io/dMod2/reference/dMod2Jobs.md)
 lists registered jobs. `recover = TRUE` with a job name returns the job
-functions without resubmitting, from the manifest in the working
-directory, else the registry, else, with `on`, the remote node folders,
-which recovers a job from another machine. A new job of the same name is
-an error while the old one runs where the new one would replace the old
-folders: in the same working directory or on the same remote nodes, also
-from another machine.
+functions without resubmitting, from the working directory, the registry
+or, with `on`, the remote nodes, also for a job from another machine. A
+new job of the same name is an error while the old one runs in the same
+folders.
 
 ``` r
 
@@ -319,27 +274,20 @@ job <- distributedComputing(jobname = "fits", on = sshNodes(c("server1", "server
 ## SLURM clusters
 
 [`slurmCluster()`](https://dmodverse.github.io/dMod2/reference/localNode.md)
-names the login node, reached by ssh, and the resources per array task:
-`cores`, `walltime`, `memPerCore` in GB. Workers are the `array` array
-tasks, by default one per task; array task `j` runs tasks `j`,
-`j + array`, `j + 2 * array`, … in sequence. The stage goes to
-`~/<jobname>_folder/1` on the login node, where the template environment
-is set up, the model files are built once, and `sbatch` submits from
-that folder, so compute nodes must see the login-node home directory.
-`partition`, `account`, `maxRunning` (array tasks at once) and `sbatch`
-(further options such as `"--constraint=ib"`) override the `#SBATCH`
-lines of the template. The start reports the job ID; `check()` reads
-`squeue`, `terminate()` calls `scancel`.
+names the login node and the resources per array task: `cores`,
+`walltime`, `memPerCore` in GB. Workers are the `array` array tasks, by
+default one per task. The job folder is `~/<jobname>_folder/1` on the
+login node, where the model files are built once and `sbatch` submits,
+so compute nodes must see that home directory. `partition`, `account`,
+`maxRunning` and `sbatch` (further options) override the `#SBATCH` lines
+of the template.
 
 [`slurmTemplate()`](https://dmodverse.github.io/dMod2/reference/slurmTemplate.md)
-sets up the job script template once per login node, stored in
-`tools::R_user_dir("dMod2", "config")`. A template is a cluster job
-script with placeholders `{{ jobname }}`, `{{ ntasks }}` (array tasks),
-`{{ cores }}`, `{{ memPerCore }}`, `{{ walltime }}`, and one line
-`{{ run }}` that runs the tasks. Non-comment lines before `{{ run }}`
-set up the environment, e.g. `module load`, also for the build on the
-login node. A placeholder without value is an error, so `{{ walltime }}`
-needs `walltime`. The shipped template for the bwForCluster Helix:
+sets up the job script template once per login node. A template is a job
+script with placeholders `{{ jobname }}`, `{{ ntasks }}`, `{{ cores }}`,
+`{{ memPerCore }}`, `{{ walltime }}` and one line `{{ run }}`; lines
+before `{{ run }}` set up the environment, also for the build. The
+shipped template for the bwForCluster Helix:
 
 ``` r
 
@@ -375,10 +323,9 @@ cluster <- slurmCluster("helix", cores = 1, walltime = "12:00:00")
 
 ## Fits and profiles of the guide project
 
-A cluster starts many small tasks sooner than one large one, so these
-jobs use one core per task. The 200 fits of `fit.R`
-([Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md))
-as 200 one-fit tasks, each start drawn from the task seed:
+The 200 fits of
+[Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md)
+as 200 one-fit tasks:
 
 ``` r
 
@@ -393,11 +340,7 @@ fits <- as.parframe(fitsJob$get())
 fitsJob$purge(local = TRUE)
 ```
 
-The sources of `obj` compile once on the login node.
-[`get()`](https://rdrr.io/r/base/get.html) joins the parlists,
-[`as.parframe()`](https://dmodverse.github.io/dMod2/reference/as.parframe.md)
-sorts by value. A later session, also on another day, takes up the job
-by name:
+A later session takes up the job by name:
 
 ``` r
 
@@ -406,7 +349,9 @@ fitsJob <- distributedComputing(jobname = "oppelt_fits", recover = TRUE)
 
 The profiles of [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md),
-one side of one parameter per task:
+one side of one parameter per task;
+[`get()`](https://rdrr.io/r/base/get.html) binds both sides into one
+profile:
 
 ``` r
 
@@ -422,33 +367,25 @@ profilesJob$wait(interval = 60)
 profiles <- profilesJob$get()
 ```
 
-[`get()`](https://rdrr.io/r/base/get.html) binds both sides of each
-parameter into one profile.
-
 An [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md)
 multistart splits by `which`: every task draws all starts from the same
 seed and fits those it names. The 200 starts of [Sparse
-deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md),
-two per task:
+deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md):
 
 ``` r
 
-compoundsJob <- distributedComputing({
+dcfJob <- distributedComputing({
   set.seed(3)
-  msem(objCompounds + priorCompounds, random, init, fixed = gaugeReduced, fits = 200,
-       sd = sdStart, keepFits = TRUE, which = task)
-}, tasks = split(1:200, rep(1:100, each = 2)), on = cluster, jobname = "oppelt_compounds",
-input = c("objCompounds", "priorCompounds", "random", "init", "gaugeReduced", "sdStart"))
-fitCompounds <- compoundsJob$get()
+  msem(objSS, randomSS, c(initDCF, prob_compound = 0.2, tau_compound = 0.5),
+       fixed = gaugeReduced, fits = 200, sd = 0.5, keepFits = TRUE, which = task)
+}, tasks = as.list(1:200), on = cluster, jobname = "oppelt_dcf",
+input = c("objSS", "randomSS", "initDCF", "gaugeReduced"))
+fitDCF <- dcfJob$get()
 ```
 
-[`get()`](https://rdrr.io/r/base/get.html) returns one
-[`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) fit, the
-best, with table and fits of all starts. `helix.R` of the project runs
-the other expensive guide scripts the same way.
-
-Without SLURM, as many tasks run at once as there are nodes. One task
-per node, the default, with ten fits per node core:
+[`get()`](https://rdrr.io/r/base/get.html) returns the best
+[`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) fit with
+all starts. Over ssh, one task per node:
 
 ``` r
 

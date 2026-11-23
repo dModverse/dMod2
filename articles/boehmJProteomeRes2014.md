@@ -198,8 +198,8 @@ rbind(ML = best[remlfit$errpars], REML = remlfit$argument[remlfit$errpars])
 ```
 
     #>      sd_pSTAT5A_rel sd_pSTAT5B_rel sd_rSTAT5A_rel
-    #> ML        0.5877357      0.8201003      0.4987671
-    #> REML      0.6253827      0.8442638      0.5249191
+    #> ML        0.5879866      0.8200847      0.4988025
+    #> REML      0.6254895      0.8442657      0.5248911
 
 ``` r
 
@@ -207,7 +207,7 @@ remlfit$dof     # data points minus the summed leverage, per observable
 ```
 
     #> pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    #>    13.67754    14.22182    14.10064
+    #>    13.67808    14.22157    14.10035
 
 ``` r
 
@@ -224,7 +224,7 @@ tapply(remlfit$leverage$leverage, remlfit$leverage$name, sum)
 ```
 
     #> pSTAT5A_rel pSTAT5B_rel rSTAT5A_rel 
-    #>    2.322464    1.778181    1.899355
+    #>    2.321924    1.778430    1.899645
 
 ## Prediction band
 
@@ -296,15 +296,15 @@ confint(profiles, level = 0.95, val.column = "data",
 ```
 
     #>                                      name      value       lower      upper
-    #> Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5679595 -1.74005895 -1.3901478
-    #> k_exp_hetero                 k_exp_hetero -4.4421935        -Inf -2.9536118
-    #> k_exp_homo                     k_exp_homo -2.2029667 -2.55732648 -1.8892122
-    #> k_imp_hetero                 k_imp_hetero -1.7873087 -1.91091368 -1.6581547
-    #> k_imp_homo                     k_imp_homo  1.4688356  0.09953717        Inf
-    #> k_phos                             k_phos  4.1976586  4.10644777  4.2965239
-    #> sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5877357  0.40937804  0.7942116
-    #> sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8201003  0.66464015  1.0126205
-    #> sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4987671  0.34873677  0.6906962
+    #> Epo_degradation_BaF3 Epo_degradation_BaF3 -1.5677407 -1.74032814 -1.3897985
+    #> k_exp_hetero                 k_exp_hetero -4.4083675        -Inf -2.9518842
+    #> k_exp_homo                     k_exp_homo -2.2022616 -2.55798090 -1.8885277
+    #> k_imp_hetero                 k_imp_hetero -1.7875168 -1.91111565 -1.6579757
+    #> k_imp_homo                     k_imp_homo  1.4651568  0.09834658        Inf
+    #> k_phos                             k_phos  4.1977563  4.10634209  4.2967160
+    #> sd_pSTAT5A_rel             sd_pSTAT5A_rel  0.5879866  0.40915395  0.7945740
+    #> sd_pSTAT5B_rel             sd_pSTAT5B_rel  0.8200847  0.66430695  1.0130229
+    #> sd_rSTAT5A_rel             sd_rSTAT5A_rel  0.4988025  0.34854787  0.6911589
 
 For k_imp_homo and k_exp_hetero the data term stays level and only the
 prior rises: homodimer import is faster than phosphorylation, and the

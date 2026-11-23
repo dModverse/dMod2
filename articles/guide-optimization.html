@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,33 +118,24 @@
 
     
     
-<p>dMod2 <span class="citation"><a href="#ref-kaschek2019dmod">[1]</a></span> minimizes <span class="math inline">\(-2 \log L\)</span>, with a prior <span class="math inline">\(-2 \log\)</span> of the posterior, by a
-trust-region method on the exact gradient, <code><a href="../reference/trust.html">trust()</a></code>, run
-from many starts by <code><a href="../reference/mstrust.html">mstrust()</a></code>. The fits below use the model
-of <a href="guide-model.html">Setting up models</a> with the gauge of <a href="guide-symmetries.html">Symmetries</a>, by <code>fit.R</code>,
-<code>onefit.R</code> and <code>plots.R</code> of the project.
-Derivations: <a href="methods-trust.html">Methods &gt; Trust-region
+<p>dMod2 <span class="citation"><a href="#ref-kaschek2019dmod">[1]</a></span> minimizes <span class="math inline">\(-2 \log L\)</span> (with a prior, <span class="math inline">\(-2 \log\)</span> of the posterior) by the
+trust-region method <code><a href="../reference/trust.html">trust()</a></code>, from many starts by
+<code><a href="../reference/mstrust.html">mstrust()</a></code>, here on the model of <a href="guide-model.html">Setting up models</a> with the gauge of <a href="guide-symmetries.html">Symmetries</a>. Derivations: <a href="methods-trust.html">Methods &gt; Trust-region
 optimization</a>.</p>
 <div class="section level2">
 <h2 id="trust-region-method">Trust-region method<a class="anchor" aria-label="anchor" href="#trust-region-method"></a>
 </h2>
-<p>Each iteration minimizes a quadratic model of the objective inside a
-ball of radius <span class="math inline">\(r\)</span>; the ratio of
-actual to predicted decrease decides on the step and the radius.
-<code>rinit</code> is the first radius in the units of the parameters,
-on the log scale <code>0.1</code> is ten percent of a rate. A trial
-point at which the objective fails counts as rejected, so no bounds are
-needed to keep a fit where the model can be evaluated.
+<p>Each iteration minimizes a quadratic model inside a ball of radius
+<span class="math inline">\(r\)</span>, first <code>rinit</code>; the
+ratio of actual to predicted decrease decides on step and radius. A
+trial point where the objective fails counts as rejected.
 <code>stepControl$nonmonotone</code> in <span class="math inline">\((0,
-1)\)</span> also accepts steps that raise the value; the result is then
-the best iterate.</p>
+1)\)</span> also accepts rising steps and returns the best iterate.</p>
 <p><code>parlower</code> and <code>parupper</code> set bounds.
 <code>boundary = "reflective"</code> (default) keeps the iterates
-strictly inside and reports the parameters held by a bound in
-<code>atBound</code>; <code>boundary = "clip"</code> takes them out of
-the subproblem, runs a single Gauss-Newton phase, reads only
-<code>ftol</code> and <code>mtol</code> and stops with
-<code>"fvalue"</code> or <code>"iterlim"</code>.</p>
+strictly inside and lists bound parameters in <code>atBound</code>;
+<code>boundary = "clip"</code> removes them from the subproblem and runs
+Gauss-Newton only, with <code>ftol</code> and <code>mtol</code>.</p>
 <div class="section level3">
 <h3 id="termination-criteria">Termination criteria<a class="anchor" aria-label="anchor" href="#termination-criteria"></a>
 </h3>
@@ -191,7 +182,10 @@ the subproblem, runs a single Gauss-Newton phase, reads only
 <td>five rejected steps in a row, value flat within
 <code>ftol</code>
 </td>
-<td><code>TRUE</code></td>
+<td>
+<code>TRUE</code> where the full Newton step predicts at most
+<code>mtol</code>
+</td>
 </tr>
 <tr class="even">
 <td><code>"radius"</code></td>
@@ -212,16 +206,12 @@ parameters</td>
 </tr>
 </tbody>
 </table>
-<p>Only <code>"gradient"</code> tests first-order optimality; the last
-quasi-Newton phase ignores the value, model and step tests (<a href="#hessian-phases-and-reverse-sweep">Hessian phases</a>).
-<code>"gradient"</code>, <code>"fvalue"</code> and
-<code>"preddiff"</code> end a run of <code><a href="../reference/trust.html">trust()</a></code> or
-<code><a href="../reference/trust.html">trustL1()</a></code> only where the full Newton step also predicts a
-decrease of at most <code>mtol</code> (<a href="methods-trust.html#termination-criteria">Methods &gt; Termination
+<p><code>"gradient"</code>, <code>"fvalue"</code> and
+<code>"preddiff"</code> stop only where the full Newton step also
+predicts at most <code>mtol</code> (<a href="methods-trust.html#termination-criteria">Methods &gt; Termination
 criteria</a>). <code>ftol</code> and <code>gtol</code> belong at or
-above the numerical error of value and gradient; <code>model.R</code>
-defines them as <code>tolerances</code>, which the fitting scripts pass
-as <code>tolControl</code>.</p>
+above the numerical error; <code>model.R</code> defines them as
+<code>tolerances</code>, passed as <code>tolControl</code>.</p>
 </div>
 </div>
 <div class="section level2">
@@ -261,10 +251,13 @@ as <code>tolControl</code>.</p>
 </tr>
 </tbody>
 </table>
-<p>The exact Hessian needs second-order sensitivities,
-<code>deriv2 = TRUE</code> or <code>derivMode = "forward-reverse"</code>
-(<a href="guide-sensitivities.html">Sensitivities</a>). The quasi-Newton
-settings are entries of <code>qnControl</code>:</p>
+<p>The default is the hybrid of Fides <span class="citation"><a href="#ref-froehlich2022fides">[2]</a></span>: Gauss-Newton until the
+radius stayed the same for 20 iterations, then BFGS (<a href="methods-trust.html#hessian-phases">Methods &gt; Hessian
+phases</a>). The sparse path, multiple shooting and
+<code>boundary = "clip"</code> run Gauss-Newton. <code>"exact"</code>
+needs <code>deriv2 = TRUE</code> or
+<code>derivMode = "forward-reverse"</code> (<a href="guide-sensitivities.html">Sensitivities</a>). Quasi-Newton
+settings, entries of <code>qnControl</code>:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -280,17 +273,15 @@ settings are entries of <code>qnControl</code>:</p>
 <tr class="odd">
 <td><code>hessianInit</code></td>
 <td><code>"gn"</code></td>
-<td>seed: Gauss-Newton at the start, <code>"identity"</code>, or
-<code>"exact"</code>
-</td>
+<td>seed: <code>"gn"</code>, <code>"identity"</code>,
+<code>"exact"</code>, or <code>"tracked"</code> (later phases)</td>
 </tr>
 <tr class="even">
 <td><code>hessianReseed</code></td>
 <td><code>"never"</code></td>
 <td>
-<code>"stall"</code>: reseed at the current iterate instead of
-stopping on stagnation or on a step that no longer moves it, where the
-iterate moved since the last reseed, at most eight times per phase</td>
+<code>"stall"</code>: reseed instead of stopping on stagnation, up
+to 8 times</td>
 </tr>
 <tr class="odd">
 <td><code>qnMemory</code></td>
@@ -312,45 +303,33 @@ iterate moved since the last reseed, at most eight times per phase</td>
 </tr>
 </tbody>
 </table>
-<p>With <code>hessianInit = "identity"</code> the objective needs to
-return gradients only.</p>
 <div class="section level3">
 <h3 id="hessian-phases-and-reverse-sweep">Hessian phases and reverse sweep<a class="anchor" aria-label="anchor" href="#hessian-phases-and-reverse-sweep"></a>
 </h3>
-<p><code>phases</code> runs several sources in turn. Each phase is a
-list with <code>hessianMethod</code> and optionally
-<code>iterlim</code>, <code>sweep</code> and <code>qnControl</code>. A
-phase ends on a value, model, step or stagnation stop or on the
-<code>iterlim</code> of the phase and hands over to the next;
-<code>"gradient"</code> ends the run. <code>switches</code> bounds the
-handovers (default: one fewer than phases).</p>
+<p><code>phases</code> runs several sources in turn, each a list with
+<code>hessianMethod</code> and optionally <code>iterlim</code>,
+<code>radiusStall</code>, <code>sweep</code>, <code>keepRadius</code>,
+<code>onStop</code> and <code>qnControl</code>. A phase hands over on a
+stop other than <code>"gradient"</code>, on <code>iterlim</code> or
+after <code>radiusStall</code> iterations at one radius;
+<code>switches</code> bounds the handovers.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">best</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span>,</span>
 <span>             phases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"sr1"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"phaseIterations"</span>, <span class="st">"evalBySource"</span>, <span class="st">"nSwitch"</span>, <span class="st">"stopReason"</span><span class="op">)</span><span class="op">]</span></span></code></pre></div>
 <p><code>sweep = "reverse"</code> computes the gradient of a
 quasi-Newton phase by one backward sweep, for models built with
-<code>derivMode = c("forward", "reverse")</code>; by default a
-<code>"bfgs"</code> or <code>"sr1"</code> phase of <code>phases</code>
-sweeps backwards where it can, while a run without <code>phases</code>
-sweeps only with <code>sweep = "reverse"</code>. With
-<code>phases</code>, <code>phaseSweep</code> reports the sweep per
-phase.</p>
+<code>derivMode = c("forward", "reverse")</code>; a <code>"bfgs"</code>
+or <code>"sr1"</code> phase does so by default.</p>
 </div>
 <div class="section level3">
 <h3 id="sparse-hessians">Sparse Hessians<a class="anchor" aria-label="anchor" href="#sparse-hessians"></a>
 </h3>
-<p><code>sparse = TRUE</code> solves the subproblem on sparse Cholesky
-factors of the Hessian, for many parameters that each act on few
-conditions; a part of the Hessian that couples many parameters at once,
-such as the normalization of an alignment, comes as a low-rank part. The
-steps, phases, bounds and stops are those of the dense path, so both
-reach the same fit. The default <code>"auto"</code> selects the sparse
-path from 100 parameters on where a step on the sparse Hessian costs
-fewer flops than one on the dense Hessian;
-<code>options(dMod2.sparseAuto = list(parameters = , fill = ))</code>
-moves the lower bound or replaces the cost by an upper bound of the
-fill.</p>
+<p><code>sparse = TRUE</code> uses sparse Cholesky factors, plus a
+low-rank part, for many parameters that each act on few conditions; it
+reaches the same fit as the dense path. <code>"auto"</code> (default)
+takes it from 100 parameters on where it costs fewer flops
+(<code>options(dMod2.sparseAuto = )</code>).</p>
 </div>
 <div class="section level3">
 <h3 id="arguments-and-result">Arguments and result<a class="anchor" aria-label="anchor" href="#arguments-and-result"></a>
@@ -383,7 +362,7 @@ fill.</p>
 </tr>
 <tr class="odd">
 <td><code>hessianMethod</code></td>
-<td><code>"gn"</code></td>
+<td>Gauss-Newton, then BFGS</td>
 <td>source of the model Hessian</td>
 </tr>
 <tr class="even">
@@ -446,20 +425,18 @@ fill.</p>
 </tbody>
 </table>
 <p>Other arguments go to the objective, such as <code>fixed</code>. The
-result, a <code>trustfit</code>, holds <code>argument</code>,
-<code>value</code>, <code>gradient</code>, <code>hessian</code>,
-<code>iterations</code>, <code>neval</code>, <code>converged</code>,
-<code>atBound</code> and <code>stopReason</code>; with
-<code>blather = TRUE</code> also the path of iterates and trial points.
-<code>vcov(fit)</code> inverts half the Hessian.</p>
+<code>trustfit</code> holds <code>argument</code>, <code>value</code>,
+<code>gradient</code>, <code>hessian</code>, <code>iterations</code>,
+<code>converged</code>, <code>atBound</code> and
+<code>stopReason</code>.</p>
 </div>
 </div>
 <div class="section level2">
 <h2 id="single-fit">Single fit<a class="anchor" aria-label="anchor" href="#single-fit"></a>
 </h2>
 <p><code>onefit.R</code> fits from one start drawn with standard
-deviation 0.5 around the best fit; <code><a href="../reference/mstrust.html">mstrust()</a></code> draws again
-where the model cannot be evaluated:</p>
+deviation 0.5 around the best fit; the fit is loaded from
+<code>results/onefit.rds</code>:</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the start drawn with standard deviation 0.5 around the best fit, and drawn again where the</span></span>
 <span><span class="co"># model cannot be evaluated</span></span>
@@ -477,7 +454,7 @@ where the model cannot be evaluated:</p>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $iterations</span></span>
-<span><span class="co">#&gt; [1] 263</span></span>
+<span><span class="co">#&gt; [1] 51</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $stopReason</span></span>
 <span><span class="co">#&gt; [1] "fvalue"</span></span></code></pre></div>
@@ -485,8 +462,8 @@ where the model cannot be evaluated:</p>
 <div class="section level2">
 <h2 id="multistart-fitting">Multistart fitting<a class="anchor" aria-label="anchor" href="#multistart-fitting"></a>
 </h2>
-<p><code><a href="../reference/mstrust.html">mstrust()</a></code> fits from many starts and returns a list of
-fits; <code><a href="../reference/as.parframe.html">as.parframe()</a></code> sorts them by value. <code>fit.R</code>
+<p><code><a href="../reference/mstrust.html">mstrust()</a></code> fits from many starts;
+<code><a href="../reference/as.parframe.html">as.parframe()</a></code> sorts the fits by value. <code>fit.R</code>
 draws 200 starts from the prior of <a href="guide-model.html#likelihood-and-prior">Setting up models</a>:</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># 200 fits from starts drawn from the prior; a start at which the model cannot be evaluated is</span></span>
@@ -496,10 +473,9 @@ draws 200 starts from the prior of <a href="guide-model.html#likelihood-and-prio
 <span><span class="va">fits</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/mstrust.html">mstrust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">mu</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, sd <span class="op">=</span> <span class="va">sigma</span><span class="op">[</span><span class="va">free</span><span class="op">]</span>, fits <span class="op">=</span> <span class="fl">200</span>, iterlim <span class="op">=</span> <span class="fl">1000</span>,</span>
 <span>                tolControl <span class="op">=</span> <span class="va">tolerances</span>, cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/as.parframe.html">as.parframe</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
-<p>Arguments go by name to <code><a href="../reference/trust.html">trust()</a></code>, to the sampler
-(<code>sd</code> to <code><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm()</a></code>) or to the objective. All
-starts are drawn before the fits are distributed, so
-<code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> reproduces a run for any <code>cores</code>.</p>
+<p>Arguments go by name to <code><a href="../reference/trust.html">trust()</a></code>, the sampler or the
+objective; <code><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed()</a></code> reproduces a run for any
+<code>cores</code>.</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -559,22 +535,14 @@ starts are drawn before the fits are distributed, so
 <code>output</code>, <code>cautiousMode</code>
 </td>
 <td><code>FALSE</code></td>
-<td>
-<code>output</code> writes every fit to
-<code>resultPath/name/trial-&lt;k&gt;-&lt;date&gt;/interRes/</code>
-while the run goes on and the parameter list at the end of the run;
-<code>cautiousMode</code> adds a deparsed <code>.R</code> copy of every
-fit, kept after the run</td>
+<td>write fits to <code>resultPath</code> during the run</td>
 </tr>
 </tbody>
 </table>
-<p><code><a href="../reference/msParframe.html">msParframe()</a></code> draws starts from a separate seed, so
-several runs can share them; <code><a href="../reference/load.parlist.html">load.parlist()</a></code> reads the fits
-in <code>interRes/</code> of a run that is still going or was aborted,
-since a finished run removes them and leaves
-<code>parameterList.Rda</code>. <code>helix.R</code> runs the 200 fits
-as 100 array tasks (<a href="guide-remote-computing.html">Remote
-computing</a>):</p>
+<p><code><a href="../reference/msParframe.html">msParframe()</a></code> draws shareable starts;
+<code><a href="../reference/load.parlist.html">load.parlist()</a></code> reads the fits of a running or aborted run.
+The fits of <code>fit.R</code> (<a href="guide-remote-computing.html">Remote computing</a>) are loaded from
+<code>results/fits.rds</code>:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
 <span><span class="va">fits</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fits.rds"</span><span class="op">)</span></span>
@@ -583,45 +551,55 @@ computing</a>):</p>
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>fits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">fits</span><span class="op">)</span>, converged <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">fits</span><span class="op">$</span><span class="va">converged</span><span class="op">)</span>, best <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">fits</span><span class="op">$</span><span class="va">value</span><span class="op">)</span>,</span>
 <span>  withinOne <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sum.html" class="external-link">sum</a></span><span class="op">(</span><span class="va">fits</span><span class="op">$</span><span class="va">value</span> <span class="op">&lt;</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">fits</span><span class="op">$</span><span class="va">value</span><span class="op">)</span> <span class="op">+</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;      fits converged      best withinOne </span></span>
-<span><span class="co">#&gt;  200.0000  152.0000 -488.6773   11.0000</span></span></code></pre></div>
-<p>The waterfall plot shows the sorted values; each plateau is a local
-optimum, the length of the plateau the size of the basin of
-attraction:</p>
+<span><span class="co">#&gt;  200.0000  187.0000 -488.6774   15.0000</span></span></code></pre></div>
+<p>Sorted values; each plateau is a local optimum:</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># every fit on a pseudo-log scale; each plateau is a local optimum</span></span>
 <span><span class="fu"><a href="../reference/plotValues.html">plotValues</a></span><span class="op">(</span><span class="va">fits</span>, pseudoLog <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-optimization_files/figure-html/waterfall-1.png" class="r-plt" alt="" width="768"></p>
-<p>The parameters that differ by more than 0.1 between the plateaus
-within 5 of the best:</p>
+<p>Parameters that differ by more than 0.1 between the plateaus within 5
+of the best:</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">pl</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/plotPars.html">plotPars</a></span><span class="op">(</span><span class="va">fits</span>, <span class="va">value</span> <span class="op">&lt;</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">value</span><span class="op">)</span> <span class="op">+</span> <span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">med</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/with.html" class="external-link">with</a></span><span class="op">(</span><span class="va">pl</span><span class="op">$</span><span class="va">data</span>, <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">parvalue</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">name</span>, <span class="va">step</span><span class="op">)</span>, <span class="va">median</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">differ</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="va">med</span><span class="op">)</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="va">med</span>, <span class="fl">1</span>, <span class="kw">function</span><span class="op">(</span><span class="va">m</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/diff.html" class="external-link">diff</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/range.html" class="external-link">range</a></span><span class="op">(</span><span class="va">m</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span> <span class="op">&gt;</span> <span class="fl">0.1</span><span class="op">]</span></span>
-<span><span class="va">pl</span> <span class="op"><a href="https://ggplot2.tidyverse.org/reference/gg-add.html" class="external-link">%+%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">pl</span><span class="op">$</span><span class="va">data</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">differ</span><span class="op">)</span> <span class="op">+</span></span>
+<span><span class="va">pl</span><span class="op">$</span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset</a></span><span class="op">(</span><span class="va">pl</span><span class="op">$</span><span class="va">data</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">differ</span><span class="op">)</span></span></code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">pl</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/coord_flip.html" class="external-link">coord_flip</a></span><span class="op">(</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/scale_discrete.html" class="external-link">scale_x_discrete</a></span><span class="op">(</span>limits <span class="op">=</span> <span class="va">rev</span><span class="op">)</span> <span class="op">+</span></span>
-<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="cn">NULL</span>, y <span class="op">=</span> <span class="st">"log value"</span>, color <span class="op">=</span> <span class="st">"plateau"</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Warning: &lt;ggplot&gt; %+% x was deprecated in ggplot2 4.0.0.</span></span>
-<span><span class="co">#&gt; <span style="color: #00BBBB;">ℹ</span> Please use &lt;ggplot&gt; + x instead.</span></span>
-<span><span class="co">#&gt; <span style="color: #555555;">This warning is displayed once per session.</span></span></span>
-<span><span class="co">#&gt; <span style="color: #555555;">Call `lifecycle::last_lifecycle_warnings()` to see where this warning was</span></span></span>
-<span><span class="co">#&gt; <span style="color: #555555;">generated.</span></span></span></code></pre></div>
-<p><img src="guide-optimization_files/figure-html/unnamed-chunk-7-1.png" class="r-plt" alt="" width="768"></p>
+<span>  <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="cn">NULL</span>, y <span class="op">=</span> <span class="st">"log value"</span>, color <span class="op">=</span> <span class="st">"plateau"</span><span class="op">)</span></span></code></pre></div>
+<p><img src="guide-optimization_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="768"></p>
 </div>
 <div class="section level2">
 <h2 id="comparison-of-hessian-sources">Comparison of Hessian sources<a class="anchor" aria-label="anchor" href="#comparison-of-hessian-sources"></a>
 </h2>
-<p><code>optimizers.R</code> fits from the same 100 starts with
-Gauss-Newton, BFGS and SR1 on the reverse gradient, the exact Hessian,
-and Gauss-Newton followed by BFGS. <code>hits</code> counts the starts
-that end within 5 of the best value:</p>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<p><code>optimizers.R</code> fits from the same 100 starts with several
+Hessian sources, loaded from <code>results/optimizers.rds</code>.
+<code>hits</code> counts the fits within 5 of the best value:</p>
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">opt</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/optimizers.rds"</span><span class="op">)</span></span>
 <span><span class="va">top</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">min</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">value</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">value</span> <span class="op">&lt;</span> <span class="va">top</span> <span class="op">+</span> <span class="fl">5</span>, <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">method</span>, <span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">method</span><span class="op">)</span><span class="op">)</span>, <span class="va">sum</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="co">#&gt;  Gauss-Newton          BFGS           SR1         exact GN, then BFGS </span></span>
-<span><span class="co">#&gt;            20            14            13            11            11</span></span></code></pre></div>
-<p>Costs and the full comparison: <a href="methods-trust.html#forward-and-reverse-derivatives-on-the-oppelt-fit">Methods
+<span><span class="va">shown</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"default (Fides hybrid)"</span>, <span class="st">"Gauss-Newton"</span>, <span class="st">"BFGS"</span>, <span class="st">"exact"</span>, <span class="st">"GN, then BFGS"</span>, <span class="st">"GN, then BFGS at stall 50"</span>, <span class="st">"SSR1, scaled"</span>,</span>
+<span>           <span class="st">"GNSBFGS"</span><span class="op">)</span></span>
+<span><span class="va">opt</span> <span class="op">&lt;-</span> <span class="va">opt</span><span class="op">[</span><span class="va">opt</span><span class="op">$</span><span class="va">method</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">shown</span>, <span class="op">]</span></span>
+<span><span class="va">method</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/factor.html" class="external-link">factor</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">method</span>, <span class="va">shown</span><span class="op">)</span></span>
+<span><span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">rbind</a></span><span class="op">(</span>converged <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">converged</span>, <span class="va">method</span>, <span class="va">sum</span><span class="op">)</span>,</span>
+<span>        hits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">value</span> <span class="op">&lt;</span> <span class="va">top</span> <span class="op">+</span> <span class="fl">5</span>, <span class="va">method</span>, <span class="va">sum</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
+<span>        secondsPerHit <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">elapsed</span>, <span class="va">method</span>, <span class="va">sum</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">/</span></span>
+<span>                              <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">opt</span><span class="op">$</span><span class="va">value</span> <span class="op">&lt;</span> <span class="va">top</span> <span class="op">+</span> <span class="fl">5</span>, <span class="va">method</span>, <span class="va">sum</span>, na.rm <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt;                           converged hits secondsPerHit</span></span>
+<span><span class="co">#&gt; default (Fides hybrid)           92   21           238</span></span>
+<span><span class="co">#&gt; Gauss-Newton                     84   21           222</span></span>
+<span><span class="co">#&gt; BFGS                             85   17            91</span></span>
+<span><span class="co">#&gt; exact                            97   15          1247</span></span>
+<span><span class="co">#&gt; GN, then BFGS                    91   21            64</span></span>
+<span><span class="co">#&gt; GN, then BFGS at stall 50        85   21           114</span></span>
+<span><span class="co">#&gt; SSR1, scaled                     95   25           161</span></span>
+<span><span class="co">#&gt; GNSBFGS                          88   20           154</span></span></code></pre></div>
+<p>The exact Hessian converges most often, scaled SR1 reaches the best
+plateaus most often, and Gauss-Newton followed by BFGS on the reverse
+gradient needs the least time per hit. Details: <a href="methods-trust.html#forward-and-reverse-derivatives-on-the-oppelt-fit">Methods
 &gt; Forward and reverse derivatives on the Oppelt fit</a>.</p>
 </div>
 <div class="section level2">
@@ -629,136 +607,12 @@ that end within 5 of the best value:</p>
 </h2>
 <p><code><a href="../reference/trust.html">trustL1()</a></code> adds <span class="math inline">\(\sum_i
 \lambda_i \lvert \theta_i - \mu_i \rvert\)</span> for the parameters
-named in <code>mu</code>, with strength <code>lambda</code>. A penalized
-parameter stays at the reference until the data pull with a force above
-<span class="math inline">\(\lambda_i\)</span>; a scan over
-<code>lambda</code> selects the parameters that differ.
-<code>one.sided = TRUE</code> penalizes one side only, <code>gate</code>
-lets parameters leave upward only, <code>fuse</code> penalizes
-differences within blocks of parameters. Bounds and tolerances are those
-of <code><a href="../reference/trust.html">trust()</a></code>; <code>mstrust(optmethod = "trustL1")</code>
-runs it from many starts. Details: <a href="methods-trust.html#l1-penalties">Methods &gt; L1
-penalties</a>.</p>
-</div>
-<div class="section level2">
-<h2 id="multiple-shooting">Multiple shooting<a class="anchor" aria-label="anchor" href="#multiple-shooting"></a>
-</h2>
-<p>Multiple shooting integrates segments of the time axis from separate
-node values and makes continuity a constraint, which helps for
-oscillating or spiking systems (<a href="methods-multiple-shooting.html">Methods &gt; Multiple
-shooting</a>). It is a control of the objective:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">obj</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">g</span> <span class="op">*</span> <span class="va">x</span> <span class="op">*</span> <span class="va">p</span>, multipleShootingControl <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">start</span><span class="op">)</span></span>
-<span><span class="va">fit</span><span class="op">$</span><span class="va">multipleShooting</span><span class="op">$</span><span class="va">violation</span></span>
-<span><span class="fu"><a href="../reference/controls.html">controls</a></span><span class="op">(</span><span class="va">obj</span>, <span class="st">"multipleShootingControl"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span>   <span class="co"># single shooting again</span></span></code></pre></div>
-<p>The chain must be <code>g * x * p</code> with one <code><a href="../reference/Xs.html">Xs()</a></code>
-built on <code>odemodel(..., includeTimeZero = FALSE)</code>. Not
-available with it: <code>hessianMethod = "exact"</code>,
-<code>qnControl$hessianInit = "exact"</code>, several phases,
-<code>switches</code>, <code>hessianReseed</code>,
-<code>qnMemory</code>, <code>nonmonotone</code>,
-<code>boundary = "clip"</code>, <code>minimize = FALSE</code>,
-<code>traceFile</code>.</p>
-<table class="table">
-<colgroup>
-<col width="33%">
-<col width="33%">
-<col width="33%">
-</colgroup>
-<thead><tr class="header">
-<th>entry of <code>multipleShootingControl</code>
-</th>
-<th>default</th>
-<th>controls</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td><code>nodes</code></td>
-<td><code>"auto"</code></td>
-<td>
-<code>"auto"</code>, <code>"transitions"</code>, or node times</td>
-</tr>
-<tr class="even">
-<td>
-<code>growth</code>, <code>misfit</code>
-</td>
-<td>
-<code>10</code>, <code>3</code>
-</td>
-<td>thresholds at which <code>"auto"</code> cuts a segment</td>
-</tr>
-<tr class="odd">
-<td><code>minPoints</code></td>
-<td>states + 1</td>
-<td>data points per half of a cut</td>
-</tr>
-<tr class="even">
-<td><code>charts</code></td>
-<td>all linear</td>
-<td>
-<code>"log10"</code>, <code>"linear"</code> or <code>"angle"</code>
-per state</td>
-</tr>
-<tr class="odd">
-<td><code>scale</code></td>
-<td>from the data</td>
-<td>scale of the gaps and node steps</td>
-</tr>
-<tr class="even">
-<td><code>init</code></td>
-<td><code>"data"</code></td>
-<td>node values: <code>"data"</code>, <code>"spline"</code>,
-<code>"simulation"</code> or a list</td>
-</tr>
-<tr class="odd">
-<td><code>breaks</code></td>
-<td>none</td>
-<td>node times without continuity</td>
-</tr>
-</tbody>
-</table>
-<table class="table">
-<thead><tr class="header">
-<th>entry of <code>stepControl</code>
-</th>
-<th>default</th>
-<th>controls</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td><code>acceptance</code></td>
-<td><code>"filter"</code></td>
-<td>
-<code>"filter"</code>, <code>"merit"</code> or
-<code>"natural"</code>
-</td>
-</tr>
-<tr class="even">
-<td><code>soc</code></td>
-<td><code>TRUE</code></td>
-<td>second-order correction of a rejected step</td>
-</tr>
-<tr class="odd">
-<td><code>anneal</code></td>
-<td><code>TRUE</code></td>
-<td>penalty on the gaps raised in stages</td>
-</tr>
-<tr class="even">
-<td>
-<code>twoPhase</code>, <code>restore</code>,
-<code>regularize</code>
-</td>
-<td>off</td>
-<td>further globalizations</td>
-</tr>
-</tbody>
-</table>
-<p><code>converged = TRUE</code> requires the scaled gaps below
-<code>tolControl$ctol</code>. The result has a list
-<code>multipleShooting</code> with <code>nodes</code>,
-<code>gaps</code>, <code>violation</code> and the counts of the
-globalization.</p>
+named in <code>mu</code>; a scan over <code>lambda</code> selects the
+parameters that differ from the reference. <code>one.sided</code>,
+<code>gate</code> and <code>fuse</code> vary the penalty (<a href="methods-trust.html#l1-penalties">Methods &gt; L1
+penalties</a>).</p>
+<p>Multiple shooting for oscillating or spiking systems: <a href="methods-multiple-shooting.html">Methods &gt; Multiple
+shooting</a>.</p>
 <p>Reference: <code><a href="../reference/trust.html">trust()</a></code>, <code><a href="../reference/mstrust.html">mstrust()</a></code>,
 <code><a href="../reference/trust.html">trustL1()</a></code>, <code><a href="../reference/msParframe.html">msParframe()</a></code>,
 <code><a href="../reference/as.parframe.html">as.parframe()</a></code>, <code><a href="../reference/load.parlist.html">load.parlist()</a></code>,
@@ -774,10 +628,17 @@ globalization.</p>
 <div class="csl-left-margin">[1] </div>
 <div class="csl-right-inline">D.
 Kaschek, W. Mader, M. Fehling-Kaschek, M. Rosenblatt, and J. Timmer,
-<span>“<span class="nocase">dMod</span>: <span>Efficient</span>
-parameter estimation and uncertainty analysis for dynamic
-models,”</span> <em>Journal of Statistical Software</em>, vol. 88, no.
-10, pp. 1–32, 2019, doi: <a href="https://doi.org/10.18637/jss.v088.i10" class="external-link">10.18637/jss.v088.i10</a>.</div>
+<span>“Dynamic modeling, parameter estimation, and uncertainty analysis
+in <span>R</span>,”</span> <em>Journal of Statistical Software</em>,
+vol. 88, no. 10, pp. 1–32, 2019, doi: <a href="https://doi.org/10.18637/jss.v088.i10" class="external-link">10.18637/jss.v088.i10</a>.</div>
+</div>
+<div id="ref-froehlich2022fides" class="csl-entry">
+<div class="csl-left-margin">[2] </div>
+<div class="csl-right-inline">F.
+Fröhlich and P. K. Sorger, <span>“Fides: <span>Reliable</span>
+trust-region optimization for parameter estimation of <span>ODE</span>
+models,”</span> <em>PLOS Computational Biology</em>, vol. 18, no. 7, p.
+e1010322, 2022, doi: <a href="https://doi.org/10.1371/journal.pcbi.1010322" class="external-link">10.1371/journal.pcbi.1010322</a>.</div>
 </div>
 </div>
 </div>

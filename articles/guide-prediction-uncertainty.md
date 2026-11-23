@@ -1,37 +1,31 @@
 # 6. Prediction uncertainty
 
 The prediction profile likelihood [\[1\]](#ref-kreutz2012likelihood)
-gives the confidence band of a model prediction directly, without
-parameter intervals. This chapter computes the band of nuclear IκBα
-after TNFα in the reduced model of [Profile
-likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md);
-nuclear IκBα is not measured and decides when NFκB leaves the nucleus
-[\[2, Fig. 5\]](#ref-oppelt2018model). The code is `prediction.R`.
+gives the confidence band of a prediction, here of unmeasured nuclear
+IκBα after TNFα [\[2, Fig. 5\]](#ref-oppelt2018model) in the reduced
+model of [Profile
+likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md).
+Code: `prediction.R`.
 
 ## Prediction profiles and validation data points
 
-The prediction profile is the objective minimized over all parameters
-with the prediction held at a value; the values within the \\\chi^2_1\\
-threshold form the confidence interval.
 [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md)
-turns the prediction into a parameter `v`, tied to the model by a
-validation data point of small standard deviation; the profile of `v` is
-the prediction profile.
-[`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
-predicts at the time of the point (`times = t`); `attrName = "data"`
-adds the validation term to the data term, so `stop = "data"` and
-`confint(val.column = "data")` leave the prior out ([Methods \>
-Prediction
+ties a parameter `v` to the prediction by a validation data point of
+small standard deviation; the profile of `v` is the prediction profile,
+and the values within the \\\chi^2_1\\ threshold form the confidence
+interval. `attrName = "data"` adds the validation term to the data term,
+so `stop = "data"` and `confint(val.column = "data")` leave the prior
+out ([Methods \> Prediction
 profiles](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#prediction-profiles)).
 
 ## Prediction band
 
-`prediction.R` computes the profile in the stimulated condition at 44
-times, densest at the flanks of the pulse. The prediction spans seven
-orders of magnitude, so the validation point has standard deviation
-\\0.01\\\hat v(t)\\ and the steps are fractions of \\\hat v(t)\\. The
-profiles run on the linear scale since the resting state holds no
-nuclear IκBα; the times start at 2 minutes.
+`prediction.R` computes the profile at 44 times of the stimulated
+condition, from 2 minutes on; the results are loaded from
+`results/prediction.rds`. The prediction spans seven orders of
+magnitude, so the validation point has standard deviation \\0.01\\\hat
+v(t)\\. The profiles run on linear scale, since the resting state holds
+no nuclear IκBα.
 
 ``` r
 
@@ -70,9 +64,6 @@ predictionProfiles <- parallel::mclapply(times, predictionProfile, mc.cores = ge
                                          mc.preschedule = FALSE)
 ```
 
-[`confint()`](https://rdrr.io/r/stats/confint.html) reads the interval
-from the data term:
-
 ``` r
 
 band <- do.call(rbind, Map(function(t, pr) {
@@ -87,19 +78,19 @@ saved <- readRDS("results/prediction.rds")
 band <- saved$band
 band[band$time %in% c(0, 10, 30, 55, 60, 70, 85, 90, 120, 240, 360), ]
 #>    time        value        lower        upper
-#> 3    10 2.020029e-06 2.721436e-07 2.994902e-06
-#> 7    30 4.396882e-05 3.661270e-05 5.001127e-05
-#> 12   55 6.834805e-04 4.412855e-04 1.179841e-03
-#> 16   60 2.175955e-02 2.696508e-03 4.596137e-02
-#> 18   70 9.074760e-02 6.450871e-02 1.169971e-01
-#> 21   85 3.227699e-02 4.502765e-03 6.094911e-02
-#> 26   90 4.751146e-04 9.354330e-05 1.186641e-02
-#> 32  120 3.424293e-05 1.782673e-05 5.057483e-05
-#> 38  240 1.082623e-04 8.057790e-05 1.395210e-04
-#> 44  360 8.493755e-05 5.923270e-05 1.124127e-04
+#> 3    10 2.020525e-06 2.717045e-07 2.995184e-06
+#> 7    30 4.396870e-05 3.661171e-05 5.001264e-05
+#> 12   55 6.834861e-04 4.412469e-04 1.180039e-03
+#> 16   60 2.175954e-02 2.695389e-03 4.596583e-02
+#> 18   70 9.074657e-02 6.449853e-02 1.169932e-01
+#> 21   85 3.227577e-02 4.503377e-03 6.095573e-02
+#> 26   90 4.750976e-04 9.351126e-05 1.187016e-02
+#> 32  120 3.424331e-05 1.782182e-05 5.057914e-05
+#> 38  240 1.082636e-04 8.056947e-05 1.395295e-04
+#> 44  360 8.493785e-05 5.922719e-05 1.124198e-04
 ```
 
-Prediction profiles at three times; all times are in [All prediction
+Profiles at three times, all in [All prediction
 profiles](#all-prediction-profiles):
 
 ``` r
@@ -116,7 +107,7 @@ plotProfile(shown, mode == "data") +
 
 ![](guide-prediction-uncertainty_files/figure-html/unnamed-chunk-7-1.png)
 
-The band around the prediction of the best fit:
+Band and prediction of the best fit:
 
 ``` r
 
@@ -134,17 +125,17 @@ ggplot2::ggplot(course, ggplot2::aes(time, value)) +
   ggplot2::scale_x_continuous(breaks = seq(0, 360, 60)) +
   ggplot2::scale_y_log10() +
   ggplot2::labs(x = "time [min]", y = "nuclear IκBα [total NFκB]") +
-  theme_dMod()
+  theme_dMod2()
 ```
 
 ![](guide-prediction-uncertainty_files/figure-html/unnamed-chunk-8-1.png)
 
-Concentrations are in units of total NFκB, set by the gauge of
+Units of total NFκB follow from the gauge of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md).
 
 ## All prediction profiles
 
-The axis is in units of the prediction \\\hat v(t)\\ of the best fit:
+In units of the prediction \\\hat v(t)\\ of the best fit:
 
 ``` r
 
@@ -177,7 +168,7 @@ likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md)
 
 C. Kreutz, A. Raue, and J. Timmer, “Likelihood based observability
 analysis and confidence intervals for predictions of dynamic models,”
-*BMC Systems Biology*, vol. 6, p. 120, 2012, doi:
+*BMC Systems Biology*, vol. 6, no. 1, p. 120, 2012, doi:
 [10.1186/1752-0509-6-120](https://doi.org/10.1186/1752-0509-6-120).
 
 \[2\]
@@ -185,6 +176,6 @@ analysis and confidence intervals for predictions of dynamic models,”
 A. Oppelt *et al.*, “Model-based identification of TNFα-induced
 IKKβ-mediated and IκBα-mediated regulation of NFκB signal transduction
 as a tool to quantify the impact of drug-induced liver injury
-compounds,” *npj Systems Biology and Applications*, vol. 4, p. 23, 2018,
-doi:
+compounds,” *npj Systems Biology and Applications*, vol. 4, no. 1, p.
+23, 2018, doi:
 [10.1038/s41540-018-0058-z](https://doi.org/10.1038/s41540-018-0058-z).

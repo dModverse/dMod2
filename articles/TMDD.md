@@ -138,6 +138,8 @@ identifiability
 ```
 
     #> Result:  structurally locally identifiable (rank 9 / 9)
+    #> 
+    #> Discrete symmetries: 0
 
 ## Design and simulation
 

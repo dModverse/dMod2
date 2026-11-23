@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,8 +118,8 @@
 
     
     
-<p>A model in dMod2 is a chain of function objects, each returning an
-output together with the derivatives with respect to the parameters:</p>
+<p>A model in dMod2 is a chain of function objects, each returning
+output and derivatives:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -137,22 +137,20 @@ output together with the derivatives with respect to the parameters:</p>
 <td>
 <code><a href="../reference/P.html">P()</a></code>, <code><a href="../reference/Pexpl.html">Pexpl()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code>
 </td>
-<td>outer to inner parameters per condition, or parameters to a steady
-state (<code><a href="../reference/Pimpl.html">Pimpl()</a></code>)</td>
+<td>outer to inner parameters, or to a steady state</td>
 </tr>
 <tr class="even">
 <td><code>prdfn</code></td>
 <td>
 <code><a href="../reference/Xs.html">Xs()</a></code>, <code><a href="../reference/Xf.html">Xf()</a></code>
 </td>
-<td>parameters to state trajectories, with sensitivities
-(<code><a href="../reference/Xs.html">Xs()</a></code>) or without (<code><a href="../reference/Xf.html">Xf()</a></code>)</td>
+<td>parameters to trajectories, with (<code><a href="../reference/Xs.html">Xs()</a></code>) or without
+sensitivities</td>
 </tr>
 <tr class="odd">
 <td><code>obsfn</code></td>
 <td><code><a href="../reference/Y.html">Y()</a></code></td>
-<td>states to observables, observables to standard deviations (error
-model)</td>
+<td>states to observables, observables to standard deviations</td>
 </tr>
 <tr class="even">
 <td><code>objfn</code></td>
@@ -160,26 +158,25 @@ model)</td>
 <code><a href="../reference/normL2.html">normL2()</a></code>, <code><a href="../reference/constraintL2.html">constraintL2()</a></code>,
 <code><a href="../reference/datapointL2.html">datapointL2()</a></code>, <code><a href="../reference/constraintStability.html">constraintStability()</a></code>
 </td>
-<td>parameters to <span class="math inline">\(-2 \log L\)</span> with
-gradient and Hessian</td>
+<td><span class="math inline">\(-2 \log L\)</span></td>
 </tr>
 </tbody>
 </table>
-<p><code>*</code> concatenates two objects by the chain rule. For <span class="math inline">\(y = g(x(p(\theta)))\)</span>,</p>
+<p><code>*</code> concatenates by the chain rule,</p>
 <p><span class="math display">\[\frac{\partial y}{\partial \theta} =
 \frac{\partial g}{\partial x}\,\frac{\partial x}{\partial p}\,
 \frac{\partial p}{\partial \theta},\]</span></p>
-<p>each factor computed exactly by the object it belongs to, the middle
-one from the sensitivity equations. <code>g*x*pSS*p</code> maps the
-outer parameters to the observables of all conditions,
-<code>normL2(data, g*x*pSS*p, e)</code> is the objective, and
-<code>+</code> adds objectives, e.g. a prior. Inner parameters are the
-symbols of the equations, with values per condition; outer parameters
-are those of the fit, shared by all conditions they enter.</p>
+<p>each factor exact, the middle one from the sensitivity equations;
+<code>+</code> adds objectives. <code>normL2(data, g*x*pSS*p, e)</code>
+is the objective. Inner parameters are the symbols of the equations, per
+condition; outer parameters are those of the fit.</p>
 <p>The guide uses the model of Oppelt et al. <span class="citation"><a href="#ref-oppelt2018model">[1]</a></span>, NFκB signaling in HepG2
 cells after TNFα, from the project <a href="https://github.com/dModverse/dMod2/tree/master/examples/oppeltNPJSystBiolAppl2018" class="external-link"><code>examples/oppeltNPJSystBiolAppl2018</code></a>.
-This chapter follows <code>model.R</code>, the full model of the
-publication.</p>
+This chapter follows <code>model.R</code>. Multistarts, profiles and
+other expensive results were computed once by the scripts of the project
+and are stored in <code>results/*.rds</code>; the chapters load them
+with <code>stored()</code>, which warns if a source script changed
+since.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dmodverse.github.io/dMod2/">dMod2</a></span><span class="op">)</span></span>
 <span></span>
@@ -189,25 +186,19 @@ publication.</p>
 <div class="section level2">
 <h2 id="reaction-network">Reaction network<a class="anchor" aria-label="anchor" href="#reaction-network"></a>
 </h2>
-<p>TNFα activates the receptor, the receptor activates IKK, and IKK
-phosphorylates IκBα and NFκB in their complex. Phosphorylated IκBα is
-degraded, free NFκB enters the nucleus and induces IκBα and A20. IκBα
-exports NFκB, A20 inhibits IKK activation; the two negative feedbacks
-give damped oscillations of nuclear NFκB. IKK passes through the states
-<code>Ikk</code>, <code>pIkk</code>, <code>ppIkk</code> and the
-refractory <code>iIkk</code>.</p>
+<p>TNFα activates the receptor, the receptor IKK, and IKK phosphorylates
+IκBα and NFκB in their complex. Free NFκB enters the nucleus and induces
+IκBα and A20, the two negative feedbacks.</p>
 <p><code><a href="../reference/addReaction.html">addReaction()</a></code> adds a reaction to an
-<code>eqnlist</code>. <code><a href="../reference/assignCompartment.html">assignCompartment()</a></code> places the four
-nuclear species in the nucleus of volume <code>Vnuc</code> relative to
-the cytoplasm. Rates are concentration rates in the compartment of the
-educts, of the products for a reaction without net educts, so</p>
+<code>eqnlist</code>; <code><a href="../reference/assignCompartment.html">assignCompartment()</a></code> places the
+nuclear species in the nucleus of relative volume <code>Vnuc</code>.
+Rates are concentration rates in the compartment of the educts (of the
+products without net educts):</p>
 <p><span class="math display">\[\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\,
 V_{c(r)}\, v_r(x, p),\]</span></p>
 <p>with <span class="math inline">\(S_{ri}\)</span> the stoichiometry
 and <span class="math inline">\(V_{c(r)}\)</span> the volume of the
-compartment of reaction <span class="math inline">\(r\)</span>. TNFα is
-not used up: the reaction <code>TNF -&gt; TNF + TNFR</code> keeps it
-constant as a catalyst.</p>
+compartment of reaction <span class="math inline">\(r\)</span>.</p>
 <table class="table">
 <colgroup>
 <col width="18%">
@@ -543,9 +534,7 @@ Code
 <span>  <span class="fu"><a href="../reference/addReaction.html">addReaction</a></span><span class="op">(</span><span class="st">""</span>, <span class="st">"A20"</span>, <span class="st">"build_A20 * RnaA20"</span>, <span class="st">"A20 translation"</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/addReaction.html">addReaction</a></span><span class="op">(</span><span class="st">"A20"</span>, <span class="st">""</span>, <span class="st">"degrad_A20 * A20"</span>, <span class="st">"A20 degradation"</span><span class="op">)</span></span></code></pre></div>
 </details><p>Expressions follow the <a href="https://dmodverse.github.io/cppDE/reference/expressions.html" class="external-link">expression
-language of cppDE</a>. Factors named <code>eta_</code> relate two rates,
-e.g. <code>eta_form_complex_nuc</code> the nuclear to the cytoplasmic
-complex formation.</p>
+language of cppDE</a>; factors <code>eta_</code> relate two rates.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">$</span><span class="va">states</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] 23</span></span>
@@ -559,12 +548,9 @@ complex formation.</p>
 <div class="section level2">
 <h2 id="observation-functions">Observation functions<a class="anchor" aria-label="anchor" href="#observation-functions"></a>
 </h2>
-<p>The data are live-cell imaging of NFκB and A20-GFP, immunoblots of
-the cytoplasm, and immunoblots after immunoprecipitation of NFκB or
-IκBα. Each readout but the ratio <code>ratioNFkBIkBa</code> measures a
-sum of species up to a scale <code>s_</code> and an offset
-<code>off_</code>; imaging signals bleach with rate <code>tau_</code>.
-On the natural log scale of the data,</p>
+<p>Readouts (live-cell imaging, immunoblots) are sums of species with
+scale <code>s_</code>, offset <code>off_</code> and, for imaging,
+bleaching rate <code>tau_</code>, on the natural log scale:</p>
 <p><span class="math display">\[y = \log(s\, x + o) - \tau t
 .\]</span></p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
@@ -597,9 +583,8 @@ On the natural log scale of the data,</p>
 <h2 id="error-model">Error model<a class="anchor" aria-label="anchor" href="#error-model"></a>
 </h2>
 <p>Blots have a standard deviation per point in the column
-<code>sigma</code>. The imaging readouts get an estimated standard
-deviation on the log scale; rows with a value in <code>sigma</code>
-ignore the error model.</p>
+<code>sigma</code>; imaging readouts get an estimated one. Rows with a
+value in <code>sigma</code> ignore the error model.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># a constant standard deviation on the log scale for each imaging readout</span></span>
 <span><span class="va">errors</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>nucNFkB <span class="op">=</span> <span class="st">"sigma_nucNFkB"</span>, cytNFkB <span class="op">=</span> <span class="st">"sigma_cytNFkB"</span>, A20GFP <span class="op">=</span> <span class="st">"sigma_A20GFP"</span><span class="op">)</span></span></code></pre></div>
@@ -607,8 +592,8 @@ ignore the error model.</p>
 <div class="section level2">
 <h2 id="steady-state-constraints">Steady-state constraints<a class="anchor" aria-label="anchor" href="#steady-state-constraints"></a>
 </h2>
-<p>The cells rest before TNFα. NFκB and IKK are conserved, so <span class="math inline">\(f(x, p) = 0\)</span> determines the resting state
-only together with the totals:</p>
+<p>NFκB and IKK are conserved, so <span class="math inline">\(f(x, p) =
+0\)</span> determines the resting state only with the totals:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/conservedQuantities.html">conservedQuantities</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $TNF</span></span>
@@ -619,12 +604,10 @@ only together with the totals:</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $totalNfk</span></span>
 <span><span class="co">#&gt; [1] "1*NfkIkb+1*NfkpIkb+1*pNfkIkb+1*pNfkpIkb+1*Nfk+1*pNfk+1*Vnuc*pnNfk+1*Vnuc*nNfk+1*Vnuc*nNfkIkb"</span></span></code></pre></div>
-<p><code><a href="../reference/Pimpl.html">Pimpl()</a></code> solves the steady state numerically in every
-evaluation, with the totals <code>totalNfk</code> and
-<code>totalIkk</code> as parameters, <code>TNF</code> held at 0, and
-exact derivatives of the root (<a href="methods-steady-states.html">Methods &gt; Steady states</a>).
-<code><a href="../reference/steadyStates.html">steadyStates()</a></code>, the analytic alternative, finds no positive
-closed form for this network.</p>
+<p><code><a href="../reference/Pimpl.html">Pimpl()</a></code> solves the steady state numerically, with the
+totals <code>totalNfk</code> and <code>totalIkk</code> as parameters,
+<code>TNF</code> at 0, and exact derivatives of the root (<a href="methods-steady-states.html">Methods &gt; Steady states</a>).
+<code><a href="../reference/steadyStates.html">steadyStates()</a></code> is the analytic alternative.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the cells rest before TNFα is added: a steady state with the amounts of NFκB and IKK conserved;</span></span>
 <span><span class="co"># an unstable one is returned rather than refused, the objective below keeps it stable</span></span>
@@ -634,22 +617,19 @@ closed form for this network.</p>
 <div class="section level2">
 <h2 id="events-and-switches">Events and switches<a class="anchor" aria-label="anchor" href="#events-and-switches"></a>
 </h2>
-<p>TNFα is added at time 0: an event replaces <code>TNF</code> by
-<code>dose_TNF</code>, 1 under stimulation and 0 in the control. Event
-times and values may be parameters; the sensitivities pass the event. A
-switch on a state needs no event:
-<code>"piecewise(kon, A &gt; A0, koff)"</code> switches the rate when
-<code>A</code> crosses <code>A0</code>, with exact sensitivities (<a href="https://dmodverse.github.io/cppDE/articles/methods-events.html" class="external-link">cppDE
+<p>An event at time 0 sets <code>TNF</code> to <code>dose_TNF</code>, 1
+under stimulation, 0 in the control. Event times and values may be
+parameters. <code>"piecewise(kon, A &gt; A0, koff)"</code> switches a
+rate on a state, with exact sensitivities (<a href="https://dmodverse.github.io/cppDE/articles/methods-events.html" class="external-link">cppDE
 &gt; Events</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="prediction-functions">Prediction functions<a class="anchor" aria-label="anchor" href="#prediction-functions"></a>
 </h2>
-<p><code><a href="../reference/odemodel.html">odemodel()</a></code> generates C++ code for the right-hand side
-and the sensitivity equations; <code><a href="../reference/Xs.html">Xs()</a></code> turns it into the
-<code>prdfn</code> <code>x</code>, <code><a href="../reference/Y.html">Y()</a></code> builds the
-observables <code>g</code> and the error model <code>e</code>.
-<code>compile = FALSE</code> defers compilation to one joint
+<p><code><a href="../reference/odemodel.html">odemodel()</a></code> generates C++ code for the ODE and the
+sensitivity equations, <code><a href="../reference/Xs.html">Xs()</a></code> the <code>prdfn</code>
+<code>x</code>, <code><a href="../reference/Y.html">Y()</a></code> the observables <code>g</code> and the
+error model <code>e</code>; <code>compile = FALSE</code> defers to one
 <code><a href="../reference/compile.html">compile()</a></code>.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># TNFα is added at time 0</span></span>
@@ -658,11 +638,9 @@ observables <code>g</code> and the error model <code>e</code>.
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Xs.html">Xs</a></span><span class="op">(</span><span class="va">model</span>, options <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>atol <span class="op">=</span> <span class="fl">1e-10</span>, rtol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">observables</span>, <span class="va">x</span>, modelname <span class="op">=</span> <span class="st">"oppelt_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">e</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">errors</span>, <span class="va">g</span>, modelname <span class="op">=</span> <span class="st">"oppelt_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p>The default backend <code>"cppDE"</code> integrates by BDF with
-first- and, with <code>deriv2 = TRUE</code>, second-order sensitivities;
-<code>backend = "Sundials"</code> uses CVODES, <code>"deSolve"</code>
-deSolve. A step is accepted if the weighted RMS norm of the local errors
-is at most one, <span class="math inline">\(\bigl(\tfrac1n \sum_i
+<p>The backend <code>"cppDE"</code> (default) integrates by BDF,
+<code>"Sundials"</code> uses CVODES, <code>"deSolve"</code> deSolve. A
+step is accepted if <span class="math inline">\(\bigl(\tfrac1n \sum_i
 \varepsilon_i^2 / (\mathrm{atol} + \mathrm{rtol}\,|x_i|)^2\bigr)^{1/2}
 \le 1\)</span>:</p>
 <table class="table">
@@ -708,15 +686,14 @@ is at most one, <span class="math inline">\(\bigl(\tfrac1n \sum_i
 </tr>
 </tbody>
 </table>
-<p>Logarithmic observables magnify the relative error of small states;
-<code>model.R</code> sets <code>rtol = 1e-8</code>,
-<code>atol = 1e-10</code>.</p>
+<p><code>model.R</code> sets <code>rtol = 1e-8</code>,
+<code>atol = 1e-10</code>, since log observables magnify errors of small
+states.</p>
 </div>
 <div class="section level2">
 <h2 id="experimental-data">Experimental data<a class="anchor" aria-label="anchor" href="#experimental-data"></a>
 </h2>
-<p><code>model.R</code> reads the CSV of the publication and keeps HepG2
-cells without compound: 312 points in two conditions.</p>
+<p>HepG2 cells without compound: 312 points in two conditions.</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the data set of the publication, values on the natural log scale; the imaging readouts have</span></span>
 <span><span class="co"># no standard deviation, the error model supplies one</span></span>
@@ -766,9 +743,6 @@ cells without compound: 312 points in two conditions.</p>
 <span><span class="co">#&gt;         condition treatment</span></span>
 <span><span class="co">#&gt; TNF           TNF       TNF</span></span>
 <span><span class="co">#&gt; control   control        no</span></span></code></pre></div>
-<p><code><a href="../reference/datalist.html">as.datalist()</a></code> splits the data by condition;
-<code><a href="../reference/covariates.html">covariates()</a></code> lists the columns that describe the
-conditions.</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotData.html">plotData</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"nucNFkB"</span>, <span class="st">"cytNFkB"</span>, <span class="st">"A20GFP"</span>, <span class="st">"IkBa"</span>, <span class="st">"pIkBa"</span>, <span class="st">"pIKK"</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"log signal [a.u.]"</span><span class="op">)</span></span></code></pre></div>
@@ -816,9 +790,8 @@ dose.</li>
 <span><span class="co">#&gt; Idx    Inner &lt;- Outer</span></span>
 <span><span class="co">#&gt;   1 dose_TNF &lt;- 0</span></span>
 <span><span class="co">#&gt;   2      TNF &lt;- 0</span></span></code></pre></div>
-<p><code><a href="../reference/compile.html">compile()</a></code> builds all sources into one shared object in
-<code>getOption("dMod2.outdir")</code> and reuses object files whose
-source and flags are unchanged.</p>
+<p><code><a href="../reference/compile.html">compile()</a></code> builds one shared object in
+<code>getOption("dMod2.outdir")</code>, reusing unchanged objects.</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/compile.html">compile</a></span><span class="op">(</span><span class="va">g</span>, <span class="va">x</span>, <span class="va">pSS</span>, <span class="va">p</span>, <span class="va">e</span>, output <span class="op">=</span> <span class="st">"oppelt"</span>, cores <span class="op">=</span> <span class="fl">6</span><span class="op">)</span></span>
 <span><span class="va">prd</span> <span class="op">&lt;-</span> <span class="va">g</span> <span class="op">*</span> <span class="va">x</span> <span class="op">*</span> <span class="va">pSS</span> <span class="op">*</span> <span class="va">p</span></span></code></pre></div>
@@ -832,10 +805,8 @@ source and flags are unchanged.</p>
 <p><code>normL2(data, prd, e)</code> returns <span class="math inline">\(-2 \log L\)</span> with gradient and Gauss-Newton
 Hessian (<a href="methods-objective.html">Methods &gt; Likelihood and
 prior</a>). <code><a href="../reference/constraintL2.html">constraintL2()</a></code> adds a Gaussian prior on the log
-scale, which keeps parameters the data do not determine finite; the
-multistart of <a href="guide-optimization.html">Optimization</a> draws
-the starts from it. Mean 0 and standard deviation 4, a factor of <span class="math inline">\(e^4 \approx 55\)</span>, for parameters of unknown
-magnitude; narrower where the magnitude is known:</p>
+scale, also the start distribution of <a href="guide-optimization.html">Optimization</a>: mean 0 and standard
+deviation 4 by default, narrower where the magnitude is known:</p>
 <table class="table">
 <colgroup>
 <col width="25%">
@@ -889,18 +860,12 @@ magnitude; narrower where the magnitude is known:</p>
 </tr>
 </tbody>
 </table>
-<p>Starts far outside these ranges end on plateaus where a signal
-bleaches away, the noise explains every residual or A20 follows NFκB
-within minutes.</p>
-<p><code>pSS</code> returns unstable roots too
+<p><code>pSS</code> also returns unstable roots
 (<code>controlsPTC = list(stability = FALSE)</code>);
-<code><a href="../reference/constraintStability.html">constraintStability()</a></code> adds a term that is zero on a stable
-resting state, rises on a narrow ramp below the stability boundary and
-reaches 100 for each eigenvalue at the boundary. It needs
-<code>Pimpl(deriv2 = TRUE)</code>. Profiles with
-<code>stop = "data"</code> and likelihood ratios read the data term
-without it (<a href="methods-steady-states.html#stability">Methods &gt;
-Steady states</a>).</p>
+<code><a href="../reference/constraintStability.html">constraintStability()</a></code> is zero on a stable resting state and
+reaches 100 per eigenvalue at the stability boundary, and needs
+<code>Pimpl(deriv2 = TRUE)</code> (<a href="methods-steady-states.html#stability">Methods &gt; Steady
+states</a>).</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># a weak prior on the log scale: mean 0, standard deviation 4, a factor of about 55, narrower</span></span>
 <span><span class="co"># where the order of magnitude is known before the fit</span></span>
@@ -927,8 +892,10 @@ Steady states</a>).</p>
 <span><span class="va">mu</span><span class="op">[</span><span class="st">"trigger_iIkk"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">1</span> <span class="op">/</span> <span class="fl">240</span><span class="op">)</span></span>
 <span><span class="va">sigma</span><span class="op">[</span><span class="st">"trigger_iIkk"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">2</span></span>
 <span><span class="co"># the cells rest: a term that is zero on a stable resting state and reaches 100 where it loses</span></span>
-<span><span class="co"># stability</span></span>
-<span><span class="va">stability</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/constraintStability.html">constraintStability</a></span><span class="op">(</span><span class="va">pSS</span>, <span class="va">p</span><span class="op">)</span></span>
+<span><span class="co"># stability, on a ramp of a tenth of the inverse time span of the data, wide enough for the model</span></span>
+<span><span class="co"># of a fit step to see the boundary before the step crosses it</span></span>
+<span><span class="va">rampWidth</span> <span class="op">&lt;-</span> <span class="fl">0.1</span> <span class="op">/</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span><span class="op">$</span><span class="va">time</span><span class="op">)</span></span>
+<span><span class="va">stability</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/constraintStability.html">constraintStability</a></span><span class="op">(</span><span class="va">pSS</span>, <span class="va">p</span>, width <span class="op">=</span> <span class="va">rampWidth</span><span class="op">)</span></span>
 <span><span class="va">obj</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">prd</span>, <span class="va">e</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="../reference/constraintL2.html">constraintL2</a></span><span class="op">(</span><span class="va">mu</span>, sigma <span class="op">=</span> <span class="va">sigma</span><span class="op">)</span> <span class="op">+</span> <span class="va">stability</span></span></code></pre></div>
 <div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the stopping tolerances of trust(), above the error that the solver settings leave: ftol and</span></span>
@@ -939,19 +906,18 @@ Steady states</a>).</p>
 <div class="section level2">
 <h2 id="model-evaluation">Model evaluation<a class="anchor" aria-label="anchor" href="#model-evaluation"></a>
 </h2>
-<p>At the best fit of <a href="guide-optimization.html">Optimization</a>, with the parameters
-fixed by the gauge of <a href="guide-symmetries.html">Symmetries</a>:</p>
+<p>The best fit of <a href="guide-optimization.html">Optimization</a>,
+with the gauge of <a href="guide-symmetries.html">Symmetries</a>:</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">best</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fits.rds"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">value</span> <span class="op">&lt;-</span> <span class="fu">obj</span><span class="op">(</span><span class="va">best</span>, fixed <span class="op">=</span> <span class="va">gauge</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>value <span class="op">=</span> <span class="va">value</span><span class="op">$</span><span class="va">value</span>, data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">value</span>, <span class="st">"data"</span><span class="op">)</span>, prior <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">value</span>, <span class="st">"prior"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt;      value       data      prior </span></span>
-<span><span class="co">#&gt; -488.67733 -511.16447   22.48714</span></span>
+<span><span class="co">#&gt; -488.67736 -511.16897   22.49162</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">max</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">abs</a></span><span class="op">(</span><span class="va">value</span><span class="op">$</span><span class="va">gradient</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] 0.02861733</span></span></code></pre></div>
-<p>The prediction against the data, with one standard deviation of the
-error model as a band, each observable up to the last time point of the
-data:</p>
+<span><span class="co">#&gt; [1] 0.007025491</span></span></code></pre></div>
+<p>Prediction and data, with one standard deviation of the error model
+as a band:</p>
 <div class="sourceCode" id="cb19"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">360</span>, length.out <span class="op">=</span> <span class="fl">361</span><span class="op">)</span></span>
 <span><span class="va">last</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Extremes.html" class="external-link">pmax</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/with.html" class="external-link">with</a></span><span class="op">(</span><span class="fu"><a href="../reference/lbind.html">lbind</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">time</span>, <span class="va">name</span>, <span class="va">max</span><span class="op">)</span><span class="op">)</span>, <span class="fl">30</span><span class="op">)</span></span>
@@ -983,7 +949,7 @@ Oppelt <em>et al.</em>, <span>“Model-based identification of
 <span>IκBα</span>-mediated regulation of <span>NFκB</span> signal
 transduction as a tool to quantify the impact of drug-induced liver
 injury compounds,”</span> <em>npj Systems Biology and Applications</em>,
-vol. 4, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
+vol. 4, no. 1, p. 23, 2018, doi: <a href="https://doi.org/10.1038/s41540-018-0058-z" class="external-link">10.1038/s41540-018-0058-z</a>.</div>
 </div>
 </div>
 </div>

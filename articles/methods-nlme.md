@@ -98,12 +98,40 @@ Each evaluation, in C++:
   sensitivities, plus SR1 from the last three accepted gradients.
 - **Stop.** Model gain below `trustControl$mtol` in the region `rmax`,
   or five rejected trials flat within `ftol`.
+- **Hessian source.** With several groupings the outer loop is
+  [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md), and
+  `trustControl` takes the arguments of
+  [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
+  `phases` among them. A handover from Gauss-Newton to BFGS, after 20
+  iterations or at a stalled radius ([Methods \> Trust
+  region](https://dmodverse.github.io/dMod2/articles/methods-trust.html#hessian-phases)),
+  reaches the optima of Gauss-Newton on the theophylline, warfarin and
+  mavoglurant fits of `bench/nlme/` with more iterations and time: the
+  evaluation builds the Gauss-Newton Hessian for the modes and the
+  volume term anyway, so a BFGS step costs as much as a Gauss-Newton
+  step.
 - **Sparsity.** `sparse = TRUE`: the same outer loop on sparse outer
   Hessians, Schur complement and volume term of a group local to the
   parameters of the group, or, where the \\n_g\\ entries of \\\psi\\ a
   group couples satisfy \\n_g^2 \> k\\ n\_\psi\\ with \\n\_\psi\\ the
   number of entries of \\\psi\\, as a low-rank part of rank \\k\\: \\k =
   K\\ for the Schur complement, \\k = 2K + K^2\\ for the volume term.
+
+### Group kernel
+
+One C++ kernel evaluates all groups at once: the modes, the local model
+of each group and the integral on it. At the mode, \\\Phi_i(\hat\eta_i +
+\delta) \approx \Phi_i(\hat\eta_i) + g_i^\top \delta + \tfrac12
+\delta^\top H_i \delta\\, \\g_i\\ the gradient the inner search leaves.
+The block \\H\_{NN}\\ of the normal random effects is factored once;
+eliminating it gives the outer model, \\\Phi_i^{\psi\psi} - \Phi_i^{\psi
+N} H\_{NN}^{-1} \Phi_i^{N\psi}\\, and the curvature \\H\_{LL} - H\_{LN}
+H\_{NN}^{-1} H\_{NL}\\ left on the other coordinates \\L\\. An
+integrator maps the local model to the term \\-2 \log L_i -
+\Phi_i(\hat\eta_i)\\ and to the derivative \\W_i\\ of the term in
+\\H_i\\, which the volume derivative (5) contracts with \\\mathrm{d} H_i
+/ \mathrm{d}\psi\\. FOCEI is Laplace on the normal block: the term
+\\\log \lvert H\_{NN}/2 \rvert\\ and \\W_i = H\_{NN}^{-1}\\.
 
 ### Volume term
 
@@ -160,14 +188,23 @@ is not differentiated.
 alternates:
 
 - **Rebuild.** Grids at the current \\\psi\\, at the lowest level (never
-  falling) whose next level changes \\-2 \log L_i\\ by at most `tol`
-  over the number of groups.
+  falling) whose error is at most `tol` over the number of groups. The
+  error of level \\l\\ is estimated by \\2\lvert \log L_i^{(l+1)} - \log
+  L_i^{(l)} \rvert\\. A level of more than `maxNodes` nodes per group
+  (default 1000) is never evaluated; there the estimate is the change
+  from level \\l - 1\\, and a group above the tolerance is capped at
+  \\l\\. For \\K = 20\\ levels \\K + 1\\ to \\K + 3\\ have 41, 801 and
+  10041 nodes, so the default budget ends at \\K + 2\\.
 - **Step.** Trust region over all parameters on frozen nodes. For
   mu-referenced fixed effects, \\\phi_i = D_i \beta + \eta_i\\, nodes
   are frozen in \\\phi\\, need no sensitivities and hold over larger
   steps.
 - **Stop.** A Newton step on the rebuilt nodes would gain less than
-  `tolDecrement` or less than the nodes resolve.
+  `tolDecrement`, or \\-2 \log L\\ rose after a step on unchanged
+  levels, so the step lies below what the levels resolve. Either way the
+  fit is stationary at the levels reached, capped ones included; it
+  returns the iterate of lowest \\-2 \log L\\ on the highest levels, and
+  the stage trace records the levels, errors and caps per group.
 
 At the estimate, importance sampling (\\t_5\\ proposal at the mode,
 shifted lattice points) flags groups whose two estimates differ by more
@@ -207,14 +244,74 @@ the marginal score as fixed point.
 | phase | rule |
 |----|----|
 | draws | few random-walk Metropolis steps and independence proposals from \\\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})\\ [\[13\]](#ref-kuhn2004coupling); [`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces |
-| burn-in | \\\gamma_k = 1\\, variances shrink at most 5 % per iteration [\[14\]](#ref-lavielle2014mixed); ends when no parameter drifts over `window` |
-| averaging | \\\gamma_k = k^{-0.7}\\, \\k\\ counted from the end of burn-in, mean of iterates [\[15\]](#ref-polyak1992acceleration); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
+| burn-in | \\\gamma_k = 1\\, variances shrink at most 5 % per iteration; ends when no parameter drifts over `window` |
+| averaging | \\\gamma_k = k^{-0.7}\\, \\k\\ counted from the end of burn-in, mean of iterates [\[14\]](#ref-kushner2003stochastic); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
 
 SAEM neither forms \\\ell\\ nor raises it in every iteration;
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) reports the
 quadrature of level \\K + 2\\ with standard errors from the quadrature
 Hessian. SAEM suits many random effects and skewed, heavy-tailed or
-multimodal posteriors [\[16\]](#ref-kuhn2005maximum).
+multimodal posteriors [\[13\]](#ref-kuhn2004coupling).
+
+### Spike-and-slab random effects
+
+A spike-and-slab random effect \\\eta\_{ij} = z\_{ij} v\_{ij}\\ has an
+indicator \\z\_{ij}\\ with \\\Pr(z\_{ij} = 1) = p\\ and a slab value
+\\v\_{ij} \sim \mathcal{N}(0, \tau^2)\\
+[\[15\]](#ref-mitchell1988bayesian), [\[16\]](#ref-george1993variable).
+Per iteration, after the normal random effects:
+
+- **Local model.** Per group the quadratic model of the data term in the
+  slab values, with the curvature clipped to be positive semidefinite,
+  refreshed at the mean of the slab-only Gaussian.
+
+- **Collapsed indicator moves.** Each indicator of a group once per
+  sweep, in random order, all groups at once. The other slab values of
+  the group move with \\v\_{ij}\\ along the regression of the local
+  model, \\v_o = b_o + x\\u_o\\, so the state \\b\\ with \\z\_{ij} = 0\\
+  and the line stay fixed. On this line the slab mass \\I = \int
+  f(x)\\dx\\, \\f\\ the joint density of data and prior, is a
+  Gauss-Hermite sum on the local Gaussian \\\mathcal{N}(m, s^2)\\ with
+  the exact data term at `nodes` (3) points, which gives the conditional
+  inclusion probability with the slab value integrated out
+  [\[17\]](#ref-liu1994collapsed),
+
+  \\\hat\pi\_{ij} = \frac{I}{I + f_0}, \qquad f_0 = f \text{ at }
+  z\_{ij} = 0 . \tag{8}\\
+
+  The proposal draws \\z\_{ij}\\ with probability \\0.01 +
+  0.98\\\hat\pi\_{ij}\\ and \\x\\ from \\\mathcal{N}(m, 1.5\\s^2)\\,
+  independently of the current state; an independence
+  Metropolis-Hastings step [\[18\]](#ref-tierney1994markov) on
+  \\(z\_{ij}, x)\\ against the model leaves the exact posterior
+  invariant, whatever the error of the sum.
+
+- **Slab values.** `nMcmc` joint random-walk Metropolis steps of the
+  slab values of every group in the slab, scaled by the conditional
+  standard deviations of the local model.
+
+- **A-step and M-steps.** \\p\\ and \\\tau\\ follow from Robbins-Monro
+  averages of \\\sum \hat\pi\_{ij}\\ and \\\sum
+  \hat\pi\_{ij}\\\mathbb{E}(x^2 \mid z\_{ij} = 1)\\, the
+  Rao-Blackwellized statistics [\[19\]](#ref-casella1996rao) of the
+  sweep, in place of the drawn indicators. An effect the data do not
+  inform has \\\hat\pi\_{ij} = p\\ and second moment \\\tau^2\\ and
+  leaves both unchanged; counts of drawn indicators would instead let
+  \\p\\ wander to 1 in burn-in, where \\\gamma_k = 1\\. In burn-in the
+  odds \\p / (1 - p)\\ and \\\tau\\ change by a factor in \\\[0.95,
+  1.25\]\\ per iteration.
+
+\\p_0\\ is one minus the mean of \\\hat\pi\_{ij}\\ over the late sweeps,
+an effect selected where it is below 1/2. An `em` fit as `init` starts
+the chain at the selected values of that fit, the indicators set where
+they are not 0, which checks a FOCEI optimum by SAEM. \\-2 \log L\\ at
+the estimate is that of `method = "focei"`; with Dirichlet-process
+random effects beside on more than 14 groups, or with
+`integral = "importance"`, it comes from sequential importance sampling
+over the partitions ([Sparsity
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#importance-sampling)),
+each group summing over the subsets of the spike-and-slab effects that
+reach the group data.
 
 ## Zero variance components
 
@@ -272,9 +369,10 @@ of Computational and Applied Mathematics*, vol. 71, no. 2, pp. 299–309,
 
 \[7\]
 
-S. A. Smolyak, “Quadrature and interpolation formulas for tensor
-products of certain classes of functions,” *Soviet Mathematics Doklady*,
-vol. 4, pp. 240–243, 1963.
+S. A. Smolyak, “Quadrature and Interpolation Formulas for Tensor
+Products of Certain Classes of Functions,” *Doklady Akademii Nauk SSSR*,
+vol. 148, no. 5, pp. 1042–1045, 1963, Available:
+<https://www.mathnet.ru/eng/dan27586>
 
 \[8\]
 
@@ -288,13 +386,15 @@ integration on sparse grids,” *Journal of Econometrics*, vol. 144, no.
 W. H. O. Clausen, B. B. Rønn, and I. M. Skovgaard, “Maximum likelihood
 estimation in nonlinear mixed effect models: Adaptive Gaussian
 quadrature by sparse grid sampling,” in *Population approach group in
-europe (PAGE) 18*, 2009, pp. Abstract 1607.
+europe (PAGE) 18*, 2009, pp. Abstract 1584. Available:
+<https://www.page-meeting.org/?abstract=1584>
 
 \[10\]
 
 A. Vehtari, D. Simpson, A. Gelman, Y. Yao, and J. Gabry, “Pareto
 smoothed importance sampling,” *Journal of Machine Learning Research*,
-vol. 25, no. 72, pp. 1–58, 2024.
+vol. 25, no. 72, pp. 1–58, 2024, Available:
+<https://jmlr.org/papers/v25/19-556.html>
 
 \[11\]
 
@@ -318,20 +418,40 @@ pp. 115–131, 2004, doi:
 
 \[14\]
 
-M. Lavielle, *Mixed effects models for the population approach: Models,
-tasks, methods and tools*. Boca Raton: Chapman; Hall/CRC, 2014. doi:
-[10.1201/b17203](https://doi.org/10.1201/b17203).
+H. J. Kushner and G. G. Yin, *Stochastic approximation and recursive
+algorithms and applications*, 2nd ed., vol. 35. in Stochastic modelling
+and applied probability, vol. 35. New York: Springer, 2003. doi:
+[10.1007/b97441](https://doi.org/10.1007/b97441).
 
 \[15\]
 
-B. T. Polyak and A. B. Juditsky, “Acceleration of stochastic
-approximation by averaging,” *SIAM Journal on Control and Optimization*,
-vol. 30, no. 4, pp. 838–855, 1992, doi:
-[10.1137/0330046](https://doi.org/10.1137/0330046).
+T. J. Mitchell and J. J. Beauchamp, “Bayesian variable selection in
+linear regression,” *Journal of the American Statistical Association*,
+vol. 83, no. 404, pp. 1023–1032, 1988, doi:
+[10.1080/01621459.1988.10478694](https://doi.org/10.1080/01621459.1988.10478694).
 
 \[16\]
 
-E. Kuhn and M. Lavielle, “Maximum likelihood estimation in nonlinear
-mixed effects models,” *Computational Statistics & Data Analysis*, vol.
-49, no. 4, pp. 1020–1038, 2005, doi:
-[10.1016/j.csda.2004.07.002](https://doi.org/10.1016/j.csda.2004.07.002).
+E. I. George and R. E. McCulloch, “Variable selection via Gibbs
+sampling,” *Journal of the American Statistical Association*, vol. 88,
+no. 423, pp. 881–889, 1993, doi:
+[10.1080/01621459.1993.10476353](https://doi.org/10.1080/01621459.1993.10476353).
+
+\[17\]
+
+J. S. Liu, “The collapsed Gibbs sampler in Bayesian computations with
+applications to a gene regulation problem,” *Journal of the American
+Statistical Association*, vol. 89, no. 427, pp. 958–966, 1994, doi:
+[10.1080/01621459.1994.10476829](https://doi.org/10.1080/01621459.1994.10476829).
+
+\[18\]
+
+L. Tierney, “Markov chains for exploring posterior distributions,” *The
+Annals of Statistics*, vol. 22, no. 4, pp. 1701–1728, 1994, doi:
+[10.1214/aos/1176325750](https://doi.org/10.1214/aos/1176325750).
+
+\[19\]
+
+G. Casella and C. P. Robert, “Rao-Blackwellisation of sampling schemes,”
+*Biometrika*, vol. 83, no. 1, pp. 81–94, 1996, doi:
+[10.1093/biomet/83.1.81](https://doi.org/10.1093/biomet/83.1.81).

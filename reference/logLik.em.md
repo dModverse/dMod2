@@ -6,7 +6,7 @@ Log-likelihood of a mixed-effects fit
 
 ``` r
 # S3 method for class 'em'
-logLik(object, ...)
+logLik(object, method = c("fit", "importance"), draws = 1000L, ...)
 ```
 
 ## Arguments
@@ -15,6 +15,19 @@ logLik(object, ...)
 
   An `em` object, see
   [`em()`](https://dmodverse.github.io/dMod2/reference/em.md).
+
+- method:
+
+  `"fit"` (default) the marginal log-likelihood of the fit;
+  `"importance"` the marginal log-likelihood at the estimates by
+  importance sampling on the model, for spike-and-slab random effects of
+  one grouping (normal ones beside). The proposal is the mixture of the
+  approximation of the fit with widened spreads; the fit must contain
+  the design.
+
+- draws:
+
+  Draws per group for `method = "importance"`, default 1000.
 
 - ...:
 
@@ -25,7 +38,10 @@ logLik(object, ...)
 The marginal log-likelihood, `-value / 2`, of class `logLik` with the
 number of estimated parameters as `df` and the number of observations as
 `nobs`, so [`stats::AIC()`](https://rdrr.io/r/stats/AIC.html) and
-[`stats::BIC()`](https://rdrr.io/r/stats/AIC.html) apply.
+[`stats::BIC()`](https://rdrr.io/r/stats/AIC.html) apply. With
+`method = "importance"` the attributes `se` (standard error), `ess`
+(effective sample size per group) and `approximation` (the
+log-likelihood of the approximation of the fit at the estimates).
 
 ## Examples
 
@@ -44,10 +60,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/Rtmp6aiYxR/theoph_err.cpp
+#> Overwriting: /tmp/RtmpNgFK2N/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

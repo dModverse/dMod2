@@ -113,10 +113,10 @@ control.
 
 A trust region converges with a gradient whose error is small relative
 to the gradient [\[1\]](#ref-carter1991global),
-[\[2\]](#ref-conn2000trust). `gradtol` bounds the error of every step in
-absolute terms, and the errors of the steps add up over the sweep; near
-the optimum, where the gradient vanishes, a fixed `gradtol` does not
-keep the relative error small ([checking the
+[\[2\]](#ref-nocedal2006numerical). `gradtol` bounds the error of every
+step in absolute terms, and the errors of the steps add up over the
+sweep; near the optimum, where the gradient vanishes, a fixed `gradtol`
+does not keep the relative error small ([checking the
 sweep](https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html)).
 
 A refined sweep differentiates the trajectory with substeps, not the
@@ -193,6 +193,7 @@ Analysis*, vol. 28, no. 1, pp. 251–265, 1991, doi:
 
 \[2\]
 
-A. R. Conn, N. I. M. Gould, and P. L. Toint, *Trust-region methods*.
-Philadelphia: SIAM, 2000. doi:
-[10.1137/1.9780898719857](https://doi.org/10.1137/1.9780898719857).
+J. Nocedal and S. J. Wright, *Numerical optimization*, 2nd ed. in
+Springer series in operations research and financial engineering. New
+York: Springer, 2006. doi:
+[10.1007/978-0-387-40065-5](https://doi.org/10.1007/978-0-387-40065-5).

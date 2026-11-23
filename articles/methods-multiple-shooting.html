@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.15.10</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -123,7 +123,124 @@ axis. For oscillating or spiking systems the objective is rugged: a
 parameter change shifts every later period, and a peak moved by more
 than the peak width leaves the residuals without direction, so few
 starts reach the narrow valleys. <code><a href="../reference/trust.html">trust()</a></code> offers multiple
-shooting instead (<a href="guide-optimization.html#multiple-shooting">switching it on</a>, <a href="methods-trust.html">trust region</a>).</p>
+shooting instead (<a href="methods-trust.html">trust region</a>).</p>
+<div class="section level2">
+<h2 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a>
+</h2>
+<p>Multiple shooting is a control of the objective:</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="va">obj</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">g</span> <span class="op">*</span> <span class="va">x</span> <span class="op">*</span> <span class="va">p</span>, multipleShootingControl <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">start</span><span class="op">)</span></span>
+<span><span class="va">fit</span><span class="op">$</span><span class="va">multipleShooting</span><span class="op">$</span><span class="va">violation</span></span>
+<span><span class="fu"><a href="../reference/controls.html">controls</a></span><span class="op">(</span><span class="va">obj</span>, <span class="st">"multipleShootingControl"</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="cn">NULL</span>   <span class="co"># single shooting again</span></span></code></pre></div>
+<p>The chain must be <code>g * x * p</code> with one <code><a href="../reference/Xs.html">Xs()</a></code>
+built on <code>odemodel(..., includeTimeZero = FALSE)</code>. Not
+available with it: <code>hessianMethod = "exact"</code>,
+<code>qnControl$hessianInit = "exact"</code>, several phases,
+<code>switches</code>, <code>hessianReseed</code>,
+<code>qnMemory</code>, <code>nonmonotone</code>,
+<code>boundary = "clip"</code>, <code>minimize = FALSE</code>,
+<code>traceFile</code>.</p>
+<table class="table">
+<colgroup>
+<col width="33%">
+<col width="33%">
+<col width="33%">
+</colgroup>
+<thead><tr class="header">
+<th>entry of <code>multipleShootingControl</code>
+</th>
+<th>default</th>
+<th>controls</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>nodes</code></td>
+<td><code>"auto"</code></td>
+<td>
+<code>"auto"</code>, <code>"transitions"</code>, or node times</td>
+</tr>
+<tr class="even">
+<td>
+<code>growth</code>, <code>misfit</code>
+</td>
+<td>
+<code>10</code>, <code>3</code>
+</td>
+<td>thresholds at which <code>"auto"</code> cuts a segment</td>
+</tr>
+<tr class="odd">
+<td><code>minPoints</code></td>
+<td>states + 1</td>
+<td>data points per half of a cut</td>
+</tr>
+<tr class="even">
+<td><code>charts</code></td>
+<td>all linear</td>
+<td>
+<code>"log10"</code>, <code>"linear"</code> or <code>"angle"</code>
+per state</td>
+</tr>
+<tr class="odd">
+<td><code>scale</code></td>
+<td>from the data</td>
+<td>scale of the gaps and node steps</td>
+</tr>
+<tr class="even">
+<td><code>init</code></td>
+<td><code>"data"</code></td>
+<td>node values: <code>"data"</code>, <code>"spline"</code>,
+<code>"simulation"</code> or a list</td>
+</tr>
+<tr class="odd">
+<td><code>breaks</code></td>
+<td>none</td>
+<td>node times without continuity</td>
+</tr>
+</tbody>
+</table>
+<table class="table">
+<thead><tr class="header">
+<th>entry of <code>stepControl</code>
+</th>
+<th>default</th>
+<th>controls</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td><code>acceptance</code></td>
+<td><code>"filter"</code></td>
+<td>
+<code>"filter"</code>, <code>"merit"</code> or
+<code>"natural"</code>
+</td>
+</tr>
+<tr class="even">
+<td><code>soc</code></td>
+<td><code>TRUE</code></td>
+<td>second-order correction of a rejected step</td>
+</tr>
+<tr class="odd">
+<td><code>anneal</code></td>
+<td><code>TRUE</code></td>
+<td>penalty on the gaps raised in stages</td>
+</tr>
+<tr class="even">
+<td>
+<code>twoPhase</code>, <code>restore</code>,
+<code>regularize</code>
+</td>
+<td>off</td>
+<td>further globalizations</td>
+</tr>
+</tbody>
+</table>
+<p><code>converged = TRUE</code> requires the scaled gaps below
+<code>tolControl$ctol</code>. The result has a list
+<code>multipleShooting</code> with <code>nodes</code>,
+<code>gaps</code>, <code>violation</code> and the counts of the
+globalization.</p>
+</div>
 <div class="section level2">
 <h2 id="segments-and-gaps">Segments and gaps<a class="anchor" aria-label="anchor" href="#segments-and-gaps"></a>
 </h2>
@@ -381,7 +498,7 @@ R = -(V - a + b R)/c , \tag{5}\]</span></p>
 <p>is fitted to the voltage <span class="math inline">\(V\)</span>
 alone, 81 points on <span class="math inline">\([0, 20]\)</span> with
 noise of 0.1.</p>
-<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fhnDir</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"fitzhughNagumo"</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/files2.html" class="external-link">dir.create</a></span><span class="op">(</span><span class="va">fhnDir</span>, showWarnings <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">fhn</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>V <span class="op">=</span> <span class="st">"c*(V - V^3/3 + R)"</span>, R <span class="op">=</span> <span class="st">"-(V - a + b*R)/c"</span><span class="op">)</span></span>
@@ -405,7 +522,7 @@ noise of 0.1.</p>
 <p>Forty starts perturb the initial states by a standard deviation of
 1.5 and <span class="math inline">\(a\)</span>, <span class="math inline">\(b\)</span>, <span class="math inline">\(\log
 c\)</span> by 1.</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">7</span><span class="op">)</span></span>
 <span><span class="va">fhnStarts</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parframe.html">parframe</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/do.call.html" class="external-link">do.call</a></span><span class="op">(</span><span class="va">rbind</span>, <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">40</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span></span>
 <span>  <span class="va">fhnTruth</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">0</span>, <span class="fl">1.5</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
@@ -417,7 +534,7 @@ c\)</span> by 1.</p>
 <p>A hit has a single-shooting objective within 0.1 of the best,
 evaluated anew because open gaps can report a data term below the
 optimum.</p>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fhnRuns</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fitzhughNagumo.rds"</span><span class="op">)</span></span>
 <span><span class="va">fhnValue</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">f</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">f</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">fhnTruth</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>, <span class="fl">1</span>, <span class="kw">function</span><span class="op">(</span><span class="va">th</span><span class="op">)</span></span>
 <span>  <span class="fu">fhnSS</span><span class="op">(</span><span class="va">th</span>, deriv <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">$</span><span class="va">value</span><span class="op">)</span></span>
@@ -464,7 +581,7 @@ G. Bock, <span>“Recent advances in parameter identification techniques
 for <span>O.D.E.</span>”</span> in <em>Numerical treatment of inverse
 problems in differential and integral equations</em>, vol. 2, P.
 Deuflhard and E. Hairer, Eds., in Progress in scientific computing, vol.
-2., Boston: Birkhäuser, 1983, pp. 95–121.</div>
+2., Boston: Birkhäuser, 1983, pp. 95–121. doi: <a href="https://doi.org/10.1007/978-1-4684-7324-7_7" class="external-link">10.1007/978-1-4684-7324-7_7</a>.</div>
 </div>
 <div id="ref-baake1992fitting" class="csl-entry">
 <div class="csl-left-margin">[2] </div>
@@ -500,7 +617,7 @@ systems,”</span> <em>Physical Review Letters</em>, vol. 64, no. 8, pp.
 <div class="csl-right-inline">W.
 Horbelt, J. Timmer, and H. U. Voss, <span>“Parameter estimation in
 nonlinear delayed feedback systems from noisy data,”</span> <em>Physics
-Letters A</em>, vol. 299, no. 5–6, pp. 513–521, 2002.</div>
+Letters A</em>, vol. 299, no. 5–6, pp. 513–521, 2002, doi: <a href="https://doi.org/10.1016/S0375-9601(02)00748-X" class="external-link">10.1016/S0375-9601(02)00748-X</a>.</div>
 </div>
 <div id="ref-peifer2007parameter" class="csl-entry">
 <div class="csl-left-margin">[7] </div>
