@@ -33,7 +33,23 @@ name: R-CMD-check
 permissions: read-all
 
 jobs:
+  # a tree that already passed this workflow, e.g. a pull request merged by fast-forward, is not
+  # checked again; the skipped jobs count as passed
+  pre:
+    runs-on: ubuntu-latest
+    outputs:
+      should_skip: ${{ steps.skip.outputs.should_skip }}
+    steps:
+      - id: skip
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          skip_after_successful_duplicate: 'true'
+          concurrent_skipping: 'never'
+          do_not_skip: '["workflow_dispatch", "schedule"]'
+
   R-CMD-check:
+    needs: pre
+    if: needs.pre.outputs.should_skip != 'true'
     runs-on: ${{ matrix.config.os }}
 
     name: ${{ matrix.config.os }} (${{ matrix.config.r }})
@@ -106,6 +122,8 @@ jobs:
   # gcc, FlexiBLAS and the hardening flags differ from Ubuntu's. No RSPM binaries
   # here, so dependencies build from source.
   fedora:
+    needs: pre
+    if: needs.pre.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     container: fedora:latest
     name: fedora (R release, gcc/FlexiBLAS)
