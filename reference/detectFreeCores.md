@@ -33,9 +33,9 @@ it is given, with attributes `"ncores"` (number of cores) and `"used"`
 
 ``` r
 detectFreeCores()
-#> [1] 2
+#> [1] 3
 #> attr(,"ncores")
 #> [1] 4
 #> attr(,"used")
-#> [1] 1.68
+#> [1] 1.45
 ```

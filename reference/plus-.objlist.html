@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -118,6 +118,21 @@ out. Numeric attributes are added, an absent one counting as zero. The
 each.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co">## Two priors on overlapping parameters</span></span></span>
+<span class="r-in"><span><span class="va">obj1</span> <span class="op">&lt;-</span> <span class="fu"><a href="constraintL2.html">constraintL2</a></span><span class="op">(</span>mu <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">0</span>, b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>, sigma <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">obj2</span> <span class="op">&lt;-</span> <span class="fu"><a href="constraintL2.html">constraintL2</a></span><span class="op">(</span>mu <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>b <span class="op">=</span> <span class="fl">1</span>, c <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>, sigma <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Gradients and Hessians are matched by parameter name</span></span></span>
+<span class="r-in"><span><span class="va">total</span> <span class="op">&lt;-</span> <span class="fu">obj1</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span>, b <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span> <span class="op">+</span> <span class="fu">obj2</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>b <span class="op">=</span> <span class="fl">2</span>, c <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">total</span><span class="op">$</span><span class="va">value</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 10</span>
+<span class="r-in"><span><span class="va">total</span><span class="op">$</span><span class="va">gradient</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a b c </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2 6 4 </span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

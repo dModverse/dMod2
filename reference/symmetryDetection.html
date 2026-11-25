@@ -31,7 +31,7 @@ the model time."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -144,7 +144,6 @@ the model time.</p>
 <span>  symEngine <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"modular"</span>, <span class="st">"symbolic"</span><span class="op">)</span>,</span>
 <span>  mode <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"local"</span>, <span class="st">"global"</span><span class="op">)</span>,</span>
 <span>  globalOptions <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  discrete <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
@@ -290,13 +289,8 @@ gets the reason in <code>info$discrete$unsupported</code> and a warning.</p></dd
 
 <dt id="arg-globaloptions">globalOptions<a class="anchor" aria-label="anchor" href="#arg-globaloptions"></a></dt>
 <dd><p>A list of arguments of the global analysis: <code>order</code>, <code>points</code>,
-<code>timeout</code> and <code>budget</code> as in <code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>.</p></dd>
-
-
-<dt id="arg-discrete">discrete<a class="anchor" aria-label="anchor" href="#arg-discrete"></a></dt>
-<dd><p><code>FALSE</code> (default), <code>TRUE</code> or a list of arguments of
-<code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>: also search the discrete symmetries; <code>mode = "global"</code> does the
-same through the detection.</p></dd>
+<code>memory</code>, <code>experiments</code>, <code>msolveEntries</code>, <code>msolveTerms</code>, <code>searchEntries</code> and
+<code>eliminationTerms</code> as in <code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>.</p></dd>
 
 
 <dt id="arg-verbose">verbose<a class="anchor" aria-label="anchor" href="#arg-verbose"></a></dt>
@@ -353,7 +347,7 @@ which the first is taken), <code>conditions</code>, <code>segments</code>, <code
 <dd><p>the coordinates fixed under <code>gaugePreference</code>.</p></dd>
 
 <dt><code>discreteSymmetries</code></dt>
-<dd><p>with <code>discrete</code>, see <code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>.</p></dd>
+<dd><p>with <code>mode = "global"</code>, see <code><a href="discreteSymmetries.html">discreteSymmetries()</a></code>.</p></dd>
 
 <dt><code>call</code></dt>
 <dd><p>the matched call.</p></dd>
@@ -372,7 +366,9 @@ The environment variables a user may need
 are <code>SYMIDENT_MSOLVE</code>, the path of the msolve executable (unset by
 default, msolve is then searched in the symident cache and on the
 <code>PATH</code>), and <code>SYMIDENT_CACHE</code>, the directory of that cache (by default
-<code>~/.cache/symident</code> on Linux). The other switches are diagnostic, see the
+<code>~/.cache/symident</code> on Linux). <code>SYMIDENT_MSOLVE_GB</code> sets the address space in GiB of
+one call of msolve where <code>memory</code> of <code><a href="discreteSymmetries.html">discreteSymmetries()</a></code> is not given. The other
+switches are diagnostic, see the
 symident documentation at <a href="https://dmodverse.github.io/symident/" class="external-link">https://dmodverse.github.io/symident/</a>.</p>
     </div>
     <div class="section level2">

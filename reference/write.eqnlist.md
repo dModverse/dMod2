@@ -29,3 +29,14 @@ write.eqnlist(eqnlist, ...)
 ## See also
 
 [`as.data.frame.eqnlist()`](https://dmodverse.github.io/dMod2/reference/as.data.frame.eqnlist.md)
+
+## Examples
+
+``` r
+el <- addReaction(eqnlist(), "A", "B", "k1*A", description = "conversion")
+file <- tempfile(fileext = ".csv")
+write.eqnlist(el, file = file)
+read.csv(file)
+#>   Description Rate  A B
+#> 1  conversion k1*A -1 1
+```

@@ -14,7 +14,10 @@ may differ between regions. Where the other points are rational functions
 \(\sigma\) of the coordinates, \(\sigma\) is reconstructed, checked on the output
 at random points (&quot;checked&quot;) and, where every state has a free initial value,
 proven by a map of the states (&quot;exact&quot;). A model with directions is reduced by
-symmetryReduction() first and the reduced model is analyzed."><meta property="og:description" content="Searches the discrete symmetries of a symmetryDetection() result: other points
+symmetryReduction() first and the reduced model is analyzed. The search stops on work
+limits, never on a clock, so the result is the same on every machine; a count or proof
+that reaches a limit ends without a result and names the limit in limits or in the
+certificate."><meta property="og:description" content="Searches the discrete symmetries of a symmetryDetection() result: other points
 of the domain with the output of a given one. The Taylor coefficients of the
 observables up to order are equated with their values at a point; msolve counts
 the solutions over the algebraic closure modulo a prime, and over the reals and in
@@ -23,7 +26,10 @@ may differ between regions. Where the other points are rational functions
 \(\sigma\) of the coordinates, \(\sigma\) is reconstructed, checked on the output
 at random points (&quot;checked&quot;) and, where every state has a free initial value,
 proven by a map of the states (&quot;exact&quot;). A model with directions is reduced by
-symmetryReduction() first and the reduced model is analyzed."></head><body>
+symmetryReduction() first and the reduced model is analyzed. The search stops on work
+limits, never on a clock, so the result is the same on every machine; a count or proof
+that reaches a limit ends without a result and names the limit in limits or in the
+certificate."></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -31,7 +37,7 @@ symmetryReduction() first and the reduced model is analyzed."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -114,7 +120,10 @@ may differ between regions. Where the other points are rational functions
 \(\sigma\) of the coordinates, \(\sigma\) is reconstructed, checked on the output
 at random points (<code>"checked"</code>) and, where every state has a free initial value,
 proven by a map of the states (<code>"exact"</code>). A model with directions is reduced by
-<code><a href="symmetryReduction.html">symmetryReduction()</a></code> first and the reduced model is analyzed.</p>
+<code><a href="symmetryReduction.html">symmetryReduction()</a></code> first and the reduced model is analyzed. The search stops on work
+limits, never on a clock, so the result is the same on every machine; a count or proof
+that reaches a limit ends without a result and names the limit in <code>limits</code> or in the
+certificate.</p>
     </div>
 
     <div class="section level2">
@@ -123,9 +132,13 @@ proven by a map of the states (<code>"exact"</code>). A model with directions is
 <span>  <span class="va">object</span>,</span>
 <span>  order <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  points <span class="op">=</span> <span class="fl">5L</span>,</span>
-<span>  timeout <span class="op">=</span> <span class="fl">600</span>,</span>
-<span>  budget <span class="op">=</span> <span class="fl">300</span>,</span>
-<span>  cores <span class="op">=</span> <span class="fl">1</span></span>
+<span>  cores <span class="op">=</span> <span class="fl">1</span>,</span>
+<span>  memory <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  experiments <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  msolveEntries <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  msolveTerms <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  searchEntries <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  eliminationTerms <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -147,17 +160,39 @@ coordinates.</p></dd>
 points, each a named list of the coordinates. Defaults to 5.</p></dd>
 
 
-<dt id="arg-timeout">timeout<a class="anchor" aria-label="anchor" href="#arg-timeout"></a></dt>
-<dd><p>Seconds one call of msolve may take. Defaults to 600.</p></dd>
-
-
-<dt id="arg-budget">budget<a class="anchor" aria-label="anchor" href="#arg-budget"></a></dt>
-<dd><p>Seconds the reconstruction of the maps may take; past it, the counts
-are reported without closed forms. Defaults to 300.</p></dd>
-
-
 <dt id="arg-cores">cores<a class="anchor" aria-label="anchor" href="#arg-cores"></a></dt>
 <dd><p>Threads of msolve. Defaults to 1.</p></dd>
+
+
+<dt id="arg-memory">memory<a class="anchor" aria-label="anchor" href="#arg-memory"></a></dt>
+<dd><p>GiB of address space one call of msolve may take; past it the call
+fails. <code>NULL</code> (default) keeps the value of symident (8).</p></dd>
+
+
+<dt id="arg-experiments">experiments<a class="anchor" aria-label="anchor" href="#arg-experiments"></a></dt>
+<dd><p>Count on several experiments with shared parameters and free
+starts, which bounds the fiber of a model with free starts and no rational first
+integral: <code>NULL</code> (default) where a short count of one experiment finds none, <code>TRUE</code>
+first with the number of experiments from the rank criterion, a number <code>K</code> with <code>K</code>
+experiments, <code>FALSE</code> never.</p></dd>
+
+
+<dt id="arg-msolveentries">msolveEntries<a class="anchor" aria-label="anchor" href="#arg-msolveentries"></a></dt>
+<dd><p>Nonzero entries of the F4 matrices one call of msolve may reduce.</p></dd>
+
+
+<dt id="arg-msolveterms">msolveTerms<a class="anchor" aria-label="anchor" href="#arg-msolveterms"></a></dt>
+<dd><p>Terms of the largest system given to msolve.</p></dd>
+
+
+<dt id="arg-searchentries">searchEntries<a class="anchor" aria-label="anchor" href="#arg-searchentries"></a></dt>
+<dd><p>Entries of the matrices over finite fields the exact count may
+reduce.</p></dd>
+
+
+<dt id="arg-eliminationterms">eliminationTerms<a class="anchor" aria-label="anchor" href="#arg-eliminationterms"></a></dt>
+<dd><p>Terms of the largest polynomial of the elimination of the
+states in the exact count.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -167,15 +202,24 @@ coordinates it changes (an <a href="eqnvec.html">eqnvec</a>), <code>changes</cod
 (<code>TRUE</code>, <code>FALSE</code>, or <code>NULL</code> with the <code>domainConditions</code> under which
 \(\sigma(\theta)\) lies in the domain) and <code>fixedSet</code>, the factors on which
 \(\sigma\) fixes \(\theta\); and <code>info$discrete</code> with <code>order</code>, <code>count</code> (the
-solutions over the algebraic closure at a random point modulo a prime), <code>counts</code>
-per point (<code>complex</code>, <code>real</code>, <code>inDomain</code>, <code>undecided</code>), <code>closedForms</code>, <code>countFinal</code>
-(every solution is the image of a proven \(\sigma\)), <code>fundamentalDomain</code>
-(inequalities that keep one point of each orbit), <code>limits</code> and, for a model with
-directions, <code>reduced</code>.</p>
+solutions over the algebraic closure at a random point modulo a prime), <code>countBound</code>
+(the probability that a generic point has more, <code>NULL</code> where the count is exact or has
+no bound), <code>countDomain</code> (the points of the fiber of a generic point inside the
+domain, where that number is final), <code>counts</code> per point (<code>complex</code>, <code>real</code>,
+<code>inDomain</code>, <code>undecided</code>), <code>closedForms</code>, <code>countFinal</code> (every solution is the image of
+a proven \(\sigma\)), <code>fundamentalDomain</code> (inequalities that keep one point of each
+orbit), <code>certificate</code> (what the result rests on, with <code>complete</code>: <code>"exact"</code>,
+<code>"verified"</code>, <code>"axiom"</code>, <code>"no"</code> or <code>"open"</code>), <code>experiments</code> (the count on several
+experiments, or why it does not apply), <code>limits</code> and, where they apply, <code>reduced</code> (for
+a model with directions), <code>eliminated</code> (under <code>reduceCQ</code>, the species solved through
+the totals), <code>relaxed</code> (the model with non-rational terms of the states as new states)
+and <code>unsupported</code>.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The search needs msolve; <code><a href="symmetryDetection.html">symmetryDetection()</a></code> says where it is searched.</p>
+    <p>The search needs msolve; <code><a href="symmetryDetection.html">symmetryDetection()</a></code> says where it is searched.
+The defaults of <code>msolveEntries</code>, <code>msolveTerms</code>, <code>searchEntries</code> and <code>eliminationTerms</code>
+(<code>NULL</code>) keep the values of symident.</p>
     </div>
     <div class="section level2">
     <h2 id="references">References<a class="anchor" aria-label="anchor" href="#references"></a></h2>
@@ -192,7 +236,7 @@ Academic Press, London.</p>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="kw">if</span> <span class="op">(</span><span class="cn">FALSE</span><span class="op">)</span> <span class="op">{</span> <span class="co"># requireNamespace("reticulate", quietly = TRUE) &amp;&amp; reticulate::py_module_available("symident.install") &amp;&amp; !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))</span></span></span>
 <span class="r-in"><span><span class="co"># two compartments, an input u into the first, the second observed</span></span></span>
 <span class="r-in"><span><span class="va">f</span> <span class="op">&lt;-</span> <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>x1 <span class="op">=</span> <span class="st">"-(k21 + k01)*x1 + k12*x2 + u"</span>, x2 <span class="op">=</span> <span class="st">"k21*x1 - k12*x2"</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">f</span>, <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"x2"</span><span class="op">)</span>, knownInputs <span class="op">=</span> <span class="st">"u"</span>, discrete <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">res</span> <span class="op">&lt;-</span> <span class="fu"><a href="symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">f</span>, <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"x2"</span><span class="op">)</span>, knownInputs <span class="op">=</span> <span class="st">"u"</span>, mode <span class="op">=</span> <span class="st">"global"</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">res</span></span></span>
 <span class="r-in"><span><span class="va">res</span><span class="op">$</span><span class="va">discreteSymmetries</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="va">map</span></span></span>
 <span class="r-in"><span><span class="va">res</span><span class="op">$</span><span class="va">info</span><span class="op">$</span><span class="va">discrete</span><span class="op">$</span><span class="va">fundamentalDomain</span></span></span>

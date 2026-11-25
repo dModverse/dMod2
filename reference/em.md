@@ -25,7 +25,8 @@ Methods:
 - `"quadrature"`:
 
   adaptive sparse-grid quadrature around the modes, started from the
-  FOCEI fit; section Quadrature.
+  FOCEI fit; section Quadrature. Also for spike-and-slab random effects
+  alone, per subset; section Sparse random effects.
 
 - `"laplaceEM"`:
 
@@ -35,7 +36,11 @@ Methods:
 - `"saem"`:
 
   stochastic-approximation EM, also for spike-and-slab and
-  Dirichlet-process random effects; section SAEM.
+  Dirichlet-process random effects; section SAEM. With many structural
+  parameters and sparse random effects it does not find the optimum from
+  random starts reliably; start it from a `"focei"` fit,
+  `em(obj, random, fit, method = "saem")`, to check that fit without the
+  Laplace approximation.
 
 ## Usage
 
@@ -254,6 +259,9 @@ An object of class `em` with, among others:
 
 - `etaModes`, `etaSE`, `shrinkage`:
 
+  the modes of the random effects per group, their conditional standard
+  errors, and per random effect 1 - SD(modes) / SD from Omega.
+
 - `certificate`:
 
   with method `"quadrature"` per group the importance-sampling check at
@@ -275,11 +283,16 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
 
 - `tol`:
 
-  allowed change of -2 log L by the next level, default 0.1, split over
-  the groups; each group takes the lowest level from the current stage
-  of the group up within `tol / G` and never a lower one than before.
-  Where the next level exceeds `maxNodes`, the change from the level
-  below is the estimate. `Inf` keeps the levels of the stages.
+  allowed change of -2 log L by the next refinement, default 0.1, split
+  over the groups. Each group starts from the Smolyak grid of the stage
+  and the grid of the last rebuild, and refines it dimension-adaptively
+  (Gerstner and Griebel 2003): the forward neighbors of the grid are
+  evaluated, their change of -2 log L is the error, and the neighbor of
+  largest change joins the grid until the error is within `tol / G`. A
+  grid therefore refines only the directions in which the integrand
+  departs from the Gaussian at the mode. Where the next refinement
+  exceeds `maxNodes`, the evaluated neighbors join the grid and their
+  change is the estimate. `Inf` keeps the grids of the stages.
 
 - `levels`:
 
@@ -289,11 +302,13 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
 
 - `maxLevel`, `maxNodes`:
 
-  highest level, default `K + 8`, and the largest node count of a level
-  per group, default 1000. A group whose error exceeds `tol / G` at the
-  highest level within both is capped. Column `capped` of `stageTrace`
-  counts the capped groups; attribute `"levels"` of `stageTrace` and the
-  `certificate` list level, level error and cap per group.
+  highest level, default `K + 8`, and the largest number of evaluated
+  nodes per group, default 1000; the level of an adaptive grid is that
+  of the smallest Smolyak grid holding it. A group whose error exceeds
+  `tol / G` at the highest level within both is capped. Column `capped`
+  of `stageTrace` counts the capped groups; attribute `"levels"` of
+  `stageTrace` and the `certificate` list level, level error and cap per
+  group.
 
 - `tolDecrement`:
 
@@ -327,7 +342,7 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
 - `epsEcm`, `maxEcm`:
 
   for `"laplaceEM"`: the extrapolated distance to the fixed point at
-  which it stops, default 1e-5, and the iteration limit.
+  which it stops, default 1e-5, and the iteration limit, default 200.
 
 ## SAEM
 
@@ -418,11 +433,12 @@ the partitions, with `valueSE`.
 
 ## Sparse random effects
 
-With spike-and-slab or Dirichlet-process random effects the parameters
-and hyperparameters move in one trust region. The integral of a group is
-exact where the data couple none of the factors and the sum over the
-subsets of the spike-and-slab random effects of the group stays within a
-budget of nodes; else it is the expectation consistent (EC)
+With spike-and-slab random effects of the default `spike = 0, mean = 0`
+or Dirichlet-process random effects, `method = "focei"` moves the
+parameters and hyperparameters in one trust region. The integral of a
+group is exact where the data couple none of the factors and the sum
+over the subsets of the spike-and-slab random effects of the group stays
+within a budget of nodes; else it is the expectation consistent (EC)
 approximation, and a trial point at which EC does not converge is a
 failed evaluation. Entries of `control$sparseFit`:
 
@@ -436,6 +452,66 @@ failed evaluation. Entries of `control$sparseFit`:
   settings of the outer search. The modes are found as by FOCEI, by the
   group kernel, where the Gauss-Newton step is below 1e-8; of
   `control$innerControl` only `sqpIterlim` applies.
+
+- `maxEcm`, `epsEcm`, `budget`, `ec`:
+
+  of the sum over subsets, see below.
+
+Spike-and-slab random effects with `mean` or `spike` other than 0, see
+[`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md),
+take a separate path of `method = "focei"`, beside normal random effects
+of the same grouping but no Dirichlet-process ones. The integral of a
+group is the sum over all subsets of the spike-and-slab random effects,
+each subset a Laplace integral over the normal random effects and the
+slab ones of the subset at the inner mode, the other random effects at
+the spike; `spike = -Inf` switches the parameter off. The number of
+subsets summed over all groups is at most `budget` (default 4096). The
+fixed effects and hyperparameters follow by EM: `prob` is the mean
+inclusion probability, `tau^2` the mean squared deviation from `mean`
+under the slab, and the fixed effects minimize the data term plus slab
+prior summed over the subsets with their weights, jointly with the
+subset modes; the log determinant of the Laplace integral enters the
+weights only; Omega is the mean of the posterior second moments of the
+normal random effects, restricted to the block structure. EM stops after
+`maxEcm` iterations (default 200) or when no estimate changes by more
+than `epsEcm` (default 1e-6). The `p0` column of the random table is the
+posterior probability of the spike.
+
+`method = "saem"` draws them by the moves of section SAEM: a spike at
+`-Inf` leaves the other slab values as they are, and a move into the
+slab proposes from the Laplace approximation of the coordinate given the
+others, by Newton steps on the model. The reported -2 log L is the sum
+over subsets of `method = "focei"` at the estimate; Dirichlet-process
+random effects beside are refused.
+
+`method = "quadrature"` takes the same path for every model with
+spike-and-slab random effects, the default `spike = 0` included, after
+EM on the Laplace integrals to their fixed point. Every subset of
+Laplace weight above 1e-8 of the largest is integrated on a
+dimension-adaptive sparse grid around the inner mode as in section
+Quadrature; a group has `control$quadrature$tol / G` (default 0.1 / G),
+a subset of relative weight \\w\\ the share \\1 / w\\ of it, so that
+light subsets stay on the first grid; the other subsets keep the Laplace
+value. Then every parameter, the Cholesky parameters of Omega and the
+estimated `prob` and `tau` included, moves by trust steps on the frozen
+nodes, which are rebuilt after each step until a Newton step would lower
+-2 log L by less than `tolDecrement` (`stopReason` `"decrement"`). Of
+`control$quadrature` this path reads `tol`, `maxLevel` and `maxNodes`
+(per subset), `tolDecrement`, `maxEcmPerStage`, `cm1Control` and
+`maxCm1Iter`.
+
+Groups beyond the budget, the largest first, take the expectation
+consistent (EC) approximation in a coordinate in which the spike is 0:
+the rate \\b^\eta\\ for `spike = -Inf`, where the slab is log-normal,
+and \\\eta\\ minus the spike else. The data term is a Gaussian in that
+coordinate, expanded first at the mode with every random effect in the
+slab and again at the EC mean until it is stable; normal random effects
+enter it exactly, without sites. These groups take the subset of
+inclusion probability above 1/2 for the fixed effects. Entries of
+`control$sparseFit$ec`: `nodes` of the Gauss-Hermite rule of the
+log-normal slab (40), `maxSweeps` (500) and `tolSweep` (1e-5, the change
+of the marginal means in standard deviations), `maxRelinearize` (30) and
+`tolRelinearize` (1e-4, relative).
 
 ## See also
 
@@ -468,10 +544,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmpnLJd0N/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpJDzFHt/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmpnLJd0N/theoph_err.cpp
+#> Overwriting: /tmp/RtmpJDzFHt/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -541,7 +617,7 @@ fitQ <- em(obj, randomEffects(p), init = fit, method = "quadrature", verbose = F
 fitS <- em(obj, randomEffects(p), init = init, method = "saem", verbose = FALSE)
 c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 #>      focei quadrature       saem 
-#>   359.4032   360.7370   360.7588 
+#>   359.4032   360.7089   360.7757 
 # }
 if (FALSE) { # \dontrun{
 ## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation

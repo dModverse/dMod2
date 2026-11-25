@@ -433,7 +433,7 @@ the model: the nonzero ones against the slab density \\\rho\\
 \mathcal{N}(0, \tau^2)\\ (line), the count at 0 against the expected
 \\20 (1 - \rho)\\ (bar). With 6 nonzero differences the figure shows
 gross departures from the slab, an outlier or separate clusters, but is
-no test of its shape:
+no test of the slab shape:
 
 ``` r
 
@@ -508,13 +508,41 @@ give deviations exactly zero unless the data need them:
 
 | distribution | a deviation \\\eta\\ of a group | hyperparameters |
 |----|----|----|
-| [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\ | `prob_<grouping>`, `tau_<grouping>` |
+| [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | `spike` with probability \\1 - \rho\\, else \\\mathcal{N}(\mu, \tau^2)\\; `spike` and \\\mu\\ (`mean`) default to 0 | `prob_<grouping>`, `tau_<grouping>` |
 | [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md) | cluster value: \\0\\ for the population cluster, else one \\\mathcal{N}(0, \tau^2)\\ draw | `concentration_<grouping>`, `tau_<grouping>` |
 
 Hyperparameters are shared by the symbols of a term (`_1`, `_2`, … for
 several terms of one grouping) and estimated unless given, as in
 `spikeSlab(tau = 0.5)`. Normal and sparse random effects of one grouping
 combine; `em(method = "focei")` fits all.
+
+## Switching parameters off
+
+With `spike = -Inf` on a parameter in an exponential,
+`insert(trafo, "k <- exp(k)")`, the spike is the rate 0: the reaction is
+absent. `gr(dist = )` without a grouping makes one group `all` of all
+conditions, so that with `0 +` the random effect is the parameter itself
+and the fit selects reactions. For a model `g * x` with data `data` and
+the rates `k0`, `k1` in the parameter transformation `trafo`:
+
+``` r
+
+trafo <- insert(trafo, "k <- exp(k)", k = c("k0", "k1"))
+trafo <- insert(trafo, k ~ 0 + (1 | gr(dist = spikeSlab(prob = 0.5, tau = 1, mean = log(0.5), spike = -Inf))),
+                k = c("k0", "k1"))
+fit <- em(normL2(data, g * x * P(trafo)), randomEffects(P(trafo)), init = c(x = 1))
+fit$random[, c("eta", "mode", "p0")]
+```
+
+`p0` is the posterior probability that the reaction is absent. With a
+grouping, `k ~ 1 + (1 | gr(ID, dist = spikeSlab(spike = -Inf)))`
+switches the reaction off per group. `em(method = "focei")` and
+`em(method = "quadrature")` fit these random effects, also beside normal
+ones of the same grouping; `"quadrature"` integrates to `tol` where
+`"focei"` takes the Laplace approximation. With few candidates, most of
+them clearly present, an estimated `prob` tends to 1; a fixed `prob` is
+the selection prior. Details: [Methods \> Spike at a given
+value](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#spike-at-a-given-value).
 
 ## Fitting sparse random effects
 

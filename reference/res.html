@@ -17,7 +17,7 @@ lloq."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -138,6 +138,34 @@ missing on the input.</p>
     <div class="dont-index"><p><code><a href="objframe.html">objframe()</a></code>, <code><a href="normL2.html">normL2()</a></code></p></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co">## Prediction with the derivative of the observable y in the parameter k</span></span></span>
+<span class="r-in"><span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fl">0</span><span class="op">:</span><span class="fl">2</span></span></span>
+<span class="r-in"><span><span class="va">J</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/array.html" class="external-link">array</a></span><span class="op">(</span><span class="op">-</span><span class="va">times</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="va">times</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">1</span>, <span class="fl">1</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="cn">NULL</span>, <span class="st">"y"</span>, <span class="st">"k"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="prdframe.html">prdframe</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>time <span class="op">=</span> <span class="va">times</span>, y <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="va">times</span><span class="op">)</span><span class="op">)</span>, deriv <span class="op">=</span> <span class="va">J</span>, parameters <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>k <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>time <span class="op">=</span> <span class="va">times</span>, name <span class="op">=</span> <span class="st">"y"</span>, value <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1.05</span>, <span class="fl">0.35</span>, <span class="fl">0.15</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                   sigma <span class="op">=</span> <span class="fl">0.1</span>, lloq <span class="op">=</span> <span class="op">-</span><span class="cn">Inf</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">r</span> <span class="op">&lt;-</span> <span class="fu">res</span><span class="op">(</span><span class="va">data</span>, <span class="va">out</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">r</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     time   name value prediction sigma    residual weighted.residual   bloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;int&gt; &lt;char&gt; &lt;num&gt;      &lt;num&gt; &lt;num&gt;       &lt;num&gt;             &lt;num&gt; &lt;lgcl&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:     0      y  1.05  1.0000000   0.1 -0.05000000        -0.5000000  FALSE</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:     1      y  0.35  0.3678794   0.1  0.01787944         0.1787944  FALSE</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:     2      y  0.15  0.1353353   0.1 -0.01466472        -0.1466472  FALSE</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    weighted.0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         &lt;num&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:  10.000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:   3.678794</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:   1.353353</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/attr.html" class="external-link">attr</a></span><span class="op">(</span><span class="va">r</span>, <span class="st">"deriv"</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>               k</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1,]  0.0000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [2,] -0.3678794</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [3,] -0.2706706</span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

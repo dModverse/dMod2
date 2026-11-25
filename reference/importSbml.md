@@ -65,6 +65,11 @@ A list with components
   [eventlist](https://dmodverse.github.io/dMod2/reference/eventlist.md)
   or `NULL`, the event assignments of the SBML file only.
 
+- `compartmentInits`:
+
+  Named character, the size at the start of each compartment an event
+  assigns to; such a compartment keeps the id as volume.
+
 - `renamed`:
 
   Named character, the new ids of SBML ids that are no valid R or C++

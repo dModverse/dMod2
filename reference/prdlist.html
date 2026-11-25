@@ -15,7 +15,7 @@ condition or parameter set. Prediction functions return prediction lists."></hea
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -130,6 +130,39 @@ are named <code>"1"</code>, <code>"2"</code>, ... For <code>as.prdlist()</code>,
     <div class="dont-index"><p><code><a href="prdfn.html">prdfn()</a></code>, <code><a href="plotCombined.html">plotCombined()</a></code></p></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co">## Prediction frames of a decay at two rates, without derivatives</span></span></span>
+<span class="r-in"><span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fl">0</span><span class="op">:</span><span class="fl">4</span></span></span>
+<span class="r-in"><span><span class="va">frame1</span> <span class="op">&lt;-</span> <span class="fu"><a href="prdframe.html">prdframe</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>time <span class="op">=</span> <span class="va">times</span>, A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="va">times</span><span class="op">)</span><span class="op">)</span>, parameters <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>k <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">frame2</span> <span class="op">&lt;-</span> <span class="fu"><a href="prdframe.html">prdframe</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/cbind.html" class="external-link">cbind</a></span><span class="op">(</span>time <span class="op">=</span> <span class="va">times</span>, A <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp</a></span><span class="op">(</span><span class="op">-</span><span class="fl">2</span> <span class="op">*</span> <span class="va">times</span><span class="op">)</span><span class="op">)</span>, parameters <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>k <span class="op">=</span> <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">frame1</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>      time          A</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1,]    0 1.00000000</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [2,]    1 0.36787944</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [3,]    2 0.13533528</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [4,]    3 0.04978707</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [5,]    4 0.01831564</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> The prediction contains 1st-order derivatives: no</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> The prediction contains 2nd-order derivatives: no</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## One frame per condition, in long format</span></span></span>
+<span class="r-in"><span><span class="va">pred</span> <span class="op">&lt;-</span> <span class="fu">prdlist</span><span class="op">(</span>slow <span class="op">=</span> <span class="va">frame1</span>, fast <span class="op">=</span> <span class="va">frame2</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame</a></span><span class="op">(</span><span class="va">pred</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    time name        value condition sigma</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1     0    A 1.0000000000      slow   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2     1    A 0.3678794412      slow   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3     2    A 0.1353352832      slow   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4     3    A 0.0497870684      slow   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5     4    A 0.0183156389      slow   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6     0    A 1.0000000000      fast   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7     1    A 0.1353352832      fast   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8     2    A 0.0183156389      fast   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9     3    A 0.0024787522      fast   NaN</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10    4    A 0.0003354626      fast   NaN</span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

@@ -105,13 +105,13 @@ with REML the maximum likelihood fits the rounds start from),
 `seSource` (`"Hessian"`, or `"Gauss-Newton"` where the reported Hessian
 of a fit with random terms is not positive definite: then the
 Gauss-Newton Schur complement of the expected information over the
-random effects), `fit`, `objfn`, `omega`, `random` and `randomEffects`
-with random terms, and the `model`. `scaled` also has `scaled`, the
-value of the biological symbol at which the prediction meets the reading
-with the other symbols at the fit (`NaN` where none does), and
-`scaledSigma`, the error model over the slope of the prediction there;
-`aligned` has `lloq`, the smallest such value of the censored readings
-of a combination.
+random effects; `"none"` where that fails too, without standard errors),
+`fit`, `objfn`, `omega`, `random` and `randomEffects` with random terms,
+and the `model`. `scaled` also has `scaled`, the value of the biological
+symbol at which the prediction meets the reading with the other symbols
+at the fit (`NaN` where none does), and `scaledSigma`, the error model
+over the slope of the prediction there; `aligned` has `lloq`, the
+smallest such value of the censored readings of a combination.
 
 ## Details
 

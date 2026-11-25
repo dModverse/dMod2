@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -113,6 +113,53 @@
     <p><code>x</code>, invisibly.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="co">## One transformation per condition, all compiled into one shared object</span></span></span>
+<span class="r-in"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  ctrl  <span class="op">=</span> <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>k1 <span class="op">=</span> <span class="st">"exp(log_k1)"</span>, k2 <span class="op">=</span> <span class="st">"exp(log_k2)"</span>, A <span class="op">=</span> <span class="st">"A0"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  treat <span class="op">=</span> <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>k1 <span class="op">=</span> <span class="st">"exp(log_k1 + log_fold)"</span>, k2 <span class="op">=</span> <span class="st">"exp(log_k2)"</span>, A <span class="op">=</span> <span class="st">"A0"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="P.html">P</a></span><span class="op">(</span><span class="va">trafo</span>, compile <span class="op">=</span> <span class="cn">TRUE</span>, modelname <span class="op">=</span> <span class="st">"P_example"</span>, outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-wrn co"><span class="r-pr">#&gt;</span> <span class="warning">Warning: </span>A shared library named 'P_example' is already loaded; overwriting it is not portable. Using 'P_example_2' instead.</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC]</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> reusing 2 unchanged object(s)</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter transformation:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> function (..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE, </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     conditions = st$default_conditions, env = NULL, cores = getOption("dMod2.cores", </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         1L), sweep = "forward")  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> ... conditions: ctrl, treat </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> ... parameters: log_k1, log_k2, A0, log_fold </span>
+<span class="r-in"><span><span class="fu"><a href="getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] "log_k1"   "log_k2"   "A0"       "log_fold"</span>
+<span class="r-in"><span><span class="fu">p</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>log_k1 <span class="op">=</span> <span class="fl">0</span>, log_k2 <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, A0 <span class="op">=</span> <span class="fl">2</span>, log_fold <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $ctrl</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter vector:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   k1 :       1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   k2 :  0.367879</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    A :       2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Attributes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv  : 3 x 3 matrix</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv2 : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   fixed  : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $treat</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter vector:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   k1 :       3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   k2 :  0.367879</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    A :       2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Attributes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv  : 3 x 4 matrix</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv2 : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   fixed  : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

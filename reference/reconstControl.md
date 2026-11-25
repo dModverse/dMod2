@@ -25,7 +25,6 @@ reconstControl(
   perPrimeCap = 120L,
   perPrimeMinPrimes = 3L,
   homotopy = TRUE,
-  timeout = Inf,
   homotopyDegree = NULL,
   degreeCapMax = NULL,
   exactProof = NULL,
@@ -109,11 +108,6 @@ reconstControl(
   Whether directions still open under `equilibrate = TRUE` are fitted
   along lines in parameter space as a last route. Defaults to `TRUE`.
 
-- timeout:
-
-  Time limit in seconds for the reconstruction. Directions not finished
-  in time are reported by their support. `Inf` (default) sets no limit.
-
 - homotopyDegree:
 
   Total degree bound of the entries the homotopy route fits.
@@ -154,7 +148,7 @@ A list of class `reconstcontrol` with the settings.
 ## Examples
 
 ``` r
-reconstControl(degreeCap = 6L, timeout = 60)
+reconstControl(degreeCap = 6L)
 #> $relevanceCap
 #> [1] 6
 #> 
@@ -205,9 +199,6 @@ reconstControl(degreeCap = 6L, timeout = 60)
 #> 
 #> $homotopy
 #> [1] TRUE
-#> 
-#> $timeout
-#> [1] 60
 #> 
 #> $homotopyDegree
 #> NULL

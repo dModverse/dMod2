@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -238,6 +238,14 @@ saddle.</p>
 <span class="r-in"><span>  treat <span class="op">=</span> <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>k1 <span class="op">=</span> <span class="st">"exp(log_k1 + log_fold)"</span>, k2 <span class="op">=</span> <span class="st">"exp(log_k2)"</span>, A <span class="op">=</span> <span class="st">"A0"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu">P</span><span class="op">(</span><span class="va">trafo</span>, compile <span class="op">=</span> <span class="cn">TRUE</span>, modelname <span class="op">=</span> <span class="st">"P_example"</span>, outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-msg co"><span class="r-pr">#&gt;</span> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC]</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter transformation:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> function (..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE, </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     conditions = st$default_conditions, env = NULL, cores = getOption("dMod2.cores", </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         1L), sweep = "forward")  </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> ... conditions: ctrl, treat </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> ... parameters: log_k1, log_k2, A0, log_fold </span>
 <span class="r-in"><span><span class="fu"><a href="getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "log_k1"   "log_k2"   "A0"       "log_fold"</span>
 <span class="r-in"><span><span class="fu">p</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>log_k1 <span class="op">=</span> <span class="fl">0</span>, log_k2 <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, A0 <span class="op">=</span> <span class="fl">2</span>, log_fold <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Log.html" class="external-link">log</a></span><span class="op">(</span><span class="fl">3</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>

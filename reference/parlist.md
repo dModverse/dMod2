@@ -110,6 +110,15 @@ summary(out)
 parframe <- as.parframe(out)
 plotValues(parframe)
 
+unique(parframe)
+#>   index     value converged iterations stopReason neval qnEval qnSkipped
+#> 1     2 -10.24463      TRUE          8     fvalue     9      0         0
+#> 2     1 223.37336      TRUE          6     fvalue     7      0         0
+#> 3     3 440.78695      TRUE         16     fvalue    17      0         4
+#>   nSwitch iterations.gn iterations.bfgs           a
+#> 1       0             8               0  0.98911802
+#> 2       0             6               0 -0.07418182
+#> 3       0            16               0  2.36333881
 bestfit <- as.parvec(parframe)
 plot((g*x)(times, bestfit), data)
 

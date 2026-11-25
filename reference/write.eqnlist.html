@@ -15,7 +15,7 @@ the equation list has any."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -120,6 +120,16 @@ the equation list has any.</p>
     <div class="dont-index"><p><code><a href="as.data.frame.eqnlist.html">as.data.frame.eqnlist()</a></code></p></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">el</span> <span class="op">&lt;-</span> <span class="fu"><a href="addReaction.html">addReaction</a></span><span class="op">(</span><span class="fu"><a href="eqnlist.html">eqnlist</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"A"</span>, <span class="st">"B"</span>, <span class="st">"k1*A"</span>, description <span class="op">=</span> <span class="st">"conversion"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">file</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempfile</a></span><span class="op">(</span>fileext <span class="op">=</span> <span class="st">".csv"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">write.eqnlist</span><span class="op">(</span><span class="va">el</span>, file <span class="op">=</span> <span class="va">file</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/utils/read.table.html" class="external-link">read.csv</a></span><span class="op">(</span><span class="va">file</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   Description Rate  A B</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1  conversion k1*A -1 1</span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

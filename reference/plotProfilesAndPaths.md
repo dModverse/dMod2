@@ -14,6 +14,8 @@ plotProfilesAndPaths(
   ncol = 3,
   normalizePaths = FALSE,
   modes = c("data", "prior"),
+  maxvalue = 5,
+  threshold = .profileLines(),
   ...
 )
 ```
@@ -47,6 +49,12 @@ plotProfilesAndPaths(
 
   Character vector, the contributions to the objective drawn in the
   profile plot besides the total. Defaults to `c("data", "prior")`.
+
+- maxvalue, threshold:
+
+  Cut-off of the objective difference and the horizontal lines above the
+  optimum, as in
+  [`plotProfile()`](https://dmodverse.github.io/dMod2/reference/plotProfile.md).
 
 - ...:
 

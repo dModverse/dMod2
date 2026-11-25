@@ -167,3 +167,20 @@ With `deriv = FALSE` it returns the value alone.
 
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md),
 [`controls()`](https://dmodverse.github.io/dMod2/reference/controls.md)
+
+## Examples
+
+``` r
+# \donttest{
+f <- eqnvec(A = "-k1*A", B = "k1*A - k2*B")
+model <- odemodel(f, modelname = "Xf_AB", outdir = tempdir())
+#> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC -fopenmp]
+#> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC -fopenmp]
+
+## States alone, without sensitivities
+x <- Xf(model)
+pred <- x(seq(0, 10, 0.1), c(A = 1, B = 0, k1 = 0.5, k2 = 0.2))
+plot(pred)
+
+# }
+```

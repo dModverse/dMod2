@@ -44,7 +44,6 @@ symmetryDetection(
   symEngine = c("modular", "symbolic"),
   mode = c("local", "global"),
   globalOptions = NULL,
-  discrete = FALSE,
   verbose = FALSE
 )
 ```
@@ -211,15 +210,9 @@ symmetryDetection(
 - globalOptions:
 
   A list of arguments of the global analysis: `order`, `points`,
-  `timeout` and `budget` as in
+  `memory`, `experiments`, `msolveEntries`, `msolveTerms`,
+  `searchEntries` and `eliminationTerms` as in
   [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md).
-
-- discrete:
-
-  `FALSE` (default), `TRUE` or a list of arguments of
-  [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md):
-  also search the discrete symmetries; `mode = "global"` does the same
-  through the detection.
 
 - verbose:
 
@@ -284,7 +277,7 @@ An object of class `symmetrydetection`:
 
 - `discreteSymmetries`:
 
-  with `discrete`, see
+  with `mode = "global"`, see
   [`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md).
 
 - `call`:
@@ -306,9 +299,11 @@ session, is passed to symident for the call. The environment variables a
 user may need are `SYMIDENT_MSOLVE`, the path of the msolve executable
 (unset by default, msolve is then searched in the symident cache and on
 the `PATH`), and `SYMIDENT_CACHE`, the directory of that cache (by
-default `~/.cache/symident` on Linux). The other switches are
-diagnostic, see the symident documentation at
-<https://dmodverse.github.io/symident/>.
+default `~/.cache/symident` on Linux). `SYMIDENT_MSOLVE_GB` sets the
+address space in GiB of one call of msolve where `memory` of
+[`discreteSymmetries()`](https://dmodverse.github.io/dMod2/reference/discreteSymmetries.md)
+is not given. The other switches are diagnostic, see the symident
+documentation at <https://dmodverse.github.io/symident/>.
 
 ## See also
 

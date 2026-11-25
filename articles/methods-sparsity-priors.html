@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -136,7 +136,8 @@ in an effect formula sets the distribution:</p>
 <tr class="odd">
 <td><code><a href="../reference/normal.html">spikeSlab()</a></code></td>
 <td>
-<span class="math inline">\(0\)</span> with probability <span class="math inline">\(1 - \rho\)</span>, else <span class="math inline">\(\mathcal{N}(0, \tau^2)\)</span>
+<span class="math inline">\(0\)</span> with probability <span class="math inline">\(1 - \rho\)</span>, else <span class="math inline">\(\mathcal{N}(0, \tau^2)\)</span>;
+<code>spike</code> and <code>mean</code> set other values, see <a href="#spike-at-a-given-value">Spike at a given value</a>
 </td>
 <td>
 <code>prob_&lt;grouping&gt;</code>,
@@ -1019,6 +1020,88 @@ sets <span class="math inline">\(M\)</span> (500). An SAEM fit has no
 gradient, Hessian or empirical information.</p>
 </div>
 </div>
+<div class="section level2">
+<h2 id="spike-at-a-given-value">Spike at a given value<a class="anchor" aria-label="anchor" href="#spike-at-a-given-value"></a>
+</h2>
+<p><code>spikeSlab(mean = , spike = )</code> generalizes the prior of <a href="#spike-and-slab">Spike and slab</a> to</p>
+<p><span class="math display">\[p(\eta_k) = (1 - \rho)\,
+\delta_\alpha(\eta_k) + \rho\, \mathcal{N}(\eta_k;\, \mu_0, \tau^2) ,
+\tag{41}\]</span></p>
+<p><span class="math inline">\(\alpha\)</span> and <span class="math inline">\(\mu_0\)</span> given. <span class="math inline">\(\alpha = -\infty\)</span> requires <span class="math inline">\(\eta_k\)</span> to enter the model only as a
+summand of an exponent <span class="math inline">\(b^{(\cdots +
+\eta_k)}\)</span> with a numeric base <span class="math inline">\(b &gt;
+1\)</span>, read off the equations of the model; the spike is then the
+model at rate 0. The quadratic model of (7) cannot reach <span class="math inline">\(-\infty\)</span>, so every subset <span class="math inline">\(F\)</span> of slab coordinates of a group is a
+separate Laplace integral, at the inner mode <span class="math inline">\(\hat\eta_F\)</span> of</p>
+<p><span class="math display">\[f_F(\eta_F) = -2 \log L(\eta_F,\,
+\eta_{\bar F} = \alpha) + \sum_{k \in F} \frac{(\eta_k -
+\mu_0)^2}{\tau^2} ,
+\qquad -2 \log Z_F = f_F(\hat\eta_F) + |F| \log \tau^2 + \log \bigl|
+\tfrac12 H_F \bigr| , \tag{42}\]</span></p>
+<p><span class="math inline">\(H_F\)</span> the Gauss-Newton Hessian,
+and <span class="math inline">\(Z = \sum_F \rho^{|F|} (1 - \rho)^{K -
+|F|} Z_F\)</span>. With <span class="math inline">\(\Pr(F \mid
+y)\)</span> the term of <span class="math inline">\(F\)</span> over
+<span class="math inline">\(Z\)</span> and <span class="math inline">\(C_F = 2 H_F^{-1}\)</span>, EM updates</p>
+<p><span class="math display">\[\rho \leftarrow \frac1K \sum_k (1 -
+p_{0k}), \qquad
+\tau^2 \leftarrow \frac{\sum_F \Pr(F \mid y) \sum_{k \in F} \bigl[
+(\hat\eta_{Fk} - \mu_0)^2 + C_{F,kk} \bigr]}
+{\sum_F \Pr(F \mid y)\, |F|} , \tag{43}\]</span></p>
+<p>per block, and the fixed effects minimize <span class="math inline">\(\sum_F \Pr(F \mid y)\, f_F\)</span> jointly with
+one copy of <span class="math inline">\(\eta_F\)</span> per subset; the
+log determinant of (42) enters the weights only.</p>
+<p>Beyond the budget a group takes EC (see <a href="#expectation-consistent-approximation">Expectation consistent
+approximation</a>) in a coordinate in which the spike is 0: <span class="math inline">\(u_k = b^{\eta_k}\)</span> for <span class="math inline">\(\alpha = -\infty\)</span>, with a log-normal slab
+<span class="math inline">\(\ln u_k \sim
+\mathcal{N}(\mu_0 \ln b, (\tau \ln b)^2)\)</span>, and <span class="math inline">\(u_k = \eta_k - \alpha\)</span> else. The data term
+is a Gaussian in <span class="math inline">\(u\)</span>, from one
+evaluation in <span class="math inline">\(\eta\)</span> at the expansion
+point <span class="math inline">\(u^\circ\)</span> and</p>
+<p><span class="math display">\[g_u = D\, g_\eta, \qquad H_u = D\,
+H_\eta\, D, \qquad D = \operatorname{diag}\bigl( 1 / (u^\circ_k \ln b)
+\bigr) , \tag{44}\]</span></p>
+<p>with no second-order term, since <span class="math inline">\(H_\eta\)</span> is Gauss-Newton. <span class="math inline">\(u^\circ\)</span> starts at the mode with every
+coordinate in the slab and moves to the EC mean until it is stable. The
+sites update one at a time; a site of negative precision is replaced by
+the one that matches the tilted mean at the cavity variance. The fixed
+effects are fitted with the slab coordinates of inclusion probability
+above 1/2.</p>
+<p>Normal random effects of the same grouping join every subset: <span class="math inline">\(F\)</span> holds them as well, with the prior
+<span class="math inline">\(\mathcal{N}(0, \Omega)\)</span> in (42) and
+<span class="math inline">\(\log\lvert\Omega\rvert\)</span> in the
+normalizer; <span class="math inline">\(\Omega\)</span> follows by EM
+from <span class="math inline">\(\sum_F \Pr(F \mid y)\, (\hat\eta_F
+\hat\eta_F^\top + C_F)\)</span> restricted to the normal coordinates,
+and in EC groups they enter the Gaussian exactly, without sites.</p>
+<p>SAEM draws the indicators by the collapsed moves of <a href="methods-nlme.html#spike-and-slab-random-effects">SAEM</a> with the
+spike at <span class="math inline">\(\alpha\)</span> and the slab mean
+<span class="math inline">\(\mu_0\)</span>. At <span class="math inline">\(\alpha = -\infty\)</span> the line of a move holds
+the other slab values, and the move into the slab proposes from <span class="math inline">\(\mathcal{N}(\hat x, 2 / f'')\)</span>,
+<span class="math inline">\(\hat x\)</span> the minimum of the data term
+plus slab prior in the coordinate by Newton steps on the model; the
+Metropolis-Hastings step on the exact posterior keeps the chain
+exact.</p>
+<p>With <code>method = "quadrature"</code> every subset of weight above
+<span class="math inline">\(10^{-8}\)</span> of the largest is
+integrated on a dimension-adaptive sparse grid <span class="citation"><a href="#ref-smolyak1963quadrature">[14]</a>, <a href="#ref-gerstner2003dimension">[15]</a></span> around <span class="math inline">\(\hat\eta_F\)</span> with precision <span class="math inline">\(\tfrac12 H_F\)</span>, a subset of relative weight
+<span class="math inline">\(w_F\)</span> to the tolerance of the group
+over <span class="math inline">\(w_F\)</span>: nodes <span class="math inline">\(\eta_i\)</span> with signed weights <span class="math inline">\(w_i\)</span>,</p>
+<p><span class="math display">\[Z_F \approx (2\pi\tau^2)^{-|F|/2} \sum_i
+w_i\, e^{-f_F(\eta_i)/2} , \qquad
+\omega_i = \frac{w_i\, e^{-f_F(\eta_i)/2}}{\sum_j w_j\,
+e^{-f_F(\eta_j)/2}} , \tag{45}\]</span></p>
+<p>the grid refined in the direction of the largest error estimate until
+the estimated error of <span class="math inline">\(-2 \log Z_F\)</span>
+is below the tolerance. On these nodes, held fixed, <span class="math inline">\(-2 \log L = -2 \log \sum_F
+\rho^{|F|} (1 - \rho)^{K - |F|} Z_F\)</span> is a smooth function of the
+fixed effects, <span class="math inline">\(\Omega\)</span>, <span class="math inline">\(\tau\)</span> and <span class="math inline">\(\rho\)</span>. <code><a href="../reference/trust.html">trust()</a></code> minimizes it,
+with the gradient <span class="math inline">\(\sum_F \Pr(F \mid y)
+\sum_i \omega_i\, \nabla
+f_F(\eta_i)\)</span> by Fisher’s identity and the Hessian by Louis’
+identity; then the modes and grids are rebuilt, until <span class="math inline">\(-2 \log L\)</span> decreases by less than
+<code>tolDecrement</code>.</p>
+</div>
 <div class="section level2 unnumbered">
 <h2 class="unnumbered" id="references">References<a class="anchor" aria-label="anchor" href="#references"></a>
 </h2>
@@ -1119,6 +1202,21 @@ Graphical Statistics</em>, vol. 9, no. 2, pp. 249–265, 2000, doi: <a href="htt
 S. Liu, <span>“Nonparametric hierarchical <span>Bayes</span> via
 sequential imputations,”</span> <em>The Annals of Statistics</em>, vol.
 24, no. 3, pp. 911–930, 1996, doi: <a href="https://doi.org/10.1214/aos/1032526949" class="external-link">10.1214/aos/1032526949</a>.</div>
+</div>
+<div id="ref-smolyak1963quadrature" class="csl-entry">
+<div class="csl-left-margin">[14] </div>
+<div class="csl-right-inline">S.
+A. Smolyak, <span>“Quadrature and Interpolation Formulas for Tensor
+Products of Certain Classes of Functions,”</span> <em>Doklady Akademii
+Nauk SSSR</em>, vol. 148, no. 5, pp. 1042–1045, 1963, Available: <a href="https://www.mathnet.ru/eng/dan27586" class="external-link">https://www.mathnet.ru/eng/dan27586</a>
+</div>
+</div>
+<div id="ref-gerstner2003dimension" class="csl-entry">
+<div class="csl-left-margin">[15] </div>
+<div class="csl-right-inline">T.
+Gerstner and M. Griebel, <span>“Dimension-adaptive tensor-product
+quadrature,”</span> <em>Computing</em>, vol. 71, no. 1, pp. 65–87, 2003,
+doi: <a href="https://doi.org/10.1007/s00607-003-0015-5" class="external-link">10.1007/s00607-003-0015-5</a>.</div>
 </div>
 </div>
 </div>

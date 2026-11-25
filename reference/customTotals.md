@@ -34,3 +34,25 @@ The eqnlist with `$totals` updated.
 ## See also
 
 [`conservedQuantities()`](https://dmodverse.github.io/dMod2/reference/conservedQuantities.md)
+
+## Examples
+
+``` r
+## A reversible conversion conserves A + B
+el <- addReaction(eqnlist(), "A", "B", "k1*A")
+el <- addReaction(el, "B", "A", "k2*B")
+conservedQuantities(el)
+#> $total_1
+#> [1] "1*A+1*B"
+#> 
+
+## Name the conserved quantity, then return to the detected basis
+el <- customTotals(el, list(total = "A + B"))
+el$totals
+#> $total
+#> [1] "A + B"
+#> 
+#> attr(,"custom")
+#> [1] TRUE
+el <- customTotals(el, NULL)
+```

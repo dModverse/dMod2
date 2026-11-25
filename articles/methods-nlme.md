@@ -188,14 +188,22 @@ the grid with \\\psi\\ is not differentiated.
 `method = "quadrature"` starts from the converged FOCEI fit and
 alternates:
 
-- **Rebuild.** Grids at the current \\\psi\\, at the lowest level (never
-  falling) whose error is at most `tol` over the number of groups. The
-  error of level \\l\\ is estimated by \\2\lvert \log L_i^{(l+1)} - \log
-  L_i^{(l)} \rvert\\. A level of more than `maxNodes` nodes per group
-  (default 1000) is never evaluated; there the estimate is the change
-  from level \\l - 1\\, and a group above the tolerance is capped at
-  \\l\\. For \\K = 20\\ levels \\K + 1\\ to \\K + 3\\ have 41, 801 and
-  10041 nodes, so the default budget ends at \\K + 2\\.
+- **Rebuild.** Grids at the current \\\psi\\, refined
+  dimension-adaptively [\[10\]](#ref-gerstner2003dimension) from the
+  union of the grid of the stage level and the grid of the last rebuild,
+  so a grid never shrinks. The grid is a downward closed set of
+  multi-indices \\\mathbf{i}\\, the sum (6) over it; the forward
+  neighbors that keep the set downward closed are evaluated, and their
+  sum, the change of \\\log L_i\\ they would make, estimates the error
+  \\2 \lvert \log L_i^{+} - \log L_i \rvert\\. While it exceeds `tol`
+  over the number of groups, the neighbor of largest term joins the set
+  and the neighbors of that index are evaluated, so the grid grows only
+  in the directions in which \\e^{-\Phi_i/2}\\ departs from the
+  Gaussian. Refinements beyond `maxNodes` evaluated nodes per group
+  (default 1000) are not made; there the evaluated neighbors join the
+  grid, their change is the estimate, and a group above the tolerance is
+  capped. With no refinement the grid is that of (6); for \\K = 20\\
+  levels \\K + 1\\ to \\K + 3\\ have 41, 801 and 10041 nodes.
 - **Step.** Trust region over all parameters on frozen nodes. For
   mu-referenced fixed effects, \\\phi_i = D_i \beta + \eta_i\\, nodes
   are frozen in \\\phi\\, need no sensitivities and hold over larger
@@ -210,33 +218,33 @@ alternates:
 At the estimate, importance sampling (\\t_5\\ proposal at the mode,
 shifted lattice points) flags groups whose two estimates differ by more
 than three standard errors plus the level error, or with Pareto shape
-[\[10\]](#ref-vehtari2024pareto) above 0.7.
+[\[11\]](#ref-vehtari2024pareto) above 0.7.
 
 ## Laplace EM
 
 `method = "laplaceEM"` runs ECME: a trust-region run of at most
-`maxCm1Iter` (30) iterations of the structural parameters on the
+`maxCm1Iter` (default 30) iterations of the structural parameters on the
 likelihood over frozen nodes of level \\K + 1\\, then every block of
 \\\Omega\\ from \\S = G^{-1} \sum_i M_i\\ with the posterior second
 moments \\M_i = \hat\eta_i \hat\eta_i^\top + 2 H_i^{-1}\\ (modes alone
 would shrink \\\Omega\\). It stops when parameter change and
 extrapolated remaining distance are below `epsEcm` (default `1e-5`), or
-after `maxEcm` (200) iterations. Settings come from
+after `maxEcm` (default 200) iterations. Settings come from
 `control$quadrature`.
 
 ## SAEM
 
 `method = "saem"` uses posterior draws, with no Gaussian assumption and
 equal cost for any \\K\\. Stochastic-approximation EM
-[\[11\]](#ref-delyon1999convergence) averages the sufficient statistics
-by a Robbins-Monro recursion [\[12\]](#ref-robbins1951stochastic),
+[\[12\]](#ref-delyon1999convergence) averages the sufficient statistics
+by a Robbins-Monro recursion [\[13\]](#ref-robbins1951stochastic),
 
 \\s_k = s\_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s\_{k-1} \bigr),
 \qquad \eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} =
 \hat\psi(s_k), \tag{7}\\
 
 converging to a stationary point of \\\ell\\
-[\[11\]](#ref-delyon1999convergence), [\[13\]](#ref-kuhn2004coupling).
+[\[12\]](#ref-delyon1999convergence), [\[14\]](#ref-kuhn2004coupling).
 \\\Omega\\ follows from \\\sum_i \eta_i \eta_i^\top\\, mu-referenced
 fixed effects by generalized least squares, other structural parameters
 from an average of quadratic models at the draws, whose Newton step has
@@ -244,22 +252,22 @@ the marginal score as fixed point.
 
 | phase | rule |
 |----|----|
-| draws | few random-walk Metropolis steps and independence proposals from \\\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})\\ [\[13\]](#ref-kuhn2004coupling); [`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces |
+| draws | few random-walk Metropolis steps and independence proposals from \\\mathcal{N}(\hat\eta_i, 1.5 \cdot 2 H_i^{-1})\\ [\[14\]](#ref-kuhn2004coupling); [`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces |
 | burn-in | \\\gamma_k = 1\\, variances shrink at most 5 % per iteration; ends when no parameter drifts over `window` |
-| averaging | \\\gamma_k = k^{-0.7}\\, \\k\\ counted from the end of burn-in, mean of iterates [\[14\]](#ref-kushner2003stochastic); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
+| averaging | \\\gamma_k = k^{-0.7}\\, \\k\\ counted from the end of burn-in, mean of iterates [\[15\]](#ref-kushner2003stochastic); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
 
 SAEM neither forms \\\ell\\ nor raises it in every iteration;
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) reports the
 quadrature of level \\K + 2\\ with standard errors from the quadrature
 Hessian. SAEM suits many random effects and skewed, heavy-tailed or
-multimodal posteriors [\[13\]](#ref-kuhn2004coupling).
+multimodal posteriors [\[14\]](#ref-kuhn2004coupling).
 
 ### Spike-and-slab random effects
 
 A spike-and-slab random effect \\\eta\_{ij} = z\_{ij} v\_{ij}\\ has an
 indicator \\z\_{ij}\\ with \\\Pr(z\_{ij} = 1) = p\\ and a slab value
 \\v\_{ij} \sim \mathcal{N}(0, \tau^2)\\
-[\[15\]](#ref-mitchell1988bayesian), [\[16\]](#ref-george1993variable).
+[\[16\]](#ref-mitchell1988bayesian), [\[17\]](#ref-george1993variable).
 Per iteration, after the normal random effects:
 
 - **Local model.** Per group the quadratic model of the data term in the
@@ -273,9 +281,9 @@ Per iteration, after the normal random effects:
   and the line stay fixed. On this line the slab mass \\I = \int
   f(x)\\dx\\, \\f\\ the joint density of data and prior, is a
   Gauss-Hermite sum on the local Gaussian \\\mathcal{N}(m, s^2)\\ with
-  the exact data term at `nodes` (3) points, which gives the conditional
-  inclusion probability with the slab value integrated out
-  [\[17\]](#ref-liu1994collapsed),
+  the exact data term at `nodes` (default 3) points, which gives the
+  conditional inclusion probability with the slab value integrated out
+  [\[18\]](#ref-liu1994collapsed),
 
   \\\hat\pi\_{ij} = \frac{I}{I + f_0}, \qquad f_0 = f \text{ at }
   z\_{ij} = 0 . \tag{8}\\
@@ -283,7 +291,7 @@ Per iteration, after the normal random effects:
   The proposal draws \\z\_{ij}\\ with probability \\0.01 +
   0.98\\\hat\pi\_{ij}\\ and \\x\\ from \\\mathcal{N}(m, 1.5\\s^2)\\,
   independently of the current state; an independence
-  Metropolis-Hastings step [\[18\]](#ref-tierney1994markov) on
+  Metropolis-Hastings step [\[19\]](#ref-tierney1994markov) on
   \\(z\_{ij}, x)\\ against the model leaves the exact posterior
   invariant, whatever the error of the sum.
 
@@ -294,7 +302,7 @@ Per iteration, after the normal random effects:
 - **A-step and M-steps.** \\p\\ and \\\tau\\ follow from Robbins-Monro
   averages of \\\sum \hat\pi\_{ij}\\ and \\\sum
   \hat\pi\_{ij}\\\mathbb{E}(x^2 \mid z\_{ij} = 1)\\, the
-  Rao-Blackwellized statistics [\[19\]](#ref-casella1996rao) of the
+  Rao-Blackwellized statistics [\[20\]](#ref-casella1996rao) of the
   sweep, in place of the drawn indicators. An effect the data do not
   inform has \\\hat\pi\_{ij} = p\\ and second moment \\\tau^2\\ and
   leaves both unchanged; counts of drawn indicators would instead let
@@ -392,66 +400,72 @@ europe (PAGE) 18*, 2009, pp. Abstract 1584. Available:
 
 \[10\]
 
+T. Gerstner and M. Griebel, “Dimension-adaptive tensor-product
+quadrature,” *Computing*, vol. 71, no. 1, pp. 65–87, 2003, doi:
+[10.1007/s00607-003-0015-5](https://doi.org/10.1007/s00607-003-0015-5).
+
+\[11\]
+
 A. Vehtari, D. Simpson, A. Gelman, Y. Yao, and J. Gabry, “Pareto
 smoothed importance sampling,” *Journal of Machine Learning Research*,
 vol. 25, no. 72, pp. 1–58, 2024, Available:
 <https://jmlr.org/papers/v25/19-556.html>
 
-\[11\]
+\[12\]
 
 B. Delyon, M. Lavielle, and E. Moulines, “Convergence of a stochastic
 approximation version of the EM algorithm,” *The Annals of Statistics*,
 vol. 27, no. 1, pp. 94–128, 1999, doi:
 [10.1214/aos/1018031103](https://doi.org/10.1214/aos/1018031103).
 
-\[12\]
+\[13\]
 
 H. Robbins and S. Monro, “A stochastic approximation method,” *The
 Annals of Mathematical Statistics*, vol. 22, no. 3, pp. 400–407, 1951,
 doi: [10.1214/aoms/1177729586](https://doi.org/10.1214/aoms/1177729586).
 
-\[13\]
+\[14\]
 
 E. Kuhn and M. Lavielle, “Coupling a stochastic approximation version of
 EM with an MCMC procedure,” *ESAIM: Probability and Statistics*, vol. 8,
 pp. 115–131, 2004, doi:
 [10.1051/ps:2004007](https://doi.org/10.1051/ps:2004007).
 
-\[14\]
+\[15\]
 
 H. J. Kushner and G. G. Yin, *Stochastic approximation and recursive
 algorithms and applications*, 2nd ed., vol. 35. in Stochastic modelling
 and applied probability, vol. 35. New York: Springer, 2003. doi:
 [10.1007/b97441](https://doi.org/10.1007/b97441).
 
-\[15\]
+\[16\]
 
 T. J. Mitchell and J. J. Beauchamp, “Bayesian variable selection in
 linear regression,” *Journal of the American Statistical Association*,
 vol. 83, no. 404, pp. 1023–1032, 1988, doi:
 [10.1080/01621459.1988.10478694](https://doi.org/10.1080/01621459.1988.10478694).
 
-\[16\]
+\[17\]
 
 E. I. George and R. E. McCulloch, “Variable selection via Gibbs
 sampling,” *Journal of the American Statistical Association*, vol. 88,
 no. 423, pp. 881–889, 1993, doi:
 [10.1080/01621459.1993.10476353](https://doi.org/10.1080/01621459.1993.10476353).
 
-\[17\]
+\[18\]
 
 J. S. Liu, “The collapsed Gibbs sampler in Bayesian computations with
 applications to a gene regulation problem,” *Journal of the American
 Statistical Association*, vol. 89, no. 427, pp. 958–966, 1994, doi:
 [10.1080/01621459.1994.10476829](https://doi.org/10.1080/01621459.1994.10476829).
 
-\[18\]
+\[19\]
 
 L. Tierney, “Markov chains for exploring posterior distributions,” *The
 Annals of Statistics*, vol. 22, no. 4, pp. 1701–1728, 1994, doi:
 [10.1214/aos/1176325750](https://doi.org/10.1214/aos/1176325750).
 
-\[19\]
+\[20\]
 
 G. Casella and C. P. Robert, “Rao-Blackwellisation of sampling schemes,”
 *Biometrika*, vol. 83, no. 1, pp. 81–94, 1996, doi:

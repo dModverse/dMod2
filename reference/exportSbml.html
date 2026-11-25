@@ -19,7 +19,7 @@ compartment. Requires the same Python environment as importSbml()."></head><body
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -145,8 +145,10 @@ formulas. Missing states default to 0. Default <code>NULL</code>.</p></dd>
 
 <dt id="arg-events">events<a class="anchor" aria-label="anchor" href="#arg-events"></a></dt>
 <dd><p>Object of class <a href="eventlist.html">eventlist</a> to emit as <code>&lt;listOfEvents&gt;</code>, or
-<code>NULL</code>. Rows sharing a trigger become one <code>&lt;event&gt;</code>. A compartment an event assigns to is written
-as non-constant. Default <code>NULL</code>.</p></dd>
+<code>NULL</code>. Rows sharing a trigger become one <code>&lt;event&gt;</code>. A root event becomes two events with
+the triggers <code>root &gt;= 0</code> and <code>root &lt;= 0</code>, initially true, so that the SBML model fires at
+crossings in both directions and not at the start, as cppDE does. A compartment an event
+assigns to is written as non-constant. Default <code>NULL</code>.</p></dd>
 
 </dl></div>
     <div class="section level2">

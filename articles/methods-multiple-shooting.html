@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -367,15 +367,16 @@ from ten segments per condition, or one per half oscillation of the data
 if more, and halves a segment where</p>
 <ul>
 <li>the spectral radius of <span class="math inline">\(G_j\)</span>
-exceeds <code>growth</code> (10), the expansion of the linearized flow
-in the coordinates of the nodes;</li>
-<li>the RMS of the weighted residuals exceeds <code>misfit</code> (3)
-and twice the condition median;</li>
+exceeds <code>growth</code> (default 10), the expansion of the
+linearized flow in the coordinates of the nodes;</li>
+<li>the RMS of the weighted residuals exceeds <code>misfit</code>
+(default 3) and twice the condition median;</li>
 <li>or the solve fails.</li>
 </ul>
 <p>Cuts happen before the first step and at every iterate, never below
-half the finest data spacing, and keep <code>minPoints</code> (states
-plus one) data points per half, so no node fits a segment alone.</p>
+half the finest data spacing, and keep <code>minPoints</code> (default:
+states plus one) data points per half, so no node fits a segment
+alone.</p>
 <p>Over a period an oscillator has growth near one; what grows is the
 phase sensitivity to the frequency, linearly in the periods, until the
 segment fits the data a period off. One segment per half oscillation,

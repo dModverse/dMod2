@@ -21,7 +21,7 @@ computation runs in the Python package symident."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -114,7 +114,6 @@ computation runs in the Python package <code>symident</code>.</p>
 <span>  separable <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  reportZeroCompatibility <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  alternatives <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  timeout <span class="op">=</span> <span class="fl">600</span>,</span>
 <span>  allowOpen <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  allowChecked <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  check <span class="op">=</span> <span class="cn">TRUE</span>,</span>
@@ -171,13 +170,6 @@ drive to 0. Defaults to <code>FALSE</code>.</p></dd>
 in <code>$alternatives</code>. Defaults to <code>FALSE</code>.</p></dd>
 
 
-<dt id="arg-timeout">timeout<a class="anchor" aria-label="anchor" href="#arg-timeout"></a></dt>
-<dd><p>Wall time in seconds for the section search of one block; a block not
-solved in time keeps the invariants (<code>"invariant_only"</code>) and is named in <code>limits</code>.
-<code>Inf</code> lets the search run to its end. Unlike <code>workCap</code>, it depends on the load of the
-machine. Defaults to 600.</p></dd>
-
-
 <dt id="arg-allowopen">allowOpen<a class="anchor" aria-label="anchor" href="#arg-allowopen"></a></dt>
 <dd><p>Logical. Reduce the directions with a closed form and leave those
 of level <code>"open"</code> in place with a warning; <code>FALSE</code> makes such a direction an error. A
@@ -197,17 +189,17 @@ and record in <code>checks$loop</code> whether exactly the remaining directions 
 Defaults to <code>TRUE</code>; large models may turn it off.</p></dd>
 
 
-<dt id="arg-branch">branch<a class="anchor" aria-label="anchor" href="#arg-branch"></a></dt>
-<dd><p>With a discrete symmetry of <code>symmetryDetection(mode = "global")</code>: the side of
-its fixed set as an inequality, e.g. <code>"k01 &gt; k12"</code>, whose chart becomes the trafo: free values
-in the positive orthant map one to one onto that side, chained with the section. Without it
-every branch is in <code>$alternatives</code>; <code>$discrete$branches</code> lists them with <code>injective</code>, <code>reach</code>,
-<code>unproven</code> and the <code>boundary</code>. Defaults to <code>NULL</code>.</p></dd>
-
-
 <dt id="arg-workcap">workCap<a class="anchor" aria-label="anchor" href="#arg-workcap"></a></dt>
 <dd><p>Number of candidate sections the search of one block may try;
 reaching it is an entry in <code>limits</code>. Defaults to 4000.</p></dd>
+
+
+<dt id="arg-branch">branch<a class="anchor" aria-label="anchor" href="#arg-branch"></a></dt>
+<dd><p>With a discrete symmetry of <code>symmetryDetection(mode = "global")</code>: the side of
+the fixed set of the symmetry as an inequality, e.g. <code>"k01 &gt; k12"</code>, whose chart becomes the trafo: free values
+in the positive orthant map one to one onto that side, chained with the section. Without it
+every branch is in <code>$alternatives</code>; <code>$discrete$branches</code> lists them with <code>injective</code>, <code>reach</code>,
+<code>unproven</code> and the <code>boundary</code>. Defaults to <code>NULL</code>.</p></dd>
 
 
 <dt id="arg--">...<a class="anchor" aria-label="anchor" href="#arg--"></a></dt>
@@ -241,8 +233,7 @@ coordinates) and <code>starts</code> (the sides of switches declared at the star
 <code>errorBound</code>, the probability that a verified closed form is wrong.</p></dd>
 
 <dt><code>limits</code></dt>
-<dd><p>the work budgets and time limits that stopped a section or
-invariant search.</p></dd>
+<dd><p>the work caps that stopped a section or invariant search.</p></dd>
 
 <dt><code>checks</code></dt>
 <dd><p><code>pins</code> and <code>invariants</code>, whether every pin holds under the trafo

@@ -24,3 +24,20 @@ format(x, ...)
 ## Value
 
 Named character vector with spaces around `+`, `-`, `*` and `/`.
+
+## Examples
+
+``` r
+v <- eqnvec(y = "2*x + offset")
+print(v)
+#> Idx Inner <- Outer
+#>   1     y <- 2*x+offset
+is.eqnvec(v)
+#> [1] TRUE
+
+format(eqnvec(y = "2*x+offset"))
+#>                y 
+#> "2 * x + offset" 
+summary(v)
+#> y = f( x, offset)
+```

@@ -19,7 +19,7 @@ instead. Kinetic laws are divided by the volume of their compartment."></head><b
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -146,6 +146,10 @@ states when an event changes a compartment volume.</p></dd>
 <dt><code>eventsSource</code></dt>
 <dd><p>An <a href="eventlist.html">eventlist</a> or <code>NULL</code>, the event assignments
 of the SBML file only.</p></dd>
+
+<dt><code>compartmentInits</code></dt>
+<dd><p>Named character, the size at the start of each
+compartment an event assigns to; such a compartment keeps the id as volume.</p></dd>
 
 <dt><code>renamed</code></dt>
 <dd><p>Named character, the new ids of SBML ids that are no

@@ -31,7 +31,11 @@ random terms
 (1 | p | ID) with an ID p: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
 terms are independent. gr(ID, dist = spikeSlab()) instead of ID sets
-the distribution, see normal(). The random effect of a group is
+the distribution, see normal(); gr(dist = ) without a grouping
+makes one group all of all conditions, so that with 0 + the random
+effect is the parameter itself, as in
+k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf))) for the
+selection of reaction rates on the log scale. The random effect of a group is
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;group&amp;gt; for the intercept and
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;column&amp;gt;_&amp;lt;group&amp;gt; for a slope; a symbol with random terms
 in a second grouping gets the grouping name in the stem, eta_cl_center_&amp;lt;group&amp;gt;.
@@ -64,7 +68,11 @@ random terms
 (1 | p | ID) with an ID p: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
 terms are independent. gr(ID, dist = spikeSlab()) instead of ID sets
-the distribution, see normal(). The random effect of a group is
+the distribution, see normal(); gr(dist = ) without a grouping
+makes one group all of all conditions, so that with 0 + the random
+effect is the parameter itself, as in
+k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf))) for the
+selection of reaction rates on the log scale. The random effect of a group is
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;group&amp;gt; for the intercept and
 eta_&amp;lt;symbol&amp;gt;_&amp;lt;column&amp;gt;_&amp;lt;group&amp;gt; for a slope; a symbol with random terms
 in a second grouping gets the grouping name in the stem, eta_cl_center_&amp;lt;group&amp;gt;.
@@ -79,7 +87,7 @@ in a second grouping gets the grouping name in the stem, eta_cl_center_&amp;lt;g
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -178,7 +186,11 @@ other columns are <code>cl_&lt;column&gt;</code> (<code>cl_wt</code>, <code>cl_l
 <code>(1 | p | ID)</code> with an ID <code>p</code>: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
 terms are independent. <code>gr(ID, dist = spikeSlab())</code> instead of <code>ID</code> sets
-the distribution, see <code><a href="normal.html">normal()</a></code>. The random effect of a group is
+the distribution, see <code><a href="normal.html">normal()</a></code>; <code>gr(dist = )</code> without a grouping
+makes one group <code>all</code> of all conditions, so that with <code>0 +</code> the random
+effect is the parameter itself, as in
+<code>k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf)))</code> for the
+selection of reaction rates on the log scale. The random effect of a group is
 <code>eta_&lt;symbol&gt;_&lt;group&gt;</code> for the intercept and
 <code>eta_&lt;symbol&gt;_&lt;column&gt;_&lt;group&gt;</code> for a slope; a symbol with random terms
 in a second grouping gets the grouping name in the stem, <code>eta_cl_center_&lt;group&gt;</code>.</p></dd>
@@ -216,8 +228,8 @@ formulas, or a parameter function <code><a href="P.html">P()</a></code> built fr
     <p>An object of class <code>randomeffects</code>, a list with <code>terms</code> (one row
 per random effect column: <code>symbol</code>, <code>origin</code> (the formula), <code>term</code>,
 <code>column</code>, <code>group</code>, <code>id</code>, <code>dist</code>, the fixed hyperparameters <code>prob</code>,
-<code>concentration</code> and <code>tau</code> (<code>NA</code> where estimated) and <code>stem</code>, the name
-stem of the etas),
+<code>concentration</code> and <code>tau</code> (<code>NA</code> where estimated), the given <code>mean</code> and
+<code>spike</code> of spike-and-slab terms and <code>stem</code>, the name stem of the etas),
 <code>blocks</code> (groups of rows: the normal rows of a block are correlated, the
 rows of a spike-and-slab or Dirichlet-process block share the
 hyperparameters), <code>subjects</code> (the groups of each
@@ -253,7 +265,7 @@ per condition) and <code>etaNames</code> (<code>NULL</code> for random effects f
 <span class="r-in"><span><span class="va">re</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Random effects: 4 terms over ID</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   block 1 (normal, ID): eta_ka, eta_cl, eta_cl_dose</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>   block 2 (spikeSlab, prob estimated, tau estimated, ID): eta_v</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   block 2 (spikeSlab, prob estimated, tau estimated, mean 0, spike 0, ID): eta_v</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   fixed effects: ka, cl, cl_wt, v </span>
 <span class="r-in"><span><span class="va">re</span><span class="op">$</span><span class="va">fixed</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] "ka"    "cl"    "cl_wt" "v"    </span>

@@ -40,4 +40,10 @@ print(v)
 #>   1     y <- 2*x+offset
 is.eqnvec(v)
 #> [1] TRUE
+
+format(eqnvec(y = "2*x+offset"))
+#>                y 
+#> "2 * x + offset" 
+summary(v)
+#> y = f( x, offset)
 ```

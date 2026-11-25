@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -113,6 +113,22 @@
     <p>Named character vector with spaces around <code>+</code>, <code>-</code>, <code>*</code> and <code>/</code>.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">v</span> <span class="op">&lt;-</span> <span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"2*x + offset"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">v</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Idx Inner &lt;- Outer</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   1     y &lt;- 2*x+offset</span>
+<span class="r-in"><span><span class="fu"><a href="eqnvec.html">is.eqnvec</a></span><span class="op">(</span><span class="va">v</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/format.html" class="external-link">format</a></span><span class="op">(</span><span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"2*x+offset"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>                y </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> "2 * x + offset" </span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">v</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> y = f( x, offset)</span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

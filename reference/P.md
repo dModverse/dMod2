@@ -205,6 +205,14 @@ trafo <- list(
   treat = eqnvec(k1 = "exp(log_k1 + log_fold)", k2 = "exp(log_k2)", A = "A0"))
 p <- P(trafo, compile = TRUE, modelname = "P_example", outdir = tempdir())
 #> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC]
+print(p)
+#> Parameter transformation:
+#> function (..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = TRUE, 
+#>     conditions = st$default_conditions, env = NULL, cores = getOption("dMod2.cores", 
+#>         1L), sweep = "forward")  
+#> 
+#> ... conditions: ctrl, treat 
+#> ... parameters: log_k1, log_k2, A0, log_fold 
 getParameters(p)
 #> [1] "log_k1"   "log_k2"   "A0"       "log_fold"
 p(c(log_k1 = 0, log_k2 = -1, A0 = 2, log_fold = log(3)))

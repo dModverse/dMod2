@@ -21,7 +21,6 @@ symmetryReduction(
   separable = TRUE,
   reportZeroCompatibility = FALSE,
   alternatives = FALSE,
-  timeout = 600,
   allowOpen = TRUE,
   allowChecked = TRUE,
   check = TRUE,
@@ -76,13 +75,6 @@ symmetryReduction(
   Logical. Also return the charts of the other valid pins in
   `$alternatives`. Defaults to `FALSE`.
 
-- timeout:
-
-  Wall time in seconds for the section search of one block; a block not
-  solved in time keeps the invariants (`"invariant_only"`) and is named
-  in `limits`. `Inf` lets the search run to its end. Unlike `workCap`,
-  it depends on the load of the machine. Defaults to 600.
-
 - allowOpen:
 
   Logical. Reduce the directions with a closed form and leave those of
@@ -103,20 +95,20 @@ symmetryReduction(
   and record in `checks$loop` whether exactly the remaining directions
   are left. Defaults to `TRUE`; large models may turn it off.
 
-- branch:
-
-  With a discrete symmetry of `symmetryDetection(mode = "global")`: the
-  side of its fixed set as an inequality, e.g. `"k01 > k12"`, whose
-  chart becomes the trafo: free values in the positive orthant map one
-  to one onto that side, chained with the section. Without it every
-  branch is in `$alternatives`; `$discrete$branches` lists them with
-  `injective`, `reach`, `unproven` and the `boundary`. Defaults to
-  `NULL`.
-
 - workCap:
 
   Number of candidate sections the search of one block may try; reaching
   it is an entry in `limits`. Defaults to 4000.
+
+- branch:
+
+  With a discrete symmetry of `symmetryDetection(mode = "global")`: the
+  side of the fixed set of the symmetry as an inequality, e.g.
+  `"k01 > k12"`, whose chart becomes the trafo: free values in the
+  positive orthant map one to one onto that side, chained with the
+  section. Without it every branch is in `$alternatives`;
+  `$discrete$branches` lists them with `injective`, `reach`, `unproven`
+  and the `boundary`. Defaults to `NULL`.
 
 - ...:
 
@@ -156,8 +148,7 @@ An object of class `symmetryreduction`:
 
 - `limits`:
 
-  the work budgets and time limits that stopped a section or invariant
-  search.
+  the work caps that stopped a section or invariant search.
 
 - `checks`:
 

@@ -117,7 +117,7 @@ intervals$shape <- with(intervals, ifelse(is.finite(lower) & is.finite(upper), "
 table(intervals$shape)
 #> 
 #>             finite         open above         open below open on both sides 
-#>                 42                  5                 14                  2
+#>                 43                  5                 13                  2
 rownames(intervals) <- NULL
 intervals[intervals$shape != "finite", c("name", "value", "lower", "upper", "shape")]
 #>                          name       value      lower       upper
@@ -135,7 +135,6 @@ intervals[intervals$shape != "finite", c("name", "value", "lower", "upper", "sha
 #> 23                eta_s_ppIkk  -4.3338331       -Inf  -0.5029478
 #> 27                    inh_Ikk  -0.4859866       -Inf         Inf
 #> 28                    int_Nfk  -4.3108096       -Inf  -2.7384181
-#> 29                 off_A20GFP  -0.7473438       -Inf  -0.5109775
 #> 31                   off_IkBa  -7.5714193       -Inf  -3.2170736
 #> 32          off_ipIkBa_ibIkBa  -2.5303205       -Inf  -1.6106014
 #> 36         off_ipNFkB_ibpIkBa  -7.1843412       -Inf  -2.4733675
@@ -157,7 +156,6 @@ intervals[intervals$shape != "finite", c("name", "value", "lower", "upper", "sha
 #> 23         open below
 #> 27 open on both sides
 #> 28         open below
-#> 29         open below
 #> 31         open below
 #> 32         open below
 #> 36         open below

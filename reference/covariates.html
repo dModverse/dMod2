@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -125,6 +125,109 @@ frame.</p>
     <div class="dont-index"><p><code><a href="datalist.html">as.datalist()</a></code></p></div>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co">## Generate datalist from scratch</span></span></span>
+<span class="r-in"><span><span class="va">mydata1</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"A"</span>,</span></span>
+<span class="r-in"><span>                      time <span class="op">=</span> <span class="fl">0</span><span class="op">:</span><span class="fl">5</span>,</span></span>
+<span class="r-in"><span>                      value <span class="op">=</span> <span class="fl">0</span><span class="op">:</span><span class="fl">5</span>,</span></span>
+<span class="r-in"><span>                      sigma <span class="op">=</span> <span class="fl">.1</span>,</span></span>
+<span class="r-in"><span>                      lloq <span class="op">=</span> <span class="op">-</span><span class="fl">0.5</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">mydata2</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"A"</span>,</span></span>
+<span class="r-in"><span>                      time <span class="op">=</span> <span class="fl">0</span><span class="op">:</span><span class="fl">5</span>,</span></span>
+<span class="r-in"><span>                      value <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin</a></span><span class="op">(</span><span class="fl">0</span><span class="op">:</span><span class="fl">5</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                      sigma <span class="op">=</span> <span class="fl">.1</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="datalist.html">datalist</a></span><span class="op">(</span>C1 <span class="op">=</span> <span class="va">mydata1</span>, C2 <span class="op">=</span> <span class="va">mydata2</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> C1:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   name time value sigma lloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1    A    0     0   0.1 -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2    A    1     1   0.1 -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3    A    2     2   0.1 -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4    A    3     3   0.1 -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5    A    4     4   0.1 -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6    A    5     5   0.1 -0.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> C2:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   name time      value sigma lloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1    A    0  0.0000000   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2    A    1  0.8414710   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3    A    2  0.9092974   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4    A    3  0.1411200   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5    A    4 -0.7568025   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6    A    5 -0.9589243   0.1 -Inf</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="covariates-1.png" alt="" width="700" height="433"></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Split one data.frame into conditions, keeping a covariate per condition</span></span></span>
+<span class="r-in"><span><span class="va">t</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">2</span><span class="op">*</span><span class="va">pi</span>, length.out <span class="op">=</span> <span class="fl">20</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">long</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"A"</span>, time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">t</span>, <span class="va">t</span><span class="op">)</span>, sigma <span class="op">=</span> <span class="fl">0.1</span>,</span></span>
+<span class="r-in"><span>                   amplitude <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">1.5</span><span class="op">)</span>, each <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                   phase <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"early"</span>, <span class="st">"late"</span><span class="op">)</span>, each <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                   stage <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"upper"</span>, <span class="st">"lower"</span><span class="op">)</span>, each <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>, <span class="fl">2</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">long</span><span class="op">$</span><span class="va">value</span> <span class="op">&lt;-</span> <span class="va">long</span><span class="op">$</span><span class="va">amplitude</span> <span class="op">*</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin</a></span><span class="op">(</span><span class="va">long</span><span class="op">$</span><span class="va">time</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="datalist.html">as.datalist</a></span><span class="op">(</span><span class="va">long</span>, splitBy <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"stage"</span>, <span class="st">"phase"</span><span class="op">)</span>, keepCovariates <span class="op">=</span> <span class="st">"amplitude"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> upper_early:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    name      time     value sigma lloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1     A 0.0000000 0.0000000   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2     A 0.3306940 0.3246995   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3     A 0.6613879 0.6142127   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4     A 0.9920819 0.8371665   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5     A 1.3227759 0.9694003   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6     A 1.6534698 0.9965845   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 7     A 1.9841638 0.9157733   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 8     A 2.3148577 0.7357239   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9     A 2.6455517 0.4759474   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 10    A 2.9762457 0.1645946   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> lower_early:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    name     time         value sigma lloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 11    A 3.306940 -1.645946e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 12    A 3.637634 -4.759474e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13    A 3.968328 -7.357239e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 14    A 4.299022 -9.157733e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 15    A 4.629715 -9.965845e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 16    A 4.960409 -9.694003e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 17    A 5.291103 -8.371665e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 18    A 5.621797 -6.142127e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 19    A 5.952491 -3.246995e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 20    A 6.283185 -2.449294e-16   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> upper_late:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    name      time     value sigma lloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 21    A 0.0000000 0.0000000   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 22    A 0.3306940 0.4870492   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 23    A 0.6613879 0.9213191   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 24    A 0.9920819 1.2557497   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 25    A 1.3227759 1.4541004   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 26    A 1.6534698 1.4948767   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 27    A 1.9841638 1.3736600   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 28    A 2.3148577 1.1035859   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 29    A 2.6455517 0.7139211   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 30    A 2.9762457 0.2468919   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> lower_late:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    name     time         value sigma lloq</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 31    A 3.306940 -2.468919e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 32    A 3.637634 -7.139211e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 33    A 3.968328 -1.103586e+00   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 34    A 4.299022 -1.373660e+00   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 35    A 4.629715 -1.494877e+00   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 36    A 4.960409 -1.454100e+00   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 37    A 5.291103 -1.255750e+00   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 38    A 5.621797 -9.213191e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 39    A 5.952491 -4.870492e-01   0.1 -Inf</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 40    A 6.283185 -3.673940e-16   0.1 -Inf</span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="covariates-2.png" alt="" width="700" height="433"></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="fu">covariates</span><span class="op">(</span><span class="va">data</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>             stage phase amplitude</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> upper_early upper early       1.0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> lower_early lower early       1.0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> upper_late  upper  late       1.5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> lower_late  lower  late       1.5</span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

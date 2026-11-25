@@ -27,7 +27,7 @@ take the sparse path as sparse = &quot;auto&quot; decides."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -199,7 +199,8 @@ with REML the maximum likelihood fits the rounds start from),
 <code>remlRounds</code> (the rounds of the restricted likelihood, 0 without),
 <code>seSource</code> (<code>"Hessian"</code>, or <code>"Gauss-Newton"</code> where the reported Hessian
 of a fit with random terms is not positive definite: then the
-Gauss-Newton Schur complement of the expected information over the random effects),
+Gauss-Newton Schur complement of the expected information over the random effects;
+<code>"none"</code> where that fails too, without standard errors),
 <code>fit</code>, <code>objfn</code>, <code>omega</code>, <code>random</code> and <code>randomEffects</code> with random terms,
 and the <code>model</code>. <code>scaled</code> also has <code>scaled</code>, the value of the biological symbol at which the prediction meets
 the reading with the other symbols at the fit (<code>NaN</code> where none does), and

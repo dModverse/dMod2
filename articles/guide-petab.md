@@ -109,8 +109,9 @@ observables, assignment rules and events:
 
 sbml <- importSbml("results/petab/oppelt.xml")
 names(sbml)
-#> [1] "reactions"       "pars"            "inits"           "observables"    
-#> [5] "assignmentRules" "events"          "eventsSource"    "renamed"
+#> [1] "reactions"        "pars"             "inits"            "observables"     
+#> [5] "assignmentRules"  "events"           "eventsSource"     "compartmentInits"
+#> [9] "renamed"
 c(states = length(sbml$reactions$states), reactions = length(sbml$reactions$rates))
 #>    states reactions 
 #>        23        38

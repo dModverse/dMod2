@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -85,6 +85,35 @@
       <small>Source: <a href="https://github.com/dModverse/dMod2/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.17.0" id="dmod2-0170">dMod2 0.17.0<a class="anchor" aria-label="anchor" href="#dmod2-0170"></a></h2>
+<ul><li>Requires symident &gt;= 0.18.1. The global analysis of symident stops on work limits instead of time limits. <code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code> drops <code>timeout</code> and <code>budget</code> and takes <code>memory</code>, <code>experiments</code>, <code>msolveEntries</code>, <code>msolveTerms</code>, <code>searchEntries</code> and <code>eliminationTerms</code>, also as <code>globalOptions</code> of <code>symmetryDetection(mode = "global")</code>; <code>info$discrete</code> holds the certificate of the count (<code>certificate$complete</code>), <code>countBound</code>, <code>countDomain</code>, <code>experiments</code>, <code>eliminated</code> and <code>relaxed</code>. <code>timeout</code> is removed from <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> and <code><a href="../reference/reconstControl.html">reconstControl()</a></code>, and <code>discrete</code> from <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>: use <code>mode = "global"</code>.</li>
+<li>
+<code><a href="../reference/normal.html">spikeSlab()</a></code> takes the slab mean <code>mean</code> and the spike <code>spike</code>, both given, not estimated: <code>(1 - prob) delta_spike + prob N(mean, tau^2)</code>. <code>spike = -Inf</code> under an exponential transformation switches the parameter off; <code><a href="../reference/em.html">em()</a></code> checks that the random effect is a summand in the exponent of a numeric base greater than 1. Defaults keep the former distribution.</li>
+<li>
+<code>gr(dist = )</code> without a grouping column makes one group <code>all</code> of all conditions. With <code>0 +</code> the random effect is the parameter itself, so that <code>k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf)))</code> selects reaction rates; placeholders, <code>x ~ ... , x = c("k1", "k2")</code>, share <code>prob</code> and <code>tau</code> the same way.</li>
+<li>
+<code>em(method = "focei")</code> fits spike-and-slab random effects with <code>mean</code> or <code>spike</code> other than 0, also beside normal random effects of the same grouping, by the sum over all subsets per group, each a Laplace integral, with EM for the fixed effects, Omega and the hyperparameters (<code>control$sparseFit$maxEcm</code>, <code>epsEcm</code>, <code>budget</code>). Groups beyond the budget take the expectation consistent (EC) approximation in the rate coordinate, with a log-normal slab and the data term expanded again at the EC mean (<code>control$sparseFit$ec</code>). <code>logLik(method = "importance")</code> refuses these fits.</li>
+<li>
+<code>em(method = "quadrature")</code> fits spike-and-slab random effects with any <code>mean</code> and <code>spike</code>, also beside normal ones: every subset of non-negligible weight on a sparse grid around the inner mode, then <code><a href="../reference/trust.html">trust()</a></code> on -2 log L over the fixed nodes until the rebuilt grids gain less than <code>control$quadrature$tolDecrement</code>.</li>
+<li>
+<code>em(method = "saem")</code> draws spike-and-slab random effects with a given <code>mean</code> and <code>spike</code>, <code>-Inf</code> included, beside normal ones: a move into the slab from a spike at <code>-Inf</code> proposes from the Laplace approximation of the coordinate by Newton steps on the model; -2 log L at the estimate is the sum over subsets of <code>method = "focei"</code>.</li>
+<li>The quadrature of <code><a href="../reference/em.html">em()</a></code> refines the sparse grids dimension-adaptively (Gerstner and Griebel 2003) in C++: from the Smolyak grid of the stage and the grid of the last rebuild, only in the directions in which the integrand departs from the Gaussian at the mode, with the change by the evaluated neighbors as the error. <code>control$quadrature$maxNodes</code> counts the evaluated nodes.</li>
+<li>
+<code><a href="../reference/fitErrorModel.html">fitErrorModel()</a></code> fits with the symbolic gradient of the error model and refuses a model without one; the group column of <code>blather = TRUE</code> is <code>group</code>.</li>
+<li>
+<code>plotPairs()</code> and <code>getObservables()</code>, generics without methods, are removed. <code><a href="../reference/plotProfilesAndPaths.html">plotProfilesAndPaths()</a></code> takes <code>maxvalue</code> and <code>threshold</code> like <code><a href="../reference/plotProfile.html">plotProfile()</a></code>.</li>
+<li>
+<code>compile(output = )</code> passes the suffixed name (<code>_2</code>, …) of a shared object to the model names, and <code><a href="../reference/getLocalDLLs.html">getLocalDLLs()</a></code> counts a shared object only below the working directory. Without <code>output</code>, <code><a href="../reference/compile.html">compile()</a></code> skips a source whose shared object is loaded instead of unloading and rebuilding it.</li>
+<li>
+<code>*</code> of two functions whose conditions do not overlap is an error. <code>objfn * parfn</code> keeps the prediction of the objective only where it composes with the parameter function.</li>
+<li>
+<code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> compares the extrapolation of a profile with the span of the whole branch. <code><a href="../reference/mstrust.html">mstrust()</a></code> passes <code>rinit</code>, <code>rmax</code> and <code>n</code> only to an optimizer that takes them. <code><a href="../reference/trust.html">trust()</a></code> with multiple shooting counts the iterations of the first phase against <code>iterlim</code>.</li>
+<li>
+<code>distributedComputing(wait = TRUE)</code> polls ssh nodes and queues every 10 s.</li>
+<li>
+<code><a href="../reference/exportSbml.html">exportSbml()</a></code> writes a root event as the trigger <code>root &gt;= 0</code>, which fires when the root rises through 0. <code><a href="../reference/importSbml.html">importSbml()</a></code> keeps a compartment that an event resizes as a symbol and returns the start sizes in <code>compartmentInits</code>. Formulas of SBML and PEtab files evaluate with the functions of <code><a href="https://dmodverse.github.io/cppDE/reference/expressions.html" class="external-link">?cppDE::expressions</a></code> only. <code><a href="../reference/importPEtab.html">importPEtab()</a></code> refuses an <code>estimate</code> other than 0 or 1.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.16.1" id="dmod2-0161">dMod2 0.16.1<a class="anchor" aria-label="anchor" href="#dmod2-0161"></a></h2>
 <ul><li>
@@ -264,7 +293,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.15.1" id="dmod2-0151">dMod2 0.15.1<a class="anchor" aria-label="anchor" href="#dmod2-0151"></a></h2>
-<ul><li><p>American spelling throughout: <code>trust(stepControl = list(regularize = ))</code> replaces <code>regularise</code>, the attribute <code>run</code> of the result of <code><a href="../reference/mstrust.html">mstrust()</a></code> names <code>optimizer</code> and <code>optimizerArgs</code> instead of <code>optimiser</code> and <code>optimiserArgs</code>, and the sequential palette <code>"grey"</code> of [dMod_palettes()] is <code>"gray"</code>.</p></li>
+<ul><li><p>American spelling throughout: <code>trust(stepControl = list(regularize = ))</code> replaces <code>regularise</code>, the attribute <code>run</code> of the result of <code><a href="../reference/mstrust.html">mstrust()</a></code> names <code>optimizer</code> and <code>optimizerArgs</code> instead of <code>optimiser</code> and <code>optimiserArgs</code>, and the sequential palette <code>"grey"</code> of [dMod2_palettes()] is <code>"gray"</code>.</p></li>
 <li><p><code>wide2long()</code>, <code>%bmm%</code>, <code>rref()</code>, <code>nullZ()</code> and <code>submatrix()</code> are no longer exported, and <code>ggopen()</code> is removed. <code><a href="https://rdrr.io/r/base/as.data.frame.html" class="external-link">as.data.frame()</a></code> of a prediction returns the long format of <code>wide2long()</code>, with a column <code>sigma</code>.</p></li>
 </ul></div>
     <div class="section level2">

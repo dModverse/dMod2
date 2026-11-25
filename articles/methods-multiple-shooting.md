@@ -134,15 +134,15 @@ needs forward sensitivities.
 segments per condition, or one per half oscillation of the data if more,
 and halves a segment where
 
-- the spectral radius of \\G_j\\ exceeds `growth` (10), the expansion of
-  the linearized flow in the coordinates of the nodes;
-- the RMS of the weighted residuals exceeds `misfit` (3) and twice the
-  condition median;
+- the spectral radius of \\G_j\\ exceeds `growth` (default 10), the
+  expansion of the linearized flow in the coordinates of the nodes;
+- the RMS of the weighted residuals exceeds `misfit` (default 3) and
+  twice the condition median;
 - or the solve fails.
 
 Cuts happen before the first step and at every iterate, never below half
-the finest data spacing, and keep `minPoints` (states plus one) data
-points per half, so no node fits a segment alone.
+the finest data spacing, and keep `minPoints` (default: states plus one)
+data points per half, so no node fits a segment alone.
 
 Over a period an oscillator has growth near one; what grows is the phase
 sensitivity to the frequency, linearly in the periods, until the segment

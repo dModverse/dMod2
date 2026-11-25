@@ -65,10 +65,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmpnLJd0N/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpJDzFHt/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmpnLJd0N/theoph_err.cpp
+#> Overwriting: /tmp/RtmpJDzFHt/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -138,7 +138,7 @@ fitQ <- em(obj, randomEffects(p), init = fit, method = "quadrature", verbose = F
 fitS <- em(obj, randomEffects(p), init = init, method = "saem", verbose = FALSE)
 c(focei = fit$value, quadrature = fitQ$value, saem = fitS$value)
 #>      focei quadrature       saem 
-#>   359.4032   360.7370   360.7624 
+#>   359.4032   360.7089   360.7537 
 # }
 if (FALSE) { # \dontrun{
 ## Ka and Cl with correlated random effects, V with a spike-and-slab one: a second transformation

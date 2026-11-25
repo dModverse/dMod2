@@ -15,7 +15,7 @@ parameters."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -116,6 +116,109 @@ parameters.</p>
     <p><code>x</code>, invisibly.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co">## Parameter vector without derivatives</span></span></span>
+<span class="r-in"><span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span>, b <span class="op">=</span> <span class="fl">2</span>, c <span class="op">=</span> <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">p</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter vector:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   a :       1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   b :       2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   c :       3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Attributes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv  : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv2 : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   fixed  : &lt;none&gt;</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Jacobian and second derivatives</span></span></span>
+<span class="r-in"><span><span class="va">J</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">matrix</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">0</span>, <span class="fl">0</span>,</span></span>
+<span class="r-in"><span>              <span class="fl">0</span>, <span class="fl">2</span>, <span class="fl">0</span>,</span></span>
+<span class="r-in"><span>              <span class="fl">0</span>, <span class="fl">0</span>, <span class="fl">3</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>            nrow <span class="op">=</span> <span class="fl">3</span>, byrow <span class="op">=</span> <span class="cn">TRUE</span>,</span></span>
+<span class="r-in"><span>            dimnames <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"y"</span>, <span class="st">"z"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">H</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/array.html" class="external-link">array</a></span><span class="op">(</span><span class="fl">0</span>, dim <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">3</span>, <span class="fl">3</span>, <span class="fl">3</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>           dimnames <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                           <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"y"</span>, <span class="st">"z"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>                           <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"y"</span>, <span class="st">"z"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">H</span><span class="op">[</span><span class="st">"a"</span>, <span class="st">"x"</span>, <span class="st">"x"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">1</span></span></span>
+<span class="r-in"><span><span class="va">H</span><span class="op">[</span><span class="st">"b"</span>, <span class="st">"y"</span>, <span class="st">"y"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">2</span></span></span>
+<span class="r-in"><span><span class="va">H</span><span class="op">[</span><span class="st">"c"</span>, <span class="st">"z"</span>, <span class="st">"z"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="fl">3</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">p2</span> <span class="op">&lt;-</span> <span class="fu"><a href="parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">10</span>, b <span class="op">=</span> <span class="fl">20</span>, c <span class="op">=</span> <span class="fl">30</span><span class="op">)</span>, deriv <span class="op">=</span> <span class="va">J</span>, deriv2 <span class="op">=</span> <span class="va">H</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">p2</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter vector:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   a :      10</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   b :      20</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   c :      30</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Attributes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv  : 3 x 3 matrix</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv2 : 3 x 3 x 3 array</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   fixed  : &lt;none&gt;</span>
+<span class="r-in"><span><span class="fu"><a href="getDerivs.html">getDerivs</a></span><span class="op">(</span><span class="va">p2</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   x y z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a 1 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> b 0 2 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> c 0 0 3</span>
+<span class="r-in"><span><span class="fu"><a href="getDerivs2.html">getDerivs2</a></span><span class="op">(</span><span class="va">p2</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> , , x</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   x y z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a 1 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> b 0 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> c 0 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> , , y</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   x y z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a 0 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> b 0 2 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> c 0 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> , , z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   x y z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a 0 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> b 0 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> c 0 0 3</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Subsetting keeps the matching derivatives</span></span></span>
+<span class="r-in"><span><span class="va">p_sub</span> <span class="op">&lt;-</span> <span class="va">p2</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span><span class="op">]</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="getDerivs.html">getDerivs</a></span><span class="op">(</span><span class="va">p_sub</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   x y z</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> a 1 0 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> b 0 2 0</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Concatenation</span></span></span>
+<span class="r-in"><span><span class="va">p3</span> <span class="op">&lt;-</span> <span class="fu"><a href="parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>d <span class="op">=</span> <span class="fl">4</span>, e <span class="op">=</span> <span class="fl">5</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">p2</span>, <span class="va">p3</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter vector:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   a :      10</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   b :      20</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   c :      30</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   d :       4</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   e :       5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Attributes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv  : 3 x 3 matrix</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv2 : 5 x 3 x 3 array</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   fixed  : d, e</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## From numbers</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="parvec.html">parvec</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span>, b <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Parameter vector:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   a :       1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   b :       2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Attributes:</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv  : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   deriv2 : &lt;none&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   fixed  : &lt;none&gt;</span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

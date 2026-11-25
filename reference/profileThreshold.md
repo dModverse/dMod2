@@ -43,3 +43,12 @@ A single number.
 
 [profile()](https://dmodverse.github.io/dMod2/reference/profile.md),
 [`confint.parframe()`](https://dmodverse.github.io/dMod2/reference/confint.parframe.md)
+
+## Examples
+
+``` r
+profileThreshold(0.95)
+#> [1] 3.841459
+profileThreshold(0.95, method = "F", n = 20, p = 3)
+#> [1] 4.651458
+```

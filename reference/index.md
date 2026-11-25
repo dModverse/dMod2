@@ -285,8 +285,6 @@ Likelihoods of the data, priors and constraints, sums of objectives.
   : Plot Objective Values of a Collection of Fits
 - [`plotPars()`](https://dmodverse.github.io/dMod2/reference/plotPars.md)
   : Plot Parameter Values of a Collection of Fits
-- [`plotPairs()`](https://dmodverse.github.io/dMod2/reference/plotPairs.md)
-  : Pair Plot of Parameter Samples
 - [`plotResiduals()`](https://dmodverse.github.io/dMod2/reference/plotResiduals.md)
   : Plot Residuals of a Collection of Fits
 - [`plotTrace()`](https://dmodverse.github.io/dMod2/reference/plotTrace.md)
@@ -455,8 +453,6 @@ Measurements on unknown scales aligned to common values.
   : Extract the Second Derivatives of an Object
 - [`getEquations()`](https://dmodverse.github.io/dMod2/reference/getEquations.md)
   : Extract the Equations of an Object
-- [`getObservables()`](https://dmodverse.github.io/dMod2/reference/getObservables.md)
-  : Extract the Observables of an Object
 - [`getParameters()`](https://dmodverse.github.io/dMod2/reference/getParameters.md)
   : Extract the Parameters of an Object
 - [`attrs()`](https://dmodverse.github.io/dMod2/reference/attrs.md) :

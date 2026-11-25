@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -123,6 +123,75 @@ starts a new step, see <code><a href="plotValues.html">plotValues()</a></code>. 
     <p>The rows of <code>x</code> with distinct values, sorted by value.</p>
     </div>
 
+    <div class="section level2">
+    <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="co"># \donttest{</span></span></span>
+<span class="r-in"><span><span class="co">## Observation of a regression curve</span></span></span>
+<span class="r-in"><span><span class="va">regfn</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"sin(a*time)"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="va">regfn</span>, parameters <span class="op">=</span> <span class="st">"a"</span>, compile <span class="op">=</span> <span class="cn">TRUE</span>, modelname <span class="op">=</span> <span class="st">"parlist_obs"</span>,</span></span>
+<span class="r-in"><span>       outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> using C++ compiler: g++ [-O2 -DNDEBUG -w -fPIC -fopenmp]</span>
+<span class="r-in"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="Xt.html">Xt</a></span><span class="op">(</span>condition <span class="op">=</span> <span class="st">"C1"</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Data</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="datalist.html">datalist</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  C1 <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    name <span class="op">=</span> <span class="st">"y"</span>,</span></span>
+<span class="r-in"><span>    time <span class="op">=</span> <span class="fl">1</span><span class="op">:</span><span class="fl">5</span>,</span></span>
+<span class="r-in"><span>    value <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/Trig.html" class="external-link">sin</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">5</span>, <span class="fl">0</span>, <span class="fl">.1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    sigma <span class="op">=</span> <span class="fl">.1</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">pars</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">5</span>, <span class="fl">.1</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="op">(</span><span class="va">g</span><span class="op">*</span><span class="va">x</span><span class="op">)</span><span class="op">(</span><span class="va">times</span>, <span class="va">pars</span><span class="op">)</span>, <span class="va">data</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="unique.parframe-1.png" alt="" width="700" height="433"></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Fits from random starts, stored in a parlist</span></span></span>
+<span class="r-in"><span><span class="va">obj</span> <span class="op">&lt;-</span> <span class="fu"><a href="normL2.html">normL2</a></span><span class="op">(</span><span class="va">data</span>, <span class="va">g</span><span class="op">*</span><span class="va">x</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">out</span> <span class="op">&lt;-</span> <span class="fu"><a href="parlist.html">as.parlist</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">lapply</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">5</span>, <span class="kw">function</span><span class="op">(</span><span class="va">i</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>  <span class="fu"><a href="trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">pars</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">pars</span><span class="op">)</span>, <span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, rinit <span class="op">=</span> <span class="fl">1</span>, rmax <span class="op">=</span> <span class="fl">10</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">}</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/summary.html" class="external-link">summary</a></span><span class="op">(</span><span class="va">out</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Best and worst fit</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>       index     value converged iterations stopReason neval qnEval qnSkipped</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> best      2 -10.24463      TRUE          8     fvalue     9      0         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> worst     3 440.78695      TRUE         16     fvalue    17      0         4</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>       nSwitch iterations.gn iterations.bfgs        a</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> best        0             8               0 0.989118</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> worst       0            16               0 2.363339</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Statistics of fit outcome</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Fits aborted:       0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Fits not converged: 0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Fits converged:     5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Fits total:         5</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> Termination reason</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> fvalue              5</span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co">## Parameter frame and best fit</span></span></span>
+<span class="r-in"><span><span class="va">parframe</span> <span class="op">&lt;-</span> <span class="fu"><a href="as.parframe.html">as.parframe</a></span><span class="op">(</span><span class="va">out</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="plotValues.html">plotValues</a></span><span class="op">(</span><span class="va">parframe</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="unique.parframe-2.png" alt="" width="700" height="433"></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/unique.html" class="external-link">unique</a></span><span class="op">(</span><span class="va">parframe</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   index     value converged iterations stopReason neval qnEval qnSkipped</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1     2 -10.24463      TRUE          8     fvalue     9      0         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2     1 223.37336      TRUE          6     fvalue     7      0         0</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3     3 440.78695      TRUE         16     fvalue    17      0         4</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>   nSwitch iterations.gn iterations.bfgs           a</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1       0             8               0  0.98911802</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2       0             6               0 -0.07418182</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3       0            16               0  2.36333881</span>
+<span class="r-in"><span><span class="va">bestfit</span> <span class="op">&lt;-</span> <span class="fu"><a href="parvec.html">as.parvec</a></span><span class="op">(</span><span class="va">parframe</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="op">(</span><span class="va">g</span><span class="op">*</span><span class="va">x</span><span class="op">)</span><span class="op">(</span><span class="va">times</span>, <span class="va">bestfit</span><span class="op">)</span>, <span class="va">data</span><span class="op">)</span></span></span>
+<span class="r-plt img"><img src="unique.parframe-3.png" alt="" width="700" height="433"></span>
+<span class="r-in"><span><span class="co"># }</span></span></span>
+</code></pre></div>
+    </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
     </nav></aside></div>
 

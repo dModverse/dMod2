@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -270,15 +270,15 @@ interval ends where the profile crosses the threshold.</p>
 <p><img src="dMod2_files/figure-html/unnamed-chunk-6-1.png" class="r-plt" alt="" width="768"></p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">profiles</span>, val.column <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span></span>
-<span><span class="co">#&gt;                          name      value      lower      upper</span></span>
-<span><span class="co">#&gt; K_EXPORT_CANA   K_EXPORT_CANA -1.0191117 -2.2432552 -0.5640135</span></span>
-<span><span class="co">#&gt; K_EXPORT_SINUS K_EXPORT_SINUS -0.8601437       -Inf -0.6216848</span></span>
-<span><span class="co">#&gt; K_IMPORT             K_IMPORT -0.7121767 -0.8129339 -0.6231449</span></span>
-<span><span class="co">#&gt; K_REFLUX             K_REFLUX -0.7442631 -1.5463901 -0.3295161</span></span>
-<span><span class="co">#&gt; K_REFLUX_OPEN   K_REFLUX_OPEN  1.7178431  1.2327520        Inf</span></span>
-<span><span class="co">#&gt; S                           S  1.9308943       -Inf        Inf</span></span>
-<span><span class="co">#&gt; TCA_CANA             TCA_CANA  0.2904975       -Inf        Inf</span></span>
-<span><span class="co">#&gt; TCA_CELL             TCA_CELL  0.6403968       -Inf        Inf</span></span></code></pre></div>
+<span><span class="co">#&gt;                          name      value       lower      upper</span></span>
+<span><span class="co">#&gt; K_EXPORT_CANA   K_EXPORT_CANA -1.0191117  -2.2432552 -0.5640135</span></span>
+<span><span class="co">#&gt; K_EXPORT_SINUS K_EXPORT_SINUS -0.8601437        -Inf -0.6216848</span></span>
+<span><span class="co">#&gt; K_IMPORT             K_IMPORT -0.7121767  -0.8129339 -0.6231449</span></span>
+<span><span class="co">#&gt; K_REFLUX             K_REFLUX -0.7442631  -1.5463901 -0.3295161</span></span>
+<span><span class="co">#&gt; K_REFLUX_OPEN   K_REFLUX_OPEN  1.7178431   1.2327520        Inf</span></span>
+<span><span class="co">#&gt; S                           S  1.9308943        -Inf        Inf</span></span>
+<span><span class="co">#&gt; TCA_CANA             TCA_CANA  0.2904975 -39.4477946        Inf</span></span>
+<span><span class="co">#&gt; TCA_CELL             TCA_CELL  0.6403968        -Inf        Inf</span></span></code></pre></div>
 <p><code>S</code>, <code>TCA_CELL</code> and <code>TCA_CANA</code> are
 flat, a structural non-identifiability: smaller initial amounts
 compensate a larger scale. <a href="guide-symmetries.html">Symmetries</a> finds and removes it

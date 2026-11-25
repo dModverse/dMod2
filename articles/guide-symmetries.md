@@ -33,6 +33,9 @@ symmetry, and `symmetries.R` drops the bleaching terms.
 
 ## Symmetries of the full model
 
+    #> Warning: symmetries.rds was computed from an earlier version of symmetries.R
+    #> Warning: reduction.rds was computed from an earlier version of symmetries.R
+
 Computed by `symmetries.R`, loaded from `results/symmetries.rds`:
 
 ``` r
@@ -139,7 +142,7 @@ Loaded from `results/reduction.rds`:
 ``` r
 
 # a section of every orbit of the scalings
-reduction <- symmetryReduction(symmetries, timeout = 120)
+reduction <- symmetryReduction(symmetries)
 ```
 
 ``` r

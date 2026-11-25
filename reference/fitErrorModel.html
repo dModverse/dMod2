@@ -19,7 +19,7 @@ Requires the package optimx."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -131,8 +131,8 @@ combinations define groups. The model is fitted separately per group.</p></dd>
 
 <dt id="arg-errormodel">errorModel<a class="anchor" aria-label="anchor" href="#arg-errormodel"></a></dt>
 <dd><p>Character, the variance of a single measurement as an
-expression in the mean <code>x</code> and the parameters. Default
-<code>"exp(s0)+exp(srel)*x^2"</code>.</p></dd>
+expression in the mean <code>x</code> and the parameters, built from the functions
+<code><a href="https://rdrr.io/r/stats/deriv.html" class="external-link">stats::deriv()</a></code> differentiates. Default <code>"exp(s0)+exp(srel)*x^2"</code>.</p></dd>
 
 
 <dt id="arg-par">par<a class="anchor" aria-label="anchor" href="#arg-par"></a></dt>
@@ -167,7 +167,7 @@ the fitted model gives.</p>
 <p>With <code>blather = TRUE</code>, a data frame with the columns of <code>data</code>, <code>sigma</code>
 replaced as above, one column per parameter of <code>errorModel</code> with the
 fitted value, the variance bands <code>cbLower68</code>, <code>cbUpper68</code>, <code>cbLower95</code> and
-<code>cbUpper95</code>, the group label <code>condidnt</code> and the input <code>sigma</code> as
+<code>cbUpper95</code>, the group label <code>group</code> and the input <code>sigma</code> as
 <code>sigmaLS</code>. The attribute <code>"errorModel"</code> holds <code>errorModel</code>.</p>
     </div>
     <div class="section level2">
@@ -182,13 +182,12 @@ fitted value, the variance bands <code>cbLower68</code>, <code>cbUpper68</code>,
 <span class="r-in"><span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>name <span class="op">=</span> <span class="st">"y"</span>, time <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">4</span>, each <span class="op">=</span> <span class="fl">4</span><span class="op">)</span>, condition <span class="op">=</span> <span class="st">"ctrl"</span>,</span></span>
 <span class="r-in"><span>                   value <span class="op">=</span> <span class="va">mu</span> <span class="op">+</span> <span class="fu"><a href="https://rdrr.io/r/stats/Normal.html" class="external-link">rnorm</a></span><span class="op">(</span><span class="fl">16</span>, sd <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="fl">0.01</span> <span class="op">+</span> <span class="fl">0.04</span> <span class="op">*</span> <span class="va">mu</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">reduced</span> <span class="op">&lt;-</span> <span class="fu"><a href="reduceReplicates.html">reduceReplicates</a></span><span class="op">(</span><span class="va">data</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Dropped columns: </span>
 <span class="r-in"><span><span class="fu">fitErrorModel</span><span class="op">(</span><span class="va">reduced</span>, factors <span class="op">=</span> <span class="st">"name"</span>, par <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>s0 <span class="op">=</span> <span class="op">-</span><span class="fl">4</span>, srel <span class="op">=</span> <span class="op">-</span><span class="fl">3</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    time      value      sigma n name condition</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1     1  0.1080779 0.05321124 4    y      ctrl</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5     2  1.0410762 0.12172064 4    y      ctrl</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 9     3 11.0873653 1.17336938 4    y      ctrl</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 13    4 91.2201745 9.64444405 4    y      ctrl</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5     2  1.0410762 0.12172063 4    y      ctrl</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 9     3 11.0873653 1.17336929 4    y      ctrl</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 13    4 91.2201745 9.64444332 4    y      ctrl</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

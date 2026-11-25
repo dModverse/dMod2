@@ -17,7 +17,7 @@ wide or high-degree directions, at the cost of more samples."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.16.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -116,7 +116,6 @@ wide or high-degree directions, at the cost of more samples.</p>
 <span>  perPrimeCap <span class="op">=</span> <span class="fl">120L</span>,</span>
 <span>  perPrimeMinPrimes <span class="op">=</span> <span class="fl">3L</span>,</span>
 <span>  homotopy <span class="op">=</span> <span class="cn">TRUE</span>,</span>
-<span>  timeout <span class="op">=</span> <span class="cn">Inf</span>,</span>
 <span>  homotopyDegree <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  degreeCapMax <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  exactProof <span class="op">=</span> <span class="cn">NULL</span>,</span>
@@ -203,11 +202,6 @@ reconstruction under <code>equilibrate = TRUE</code>. Defaults to 3.</p></dd>
 fitted along lines in parameter space as a last route. Defaults to <code>TRUE</code>.</p></dd>
 
 
-<dt id="arg-timeout">timeout<a class="anchor" aria-label="anchor" href="#arg-timeout"></a></dt>
-<dd><p>Time limit in seconds for the reconstruction. Directions not
-finished in time are reported by their support. <code>Inf</code> (default) sets no limit.</p></dd>
-
-
 <dt id="arg-homotopydegree">homotopyDegree<a class="anchor" aria-label="anchor" href="#arg-homotopydegree"></a></dt>
 <dd><p>Total degree bound of the entries the homotopy route fits.</p></dd>
 
@@ -248,7 +242,7 @@ default to <code>NULL</code>, which keeps the value of symident (4, 8, <code>TRU
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">reconstControl</span><span class="op">(</span>degreeCap <span class="op">=</span> <span class="fl">6L</span>, timeout <span class="op">=</span> <span class="fl">60</span><span class="op">)</span></span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">reconstControl</span><span class="op">(</span>degreeCap <span class="op">=</span> <span class="fl">6L</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $relevanceCap</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 6</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
@@ -299,9 +293,6 @@ default to <code>NULL</code>, which keeps the value of symident (4, 8, <code>TRU
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $homotopy</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> $timeout</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 60</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $homotopyDegree</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> NULL</span>

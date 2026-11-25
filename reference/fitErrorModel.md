@@ -38,7 +38,9 @@ fitErrorModel(
 - errorModel:
 
   Character, the variance of a single measurement as an expression in
-  the mean `x` and the parameters. Default `"exp(s0)+exp(srel)*x^2"`.
+  the mean `x` and the parameters, built from the functions
+  [`stats::deriv()`](https://rdrr.io/r/stats/deriv.html) differentiates.
+  Default `"exp(s0)+exp(srel)*x^2"`.
 
 - par:
 
@@ -74,7 +76,7 @@ fitted model gives.
 With `blather = TRUE`, a data frame with the columns of `data`, `sigma`
 replaced as above, one column per parameter of `errorModel` with the
 fitted value, the variance bands `cbLower68`, `cbUpper68`, `cbLower95`
-and `cbUpper95`, the group label `condidnt` and the input `sigma` as
+and `cbUpper95`, the group label `group` and the input `sigma` as
 `sigmaLS`. The attribute `"errorModel"` holds `errorModel`.
 
 ## See also
@@ -89,11 +91,10 @@ mu <- rep(c(0.1, 1, 10, 100), each = 4)
 data <- data.frame(name = "y", time = rep(1:4, each = 4), condition = "ctrl",
                    value = mu + rnorm(16, sd = sqrt(0.01 + 0.04 * mu^2)))
 reduced <- reduceReplicates(data)
-#> Dropped columns: 
 fitErrorModel(reduced, factors = "name", par = c(s0 = -4, srel = -3))
 #>    time      value      sigma n name condition
 #> 1     1  0.1080779 0.05321124 4    y      ctrl
-#> 5     2  1.0410762 0.12172064 4    y      ctrl
-#> 9     3 11.0873653 1.17336938 4    y      ctrl
-#> 13    4 91.2201745 9.64444405 4    y      ctrl
+#> 5     2  1.0410762 0.12172063 4    y      ctrl
+#> 9     3 11.0873653 1.17336929 4    y      ctrl
+#> 13    4 91.2201745 9.64444332 4    y      ctrl
 ```

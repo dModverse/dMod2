@@ -59,8 +59,11 @@ exportSbml(
   Object of class
   [eventlist](https://dmodverse.github.io/dMod2/reference/eventlist.md)
   to emit as `<listOfEvents>`, or `NULL`. Rows sharing a trigger become
-  one `<event>`. A compartment an event assigns to is written as
-  non-constant. Default `NULL`.
+  one `<event>`. A root event becomes two events with the triggers
+  `root >= 0` and `root <= 0`, initially true, so that the SBML model
+  fires at crossings in both directions and not at the start, as cppDE
+  does. A compartment an event assigns to is written as non-constant.
+  Default `NULL`.
 
 ## Value
 

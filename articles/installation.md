@@ -70,7 +70,7 @@ On first use of
 [`symmetryDetection()`](https://dmodverse.github.io/dMod2/reference/symmetryDetection.md)
 or
 [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md),
-dMod2 installs [symident](https://github.com/dModverse/symident) from
+dMod2 installs [symident](https://dmodverse.github.io/symident/) from
 PyPI into the session Python. On failure the error names the
 interpreter; `pip install -U symident` with that interpreter installs
 it.

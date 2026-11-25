@@ -6,7 +6,7 @@ them. `gr(group, dist = )` in an effect formula sets the distribution:
 
 | distribution | deviation \\\eta\\ of a group | hyperparameters |
 |----|----|----|
-| [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\ | `prob_<grouping>`, `tau_<grouping>` |
+| [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\; `spike` and `mean` set other values, see [Spike at a given value](#spike-at-a-given-value) | `prob_<grouping>`, `tau_<grouping>` |
 | [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md) | value of the cluster of the group: \\0\\ for the population cluster, else one \\\mathcal{N}(0, \tau^2)\\ draw per cluster | `concentration_<grouping>`, `tau_<grouping>` |
 
 The spike and slab decides for every group alone whether it deviates.
@@ -722,6 +722,97 @@ The symbols of a group are seated together on the full \\P_i\\.
 `control$saem$particles` sets \\M\\ (500). An SAEM fit has no gradient,
 Hessian or empirical information.
 
+## Spike at a given value
+
+`spikeSlab(mean = , spike = )` generalizes the prior of [Spike and
+slab](#spike-and-slab) to
+
+\\p(\eta_k) = (1 - \rho)\\ \delta\_\alpha(\eta_k) + \rho\\
+\mathcal{N}(\eta_k;\\ \mu_0, \tau^2) , \tag{41}\\
+
+\\\alpha\\ and \\\mu_0\\ given. \\\alpha = -\infty\\ requires \\\eta_k\\
+to enter the model only as a summand of an exponent \\b^{(\cdots +
+\eta_k)}\\ with a numeric base \\b \> 1\\, read off the equations of the
+model; the spike is then the model at rate 0. The quadratic model of (7)
+cannot reach \\-\infty\\, so every subset \\F\\ of slab coordinates of a
+group is a separate Laplace integral, at the inner mode \\\hat\eta_F\\
+of
+
+\\f_F(\eta_F) = -2 \log L(\eta_F,\\ \eta\_{\bar F} = \alpha) + \sum\_{k
+\in F} \frac{(\eta_k - \mu_0)^2}{\tau^2} , \qquad -2 \log Z_F =
+f_F(\hat\eta_F) + \|F\| \log \tau^2 + \log \bigl\| \tfrac12 H_F \bigr\|
+, \tag{42}\\
+
+\\H_F\\ the Gauss-Newton Hessian, and \\Z = \sum_F \rho^{\|F\|} (1 -
+\rho)^{K - \|F\|} Z_F\\. With \\\Pr(F \mid y)\\ the term of \\F\\ over
+\\Z\\ and \\C_F = 2 H_F^{-1}\\, EM updates
+
+\\\rho \leftarrow \frac1K \sum_k (1 - p\_{0k}), \qquad \tau^2 \leftarrow
+\frac{\sum_F \Pr(F \mid y) \sum\_{k \in F} \bigl\[ (\hat\eta\_{Fk} -
+\mu_0)^2 + C\_{F,kk} \bigr\]} {\sum_F \Pr(F \mid y)\\ \|F\|} ,
+\tag{43}\\
+
+per block, and the fixed effects minimize \\\sum_F \Pr(F \mid y)\\ f_F\\
+jointly with one copy of \\\eta_F\\ per subset; the log determinant of
+(42) enters the weights only.
+
+Beyond the budget a group takes EC (see [Expectation consistent
+approximation](#expectation-consistent-approximation)) in a coordinate
+in which the spike is 0: \\u_k = b^{\eta_k}\\ for \\\alpha = -\infty\\,
+with a log-normal slab \\\ln u_k \sim \mathcal{N}(\mu_0 \ln b, (\tau \ln
+b)^2)\\, and \\u_k = \eta_k - \alpha\\ else. The data term is a Gaussian
+in \\u\\, from one evaluation in \\\eta\\ at the expansion point
+\\u^\circ\\ and
+
+\\g_u = D\\ g\_\eta, \qquad H_u = D\\ H\_\eta\\ D, \qquad D =
+\operatorname{diag}\bigl( 1 / (u^\circ_k \ln b) \bigr) , \tag{44}\\
+
+with no second-order term, since \\H\_\eta\\ is Gauss-Newton.
+\\u^\circ\\ starts at the mode with every coordinate in the slab and
+moves to the EC mean until it is stable. The sites update one at a time;
+a site of negative precision is replaced by the one that matches the
+tilted mean at the cavity variance. The fixed effects are fitted with
+the slab coordinates of inclusion probability above 1/2.
+
+Normal random effects of the same grouping join every subset: \\F\\
+holds them as well, with the prior \\\mathcal{N}(0, \Omega)\\ in (42)
+and \\\log\lvert\Omega\rvert\\ in the normalizer; \\\Omega\\ follows by
+EM from \\\sum_F \Pr(F \mid y)\\ (\hat\eta_F \hat\eta_F^\top + C_F)\\
+restricted to the normal coordinates, and in EC groups they enter the
+Gaussian exactly, without sites.
+
+SAEM draws the indicators by the collapsed moves of
+[SAEM](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#spike-and-slab-random-effects)
+with the spike at \\\alpha\\ and the slab mean \\\mu_0\\. At \\\alpha =
+-\infty\\ the line of a move holds the other slab values, and the move
+into the slab proposes from \\\mathcal{N}(\hat x, 2 / f'')\\, \\\hat x\\
+the minimum of the data term plus slab prior in the coordinate by Newton
+steps on the model; the Metropolis-Hastings step on the exact posterior
+keeps the chain exact.
+
+With `method = "quadrature"` every subset of weight above \\10^{-8}\\ of
+the largest is integrated on a dimension-adaptive sparse grid
+[\[14\]](#ref-smolyak1963quadrature),
+[\[15\]](#ref-gerstner2003dimension) around \\\hat\eta_F\\ with
+precision \\\tfrac12 H_F\\, a subset of relative weight \\w_F\\ to the
+tolerance of the group over \\w_F\\: nodes \\\eta_i\\ with signed
+weights \\w_i\\,
+
+\\Z_F \approx (2\pi\tau^2)^{-\|F\|/2} \sum_i w_i\\ e^{-f_F(\eta_i)/2} ,
+\qquad \omega_i = \frac{w_i\\ e^{-f_F(\eta_i)/2}}{\sum_j w_j\\
+e^{-f_F(\eta_j)/2}} , \tag{45}\\
+
+the grid refined in the direction of the largest error estimate until
+the estimated error of \\-2 \log Z_F\\ is below the tolerance. On these
+nodes, held fixed, \\-2 \log L = -2 \log \sum_F \rho^{\|F\|} (1 -
+\rho)^{K - \|F\|} Z_F\\ is a smooth function of the fixed effects,
+\\\Omega\\, \\\tau\\ and \\\rho\\.
+[`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
+minimizes it, with the gradient \\\sum_F \Pr(F \mid y) \sum_i \omega_i\\
+\nabla f_F(\eta_i)\\ by Fisher’s identity and the Hessian by Louis’
+identity; then the modes and grids are rebuilt, until \\-2 \log L\\
+decreases by less than `tolDecrement`.
+
 ## References
 
 \[1\]
@@ -812,3 +903,16 @@ J. S. Liu, “Nonparametric hierarchical Bayes via sequential
 imputations,” *The Annals of Statistics*, vol. 24, no. 3, pp. 911–930,
 1996, doi:
 [10.1214/aos/1032526949](https://doi.org/10.1214/aos/1032526949).
+
+\[14\]
+
+S. A. Smolyak, “Quadrature and Interpolation Formulas for Tensor
+Products of Certain Classes of Functions,” *Doklady Akademii Nauk SSSR*,
+vol. 148, no. 5, pp. 1042–1045, 1963, Available:
+<https://www.mathnet.ru/eng/dan27586>
+
+\[15\]
+
+T. Gerstner and M. Griebel, “Dimension-adaptive tensor-product
+quadrature,” *Computing*, vol. 71, no. 1, pp. 65–87, 2003, doi:
+[10.1007/s00607-003-0015-5](https://doi.org/10.1007/s00607-003-0015-5).

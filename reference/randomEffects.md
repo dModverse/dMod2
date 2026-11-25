@@ -37,11 +37,15 @@ on the log scale. The parts of an effect formula:
   formulas, the columns of one term are correlated, other terms are
   independent. `gr(ID, dist = spikeSlab())` instead of `ID` sets the
   distribution, see
-  [`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md).
-  The random effect of a group is `eta_<symbol>_<group>` for the
-  intercept and `eta_<symbol>_<column>_<group>` for a slope; a symbol
-  with random terms in a second grouping gets the grouping name in the
-  stem, `eta_cl_center_<group>`.
+  [`normal()`](https://dmodverse.github.io/dMod2/reference/normal.md);
+  `gr(dist = )` without a grouping makes one group `all` of all
+  conditions, so that with `0 +` the random effect is the parameter
+  itself, as in `k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf)))`
+  for the selection of reaction rates on the log scale. The random
+  effect of a group is `eta_<symbol>_<group>` for the intercept and
+  `eta_<symbol>_<column>_<group>` for a slope; a symbol with random
+  terms in a second grouping gets the grouping name in the stem,
+  `eta_cl_center_<group>`.
 
 ## Usage
 
@@ -75,11 +79,12 @@ print(x, ...)
 An object of class `randomeffects`, a list with `terms` (one row per
 random effect column: `symbol`, `origin` (the formula), `term`,
 `column`, `group`, `id`, `dist`, the fixed hyperparameters `prob`,
-`concentration` and `tau` (`NA` where estimated) and `stem`, the name
-stem of the etas), `blocks` (groups of rows: the normal rows of a block
-are correlated, the rows of a spike-and-slab or Dirichlet-process block
-share the hyperparameters), `subjects` (the groups of each grouping and
-the conditions they own), `fixed` (the parameters the formulas created),
+`concentration` and `tau` (`NA` where estimated), the given `mean` and
+`spike` of spike-and-slab terms and `stem`, the name stem of the etas),
+`blocks` (groups of rows: the normal rows of a block are correlated, the
+rows of a spike-and-slab or Dirichlet-process block share the
+hyperparameters), `subjects` (the groups of each grouping and the
+conditions they own), `fixed` (the parameters the formulas created),
 `etas` (eta names, one row per condition, one column per term row),
 `groups` (per stem the group of each condition), `fixedDesign` (per
 symbol the model matrix of the fixed effects, one row per condition) and
@@ -114,7 +119,7 @@ re <- randomEffects(trafo)
 re
 #> Random effects: 4 terms over ID
 #>   block 1 (normal, ID): eta_ka, eta_cl, eta_cl_dose
-#>   block 2 (spikeSlab, prob estimated, tau estimated, ID): eta_v
+#>   block 2 (spikeSlab, prob estimated, tau estimated, mean 0, spike 0, ID): eta_v
 #>   fixed effects: ka, cl, cl_wt, v 
 re$fixed
 #> [1] "ka"    "cl"    "cl_wt" "v"    
