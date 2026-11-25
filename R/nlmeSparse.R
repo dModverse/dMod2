@@ -882,8 +882,8 @@
 .empiricalInformation <- function(final, par) {
   if (is.null(final$scores) || anyNA(final$scores)) return(NULL)
   G <- nrow(final$scores)
-  centred <- sweep(final$scores, 2, colMeans(final$scores)) / 2
-  I <- if (G > 1L) G / (G - 1) * crossprod(centred) else 0 * crossprod(centred)
+  centered <- sweep(final$scores, 2, colMeans(final$scores)) / 2
+  I <- if (G > 1L) G / (G - 1) * crossprod(centered) else 0 * crossprod(centered)
   I[par, par] <- I[par, par] + final$freeHessian / 2
   I
 }

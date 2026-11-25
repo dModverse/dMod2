@@ -14,6 +14,10 @@ path lies in the working directory.
 Only the working directory is searched, not \code{getOption("dMod2.outdir")} or
 the directories the objects were generated in.
 }
+\examples{
+## Names of the loaded shared objects below the working directory
+getLocalDLLs()
+}
 \seealso{
 \code{\link[=loadDLL]{loadDLL()}}
 }

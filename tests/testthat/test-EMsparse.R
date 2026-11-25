@@ -12,8 +12,8 @@
   r
 }
 
-# A decay model y = A exp(-k dose) per condition, five groups with two conditions each, and the
-# linear model y = a + b dose on the same design with a known sigma.
+# A nonlinear and a linear model per condition, five groups with two conditions each, the linear
+# one with a known sigma.
 .sparse <- local({
   cache <- NULL
   function() {
@@ -58,7 +58,7 @@
             modelname = "sp_glin", derivMode = .dm)
     pls <- P(linear(spikeSlab()), method = "explicit", compile = FALSE, modelname = "sp_linslab", derivMode = .dm)
     pld <- P(linear(dirichletProcess()), method = "explicit", compile = FALSE, modelname = "sp_lindp", derivMode = .dm)
-    # a second observable z = b + c that only the first two groups measure
+    # a second observable that only some groups measure
     gz <- Y(c(y = "a + b * dose", z = "b + c"), f = NULL, parameters = c("a", "b", "c", "dose"), compile = FALSE,
             modelname = "sp_gz", derivMode = .dm)
     reachP <- function(dist, name) {
@@ -68,8 +68,8 @@
         modelname = name, derivMode = .dm)
     }
     pz <- list(spikeSlab = reachP(spikeSlab(), "sp_zslab"), dirichletProcess = reachP(dirichletProcess(), "sp_zdp"))
-    # a state X that a stimulus u drives from 0, u = 0 in the groups L1 and L2, read with a drift w
-    # that only a state at 0 multiplies
+    # a state driven by a stimulus that is off in some groups, with a parameter that only a state at
+    # 0 multiplies
     tabu <- cbind(tab, u = ifelse(tab$ID %in% c("L1", "L2"), 0, 1))
     xu <- Xs(odemodel(eqnvec(X = "s * u - dg * X", W = "w * X - dg * W"), modelname = "sp_xu", compile = FALSE,
                       derivMode = .dm))

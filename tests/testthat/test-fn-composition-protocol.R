@@ -203,6 +203,16 @@ test_that("functions for single conditions compose only for the same condition",
   expect_s3_class(gA * dMod2:::.fnWithConditions(fx$xfn, "A"), "prdfn")
 })
 
+test_that("condition sets without a common condition do not compose", {
+  skip_if_not_installed("cppDE")
+  skip_on_cran()
+
+  fx <- fx_decay_compiled()
+  gAB <- dMod2:::.fnWithConditions(fx$gfn, c("A", "B"))
+  expect_error(gAB * dMod2:::.fnWithConditions(fx$xfn, c("C", "D")), "share none")
+  expect_s3_class(gAB * dMod2:::.fnWithConditions(fx$xfn, c("B", "C")), "prdfn")
+})
+
 
 ## ---- Objective composition ----------------------------------------------
 
@@ -226,6 +236,27 @@ test_that("objfn * parfn keeps parameters, modelname and the NLME handles", {
   expect_equal(rep(lp)$value,
                obj(setNames(exp(lp[c("A_log", "k_log")]), c("A", "k")))$value,
                tolerance = 1e-4)
+})
+
+
+test_that("objfn * parfn drops the prediction handles that do not compose", {
+  skip_if_not_installed("cppDE")
+  skip_on_cran()
+
+  fx <- fx_decay_compiled()
+  mc <- fx_decay_multicond_compiled()
+  d  <- fx_decay_data()
+
+  rep <- normL2(d, fx$prd_id) * fx$pfn_log
+  expect_s3_class(attr(rep, "prdfn", exact = TRUE), "prdfn")
+  expect_length(attr(rep, "l2spec", exact = TRUE), 1L)
+
+  # A prediction over several conditions does not compose with a
+  # single-condition transformation, so no handle stays in inner coordinates.
+  rep <- normL2(d, mc$prd) * fx$pfn_log
+  expect_s3_class(rep, "objfn")
+  expect_null(attr(rep, "prdfn", exact = TRUE))
+  expect_null(attr(rep, "l2spec", exact = TRUE))
 })
 
 

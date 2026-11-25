@@ -24,7 +24,11 @@
 #'     `(1 | p | ID)` with an ID `p`: terms with the same ID and grouping are
 #'     correlated across formulas, the columns of one term are correlated, other
 #'     terms are independent. `gr(ID, dist = spikeSlab())` instead of `ID` sets
-#'     the distribution, see [normal()]. The random effect of a group is
+#'     the distribution, see [normal()]; `gr(dist = )` without a grouping
+#'     makes one group `all` of all conditions, so that with `0 +` the random
+#'     effect is the parameter itself, as in
+#'     `k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf)))` for the
+#'     selection of reaction rates on the log scale. The random effect of a group is
 #'     `eta_<symbol>_<group>` for the intercept and
 #'     `eta_<symbol>_<column>_<group>` for a slope; a symbol with random terms
 #'     in a second grouping gets the grouping name in the stem, `eta_cl_center_<group>`.}
@@ -38,8 +42,8 @@
 #' @return An object of class `randomeffects`, a list with `terms` (one row
 #'   per random effect column: `symbol`, `origin` (the formula), `term`,
 #'   `column`, `group`, `id`, `dist`, the fixed hyperparameters `prob`,
-#'   `concentration` and `tau` (`NA` where estimated) and `stem`, the name
-#'   stem of the etas),
+#'   `concentration` and `tau` (`NA` where estimated), the given `mean` and
+#'   `spike` of spike-and-slab terms and `stem`, the name stem of the etas),
 #'   `blocks` (groups of rows: the normal rows of a block are correlated, the
 #'   rows of a spike-and-slab or Dirichlet-process block share the
 #'   hyperparameters), `subjects` (the groups of each
@@ -70,7 +74,8 @@ print.randomeffects <- function(x, ...) {
     r <- tm[x$blocks[[b]], , drop = FALSE]
     given <- function(v) if (is.na(v)) "estimated" else format(v)
     dist <- switch(r$dist[1], normal = "normal",
-                   spikeSlab = sprintf("spikeSlab, prob %s, tau %s", given(r$prob[1]), given(r$tau[1])),
+                   spikeSlab = sprintf("spikeSlab, prob %s, tau %s, mean %s, spike %s", given(r$prob[1]),
+                                       given(r$tau[1]), format(r$mean[1]), format(r$spike[1])),
                    dirichletProcess = sprintf("dirichletProcess, concentration %s, tau %s",
                                               given(r$concentration[1]), given(r$tau[1])))
     cat(sprintf("  block %d (%s, %s): %s\n", b, dist, r$group[1], paste(r$stem, collapse = ", ")))
@@ -89,11 +94,12 @@ print.randomeffects <- function(x, ...) {
 #'
 #' - `normal()`: multivariate normal with mean 0 and a covariance estimated
 #'   per correlation block. The default.
-#' - `spikeSlab()`: the deviation of a group is exactly 0 (spike) or drawn
-#'   from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
-#'   probability `prob`, independently. The spike-and-slab random effects of
-#'   a group are integrated jointly, see section Sparse random effects of
-#'   [em()].
+#' - `spikeSlab()`: the deviation of a group is exactly `spike` (spike) or
+#'   drawn from \eqn{N(\mu, \tau^2)}{N(mean, tau^2)} (slab); every group
+#'   deviates with probability `prob`, independently. The spike-and-slab
+#'   random effects of a group are integrated jointly, see section Sparse
+#'   random effects of [em()]. With `spike = -Inf` under an exponential
+#'   transformation, the spike switches the parameter off.
 #' - `dirichletProcess()`: per symbol, the deviations follow a Dirichlet
 #'   process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 #'   `concentration`, the fixed effect seated first at deviation 0: the
@@ -112,6 +118,10 @@ print.randomeffects <- function(x, ...) {
 #' @param concentration Concentration of the Ewens prior, positive; `NULL`
 #'   (default) estimates it.
 #' @param tau Standard deviation of the slab; `NULL` (default) estimates it.
+#' @param mean Mean of the slab, one finite number, not estimated.
+#' @param spike Value of the spike, one finite number or `-Inf`, not
+#'   estimated. `-Inf` needs the random effect as a summand in the exponent
+#'   of a numeric base greater than 1, as after `insert(trafo, "x <- exp(x)")`.
 #' @return An object of class `redist`.
 #' @seealso [randomEffects()], [insert()]
 #' @example inst/examples/normal.R
@@ -120,11 +130,15 @@ normal <- function() .redist("normal")
 
 #' @export
 #' @rdname normal
-spikeSlab <- function(prob = NULL, tau = NULL) {
+spikeSlab <- function(prob = NULL, tau = NULL, mean = 0, spike = 0) {
   if (!.positiveOrNull(prob) || (!is.null(prob) && prob >= 1))
     stop("spikeSlab: `prob` is NULL or one number in (0, 1).", call. = FALSE)
   if (!.positiveOrNull(tau)) stop("spikeSlab: `tau` is NULL or one positive number.", call. = FALSE)
-  .redist("spikeSlab", prob = prob, tau = tau)
+  if (!is.numeric(mean) || length(mean) != 1L || !is.finite(mean))
+    stop("spikeSlab: `mean` is one finite number.", call. = FALSE)
+  if (!is.numeric(spike) || length(spike) != 1L || is.na(spike) || spike == Inf)
+    stop("spikeSlab: `spike` is one finite number or -Inf.", call. = FALSE)
+  .redist("spikeSlab", prob = prob, tau = tau, mean = mean, spike = spike)
 }
 
 #' @export
@@ -138,15 +152,16 @@ dirichletProcess <- function(concentration = NULL, tau = NULL) {
 
 .positiveOrNull <- function(x) is.null(x) || (is.numeric(x) && length(x) == 1L && x > 0)
 
-.redist <- function(dist, prob = NULL, concentration = NULL, tau = NULL)
+.redist <- function(dist, prob = NULL, concentration = NULL, tau = NULL, mean = 0, spike = 0)
   structure(list(dist = dist, prob = prob %||% NA_real_, concentration = concentration %||% NA_real_,
-                 tau = tau %||% NA_real_), class = "redist")
+                 tau = tau %||% NA_real_, mean = mean, spike = spike), class = "redist")
 
 #' @export
 print.redist <- function(x, ...) {
   arg <- function(v) if (is.na(v)) "NULL" else format(v)
   cat(switch(x$dist, normal = "normal()",
-             spikeSlab = sprintf("spikeSlab(prob = %s, tau = %s)", arg(x$prob), arg(x$tau)),
+             spikeSlab = sprintf("spikeSlab(prob = %s, tau = %s, mean = %s, spike = %s)", arg(x$prob),
+                                 arg(x$tau), format(x$mean %||% 0), format(x$spike %||% 0)),
              dirichletProcess = sprintf("dirichletProcess(concentration = %s, tau = %s)", arg(x$concentration),
                                         arg(x$tau))), "\n")
   invisible(x)
@@ -221,7 +236,10 @@ print.redist <- function(x, ...) {
                                    origin = attr(f, "origin") %||% 1L))
 }
 
-## `expr | group`, `expr | id | group`; group a column, an interaction a:b or gr(group, dist = ).
+## The group label of a random term without a grouping column, gr(dist = ): one group over all conditions.
+.allGroup <- "all"
+
+## `expr | group`, `expr | id | group`; group a column, an interaction a:b, gr(group, dist = ) or gr(dist = ).
 .parseBar <- function(e, env) {
   id <- NA_character_
   left <- e[[2]]; grp <- e[[3]]
@@ -237,10 +255,15 @@ print.redist <- function(x, ...) {
     if (any(!nm %in% c("", "dist")))
       stop("insert: gr() takes the grouping and `dist`, as in gr(ID, dist = spikeSlab()).", call. = FALSE)
     if ("dist" %in% nm) dist <- .evalDistribution(a[["dist"]], env)
-    grp <- a[[which(nm == "")[1]]]
+    grp <- if (any(nm == "")) a[[which(nm == "")[1]]]
   }
+  if (is.null(grp)) return(list(expr = stats::as.formula(call("~", left)), group = .allGroup, vars = character(0),
+                                id = id, dist = dist))
   vars <- all.vars(grp)
-  if (!length(vars)) stop("insert: a random term needs a grouping column.", call. = FALSE)
+  if (!length(vars)) stop("insert: a random term needs a grouping column, or gr(dist = ) for one group.", call. = FALSE)
+  if (identical(vars, .allGroup))
+    stop("insert: the grouping `", .allGroup, "` is the label of gr(dist = ) without a grouping; rename the column.",
+         call. = FALSE)
   list(expr = stats::as.formula(call("~", left)), group = paste(vars, collapse = ":"), vars = vars,
        id = id, dist = dist)
 }
@@ -294,9 +317,10 @@ print.redist <- function(x, ...) {
   random <- list()
   for (ti in seq_along(pf$random)) {
     rt <- pf$random[[ti]]
-    g <- do.call(paste, c(lapply(tree[rt$vars], as.character), sep = "_"))
+    g <- if (length(rt$vars)) do.call(paste, c(lapply(tree[rt$vars], as.character), sep = "_"))
+         else rep(.allGroup, nrow(tree))
     # a condition with a missing grouping belongs to no group and keeps the fixed effects
-    none <- Reduce(`|`, lapply(tree[rt$vars], is.na))
+    none <- Reduce(`|`, lapply(tree[rt$vars], is.na), rep(FALSE, nrow(tree)))
     g[none] <- NA_character_
     .uniqueNames(g[!none], "groups of ", rt$group)
     Z <- stats::model.matrix(rt$expr, stats::model.frame(rt$expr, tree, na.action = stats::na.fail))
@@ -311,6 +335,7 @@ print.redist <- function(x, ...) {
       random[[length(random) + 1L]] <- list(symbol = sym, term = ti, column = zn[k], group = rt$group,
                                             id = rt$id, dist = rt$dist$dist, prob = rt$dist$prob,
                                             concentration = rt$dist$concentration, tau = rt$dist$tau,
+                                            mean = rt$dist$mean %||% 0, spike = rt$dist$spike %||% 0,
                                             stem = stems[k],
                                             etas = ifelse(none, NA_character_, paste0(stems[k], "_", .effectName(g))),
                                             z = Z[, k],
@@ -373,7 +398,7 @@ print.redist <- function(x, ...) {
       row <- data.frame(symbol = r$symbol, origin = pf$origin, term = r$term, column = r$column,
                         group = r$group, id = r$id, dist = r$dist,
                         prob = r$prob, concentration = r$concentration, tau = r$tau,
-                        stem = r$stem, stringsAsFactors = FALSE)
+                        mean = r$mean, spike = r$spike, stem = r$stem, stringsAsFactors = FALSE)
       terms <- rbind(terms, row)
       col <- setNames(rep(NA_character_, length(conds)), conds)
       col[rownames(tr)] <- r$etas
@@ -409,7 +434,7 @@ print.redist <- function(x, ...) {
                         column = character(0),
                         group = character(0), id = character(0), dist = character(0),
                         prob = numeric(0), concentration = numeric(0), tau = numeric(0),
-                        stem = character(0))
+                        mean = numeric(0), spike = numeric(0), stem = character(0))
   key <- ifelse(terms$dist != "normal", paste(terms$dist, terms$origin, terms$term, sep = "\r"),
          ifelse(is.na(terms$id), paste("term", terms$symbol, terms$term, sep = "\r"),
                 paste("id", terms$id, terms$group, terms$dist, sep = "\r")))

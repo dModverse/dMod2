@@ -13,6 +13,7 @@ using namespace Rcpp;
 // [[Rcpp::export]]
 LogicalVector graph_reach(CharacterVector from, CharacterVector to, CharacterVector sources,
                           CharacterVector sinks) {
+  if (from.size() != to.size()) stop("graph_reach: `from` and `to` differ in length");
   std::unordered_map<std::string, int> id;
   auto number = [&](SEXP s) {
     auto it = id.emplace(CHAR(s), (int) id.size());

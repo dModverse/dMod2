@@ -26,11 +26,16 @@
 #'     several groupings; also for spike-and-slab and Dirichlet-process
 #'     random effects (at most 14 groups).}
 #'   \item{`"quadrature"`}{adaptive sparse-grid quadrature around the modes,
-#'     started from the FOCEI fit; section Quadrature.}
+#'     started from the FOCEI fit; section Quadrature. Also for spike-and-slab
+#'     random effects alone, per subset; section Sparse random effects.}
 #'   \item{`"laplaceEM"`}{ECM on the Laplace approximation with the
 #'     covariance-corrected update of `Omega`.}
 #'   \item{`"saem"`}{stochastic-approximation EM, also for spike-and-slab and
-#'     Dirichlet-process random effects; section SAEM.}
+#'     Dirichlet-process random effects; section SAEM. With many structural
+#'     parameters and sparse random effects it does not find the optimum from
+#'     random starts reliably; start it from a `"focei"` fit,
+#'     `em(obj, random, fit, method = "saem")`, to check that fit without the
+#'     Laplace approximation.}
 #' }
 #'
 #' @param obj Objective of the data, [normL2()] or [normT()] of the model
@@ -143,7 +148,9 @@
 #'     \item{`coupling`}{`"expectationConsistent"` where a group needed it,
 #'       else `NULL`.}
 #'     \item{`boundary`}{the hyperparameters set to 0, see `control`.}
-#'     \item{`etaModes`, `etaSE`, `shrinkage`}{}
+#'     \item{`etaModes`, `etaSE`, `shrinkage`}{the modes of the random effects per
+#'       group, their conditional standard errors, and per random effect
+#'       1 - SD(modes) / SD from Omega.}
 #'     \item{`certificate`}{with method `"quadrature"` per group the
 #'       importance-sampling check at the estimate, section Quadrature.}
 #'   }
@@ -156,16 +163,22 @@
 #' these frozen nodes. The nodes of the mu-referenced fixed effects are frozen
 #' in `phi = X beta + eta`. Entries of `control$quadrature`:
 #' \describe{
-#'   \item{`tol`}{allowed change of -2 log L by the next level, default 0.1,
-#'     split over the groups; each group takes the lowest level from the current
-#'     stage of the group up within `tol / G` and never a lower one than before.
-#'     Where the next level exceeds `maxNodes`, the change from the level below
-#'     is the estimate. `Inf` keeps the levels of the stages.}
+#'   \item{`tol`}{allowed change of -2 log L by the next refinement, default
+#'     0.1, split over the groups. Each group starts from the Smolyak grid of
+#'     the stage and the grid of the last rebuild, and refines it
+#'     dimension-adaptively (Gerstner and Griebel 2003): the forward neighbors
+#'     of the grid are evaluated, their change of -2 log L is the error, and the
+#'     neighbor of largest change joins the grid until the error is within
+#'     `tol / G`. A grid therefore refines only the directions in which the
+#'     integrand departs from the Gaussian at the mode. Where the next
+#'     refinement exceeds `maxNodes`, the evaluated neighbors join the grid and
+#'     their change is the estimate. `Inf` keeps the grids of the stages.}
 #'   \item{`levels`}{the stages, default `K + 1` with `K` the number of random
 #'     effects of a group; level `K + s` integrates polynomials of total
 #'     degree `2 s + 1` exactly.}
 #'   \item{`maxLevel`, `maxNodes`}{highest level, default `K + 8`, and the
-#'     largest node count of a level per group, default 1000. A group whose
+#'     largest number of evaluated nodes per group, default 1000; the level of
+#'     an adaptive grid is that of the smallest Smolyak grid holding it. A group whose
 #'     error exceeds `tol / G` at the highest level within both is capped.
 #'     Column `capped` of `stageTrace` counts the capped groups; attribute
 #'     `"levels"` of `stageTrace` and the `certificate` list level, level error
@@ -188,7 +201,8 @@
 #'     -2 log L differ by more than three standard errors plus the error the
 #'     level of the group allows, or the Pareto shape of the weights exceeds 0.7.}
 #'   \item{`epsEcm`, `maxEcm`}{for `"laplaceEM"`: the extrapolated distance to
-#'     the fixed point at which it stops, default 1e-5, and the iteration limit.}
+#'     the fixed point at which it stops, default 1e-5, and the iteration limit,
+#'     default 200.}
 #' }
 #' @section SAEM:
 #' Metropolis draws of the random effects by random-walk and independence
@@ -250,8 +264,9 @@
 #' spike-and-slab ones on more than 14 groups, by importance sampling over the
 #' partitions, with `valueSE`.
 #' @section Sparse random effects:
-#' With spike-and-slab or Dirichlet-process random effects the
-#' parameters and hyperparameters move in one trust region. The integral of a
+#' With spike-and-slab random effects of the default `spike = 0, mean = 0` or
+#' Dirichlet-process random effects, `method = "focei"` moves the
+#' parameters and hyperparameters in one trust region. The integral of a
 #' group is exact where the data couple none of the factors and the sum over
 #' the subsets of the spike-and-slab random effects of the group stays within a budget of
 #' nodes; else it is the expectation consistent (EC) approximation, and a
@@ -261,7 +276,62 @@
 #'   \item{`trustControl`}{the [trust()] settings of the outer search. The modes
 #'     are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
 #'     below 1e-8; of `control$innerControl` only `sqpIterlim` applies.}
+#'   \item{`maxEcm`, `epsEcm`, `budget`, `ec`}{of the sum over subsets, see below.}
 #' }
+#'
+#' Spike-and-slab random effects with `mean` or `spike` other than 0, see
+#' [spikeSlab()], take a separate path of `method = "focei"`, beside normal
+#' random effects of the same grouping but no Dirichlet-process ones. The
+#' integral of a group is the sum over all subsets of the spike-and-slab random
+#' effects, each subset a Laplace integral over the normal random effects and
+#' the slab ones of the subset at the inner mode, the other random effects at
+#' the spike; `spike = -Inf` switches the
+#' parameter off. The number of subsets summed over all groups is at most
+#' `budget` (default 4096). The fixed effects and hyperparameters follow by EM:
+#' `prob` is the mean inclusion probability, `tau^2` the mean squared deviation
+#' from `mean` under the slab, and the fixed effects minimize the data term
+#' plus slab prior summed over the subsets with their weights, jointly with
+#' the subset modes; the log determinant of the Laplace integral enters the
+#' weights only; Omega is the mean of the posterior second moments of the
+#' normal random effects, restricted to the block structure. EM stops after
+#' `maxEcm` iterations (default 200) or when no
+#' estimate changes by more than `epsEcm` (default 1e-6). The `p0` column of
+#' the random table is the posterior probability of the spike.
+#'
+#' `method = "saem"` draws them by the moves of section SAEM: a spike at
+#' `-Inf` leaves the other slab values as they are, and a move into the slab
+#' proposes from the Laplace approximation of the coordinate given the others,
+#' by Newton steps on the model. The reported -2 log L is the sum over subsets
+#' of `method = "focei"` at the estimate; Dirichlet-process random effects
+#' beside are refused.
+#'
+#' `method = "quadrature"` takes the same path for every model with
+#' spike-and-slab random effects, the default `spike = 0` included, after EM on
+#' the Laplace integrals to their fixed point. Every subset of Laplace weight
+#' above 1e-8 of the largest is integrated on a dimension-adaptive sparse grid
+#' around the inner mode as in section Quadrature; a group has
+#' `control$quadrature$tol / G` (default 0.1 / G), a subset of relative weight
+#' \eqn{w} the share \eqn{1 / w} of it, so that light subsets stay on the first
+#' grid; the other subsets keep the Laplace value. Then every parameter, the
+#' Cholesky parameters of Omega and the estimated `prob` and `tau` included,
+#' moves by trust steps on the frozen nodes, which are rebuilt after each step
+#' until a Newton step would lower -2 log L by less than `tolDecrement`
+#' (`stopReason` `"decrement"`). Of `control$quadrature` this path reads `tol`,
+#' `maxLevel` and `maxNodes` (per subset), `tolDecrement`, `maxEcmPerStage`,
+#' `cm1Control` and `maxCm1Iter`.
+#'
+#' Groups beyond the budget, the largest first, take the expectation consistent
+#' (EC) approximation in a coordinate in which the spike is 0: the rate
+#' \eqn{b^\eta}{b^eta} for `spike = -Inf`, where the slab is log-normal, and
+#' \eqn{\eta}{eta} minus the spike else. The data term is a Gaussian in that
+#' coordinate, expanded first at the mode with every random effect in the slab
+#' and again at the EC mean until it is stable; normal random effects enter it
+#' exactly, without sites. These groups take the subset of
+#' inclusion probability above 1/2 for the fixed effects. Entries of
+#' `control$sparseFit$ec`: `nodes` of the Gauss-Hermite rule of the log-normal
+#' slab (40), `maxSweeps` (500) and `tolSweep` (1e-5, the change of the
+#' marginal means in standard deviations), `maxRelinearize` (30) and
+#' `tolRelinearize` (1e-4, relative).
 #'
 #' @seealso [msem()], [randomEffects()], [insert()]; the guide chapters
 #'   [Nonlinear mixed-effects models](https://dmodverse.github.io/dMod2/articles/guide-nlme.html) and
@@ -286,22 +356,24 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   .withCores(cores, .emFit(design, start, fixed, method, control, verbose))
 }
 
-## Refuses entries of `control` and of the lists `sparseFit`, `quadrature`, `saem` and `innerControl` that
-## em() does not read.
+## Refuses entries of `control` and of the lists `sparseFit`, `sparseFit$ec`, `quadrature`, `saem` and
+## `innerControl` that em() does not read.
 .checkEmControl <- function(control) {
   known <- list(control = c("sd", "inner", "innerControl", "trustControl", "secondOrderCorrection", "derivMode",
                             "quadrature", "saem", "sparseFit", "boundary"),
-                sparseFit = c("maxOuter", "trustControl"),
+                sparseFit = c("maxOuter", "trustControl", "maxEcm", "epsEcm", "budget", "ec"),
+                ec = c("nodes", "maxSweeps", "tolSweep", "maxRelinearize", "tolRelinearize"),
                 quadrature = c("tol", "levels", "maxLevel", "maxNodes", "tolDecrement", "maxEcmPerStage",
                                "cm1Control", "maxCm1Iter", "pruneTol", "certificate", "epsEcm", "maxEcm"),
                 saem = c("nBurnin", "nEM", "nMcmc", "nLaplace", "laplaceEvery", "laplaceScale", "window", "mcTol",
                          "particles", "cm1Control", "nFlip", "nodes", "integral"),
                 innerControl = c("rinit", "rmax", "iterlim", "mtol", "steptol", "eigenFloorRelative", "sqpIterlim"))
   for (k in names(known)) {
-    x <- if (k == "control") control else control[[k]]
+    x <- if (k == "control") control else if (k == "ec") control$sparseFit$ec else control[[k]]
     bad <- .setdiff(names(x), known[[k]])
+    where <- if (k == "control") "control" else if (k == "ec") "control$sparseFit$ec" else paste0("control$", k)
     if (length(bad))
-      stop("em: unknown entries of `", if (k == "control") "control" else paste0("control$", k), "`: ",
+      stop("em: unknown entries of `", where, "`: ",
            paste(bad, collapse = ", "), ".", call. = FALSE)
   }
   inner <- control[["inner"]]
@@ -505,7 +577,8 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     stop("em: -2 log L of the data is not finite at the start (", format(v), "); an error model of 0 or ",
          "below at a data point gives that.", call. = FALSE)
   fit <- .emFitMethod(design, start, fixed, method, control, verbose)
-  fit$control <- control
+  # the settings of the call, without the entries em() adds itself, so that em(control = fit$control) runs
+  fit$control <- control[.setdiff(names(control), c("sparse", "modes", "selected"))]
   fit$fixed <- fixed
   if (!boundary) return(fit)
   .emBoundary(design, fit, fixed, method, control, verbose)
@@ -567,6 +640,20 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     return(.emResult(design, .fitFoceiJoint(design, joint, start, fixed, control), method, fixed))
   }
   if (any(vapply(design$blocks, function(b) b$dist != "normal", TRUE))) {
+    general <- any(vapply(design$blocks, function(b) b$dist == "spikeSlab" && (b$mean != 0 || b$spike != 0), TRUE))
+    noProcess <- !any(vapply(design$blocks, function(b) b$dist == "dirichletProcess", TRUE))
+    if (general || (method == "quadrature" && noProcess)) {
+      # stops where a spike at -Inf is not the rate 0
+      .spikeBases(design)
+      if (method == "saem") return(.emResult(design, .fitSaemSparse(design, start, fixed, control, verbose),
+                                             method, fixed))
+      if (!method %in% c("focei", "quadrature"))
+        stop("em: spikeSlab() with `mean` or `spike` other than 0 is fitted by method = \"focei\", \"quadrature\" ",
+             "or \"saem\".", call. = FALSE)
+      qc <- if (method == "quadrature") control$quadrature %||% list()
+      return(.emResult(design, .fitSpikeSubsets(design, start, fixed, control, verbose, quadrature = qc), method,
+                       fixed))
+    }
     if (method == "saem") return(.emResult(design, .fitSaemSparse(design, start, fixed, control, verbose),
                                            method, fixed))
     if (method != "focei")

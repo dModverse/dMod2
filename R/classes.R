@@ -96,7 +96,7 @@ match.fnargs <- function(arglist, choices) {
 # NULL (one unnamed slot if none are), else those named `own`, and nothing when
 # the request names other conditions only.
 .resolveConditions <- function(conditions, own) {
-  overlap <- test_conditions(conditions, own)
+  overlap <- .testConditions(conditions, own)
   # union() would drop repeats, and a request may name the same condition more
   # than once (quadrature nodes, parameter-frame rows).
   if (is.null(overlap))
@@ -784,7 +784,8 @@ match.fnargs <- function(arglist, choices) {
   c1 <- attr(x1, "conditions"); c2 <- attr(x2, "conditions")
   overlap <- intersect(c1, c2)
   if (length(overlap) > 0) {
-    warning(paste("Condition", overlap, "existed and has been overwritten."))
+    warning("Condition ", paste(overlap, collapse = ", "), " existed and has been overwritten.",
+            call. = FALSE)
     m1 <- m1[!c1 %in% overlap]
     c1 <- c1[!c1 %in% overlap]
   }
@@ -885,13 +886,6 @@ match.fnargs <- function(arglist, choices) {
 }
 
 
-.unionMappingAttr <- function(mappings) {
-  vals <- lapply(mappings, attr, "forcings")
-  vals <- vals[!vapply(vals, is.null, logical(1))]
-  if (!length(vals)) NULL else vals[[1]]
-}
-
-
 ## General concatenation of functions ------------------------------------------
 
 # The summands of an objective: the flat list `+` recorded, or the objective
@@ -934,87 +928,79 @@ match.fnargs <- function(arglist, choices) {
   modelname.x2 <- attr(e2, "modelname")
   modelname12 <- union(modelname.x1, modelname.x2)
 
+  outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
+                    conditions = conditions12, env = NULL,
+                    cores = getOption("dMod2.cores", 1L),
+                    sweep = "forward") {
 
-  # objfn + objfn
-  if (inherits(e1, "objfn") & inherits(e2, "objfn")) {
+    arglist <- list(...)
+    arglist <- arglist[match.fnargs(arglist, c("pars"))]
+    pars <- arglist[[1]]
+    # NULL asks for all conditions, as in normL2()
+    if (is.null(conditions)) conditions <- conditions12
 
-    outfn <- function(..., fixed = NULL, deriv = TRUE, deriv2 = FALSE, hessian = NULL,
-                      conditions = conditions12, env = NULL,
-                      cores = getOption("dMod2.cores", 1L),
-                      sweep = "forward") {
-
-      arglist <- list(...)
-      arglist <- arglist[match.fnargs(arglist, c("pars"))]
-      pars <- arglist[[1]]
-      # NULL asks for all conditions, as in normL2()
-      if (is.null(conditions)) conditions <- conditions12
-
-      # A term understands `sweep` only if it names it as a formal; one that
-      # does not runs forward, and under an exact request still returns the
-      # Hessian. Every wrapper in this package declares `sweep`.
-      .call <- function(f, conds, e) {
-        if (identical(sweep, "reverse") && "sweep" %in% names(formals(f)))
-          f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
-            hessian = hessian, conditions = conds, env = e, cores = cores,
-            sweep = sweep)
-        else
-          f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
-            hessian = if (identical(sweep, "reverse")) isTRUE(deriv2)
-                      else hessian,
-            conditions = conds, env = e, cores = cores)
-      }
-      # a term without conditions once with the caller's env, any other on the term share of `conditions`,
-      # skipped where that is empty and it holds no unconditioned term; the second reuses the first env
-      .term <- function(f, own, e) {
-        if (is.null(own)) return(.call(f, NULL, env))
-        mine <- .intersect(conditions, own)
-        if (length(mine) || isTRUE(attr(f, "unconditioned"))) .call(f, mine, e)
-      }
-      v1 <- .term(e1, conditions.x1, env)
-      v2 <- .term(e2, conditions.x2, attr(v1, "env") %||% env)
-
-      # .sumobjlist adds an absent Hessian as zero, which is wrong when only
-      # one term has one and both values are finite.
-      .h <- function(v) !is.null(v) && !is.null(v$hessian)
-      .finite <- function(v) all(is.finite(v$value))
-      if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)) && .finite(v1) && .finite(v2))
-        stop("a summed objective got a Hessian from ",
-             if (.h(v1)) "the first" else "the second", " term and none from ",
-             if (.h(v1)) "the second" else "the first",
-             ". Adding them would drop that term's curvature silently.",
-             call. = FALSE)
-
-      out <- v1 + v2
-      attr(out, "env") <- attr(v1, "env") %||% attr(v2, "env")
-      return(out)
+    # A term understands `sweep` only if it names it as a formal; one that
+    # does not runs forward, and under an exact request still returns the
+    # Hessian. Every wrapper in this package declares `sweep`.
+    .call <- function(f, conds, e) {
+      if (identical(sweep, "reverse") && "sweep" %in% names(formals(f)))
+        f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
+          hessian = hessian, conditions = conds, env = e, cores = cores,
+          sweep = sweep)
+      else
+        f(pars = pars, fixed = fixed, deriv = deriv, deriv2 = deriv2,
+          hessian = if (identical(sweep, "reverse")) isTRUE(deriv2)
+                    else hessian,
+          conditions = conds, env = e, cores = cores)
     }
-
-    class(outfn) <- c("objfn", "fn")
-    attr(outfn, "conditions") <- conditions12
-    attr(outfn, "parameters") <- parameters12
-    attr(outfn, "modelname") <- modelname12
-    attr(outfn, "unconditioned") <- is.null(conditions.x1) || is.null(conditions.x2) ||
-      isTRUE(attr(e1, "unconditioned")) || isTRUE(attr(e2, "unconditioned"))
-    attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
-                                                    attr(e2, "compileInfo"))
-    # Reconstruction handles, coalesced from either operand.
-    for (.a in c("prdfn", "data", "errfn", "timesD")) {
-      .v <- attr(e1, .a, exact = TRUE)
-      if (is.null(.v)) .v <- attr(e2, .a, exact = TRUE)
-      if (!is.null(.v)) attr(outfn, .a) <- .v
+    # a term without conditions once with the caller's env, any other on the term share of `conditions`,
+    # skipped where that is empty and it holds no unconditioned term; the second reuses the first env
+    .term <- function(f, own, e) {
+      if (is.null(own)) return(.call(f, NULL, env))
+      mine <- .intersect(conditions, own)
+      if (length(mine) || isTRUE(attr(f, "unconditioned"))) .call(f, mine, e)
     }
-    # l2spec is CONCATENATED: every L2 term keeps separate data, prediction and
-    # error model, which is what reml() needs from a split objective.
-    attr(outfn, "l2spec") <- c(attr(e1, "l2spec", exact = TRUE),
-                               attr(e2, "l2spec", exact = TRUE))
-    # The summands themselves, flat however the sum was nested, so a caller
-    # can take a data term apart from the priors beside it.
-    attr(outfn, "terms") <- c(.objTerms(e1), .objTerms(e2))
-    return(outfn)
+    v1 <- .term(e1, conditions.x1, env)
+    v2 <- .term(e2, conditions.x2, attr(v1, "env") %||% env)
 
+    # .sumobjlist adds an absent Hessian as zero, which is wrong when only
+    # one term has one and both values are finite.
+    .h <- function(v) !is.null(v) && !is.null(v$hessian)
+    .finite <- function(v) all(is.finite(v$value))
+    if (!is.null(v1) && !is.null(v2) && xor(.h(v1), .h(v2)) && .finite(v1) && .finite(v2))
+      stop("a summed objective got a Hessian from ",
+           if (.h(v1)) "the first" else "the second", " term and none from ",
+           if (.h(v1)) "the second" else "the first",
+           ". Adding them would drop that term's curvature silently.",
+           call. = FALSE)
+
+    out <- v1 + v2
+    attr(out, "env") <- attr(v1, "env") %||% attr(v2, "env")
+    return(out)
   }
 
-
+  class(outfn) <- c("objfn", "fn")
+  attr(outfn, "conditions") <- conditions12
+  attr(outfn, "parameters") <- parameters12
+  attr(outfn, "modelname") <- modelname12
+  attr(outfn, "unconditioned") <- is.null(conditions.x1) || is.null(conditions.x2) ||
+    isTRUE(attr(e1, "unconditioned")) || isTRUE(attr(e2, "unconditioned"))
+  attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
+                                                  attr(e2, "compileInfo"))
+  # Reconstruction handles, coalesced from either operand.
+  for (.a in c("prdfn", "data", "errfn", "timesD")) {
+    .v <- attr(e1, .a, exact = TRUE)
+    if (is.null(.v)) .v <- attr(e2, .a, exact = TRUE)
+    if (!is.null(.v)) attr(outfn, .a) <- .v
+  }
+  # l2spec is CONCATENATED: every L2 term keeps separate data, prediction and
+  # error model, which is what reml() needs from a split objective.
+  attr(outfn, "l2spec") <- c(attr(e1, "l2spec", exact = TRUE),
+                             attr(e2, "l2spec", exact = TRUE))
+  # The summands themselves, flat however the sum was nested, so a caller
+  # can take a data term apart from the priors beside it.
+  attr(outfn, "terms") <- c(.objTerms(e1), .objTerms(e2))
+  outfn
 }
 
 
@@ -1139,7 +1125,6 @@ match.fnargs <- function(arglist, choices) {
   attr(outfn, "compileInfo") <- .mergeCompileInfo(attr(e1, "compileInfo"),
                                                   attr(e2, "compileInfo"))
   attr(outfn, "conditions")  <- own$conditions
-  attr(outfn, "forcings")    <- .unionMappingAttr(own$mappings)
 
   # Keep "composed" only when a composed operand went in, so summary() keeps
   # the detail branch for a sum of leaves and drops it for a sum of chains.
@@ -1169,7 +1154,8 @@ match.fnargs <- function(arglist, choices) {
 
   overlap <- names(e2)[names(e2) %in% names(e1)]
   if (length(overlap) > 0) {
-    warning(paste("Condition", overlap, "existed and has been overwritten."))
+    warning("Condition ", paste(overlap, collapse = ", "), " existed and has been overwritten.",
+            call. = FALSE)
     e1 <- e1[!names(e1) %in% names(e2)]
   }
 
@@ -1193,7 +1179,7 @@ match.fnargs <- function(arglist, choices) {
   return(out)
 }
 
-out_conditions <- function(c1, c2) {
+.outConditions <- function(c1, c2) {
 
   if (!is.null(c1)) return(c1)
   if (!is.null(c2)) return(c2)
@@ -1201,7 +1187,7 @@ out_conditions <- function(c1, c2) {
 
 }
 
-test_conditions <- function(c1, c2) {
+.testConditions <- function(c1, c2) {
   if (is.null(c1)) return(NULL)
   if (is.null(c2)) return(NULL)
   .intersectU(c1, c2)
@@ -1262,6 +1248,11 @@ test_conditions <- function(c1, c2) {
         !identical(conditions.p1, conditions.p2))
       stop("Invalid composition of functions: the left-hand function is defined for condition ",
            conditions.p1, ", the right-hand one for condition ", conditions.p2, ".", call. = FALSE)
+    # two condition sets without a common condition -> every slot would be empty
+    if (!length(.intersect(conditions.p1, conditions.p2)))
+      stop("Invalid composition of functions: the left-hand function is defined for conditions ",
+           paste(conditions.p1, collapse = ", "), ", the right-hand one for ",
+           paste(conditions.p2, collapse = ", "), ", which share none.", call. = FALSE)
   }
 
   if (inherits(e1, "idfn")) return(e2)
@@ -1274,7 +1265,7 @@ test_conditions <- function(c1, c2) {
          paste(class(e1), collapse = "/"), " * ",
          paste(class(e2), collapse = "/"), ".", call. = FALSE)
 
-  conditions.out <- out_conditions(conditions.p1, conditions.p2)
+  conditions.out <- .outConditions(conditions.p1, conditions.p2)
 
   st <- list2env(list(op = "*", kind = spec$out, p1 = e1, p2 = e2,
                       p1kind = .fnKind(e1), p2kind = .fnKind(e2),
@@ -1295,16 +1286,18 @@ test_conditions <- function(c1, c2) {
       .v <- attr(e1, .a, exact = TRUE)
       if (!is.null(.v)) attr(outfn, .a) <- .v
     }
-    # The reconstructed prediction has to live in the outer coordinates.
+    # The reconstructed prediction has to live in the outer coordinates. When
+    # it does not compose with e2 the handles are dropped: one in the inner
+    # coordinates would reconstruct another model.
+    .outer <- function(prd) tryCatch(prd * e2, error = function(e) NULL)
     .prd <- attr(e1, "prdfn", exact = TRUE)
-    if (!is.null(.prd))
-      attr(outfn, "prdfn") <- tryCatch(.prd * e2, error = function(e) .prd)
-    .l2 <- attr(e1, "l2spec", exact = TRUE)
-    if (!is.null(.l2))
-      attr(outfn, "l2spec") <- lapply(.l2, function(tm) {
-        tm$prdfn <- tryCatch(tm$prdfn * e2, error = function(e) tm$prdfn)
-        tm
-      })
+    if (!is.null(.prd)) attr(outfn, "prdfn") <- .outer(.prd)
+    .l2 <- lapply(attr(e1, "l2spec", exact = TRUE), function(tm) {
+      tm$prdfn <- .outer(tm$prdfn)
+      tm
+    })
+    if (length(.l2) && !any(vapply(.l2, function(tm) is.null(tm$prdfn), TRUE)))
+      attr(outfn, "l2spec") <- .l2
     # The objective inside and the transformation, for controls(). Not
     # `terms`: the composition reads other parameters than the objective it
     # wraps.

@@ -17,3 +17,11 @@ Named character vector with spaces around \code{+}, \code{-}, \code{*} and \code
 \description{
 Format Equation Vector with Spaces
 }
+\examples{
+v <- eqnvec(y = "2*x + offset")
+print(v)
+is.eqnvec(v)
+
+format(eqnvec(y = "2*x+offset"))
+summary(v)
+}

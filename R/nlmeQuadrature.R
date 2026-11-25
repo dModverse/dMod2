@@ -18,27 +18,6 @@
   .sparseGridCache[[key]]
 }
 
-## The next level above `level` whose grid differs, NA above the largest one.
-.nextLevel <- function(K, level) {
-  a <- .sparseGrid(K, level)
-  for (l in seq(level + 1L, length.out = 25L)) {
-    if (l - K + 1L > 26L) return(NA_integer_)
-    b <- .sparseGrid(K, l)
-    if (!identical(a$key, b$key) || !identical(a$logAbsW, b$logAbsW)) return(l)
-  }
-  NA_integer_
-}
-
-## The highest level below `level`, at least K, whose grid differs, NA if there is none.
-.prevLevel <- function(K, level) {
-  a <- .sparseGrid(K, level)
-  for (l in rev(seq_len(level - K) + K - 1L)) {
-    b <- .sparseGrid(K, l)
-    if (!identical(a$key, b$key) || !identical(a$logAbsW, b$logAbsW)) return(l)
-  }
-  NA_integer_
-}
-
 ## The node count of a level after pruning.
 .levelNodes <- function(K, level, pruneTol = Inf) {
   w <- .sparseGrid(K, level)$logAbsW
@@ -57,6 +36,85 @@
   logW <- (K / 2) * log(2) - sum(log(diag(R))) + grid$logAbsW + grid$z2
   keep <- grid$logAbsW >= max(grid$logAbsW) - pruneTol
   list(eta = eta[keep, , drop = FALSE], logW = logW[keep], signs = grid$signs[keep], key = grid$key[keep])
+}
+
+
+## Dimension-adaptive sparse grids (src/adaptiveGrid.cpp) of several integrals in lock step, each from the Smolyak
+## set of `level` and the index set `starts` until the error of -2 log I is within `tol`; `logf(which, z)` gives the
+## log integrands of all integrals of a round in one call. Per integral grid, index set, level, error and cap.
+.adaptiveGrids <- function(K, level, starts, logf, tol, maxNodes = Inf, maxLevel = Inf) {
+  n <- length(K)
+  tol <- rep_len(tol, n)
+  level <- rep_len(level, n)
+  maxLevel <- rep_len(maxLevel, n)
+  grids <- lapply(seq_len(n), function(i)
+    adaptiveGridNew(K[i], level[i], if (is.null(starts[[i]])) matrix(0L, 0, K[i]) else starts[[i]],
+                    as.integer(min(maxLevel[i], .Machine$integer.max))))
+  capped <- logical(n)
+  errorAt <- rep(NA_real_, n)
+  open <- seq_len(n)
+  while (length(open)) {
+    pend <- lapply(grids[open], adaptiveGridPending)
+    some <- which(vapply(pend, nrow, 0L) > 0L)
+    vals <- vector("list", length(open))
+    if (length(some)) vals[some] <- logf(open[some], pend[some])
+    # every open grid absorbs, so that waiting terms whose nodes are all known are computed as well
+    for (j in seq_along(open)) adaptiveGridAbsorb(grids[[open[j]]], pend[[j]], vals[[j]] %||% numeric(0))
+    done <- logical(length(open))
+    for (j in seq_along(open)) {
+      i <- open[j]
+      st <- adaptiveGridStatus(grids[[i]])
+      error <- .gridError(st)
+      if (error <= tol[i]) { done[j] <- TRUE; next }
+      step <- adaptiveGridRefine(grids[[i]], maxNodes)
+      if (step == 1L) next
+      done[j] <- TRUE
+      capped[i] <- TRUE
+      # at the node budget the evaluated frontier joins the grid, the change by the frontier stays the error
+      if (step == 2L) {
+        adaptiveGridAccept(grids[[i]])
+        errorAt[i] <- error
+      }
+    }
+    open <- open[!done]
+  }
+  lapply(seq_len(n), function(i) {
+    st <- adaptiveGridStatus(grids[[i]])
+    ix <- adaptiveGridIndices(grids[[i]])
+    # the old indices, the grid of the integral, start a later grid; the active ones only estimate the error
+    old <- ix[attr(ix, "old"), , drop = FALSE]
+    c(adaptiveGridNodes(grids[[i]]), list(indices = old, level = st$level,
+      error = if (!is.na(errorAt[i])) errorAt[i] else .gridError(st),
+      nodes = st$nodes, capped = capped[i]))
+  })
+}
+
+## The error of -2 log I of a grid status: twice the change of log I that the active terms make, as the
+## change between two Smolyak levels, or without active terms the change from the grid below; Inf where
+## the integral or the change leaves it without a sign.
+.gridError <- function(st) {
+  # without an active term, as at maxLevel, the change from the grid without the outermost terms
+  if (!st$active) {
+    if (!(st$total > 0) || !(st$total - st$shell > 0)) return(Inf)
+    return(2 * abs(log(st$total / (st$total - st$shell))))
+  }
+  if (!(st$total > 0) || !(st$total + st$change > 0)) return(Inf)
+  2 * abs(log1p(st$change / st$total))
+}
+
+## The nodes of an adaptive grid `gr` around `mode` with posterior precision P = R'R, as
+## .quadratureNodes() gives them: eta = mode + sqrt(2) R^-1 z and log weights
+## log|w| + z'z + (K/2) log 2 - log|R|; nodes whose |w| lies `pruneTol` in log below the largest dropped.
+.gridNodes <- function(gr, mode, precision, pruneTol = Inf) {
+  K <- length(mode)
+  R <- chol(precision)
+  z <- gr$z
+  eta <- t(sqrt(2) * backsolve(R, t(z))) + matrix(mode, nrow(z), K, byrow = TRUE)
+  colnames(eta) <- names(mode)
+  la <- log(abs(gr$weights))
+  keep <- la >= max(la) - pruneTol
+  list(eta = eta[keep, , drop = FALSE], logW = ((K / 2) * log(2) - sum(log(diag(R))) + la + rowSums(z^2))[keep],
+       signs = sign(gr$weights)[keep], key = gr$key[keep])
 }
 
 
@@ -270,46 +328,8 @@
     l
   }
 
-  # from `levels` up per group the lowest level whose error, the change of the group -2 log L to the next level
-  # within the budget, is at most tol / G, in lock step over the groups with the node values kept by key; a
-  # group above tol / G at the highest allowed level is capped
-  chooseLevels <- function(levels, capped, tol, nodesAt, psi) {
-    G <- length(levels)
-    error <- rep(NA_real_, G)
-    seen <- replicate(G, numeric(0), simplify = FALSE)
-    open <- seq_len(G)
-    while (length(open)) {
-      nxt <- vapply(open, function(i) .nextLevel(lay$K, levels[i]), 0L)
-      est <- vapply(nxt, allowed, TRUE)
-      up <- est & !is.na(nxt) & nxt <= maxLevel
-      ref <- ifelse(est, nxt, vapply(open, function(i) .prevLevel(lay$K, levels[i]), 0L))
-      grids <- lapply(seq_along(open), function(j)
-        list(at = nodesAt(open[j], levels[open[j]]), ref = if (!is.na(ref[j])) nodesAt(open[j], ref[j])))
-      need <- lapply(seq_along(open), function(j) {
-        gr <- grids[[j]]
-        eta <- rbind(gr$at$eta, gr$ref$eta)
-        key <- c(gr$at$key, gr$ref$key)
-        new <- !duplicated(key) & !(key %in% names(seen[[open[j]]]))
-        list(eta = eta[new, , drop = FALSE], key = key[new])
-      })
-      some <- which(vapply(need, function(n) length(n$key) > 0L, TRUE))
-      vals <- if (length(some)) integrand(design$groups[open[some]], lapply(need[some], `[[`, "eta"), psi)
-      for (k in seq_along(some))
-        seen[[open[some[k]]]] <- c(seen[[open[some[k]]]], setNames(vals[[k]], need[[some[k]]]$key))
-      done <- logical(length(open))
-      for (j in seq_along(open)) {
-        i <- open[j]
-        error[i] <- .levelError(grids[[j]], seen[[i]], lay$stems)
-        if (up[j] && error[i] > tol / G) { levels[i] <- nxt[j]; next }
-        done[j] <- TRUE
-        capped[i] <- !up[j] && !isTRUE(error[i] <= tol / G)
-      }
-      open <- open[!done]
-    }
-    list(levels = levels, error = error, capped = capped)
-  }
-
-  # each group at the lowest level from `level` up within tol / G (chooseLevels()), never below the previous one
+  # each group on a dimension-adaptive grid (.adaptiveGrids()) from the Smolyak set of `level` and the index set
+  # of the last rebuild, refined until the error of the group -2 log L is within tol / G
   rebuild <- function(psi, level, tol = Inf, etaInit = state$modes) {
     psi <- c(psi, fixed[.setdiff(names(fixed), names(psi))])
     im <- .innerModes(design, psi, etaInit, fixed, meta, control$innerControl %||% list())
@@ -319,23 +339,24 @@
     state$stamp <- state$stamp + 1L
     state$memo <- NULL
     G <- length(design$groups)
-    levels <- pmax(rep(accepted(level), G), state$levels %||% 0L)
-    capped <- levels < as.integer(level)
-    error <- rep(NA_real_, G)
-    nodesAt <- function(i, l) .quadratureNodes(im$modes[i, ], im$H[[i]] / 2, l, pruneTol)
-    if (is.finite(tol)) {
-      chosen <- chooseLevels(levels, capped, tol, nodesAt, psi)
-      levels <- chosen$levels; error <- chosen$error; capped <- chosen$capped
+    Rs <- lapply(seq_len(G), function(i) chol(im$H[[i]] / 2))
+    etaOf <- function(i, z) {
+      eta <- t(sqrt(2) * backsolve(Rs[[i]], t(z))) + matrix(im$modes[i, ], nrow(z), lay$K, byrow = TRUE)
+      `colnames<-`(eta, lay$stems)
     }
-    state$levels <- levels
-    state$levelError <- error
-    state$capped <- capped
-    state$nodes <- lapply(seq_len(G), function(i) nodesAt(i, levels[i]))
+    logf <- function(which, z) integrand(design$groups[which], Map(etaOf, which, z), psi)
+    grids <- .adaptiveGrids(rep(lay$K, G), accepted(level), state$indices %||% vector("list", G), logf, tol / G,
+                            maxNodes, maxLevel)
+    state$indices <- lapply(grids, `[[`, "indices")
+    state$levels <- vapply(grids, `[[`, 0L, "level")
+    state$levelError <- vapply(grids, `[[`, 0, "error")
+    state$capped <- vapply(grids, `[[`, TRUE, "capped") | accepted(level) < as.integer(level)
+    state$nodes <- lapply(seq_len(G), function(i) .gridNodes(grids[[i]], im$modes[i, ], im$H[[i]] / 2, pruneTol))
     invisible(state)
   }
 
   # the nodes of a rebuild, to return to without a new mode search
-  fields <- c("modes", "H", "psi0", "levels", "levelError", "capped", "nodes")
+  fields <- c("modes", "H", "psi0", "levels", "levelError", "capped", "nodes", "indices")
   snapshot <- function() mget(fields, envir = state)
   restore <- function(snap) {
     list2env(snap, envir = state)
@@ -422,18 +443,6 @@
   attr(value, "parameters") <- names(start)
   list(value = value, rebuild = rebuild, integrand = integrand, state = state, allowed = allowed,
        snapshot = snapshot, restore = restore)
-}
-
-
-## The error of a group level, twice the change of log L to the reference level of `grid` on the node
-## values `seen`: NA without a reference, Inf where a node sum is not resolved.
-.levelError <- function(grid, seen, stems) {
-  if (is.null(grid$ref)) return(NA_real_)
-  at <- grid$at; rf <- grid$ref
-  la <- .nodeSum(at$logW + seen[at$key], at$signs, at$eta, stems)
-  lr <- .nodeSum(rf$logW + seen[rf$key], rf$signs, rf$eta, stems)
-  if (is.null(la) || is.null(lr)) return(Inf)
-  2 * abs(lr$logL - la$logL)
 }
 
 
@@ -613,17 +622,7 @@
     list(eta = eta, logProposal = logProposal)
   })
   logF <- q$integrand(design$groups, lapply(draws, `[[`, "eta"), c(psi, fixed))
-  # the error of the levels against the next one where the levels were not chosen by tolerance
   levelError <- st$levelError
-  for (i in which(is.na(levelError))) {
-    up <- .nextLevel(K, st$levels[i])
-    if (!q$allowed(up)) up <- .prevLevel(K, st$levels[i])
-    if (is.na(up)) next
-    nodes <- .quadratureNodes(st$modes[i, ], st$H[[i]] / 2, up)
-    s <- .nodeSum(nodes$logW + q$integrand(design$groups[i], list(nodes$eta), c(psi, fixed))[[1]],
-                  nodes$signs, nodes$eta, lay$stems)
-    levelError[i] <- if (is.null(s) || is.na(quad[i])) Inf else 2 * abs(s$logL - quad[i])
-  }
   rows <- lapply(seq_along(design$groups), function(i) {
     lw <- logF[[i]] - draws[[i]]$logProposal
     mx <- max(lw)

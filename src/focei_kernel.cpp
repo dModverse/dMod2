@@ -79,8 +79,8 @@ static List add_correction(Function& correction_cb, const CharacterVector& outer
 }
 
 // Moves the modes in `eta` (N x K) to first order along the step, eta += S_i step, the columns of
-// S_i at the outer positions in its attribute "idx" where it has one; a subject whose move exceeds
-// `radius`, the region the inner search starts with, keeps its modes.
+// S_i at the outer positions in the attribute "idx" of S_i where present; a subject whose move
+// exceeds `radius`, the region the inner search starts with, keeps the current modes.
 static void shift_modes(NumericMatrix& eta, const List& shift, const std::vector<double>& step, double radius) {
   const int N = eta.nrow(), K = eta.ncol(), n = step.size();
   if (shift.size() != N) return;

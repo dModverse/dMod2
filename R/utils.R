@@ -1,6 +1,5 @@
-# setdiff/intersect for character vectors that are already unique. base's
-# versions coerce with as.vector() and run a unique() pass; on parameter-name
-# vectors touched once per condition that is most of their cost.
+# setdiff/intersect for character vectors that are already unique, without
+# the as.vector() and unique() passes of base.
 .setdiffU <- function(a, b) a[match(a, b, 0L) == 0L]
 .intersectU <- function(a, b) a[match(a, b, 0L) > 0L]
 

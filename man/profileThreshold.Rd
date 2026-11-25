@@ -27,6 +27,10 @@ finite-sample threshold \eqn{n\log(1 + F_{1,\nu,1-\alpha}/\nu)},
 \eqn{\nu = n - p}, exact for Gaussian errors with a single sigma profiled
 out and the generalization of the classical t interval.
 }
+\examples{
+profileThreshold(0.95)
+profileThreshold(0.95, method = "F", n = 20, p = 3)
+}
 \seealso{
 \link[=profile.objfn]{profile()}, \code{\link[=confint.parframe]{confint.parframe()}}
 }

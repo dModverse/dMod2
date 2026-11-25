@@ -14,7 +14,6 @@ symmetryReduction(
   separable = TRUE,
   reportZeroCompatibility = FALSE,
   alternatives = FALSE,
-  timeout = 600,
   allowOpen = TRUE,
   allowChecked = TRUE,
   check = TRUE,
@@ -49,11 +48,6 @@ drive to 0. Defaults to \code{FALSE}.}
 \item{alternatives}{Logical. Also return the charts of the other valid pins
 in \verb{$alternatives}. Defaults to \code{FALSE}.}
 
-\item{timeout}{Wall time in seconds for the section search of one block; a block not
-solved in time keeps the invariants (\code{"invariant_only"}) and is named in \code{limits}.
-\code{Inf} lets the search run to its end. Unlike \code{workCap}, it depends on the load of the
-machine. Defaults to 600.}
-
 \item{allowOpen}{Logical. Reduce the directions with a closed form and leave those
 of level \code{"open"} in place with a warning; \code{FALSE} makes such a direction an error. A
 direction of level \code{"verified"}, and a section claim left unproven, give a warning.
@@ -67,14 +61,14 @@ failed, with a warning; \code{FALSE} makes either an error. Defaults to \code{TR
 and record in \code{checks$loop} whether exactly the remaining directions are left.
 Defaults to \code{TRUE}; large models may turn it off.}
 
-\item{branch}{With a discrete symmetry of \code{symmetryDetection(mode = "global")}: the side of
-its fixed set as an inequality, e.g. \code{"k01 > k12"}, whose chart becomes the trafo: free values
-in the positive orthant map one to one onto that side, chained with the section. Without it
-every branch is in \code{$alternatives}; \code{$discrete$branches} lists them with \code{injective}, \code{reach},
-\code{unproven} and the \code{boundary}. Defaults to \code{NULL}.}
-
 \item{workCap}{Number of candidate sections the search of one block may try;
 reaching it is an entry in \code{limits}. Defaults to 4000.}
+
+\item{branch}{With a discrete symmetry of \code{symmetryDetection(mode = "global")}: the side of
+the fixed set of the symmetry as an inequality, e.g. \code{"k01 > k12"}, whose chart becomes the trafo: free values
+in the positive orthant map one to one onto that side, chained with the section. Without it
+every branch is in \verb{$alternatives}; \verb{$discrete$branches} lists them with \code{injective}, \code{reach},
+\code{unproven} and the \code{boundary}. Defaults to \code{NULL}.}
 
 \item{...}{Not used.}
 }
@@ -99,8 +93,7 @@ under \code{unproven}).}
 \item{\code{assumptions}}{what the reduction assumes: \code{domain} (the declared positive
 coordinates) and \code{starts} (the sides of switches declared at the start), with
 \code{errorBound}, the probability that a verified closed form is wrong.}
-\item{\code{limits}}{the work budgets and time limits that stopped a section or
-invariant search.}
+\item{\code{limits}}{the work caps that stopped a section or invariant search.}
 \item{\code{checks}}{\code{pins} and \code{invariants}, whether every pin holds under the trafo
 and every invariant of a block maps to the matching new parameter over Q, \code{failed},
 and with \code{check = TRUE} \code{loop}: the \code{directions} the reduced model has, the

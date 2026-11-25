@@ -148,3 +148,78 @@ resolveRecurrence <- function (variables) {
 
 
 
+
+
+## ---- exponential wraps -----------------------------------------------------------------------
+
+## TRUE if `e` is the symbol `sym`, possibly in redundant parentheses.
+.isBare <- function(e, sym) {
+  while (is.call(e) && length(e) == 2L && identical(e[[1L]], as.name("("))) e <- e[[2L]]
+  is.name(e) && identical(e, sym)
+}
+
+## TRUE if `sym` occurs in `e` once, as a summand with sign + and coefficient 1: `sym`, `a + sym`,
+## `(sym + a) - b`.
+.isSummand <- function(e, sym) {
+  if (sum(all.names(e) == as.character(sym)) != 1L) return(FALSE)
+  repeat {
+    if (.isBare(e, sym)) return(TRUE)
+    if (!is.call(e)) return(FALSE)
+    head <- e[[1L]]
+    if (identical(head, as.name("(")) || (identical(head, as.name("+")) && length(e) == 2L)) {
+      e <- e[[2L]]; next
+    }
+    if (identical(head, as.name("+")) && length(e) == 3L) {
+      e <- if (as.character(sym) %in% all.names(e[[2L]])) e[[2L]] else e[[3L]]; next
+    }
+    if (identical(head, as.name("-")) && length(e) == 3L && as.character(sym) %in% all.names(e[[2L]])) {
+      e <- e[[2L]]; next
+    }
+    return(FALSE)
+  }
+}
+
+## The base b of `e` when `e` is b^(...) with `sym` in the exponent: `exp()` (b = e), `exp10()`,
+## a numeric literal `b^`; bare `sym` in the exponent, or with `summand` also as a summand. NA else.
+.wrapBase <- function(e, sym, summand = FALSE) {
+  if (!is.call(e)) return(NA_real_)
+  head <- e[[1L]]
+  inside <- function(x) if (summand) .isSummand(x, sym) else .isBare(x, sym)
+  if (length(e) == 2L && inside(e[[2L]])) {
+    if (identical(head, as.name("exp"))) return(exp(1))
+    if (identical(head, as.name("exp10"))) return(10)
+  }
+  if (length(e) == 3L && identical(head, as.name("^")) && is.numeric(e[[2L]]) && length(e[[2L]]) == 1L &&
+      inside(e[[3L]])) return(e[[2L]])
+  NA_real_
+}
+
+## Per symbol of `ids` the base b if every occurrence in the expressions `eqs` (character, or a list
+## of them) is in a wrap b^(...) of one numeric base; NA for a linear or mixed occurrence, or none.
+.wrapBases <- function(eqs, ids, summand = FALSE) {
+  seen <- setNames(vector("list", length(ids)), ids)
+  walk <- function(e, skip) {
+    if (is.name(e)) {
+      s <- as.character(e)
+      if (s %in% ids && !s %in% skip) seen[[s]] <<- c(seen[[s]], NA_real_)
+      return(invisible())
+    }
+    if (!is.call(e)) return(invisible())
+    for (s in .setdiff(.intersect(all.names(e), ids), skip)) {
+      b <- .wrapBase(e, as.name(s), summand)
+      if (is.na(b)) next
+      seen[[s]] <<- c(seen[[s]], b)
+      skip <- c(skip, s)
+    }
+    for (x in as.list(e)[-1L]) walk(x, skip)
+    invisible()
+  }
+  for (rhs in unlist(lapply(eqs, function(v) as.character(unclass(v))))) {
+    if (is.na(rhs) || !is.na(suppressWarnings(as.numeric(rhs)))) next
+    walk(str2lang(rhs), character(0))
+  }
+  vapply(ids, function(s) {
+    u <- unique(seen[[s]])
+    if (length(u) == 1L) u else NA_real_
+  }, 0)
+}

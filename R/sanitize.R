@@ -2,9 +2,8 @@
 
 sanitizeConditions <- function(conditions) {
   
-  # The result names generated C sources and identifiers, so anything outside
-  # the C identifier alphabet has to go. `[[:punct:]]` is not enough: ICU counts
-  # `^` and `+` as symbols, and a non-ASCII condition name would survive it too.
+  # The result names generated C sources and identifiers: every run of
+  # characters outside the ASCII C identifier alphabet becomes one underscore.
   new <- str_replace_all(conditions, "[^A-Za-z0-9_]+", "_")
   return(new)
   

@@ -1028,6 +1028,7 @@ Xs.cppDE <- function(odemodel, forcings = NULL, events = NULL, names = NULL, con
 #'   changed with [controls()].
 #' @inheritSection dModfn Calling a dMod function
 #' @seealso [Xs()], [controls()]
+#' @example inst/examples/Xf.R
 #' @export
 Xf <- function(odemodel, ...) {
   UseMethod("Xf", odemodel)
@@ -1197,7 +1198,7 @@ Xf.cppDE <- function(odemodel, forcings = NULL, events = NULL, condition = NULL,
 #' # Generate a data.frame and corresponding prediction function
 #' timesD <- seq(0, 2*pi, 0.5)
 #' mydata <- data.frame(name = "A", time = timesD, value = sin(timesD), 
-#'                      row.names = paste0("par", 1:length(timesD)))
+#'                      row.names = paste0("par", seq_along(timesD)))
 #' x <- Xd(mydata)
 #' 
 #' # Evaluate the prediction function at different time points

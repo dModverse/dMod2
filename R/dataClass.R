@@ -192,7 +192,7 @@ plotData.datalist <- function(data, ..., scales = "free",
   legends <- list(if (all(frame$bloq == "no")) guides(shape = "none"),
                   if (nlevels(frame$condition) == 1L) guides(color = "none"))
 
-  p <- ggplot(frame, aes(x = time, y = value, ymin = value - sigma, ymax = value + sigma,
+  p <- .ggplotDMod2(frame, aes(x = time, y = value, ymin = value - sigma, ymax = value + sigma,
                          pch = bloq)) +
     layout +
     geom_point() +
@@ -218,6 +218,7 @@ plot.datalist <- function(x, ..., scales = "free",
 #' @param x any R object
 #' @return a data frame
 #' @rdname as.data.frame.dMod
+#' @example inst/examples/prdframe.R
 #' @export
 as.data.frame.datalist <- function(x, ...) {
 
@@ -249,6 +250,7 @@ as.data.frame.datalist <- function(x, ...) {
 #' datalist, or the unique combinations of the non-standard columns of a data
 #' frame.
 #' @seealso [as.datalist()]
+#' @example inst/examples/datalist.R
 #' @export
 covariates <- function(x, ...) {
   UseMethod("covariates", x)

@@ -21,6 +21,17 @@ replace the detected basis, also as parameters of \code{\link[=Pimpl]{Pimpl()}}.
 expression must be linear in the states and conserved by the reactions, and
 together they must span as many quantities as \code{\link[=conservedQuantities]{conservedQuantities()}} finds.
 }
+\examples{
+## A reversible conversion conserves A + B
+el <- addReaction(eqnlist(), "A", "B", "k1*A")
+el <- addReaction(el, "B", "A", "k2*B")
+conservedQuantities(el)
+
+## Name the conserved quantity, then return to the detected basis
+el <- customTotals(el, list(total = "A + B"))
+el$totals
+el <- customTotals(el, NULL)
+}
 \seealso{
 \code{\link[=conservedQuantities]{conservedQuantities()}}
 }

@@ -25,6 +25,8 @@
 #'       states when an event changes a compartment volume.}
 #'     \item{`eventsSource`}{An [eventlist] or `NULL`, the event assignments
 #'       of the SBML file only.}
+#'     \item{`compartmentInits`}{Named character, the size at the start of each
+#'       compartment an event assigns to; such a compartment keeps the id as volume.}
 #'     \item{`renamed`}{Named character, the new ids of SBML ids that are no
 #'       valid R or C++ names, named by the old ids.}
 #'   }
@@ -63,14 +65,14 @@ importSbml <- function(modelpath, keep = NULL) {
 
   # libsbml writes natural log as `ln(x)`, R and C expect `log(x)`. Every
   # formula passes through here; the leading boundary leaves `eln` intact.
-  .normalise_formula <- function(s) {
+  .normalizeFormula <- function(s) {
     if (length(s) == 0L) return(s)
     s <- stringr::str_replace_all(s, "\\*\\*", "^")
     s <- stringr::str_replace_all(s, "(^|[^A-Za-z0-9_.])ln\\(", "\\1log(")
     s
   }
 
-  v <- .normalise_formula(sbml[["v"]])
+  v <- .normalizeFormula(sbml[["v"]])
 
   states <- sbml[["stateNames"]]
 
@@ -79,13 +81,24 @@ importSbml <- function(modelpath, keep = NULL) {
   compartmentOf <- character(0)
   comp_json <- sbml[["compartments"]]
   spc_json  <- sbml[["speciesCompartments"]]
+  # A compartment an event assigns to keeps the id as volume, so the kinetic laws follow the event;
+  # the size at the start is in `compartmentInits`.
+  ev_targets <- unlist(lapply(sbml[["events"]], function(ev)
+    vapply(ev$assignments, function(a) a$variable, "")))
+  compartmentInits <- character(0)
   if (!is.null(comp_json) && length(comp_json) > 0L) {
     for (c in comp_json) {
       # A unit-size compartment becomes the literal "1", keeping the compartment id out of
       # the kinetic laws; otherwise the id is a volume symbol the trafo can set.
       trivial <- !is.null(c$size) && is.numeric(c$size) && isTRUE(c$size == 1)
+      if (c$id %in% ev_targets) {
+        compartmentInits[[c$id]] <- if (!is.null(c$sizeAssignment)) .normalizeFormula(c$sizeAssignment)
+                                    else if (is.numeric(c$size)) format(c$size, digits = 17) else "1"
+        compartments[[c$id]] <- list(volume = c$id, rule = NULL)
+        next
+      }
       # An InitialAssignment on the compartment is the symbolic volume.
-      volume <- if (!is.null(c$sizeAssignment)) .normalise_formula(c$sizeAssignment)
+      volume <- if (!is.null(c$sizeAssignment)) .normalizeFormula(c$sizeAssignment)
                 else if (trivial) "1" else c$id
       compartments[[c$id]] <- list(volume = volume, rule = NULL)
     }
@@ -125,7 +138,7 @@ importSbml <- function(modelpath, keep = NULL) {
   amountStates <- intersect(unlist(sbml[["amountSpecies"]]), states)
 
   pars <- setNames(sbml[["p"]], sbml[["parameterNames"]])
-  x0 <- setNames(.normalise_formula(sbml[["x0"]]),
+  x0 <- setNames(.normalizeFormula(sbml[["x0"]]),
                  sbml[["stateNames"]])
 
   # AssignmentRules `lhs := rhs` are inlined into rates and initials up to a
@@ -136,21 +149,21 @@ importSbml <- function(modelpath, keep = NULL) {
   # RateRule is promoted to a state below instead.
   par_ia <- sbml[["parameterAssignments"]]
   for (nm in intersect(keep, names(par_ia))) {
-    v0 <- tryCatch(eval(parse(text = .normalise_formula(par_ia[[nm]])), baseenv()),
+    v0 <- tryCatch(eval(str2lang(.normalizeFormula(par_ia[[nm]])), .formulaEnv()),
                    error = function(e) NULL)
     if (is.numeric(v0) && length(v0) == 1L && nm %in% names(pars)) pars[[nm]] <- v0
   }
   ia_lhs <- setdiff(names(par_ia),
                     c(names(rules), names(sbml[["rateRules"]]), keep))
   if (length(ia_lhs)) {
-    ia_rhs <- .normalise_formula(unlist(par_ia[ia_lhs], use.names = FALSE))
+    ia_rhs <- .normalizeFormula(unlist(par_ia[ia_lhs], use.names = FALSE))
     if (length(states))
       ia_rhs <- replaceSymbols(states, paste0("(", x0[states], ")"), ia_rhs)
     rules <- c(rules, setNames(as.list(ia_rhs), ia_lhs))
   }
   if (length(rules)) {
     rule_lhs <- names(rules)
-    rule_rhs <- .normalise_formula(unlist(rules, use.names = FALSE))
+    rule_rhs <- .normalizeFormula(unlist(rules, use.names = FALSE))
     # Parenthesized so substitution into a sub-expression keeps precedence.
     rule_rhs <- paste0("(", rule_rhs, ")")
     max_iter <- length(rule_lhs) + 1L
@@ -169,7 +182,7 @@ importSbml <- function(modelpath, keep = NULL) {
   rate_rules <- sbml[["rateRules"]]
   if (length(rate_rules)) {
     rr_lhs <- names(rate_rules)
-    rr_rhs <- .normalise_formula(unlist(rate_rules, use.names = FALSE))
+    rr_rhs <- .normalizeFormula(unlist(rate_rules, use.names = FALSE))
     # Inline assignment-rule LHSs into the rate-rule RHSs too, so a RateRule
     # that references a rule-defined symbol doesn't keep it as a free var.
     if (length(rules)) {
@@ -187,7 +200,7 @@ importSbml <- function(modelpath, keep = NULL) {
       par_ia <- sbml[["parameterAssignments"]]
       init <- vapply(promote, function(nm) {
         ia <- par_ia[[nm]]
-        if (!is.null(ia) && nzchar(ia)) return(.normalise_formula(ia))
+        if (!is.null(ia) && nzchar(ia)) return(.normalizeFormula(ia))
         v0 <- suppressWarnings(as.numeric(pars[nm]))
         if (length(v0) != 1L || is.na(v0)) "0" else format(v0, digits = 17)
       }, character(1))
@@ -238,7 +251,8 @@ importSbml <- function(modelpath, keep = NULL) {
 
   # ---- events ----
   # One "replace" row per eventAssignment. A `time >= T` trigger sets `time`,
-  # any other trigger becomes the root `lhs - (rhs)`.
+  # any other trigger becomes the root `lhs - (rhs)`, which cppDE fires at crossings in both
+  # directions; a pair `lhs >= rhs`, `lhs <= rhs` with the same assignments is one root event.
   events_json <- sbml[["events"]]
   events_df <- NULL
   events_src <- NULL
@@ -248,6 +262,7 @@ importSbml <- function(modelpath, keep = NULL) {
     # compartment rescales are regenerated on the next import, so exporting
     # them would apply them twice.
     rows_src <- list()
+    down <- down_src <- logical(0)
     cmp_pat <- "^\\s*(.+?)\\s*(>=|>|<=|<|==|!=)\\s*(.+?)\\s*$"
     for (ev in events_json) {
       tt <- ev[["triggerTime"]]
@@ -257,8 +272,10 @@ importSbml <- function(modelpath, keep = NULL) {
                   else if (length(tt) && nzchar(tt)) as.character(tt)
                   else NA
       root_val <- NA_character_
+      falling <- FALSE
       if (is.na(time_val) && length(tf) && nzchar(tf)) {
         m <- regmatches(tf, regexec(cmp_pat, tf))[[1L]]
+        falling <- length(m) == 4L && m[3L] %in% c("<=", "<")
         root_val <- if (length(m) == 4L)
                       paste0("(", m[2L], ") - (", m[4L], ")")
                     else
@@ -268,7 +285,7 @@ importSbml <- function(modelpath, keep = NULL) {
         # An event assignment to a compartment changes the compartment size while species
         # amounts stay put, so concentrations scale inversely. Emit the
         # rescale first, while the old volume is still in effect.
-        new_val <- .normalise_formula(a$formula)
+        new_val <- .normalizeFormula(a$formula)
         if (!is.null(compartmentOf) && a$variable %in% names(compartments)) {
           old_vol <- compartments[[a$variable]]$volume
           inside  <- setdiff(names(compartmentOf)[compartmentOf == a$variable],
@@ -281,6 +298,7 @@ importSbml <- function(modelpath, keep = NULL) {
               root   = root_val,
               method = "replace",
               stringsAsFactors = FALSE)
+          down <- c(down, falling)
         }
         src_row <- data.frame(
           var    = a$variable,
@@ -292,11 +310,18 @@ importSbml <- function(modelpath, keep = NULL) {
         )
         rows[[length(rows) + 1L]] <- src_row
         rows_src[[length(rows_src) + 1L]] <- src_row
+        down <- c(down, falling)
+        down_src <- c(down_src, falling)
       }
     }
+    # a falling row whose rising twin exists is the second half of one root event
+    paired <- function(df, falling) {
+      key <- do.call(paste, c(df[c("var", "value", "root")], sep = "\r"))
+      df[!(falling & key %in% key[!falling]), , drop = FALSE]
+    }
     if (length(rows)) {
-      events_df <- as.eventlist(do.call(rbind, rows))
-      events_src <- as.eventlist(do.call(rbind, rows_src))
+      events_df <- as.eventlist(paired(do.call(rbind, rows), down))
+      events_src <- as.eventlist(paired(do.call(rbind, rows_src), down_src))
     }
   }
 
@@ -304,6 +329,7 @@ importSbml <- function(modelpath, keep = NULL) {
               observables = observables, assignmentRules = rules,
               events = events_df,
               eventsSource = events_src,
+              compartmentInits = compartmentInits,
               renamed = attr(sbml, "renamed") %||% character(0))
   out
 }
@@ -322,6 +348,40 @@ importSbml <- function(modelpath, keep = NULL) {
   "struct", "switch", "template", "this", "throw", "true", "try", "typedef",
   "typeid", "typename", "union", "unsigned", "using", "virtual", "void",
   "volatile", "wchar_t", "while", "xor", "std")
+
+
+# Formulas of SBML and PEtab files are evaluated here: an environment on emptyenv() with the
+# arithmetic, the comparisons and the functions of the expression language of cppDE, nothing else.
+.formulaEnv <- local({
+  env <- NULL
+  function() {
+    if (!is.null(env)) return(env)
+    e <- new.env(parent = emptyenv())
+    base <- c("(", "+", "-", "*", "/", "^", "<", "<=", ">", ">=", "==", "!=", "&&", "||", "!",
+              "&", "|", "exp", "log", "log2", "log10", "sqrt", "sin", "cos", "tan", "asin", "acos",
+              "atan", "atan2", "sinh", "cosh", "tanh", "asinh", "acosh", "atanh", "abs", "min", "max",
+              "floor", "ceiling", "round", "trunc", "sign", "ifelse", "pi")
+    for (f in base) assign(f, get(f, envir = baseenv()), envir = e)
+    fns <- list(
+      ln = log, exp2 = function(x) 2^x, exp10 = function(x) 10^x, cbrt = function(x) sign(x) * abs(x)^(1/3),
+      pow = function(x, y) x^y, root = function(x, n) x^(1/n), ceil = ceiling,
+      cot = function(x) 1/tan(x), sec = function(x) 1/cos(x), csc = function(x) 1/sin(x),
+      acot = function(x) atan(1/x), asec = function(x) acos(1/x), acsc = function(x) asin(1/x),
+      coth = function(x) 1/tanh(x), sech = function(x) 1/cosh(x), csch = function(x) 1/sinh(x),
+      acoth = function(x) atanh(1/x), asech = function(x) acosh(1/x), acsch = function(x) asinh(1/x),
+      erf = function(x) 2 * stats::pnorm(x * sqrt(2)) - 1, erfc = function(x) 2 * stats::pnorm(-x * sqrt(2)),
+      Heaviside = function(x) as.numeric(x > 0),
+      piecewise = function(...) {
+        a <- list(...); n <- length(a)
+        for (i in seq_len(n %/% 2L)) if (isTRUE(as.logical(a[[2L * i]]))) return(a[[2L * i - 1L]])
+        if (n %% 2L) a[[n]] else 0
+      })
+    list2env(fns, envir = e)
+    lockEnvironment(e, bindings = TRUE)
+    env <<- e
+    e
+  }
+})
 
 
 # Reserved in R, so a bare identifier of this name cannot be parsed.
@@ -434,8 +494,10 @@ importSbml <- function(modelpath, keep = NULL) {
 #' @param filepath Path of the SBML file to write.
 #' @param modelID SBML model identifier. Defaults to `"dMod_export"`.
 #' @param events Object of class [eventlist] to emit as `<listOfEvents>`, or
-#'   `NULL`. Rows sharing a trigger become one `<event>`. A compartment an event assigns to is written
-#'   as non-constant. Default `NULL`.
+#'   `NULL`. Rows sharing a trigger become one `<event>`. A root event becomes two events with
+#'   the triggers `root >= 0` and `root <= 0`, initially true, so that the SBML model fires at
+#'   crossings in both directions and not at the start, as cppDE does. A compartment an event
+#'   assigns to is written as non-constant. Default `NULL`.
 #' @return `filepath`, invisibly.
 #' @seealso [importSbml()], [exportPEtab()]
 #' @inherit importSbml examples
@@ -450,7 +512,8 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
   # parameter-only SBML document.
   if (length(eqnlist$states) > 0L &&
       (is.null(eqnlist$compartments) || is.null(eqnlist$compartmentOf)))
-    stop("`eqnlist` must have populated compartments/compartmentOf. Use the updated constructor.")
+    stop("exportSbml: `eqnlist` has no compartments; assign them with assignCompartment().",
+         call. = FALSE)
 
   # Compartments: numeric size when the volume expression parses as numeric;
   # otherwise 1.0 and rely on the homonymous parameter for the symbolic value.
@@ -509,7 +572,7 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
   }
 
   # Each row of the stoichiometric matrix becomes one reaction. The kinetic
-  # law is `rate * V_ref`, the α-bridge identity in the export direction.
+  # law is `rate * V_ref`, the inverse of the division by the volume on import.
   smatrix <- eqnlist$smatrix
   vref_vol <- .refVolumes(.refCompartments(smatrix, eqnlist$compartmentOf[eqnlist$states],
                                            eqnlist$reactionCompartment, eqnlist$description),
@@ -548,20 +611,24 @@ exportSbml <- function(eqnlist, parameters = NULL, inits = NULL, filepath,
   event_list <- list()
   if (!is.null(events) && nrow(events)) {
     ev <- as.data.frame(events, stringsAsFactors = FALSE)
-    trig <- ifelse(is.na(ev$time), as.character(ev$root),
-                   paste("time >=", ev$time))
+    # an SBML trigger fires when it turns true: a root that cppDE fires on crossings in both
+    # directions becomes two triggers, true beforehand so that neither fires at the start
+    isRoot <- is.na(ev$time)
+    key <- ifelse(isRoot, as.character(ev$root), paste("time >=", ev$time))
     # SBML assigns a value: an added or multiplied value becomes the formula on the old one
     formula <- function(var, value, method)
       switch(if (is.null(method) || is.na(method)) "replace" else as.character(method),
              replace = as.character(value),
              add = sprintf("%s + (%s)", var, value), multiply = sprintf("%s * (%s)", var, value),
              stop("exportSbml: event method ", method, " is not replace, add or multiply.", call. = FALSE))
-    for (t in unique(trig)) {
-      rows <- ev[trig == t, , drop = FALSE]
-      event_list[[length(event_list) + 1L]] <- list(
-        trigger = t,
-        assignments = lapply(seq_len(nrow(rows)), function(i)
-          list(variable = rows$var[i], formula = formula(rows$var[i], rows$value[i], rows$method[i]))))
+    for (k in unique(key)) {
+      rows <- ev[key == k, , drop = FALSE]
+      assignments <- lapply(seq_len(nrow(rows)), function(i)
+        list(variable = rows$var[i], formula = formula(rows$var[i], rows$value[i], rows$method[i])))
+      triggers <- if (isRoot[match(k, key)]) paste0("(", k, c(") >= 0", ") <= 0")) else k
+      for (t in triggers)
+        event_list[[length(event_list) + 1L]] <- list(trigger = t, initialValue = !identical(t, k),
+                                                      assignments = assignments)
     }
   }
 

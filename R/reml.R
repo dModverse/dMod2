@@ -29,13 +29,9 @@
     for (cn in conditions) {
       errout <- NULL
       if (!is.null(term$errfn)) {
-        pinner     <- getParameters(prediction[[cn]])
-        fixedinner <- pinner[attr(pinner, "fixed")]
-        errout <- term$errfn(
-          out   = prediction[[cn]],
-          pars  = as.parvec(pinner[setdiff(names(pinner), names(fixed))]),
-          fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE),
-          conditions = cn)[[cn]]
+        inner  <- .errorModelArgs(prediction[[cn]], fixed)
+        errout <- term$errfn(out = prediction[[cn]], pars = inner$pars, fixed = inner$fixed,
+                             conditions = cn)[[cn]]
       }
       frames <- c(frames, list(res(term$data[[cn]], prediction[[cn]], errout)))
       labels <- c(labels, if (length(spec) > 1L) paste0(t, ":", cn) else cn)
@@ -45,6 +41,17 @@
   if (!length(frames))
     stop("reml: the objective holds no data to evaluate.", call. = FALSE)
   structure(frames, names = labels)
+}
+
+
+# The inner parameters of a prediction as an error model takes them: `pars` without
+# the outer `fixed`, and `fixed` those plus the ones the prediction marks fixed. The
+# marker is empty without sensitivities, so the outer names always count.
+.errorModelArgs <- function(prediction, fixed) {
+  pinner <- getParameters(prediction)
+  fixedinner <- pinner[.union(attr(pinner, "fixed"), .intersect(names(pinner), names(fixed)))]
+  list(pars  = as.parvec(pinner[.setdiff(names(pinner), names(fixed))]),
+       fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
 }
 
 
@@ -68,14 +75,14 @@
 
 # Stack the per-row derivative blocks of every frame into one matrix over
 # `cols`, filling with zero where a term lacks a parameter.
-.remlBlocks <- function(frames, which, cols) {
+.remlBlocks <- function(frames, what, cols) {
 
   n <- vapply(frames, nrow, 0L)
   out <- matrix(0, sum(n), length(cols), dimnames = list(NULL, cols))
   seen <- character(0)
   off <- 0L
   for (i in seq_along(frames)) {
-    d <- attr(frames[[i]], which)
+    d <- attr(frames[[i]], what)
     idx <- off + seq_len(n[i])
     off <- off + n[i]
     if (is.null(d)) next

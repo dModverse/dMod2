@@ -1,4 +1,4 @@
-# Spike-and-slab random effects, 0 or from N(0, tau^2) with probability prob, and Dirichlet-process ones, a
+# Spike-and-slab random effects of the default spike 0 and slab N(0, tau^2), and Dirichlet-process ones, a
 # partition of the groups under the Ewens prior with one N(0, tau^2) value per block but that of the population
 # value; derived in the methods article Sparsity priors.
 
@@ -65,10 +65,10 @@
         # the slab values of the group are integrated out: the Schur complement keeps the clusters
         keep <- seq_len(length(h) + length(new))
         if (length(on)) {
-          drop <- setdiff(seq_len(d), keep)
-          Sinv <- solve(L2[drop, drop, drop = FALSE])
-          h2 <- h2[keep] - drop(L2[keep, drop, drop = FALSE] %*% Sinv %*% h2[drop])
-          L2 <- L2[keep, keep, drop = FALSE] - L2[keep, drop, drop = FALSE] %*% Sinv %*% L2[drop, keep, drop = FALSE]
+          out <- setdiff(seq_len(d), keep)
+          Sinv <- solve(L2[out, out, drop = FALSE])
+          h2 <- h2[keep] - drop(L2[keep, out, drop = FALSE] %*% Sinv %*% h2[out])
+          L2 <- L2[keep, keep, drop = FALSE] - L2[keep, out, drop = FALSE] %*% Sinv %*% L2[out, keep, drop = FALSE]
           lt <- lt[keep]
           cc <- value - logIntegral(L2, h2, lt)
         }

@@ -601,3 +601,23 @@ test_that("load.parlist reads the fits in the order of their numbers", {
                           file.path(d, paste0("fit-", i, ".Rda")))
   expect_equal(vapply(load.parlist(d), function(f) f$value, 1), 1:11)
 })
+
+test_that("confint extrapolates a flat branch against the span of the whole branch", {
+  x <- seq(-10, 10, by = 1)
+  pr <- parframe(data.frame(value = 0.1 * abs(x), constraint = x, whichPar = "a", a = 1 + x),
+                 parameters = "a", metanames = c("value", "constraint", "whichPar"))
+  ci <- confint(pr, val.column = "value")
+  dx <- (qchisq(0.95, 1) - 1) / 0.1 + 10
+  expect_equal(unname(unlist(ci[1, c("lower", "upper")])), 1 + c(-1, 1) * dx)
+})
+
+test_that("mstrust keeps rinit, rmax and n from the objective when the optimizer lacks them", {
+  obj <- function(pars, ...) {
+    if (length(list(...))) stop("unexpected arguments: ", toString(names(list(...))))
+    list(value = sum(pars^2))
+  }
+  opt <- function(objfun, parinit, ...)
+    list(value = objfun(parinit, ...)$value, argument = parinit, converged = TRUE, iterations = 0L)
+  fits <- mstrust(obj, c(a = 0, b = 0), fits = 2, sd = 1, cores = 1, optmethod = opt)
+  expect_false(any(vapply(fits, function(f) !is.null(f$error), TRUE)))
+})

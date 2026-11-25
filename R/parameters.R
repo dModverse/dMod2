@@ -891,7 +891,6 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
   cons <- if (length(tn))
     setNames(paste0("(", unlist(norm$totals), ") - ", tn), tn) else character(0)
   all_exprs <- c(unclass(norm$trafo[dependent]), cons)
-  n_eq      <- length(all_exprs)
   parms_all <- intersect(norm$parms_all, getSymbols(all_exprs))
 
   PEval <- suppressWarnings(cppDE::cppFUN(

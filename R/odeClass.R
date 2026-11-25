@@ -217,7 +217,7 @@ odemodel <- function(f, derivMode = "forward",
             as.eventlist(events.func),
             stringsAsFactors = FALSE)
         } else {
-          events <- do.call(rbind, lapply(1:nrow(events.func), function(i) {
+          events <- do.call(rbind, lapply(seq_len(nrow(events.func)), function(i) {
             rbind(
               as.eventlist(events.sens[[i]]),
               as.eventlist(events.func[i,]),

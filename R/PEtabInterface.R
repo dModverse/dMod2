@@ -201,12 +201,16 @@ readPEtabTables <- function(yamlPath) {
 
   ids   <- as.character(df$conditionId)
   names_ <- as.character(df$conditionName)
-  usable <- !is.na(names_) & nzchar(trimws(names_)) &
-            !names_ %in% ids[!ids %in% names_] &
-            !duplicated(names_) & !duplicated(names_, fromLast = TRUE)
+  usable <- !is.na(names_) & nzchar(trimws(names_))
+  # a name shared with another key falls back to the id, until the keys are unique
+  repeat {
+    key <- ifelse(usable, names_, ids)
+    clash <- usable & key %in% key[duplicated(key)]
+    if (!any(clash)) break
+    usable[clash] <- FALSE
+  }
   if (!any(usable)) return(c(tables, list(conditionIds = NULL)))
 
-  key <- ifelse(usable, names_, ids)
   map <- setNames(ids, key)
 
   df$conditionId <- key
@@ -555,6 +559,8 @@ readPEtabTables <- function(yamlPath) {
     out
   }
 
+  if (anyNA(df$estimate) || !all(df$estimate %in% c(0, 1)))
+    stop("parameters.tsv `estimate` must be 1 or 0 for every parameter.", call. = FALSE)
   pouter_idx <- which(df$estimate == 1)
   fixed_idx  <- which(df$estimate == 0)
 
@@ -995,7 +1001,7 @@ readPEtabTables <- function(yamlPath) {
 
   # Group by (simCondId, preeq); decide merge-vs-split per group.
   group_key <- paste(m$simulationConditionId, m$preequilibrationConditionId,
-                     sep = "")
+                     sep = "\001")
   for (gk in unique(group_key)) {
     ix <- which(group_key == gk)
     sc   <- m$simulationConditionId[ix[1L]]
@@ -1007,7 +1013,7 @@ readPEtabTables <- function(yamlPath) {
     consistent <- all(vapply(by_obs, function(rs) {
       length(unique(paste(m$observableParameters[rs],
                           m$noiseParameters[rs],
-                          sep = ""))) <= 1L
+                          sep = "\001"))) <= 1L
     }, logical(1)))
 
     if (consistent) {
@@ -1026,7 +1032,7 @@ readPEtabTables <- function(yamlPath) {
     }
 
     # ----- split: one sub-condition per distinct (obsPar, noisePar) tuple -----
-    tuple_key <- paste(peq_lab[ix], obs_lab[ix], noi_lab[ix], sep = "")
+    tuple_key <- paste(peq_lab[ix], obs_lab[ix], noi_lab[ix], sep = "\001")
     keys_here <- unique(tuple_key)
     suffixes <- vapply(keys_here, function(k) {
       jx <- ix[tuple_key == k][1L]
@@ -1110,14 +1116,13 @@ readPEtabTables <- function(yamlPath) {
 }
 
 
-# Internal: evaluate a formula string to a finite constant in baseenv(), or
+# Internal: evaluate a formula string to a finite constant in .formulaEnv(), or
 # NA_real_ when it is not numeric, not finite or has a free symbol.
 .petab_eval_constant <- function(formula) {
   if (is.na(formula) || !nzchar(formula)) return(NA_real_)
   num <- suppressWarnings(as.numeric(formula))
   if (!is.na(num)) return(num)
-  v <- tryCatch(eval(parse(text = formula), envir = baseenv()),
-                error = function(e) NULL)
+  v <- tryCatch(eval(str2lang(formula), .formulaEnv()), error = function(e) NULL)
   if (is.numeric(v) && length(v) == 1L && is.finite(v)) v else NA_real_
 }
 
@@ -1128,12 +1133,7 @@ readPEtabTables <- function(yamlPath) {
 .petab_vanishes <- function(e, zero = character(0)) {
   if (is.null(e)) return(FALSE)
   syms <- setdiff(all.vars(e), "pi")
-  env  <- new.env(parent = baseenv())
-  env$piecewise <- function(...) {
-    a <- list(...); n <- length(a)
-    for (i in seq_len(n %/% 2L)) if (isTRUE(a[[2L * i]])) return(a[[2L * i - 1L]])
-    if (n %% 2L) a[[n]] else 0
-  }
+  env  <- .formulaEnv()
   k <- seq_along(syms)
   for (probe in list(exp(sin(k)), exp(cos(k)))) {
     vals <- setNames(as.list(probe), syms)
@@ -1590,6 +1590,7 @@ readPEtabTables <- function(yamlPath) {
   # place: other initial expressions (an amount species is conc * volume) still
   # reference it as an outer symbol.
   init <- vapply(extra, function(nm) {
+    if (nm %in% names(sbml$compartmentInits)) return(sbml$compartmentInits[[nm]])
     if (nm %in% names(sbml$pars))
       return(format(unname(sbml$pars[nm]), digits = 17))
     vol <- r$compartments[[nm]]$volume
@@ -2352,55 +2353,23 @@ print.petabproblem <- function(x, ...) {
 ## The exporter inverts `.petab_build_trafo` on `getEquations(p)`: scale wraps
 ## are stripped, then each LHS is classified (see .petab_classify_lhs).
 
-# Internal: TRUE if `e` is the symbol `op_sym`, possibly in redundant
-# parentheses as in `10^(K)`.
-.petab_is_bare <- function(e, op_sym) {
-  if (is.symbol(e) && identical(e, op_sym)) return(TRUE)
-  if (is.call(e) && length(e) == 2L &&
-      identical(e[[1L]], as.symbol("(")) &&
-      .petab_is_bare(e[[2L]], op_sym)) return(TRUE)
-  FALSE
+# Internal: the PEtab scale of a base of .wrapBase(): "log" for e, "log10" for 10, else NA.
+.petab_base_scale <- function(b) {
+  if (is.na(b)) return(NA_character_)
+  if (b == exp(1)) return("log")
+  if (b == 10) return("log10")
+  NA_character_
 }
 
 # Internal: scale encoded by `e` if it is a clean wrap of `op_sym`:
 # `exp(op)` -> "log", `10^(op)` or `exp10(op)` -> "log10", otherwise NA.
-.petab_wrap_scale <- function(e, op_sym) {
-  if (!is.call(e)) return(NA_character_)
-  head <- e[[1L]]
-  if (length(e) == 2L && .petab_is_bare(e[[2L]], op_sym)) {
-    if (identical(head, as.symbol("exp")))   return("log")
-    if (identical(head, as.symbol("exp10"))) return("log10")
-  }
-  if (length(e) == 3L && identical(head, as.symbol("^")) &&
-      is.numeric(e[[2L]]) && length(e[[2L]]) == 1L && e[[2L]] == 10 &&
-      .petab_is_bare(e[[3L]], op_sym)) return("log10")
-  NA_character_
-}
+.petab_wrap_scale <- function(e, op_sym) .petab_base_scale(.wrapBase(e, op_sym))
 
 # Internal: parameter scale of each outer id read off the trafo: "log" if every
 # occurrence is a clean `exp(.)` wrap, "log10" for `10^(.)` / `exp10(.)`, else "lin".
 .petab_detect_scales <- function(eqs, ids) {
-  seen <- setNames(vector("list", length(ids)), ids)
-  walk <- function(e) {
-    if (is.call(e)) {
-      for (op in ids) {
-        sc <- .petab_wrap_scale(e, as.symbol(op))
-        if (!is.na(sc)) { seen[[op]] <<- c(seen[[op]], sc); return(invisible()) }
-      }
-      for (i in seq_along(e)[-1L]) walk(e[[i]])
-    } else if (is.symbol(e) && as.character(e) %in% ids) {
-      seen[[as.character(e)]] <<- c(seen[[as.character(e)]], "lin")
-    }
-    invisible()
-  }
-  for (eqv in eqs) for (rhs in as.character(unclass(eqv))) {
-    if (!is.na(suppressWarnings(as.numeric(rhs)))) next
-    walk(parse(text = rhs, keep.source = FALSE)[[1L]])
-  }
-  vapply(ids, function(op) {
-    u <- unique(seen[[op]])
-    if (length(u) == 1L) u else "lin"
-  }, character(1))
+  sc <- vapply(.wrapBases(eqs, ids), .petab_base_scale, "")
+  setNames(ifelse(is.na(sc), "lin", sc), ids)
 }
 
 # Internal: SBML and PEtab math know no `exp10`; rewrite it as `10^(.)`.
@@ -2707,7 +2676,7 @@ print.petabproblem <- function(x, ...) {
       if (length(miss))
         stop("exportPEtab: the event on ", var, " depends on ", paste(miss, collapse = ", "),
              ", which is no parameter of the problem.", call. = FALSE)
-      num <- tryCatch(eval(str2lang(v), baseenv()), error = function(e) NULL)
+      num <- tryCatch(eval(str2lang(v), .formulaEnv()), error = function(e) NULL)
       if (is.numeric(num) && length(num) == 1L) format(num, digits = 17) else v
     }, "")
     cdf[[var]] <- NA_character_

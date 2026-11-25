@@ -21,8 +21,8 @@ formulas, or a parameter function \code{\link[=P]{P()}} built from one.}
 An object of class \code{randomeffects}, a list with \code{terms} (one row
 per random effect column: \code{symbol}, \code{origin} (the formula), \code{term},
 \code{column}, \code{group}, \code{id}, \code{dist}, the fixed hyperparameters \code{prob},
-\code{concentration} and \code{tau} (\code{NA} where estimated) and \code{stem}, the name
-stem of the etas),
+\code{concentration} and \code{tau} (\code{NA} where estimated), the given \code{mean} and
+\code{spike} of spike-and-slab terms and \code{stem}, the name stem of the etas),
 \code{blocks} (groups of rows: the normal rows of a block are correlated, the
 rows of a spike-and-slab or Dirichlet-process block share the
 hyperparameters), \code{subjects} (the groups of each
@@ -56,7 +56,11 @@ other columns are \verb{cl_<column>} (\code{cl_wt}, \code{cl_log_wt}).}
 \code{(1 | p | ID)} with an ID \code{p}: terms with the same ID and grouping are
 correlated across formulas, the columns of one term are correlated, other
 terms are independent. \code{gr(ID, dist = spikeSlab())} instead of \code{ID} sets
-the distribution, see \code{\link[=normal]{normal()}}. The random effect of a group is
+the distribution, see \code{\link[=normal]{normal()}}; \code{gr(dist = )} without a grouping
+makes one group \code{all} of all conditions, so that with \verb{0 +} the random
+effect is the parameter itself, as in
+\code{k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf)))} for the
+selection of reaction rates on the log scale. The random effect of a group is
 \verb{eta_<symbol>_<group>} for the intercept and
 \verb{eta_<symbol>_<column>_<group>} for a slope; a symbol with random terms
 in a second grouping gets the grouping name in the stem, \verb{eta_cl_center_<group>}.}

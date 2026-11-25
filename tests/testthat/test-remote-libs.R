@@ -505,3 +505,9 @@ test_that("a failing task returns the error, a running job keeps the name, and t
   job$purge(local = TRUE)
   expect_length(list.files("."), 0L)
 })
+
+test_that("distributedComputing(wait = TRUE) polls ssh nodes and queues every 10 s", {
+  expect_identical(dMod2:::.pollInterval(list(hosts = "localhost", slurm = FALSE)), 1)
+  expect_identical(dMod2:::.pollInterval(list(hosts = c("localhost", "h1"), slurm = FALSE)), 10)
+  expect_identical(dMod2:::.pollInterval(list(hosts = "h1", slurm = TRUE)), 10)
+})

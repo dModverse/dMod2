@@ -60,7 +60,7 @@ test_that("mstrust routes the arguments to the optimizer, the sampler and the ob
   fits <- mstrust(obj, c(a = 0, b = 0), fits = 2, optmethod = myopt,
                   samplefun = mysample, spread = 0.5, iterlim = 7, scale = 10)
   expect_identical(seen$iterlim, 7)
-  expect_identical(sort(seen$dots), c("rinit", "rmax", "scale"))
+  expect_identical(seen$dots, "scale")
   expect_equal(fits[[1]]$parinit, c(a = 0.5, b = 1))
   expect_equal(fits[[2]]$value, 12.5)
   run <- attr(fits, "run")
@@ -114,6 +114,13 @@ test_that("reduceReplicates gives mean, standard error and the stable columns", 
   expect_snapshot(pinFrame(suppressMessages(reduceReplicates(d[, -7]))))
 })
 
+test_that("reduceReplicates reports dropped columns only when there are some", {
+  d <- replicateData()[, c("name", "time", "value", "condition", "dose")]
+  expect_no_message(reduceReplicates(d))
+  expect_no_message(reduceReplicates(d, select = c("condition", "dose")))
+  expect_message(reduceReplicates(replicateData()), "Dropped columns: batch")
+})
+
 test_that("reduceReplicates checks the input", {
   d <- replicateData()
   expect_error(reduceReplicates(d[, -1]),
@@ -148,11 +155,11 @@ test_that("fitErrorModel fits per group and returns the standard error", {
 
   full <- fitErrorModel(red, factors = "name", par = c(s0 = -4, srel = -3), blather = TRUE)
   expect_identical(names(full), c(names(red), "s0", "srel", "cbLower68", "cbUpper68",
-                                  "cbLower95", "cbUpper95", "condidnt", "sigmaLS"))
+                                  "cbLower95", "cbUpper95", "group", "sigmaLS"))
   expect_identical(attr(full, "errorModel"), "exp(s0)+exp(srel)*x^2")
   expect_identical(full$sigma, out$sigma)
   expect_identical(full$sigmaLS, red$sigma)
-  expect_type(full$condidnt, "character")
+  expect_type(full$group, "character")
   expect_snapshot(print(roundNumeric(full)))
 
   # bounds, named or positional; two factors give one group per combination
@@ -164,7 +171,23 @@ test_that("fitErrorModel fits per group and returns the standard error", {
   expect_equal(pos$srel, bnd$srel)
   two <- fitErrorModel(red, factors = c("name", "condition"), par = c(s0 = -4, srel = -3),
                        blather = TRUE)
-  expect_identical(unique(as.character(two$condidnt)), c("y ctrl", "z ctrl"))
+  expect_identical(unique(as.character(two$group)), c("y ctrl", "z ctrl"))
+})
+
+test_that("fitErrorModel optimizes with the symbolic gradient of the error model", {
+  skip_if_not_installed("optimx")
+  skip_if_not_installed("numDeriv")
+  red <- errorModelData()
+  full <- fitErrorModel(red, factors = "name", par = c(s0 = -4, srel = -3), blather = TRUE)
+  rows <- red$name == "y"
+  nll <- function(p) {
+    v <- exp(p[1]) + exp(p[2]) * red$value[rows]^2
+    sum((red$n[rows] - 1) * (log(v) + red$n[rows] * red$sigma[rows]^2 / v))
+  }
+  best <- unname(unlist(full[which(rows)[1], c("s0", "srel")]))
+  expect_lt(max(abs(numDeriv::grad(nll, best))), 1e-3)
+  expect_error(fitErrorModel(red, factors = "name", errorModel = "pmax(exp(s0), x)",
+                             par = c(s0 = -4)), "no symbolic derivative")
 })
 
 test_that("fitErrorModel plots the variances of the replicates", {

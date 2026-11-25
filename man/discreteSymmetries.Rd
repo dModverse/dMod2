@@ -8,9 +8,13 @@ discreteSymmetries(
   object,
   order = NULL,
   points = 5L,
-  timeout = 600,
-  budget = 300,
-  cores = 1
+  cores = 1,
+  memory = NULL,
+  experiments = NULL,
+  msolveEntries = NULL,
+  msolveTerms = NULL,
+  searchEntries = NULL,
+  eliminationTerms = NULL
 )
 }
 \arguments{
@@ -22,12 +26,26 @@ coordinates.}
 \item{points}{Number of random points of the count in the domain, or a list of
 points, each a named list of the coordinates. Defaults to 5.}
 
-\item{timeout}{Seconds one call of msolve may take. Defaults to 600.}
-
-\item{budget}{Seconds the reconstruction of the maps may take; past it, the counts
-are reported without closed forms. Defaults to 300.}
-
 \item{cores}{Threads of msolve. Defaults to 1.}
+
+\item{memory}{GiB of address space one call of msolve may take; past it the call
+fails. \code{NULL} (default) keeps the value of symident (8).}
+
+\item{experiments}{Count on several experiments with shared parameters and free
+starts, which bounds the fiber of a model with free starts and no rational first
+integral: \code{NULL} (default) where a short count of one experiment finds none, \code{TRUE}
+first with the number of experiments from the rank criterion, a number \code{K} with \code{K}
+experiments, \code{FALSE} never.}
+
+\item{msolveEntries}{Nonzero entries of the F4 matrices one call of msolve may reduce.}
+
+\item{msolveTerms}{Terms of the largest system given to msolve.}
+
+\item{searchEntries}{Entries of the matrices over finite fields the exact count may
+reduce.}
+
+\item{eliminationTerms}{Terms of the largest polynomial of the elimination of the
+states in the exact count.}
 }
 \value{
 \code{object} with \code{discreteSymmetries}, per \eqn{\sigma} the \code{map} of the
@@ -35,11 +53,18 @@ coordinates it changes (an \link{eqnvec}), \code{changes}, \code{level}, \code{p
 (\code{TRUE}, \code{FALSE}, or \code{NULL} with the \code{domainConditions} under which
 \eqn{\sigma(\theta)} lies in the domain) and \code{fixedSet}, the factors on which
 \eqn{\sigma} fixes \eqn{\theta}; and \code{info$discrete} with \code{order}, \code{count} (the
-solutions over the algebraic closure at a random point modulo a prime), \code{counts}
-per point (\code{complex}, \code{real}, \code{inDomain}, \code{undecided}), \code{closedForms}, \code{countFinal}
-(every solution is the image of a proven \eqn{\sigma}), \code{fundamentalDomain}
-(inequalities that keep one point of each orbit), \code{limits} and, for a model with
-directions, \code{reduced}.
+solutions over the algebraic closure at a random point modulo a prime), \code{countBound}
+(the probability that a generic point has more, \code{NULL} where the count is exact or has
+no bound), \code{countDomain} (the points of the fiber of a generic point inside the
+domain, where that number is final), \code{counts} per point (\code{complex}, \code{real},
+\code{inDomain}, \code{undecided}), \code{closedForms}, \code{countFinal} (every solution is the image of
+a proven \eqn{\sigma}), \code{fundamentalDomain} (inequalities that keep one point of each
+orbit), \code{certificate} (what the result rests on, with \code{complete}: \code{"exact"},
+\code{"verified"}, \code{"axiom"}, \code{"no"} or \code{"open"}), \code{experiments} (the count on several
+experiments, or why it does not apply), \code{limits} and, where they apply, \code{reduced} (for
+a model with directions), \code{eliminated} (under \code{reduceCQ}, the species solved through
+the totals), \code{relaxed} (the model with non-rational terms of the states as new states)
+and \code{unsupported}.
 }
 \description{
 Searches the discrete symmetries of a \code{\link[=symmetryDetection]{symmetryDetection()}} result: other points
@@ -51,16 +76,21 @@ may differ between regions. Where the other points are rational functions
 \eqn{\sigma} of the coordinates, \eqn{\sigma} is reconstructed, checked on the output
 at random points (\code{"checked"}) and, where every state has a free initial value,
 proven by a map of the states (\code{"exact"}). A model with directions is reduced by
-\code{\link[=symmetryReduction]{symmetryReduction()}} first and the reduced model is analyzed.
+\code{\link[=symmetryReduction]{symmetryReduction()}} first and the reduced model is analyzed. The search stops on work
+limits, never on a clock, so the result is the same on every machine; a count or proof
+that reaches a limit ends without a result and names the limit in \code{limits} or in the
+certificate.
 }
 \details{
 The search needs msolve; \code{\link[=symmetryDetection]{symmetryDetection()}} says where it is searched.
+The defaults of \code{msolveEntries}, \code{msolveTerms}, \code{searchEntries} and \code{eliminationTerms}
+(\code{NULL}) keep the values of symident.
 }
 \examples{
 \dontshow{if (requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident.install") && !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))) withAutoprint(\{ # examplesIf}
 # two compartments, an input u into the first, the second observed
 f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
-res <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
+res <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", mode = "global")
 res
 res$discreteSymmetries[[1]]$map
 res$info$discrete$fundamentalDomain

@@ -28,6 +28,7 @@
 #include <cstring>
 #include <deque>
 #include <limits>
+#include <memory>
 #include <map>
 #include <random>
 #include <string>
@@ -338,6 +339,10 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
               std::vector<double>& vectors, std::string& error) {
   using cd = std::complex<double>;
   const int n = s.nDep, np = s.nPar, m = s.nEq, k = s.k, nd = n + np, q = n - k;
+  if ((int) pv.size() != np || (int) x.size() != n) {
+    error = "parameters or state of the wrong length";
+    return false;
+  }
   if (s.ad2 == nullptr) {
     error = "the stability of the steady state needs the second derivatives of the steady state, Pimpl(deriv2 = TRUE)";
     return false;
@@ -392,15 +397,15 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
       for (int j = 0; j < n; ++j) N[j + (std::size_t) n * t] = VT[(k + t) + (std::size_t) n * j];
   }
   // eigen decomposition with left and right vectors; false where it fails
-  auto eigen = [](std::vector<double> M, int d, bool vectors, std::vector<double>& wr, std::vector<double>& wi,
+  auto eigen = [](std::vector<double> M, int d, bool withVectors, std::vector<double>& wr, std::vector<double>& wi,
                   std::vector<double>& vl, std::vector<double>& vr) {
     wr.assign(d, 0.0);
     wi.assign(d, 0.0);
-    vl.assign(vectors ? (std::size_t) d * d : 1, 0.0);
-    vr.assign(vectors ? (std::size_t) d * d : 1, 0.0);
+    vl.assign(withVectors ? (std::size_t) d * d : 1, 0.0);
+    vr.assign(withVectors ? (std::size_t) d * d : 1, 0.0);
     if (d == 0) return true;
-    const char* job = vectors ? "V" : "N";
-    int dd = d, ldv = vectors ? d : 1, lwork = -1, info = 0;
+    const char* job = withVectors ? "V" : "N";
+    int dd = d, ldv = withVectors ? d : 1, lwork = -1, info = 0;
     double wq = 0;
     F77_CALL(dgeev)(job, job, &dd, M.data(), &dd, wr.data(), wi.data(), vl.data(), &ldv, vr.data(), &ldv, &wq,
                     &lwork, &info FCONE FCONE);
@@ -509,9 +514,9 @@ bool spectrum(const State& s, const std::vector<double>& pv, const std::vector<d
     std::vector<cd> P((std::size_t) n * n, 0.0);
     for (int j = 0; j < n; ++j)
       for (int c = 0; c < mJ; ++c) {
-        cd y = std::conj(Z[j + (std::size_t) n * c]);
-        for (int b = 0; b < r2; ++b) y += X[c + (std::size_t) mJ * b] * std::conj(Z[j + (std::size_t) n * (mJ + b)]);
-        for (int i = 0; i < n; ++i) P[i + (std::size_t) n * j] += Z[i + (std::size_t) n * c] * y;
+        cd zc = std::conj(Z[j + (std::size_t) n * c]);
+        for (int b = 0; b < r2; ++b) zc += X[c + (std::size_t) mJ * b] * std::conj(Z[j + (std::size_t) n * (mJ + b)]);
+        for (int i = 0; i < n; ++i) P[i + (std::size_t) n * j] += Z[i + (std::size_t) n * c] * zc;
       }
     double umax = 0.0;
     for (int i = 0; i < n; ++i) umax = std::max(umax, std::abs(Z[i]));
@@ -687,6 +692,11 @@ bool roots(const std::vector<Request>& req, std::vector<Root>& out, int threads,
            std::vector<std::string>& warnings) {
   const int N = req.size();
   out.assign(N, Root());
+  for (const Request& q : req)
+    if ((int) q.pv.size() != q.st->nPar || (int) q.guess.size() != q.st->nDep) {
+      error = "Pimpl: parameters or start of the wrong length";
+      return false;
+    }
   // per request: a memory entry, the task of another request, or a new task
   std::vector<int> task(N, -1);
   std::vector<std::string> keys(N);
@@ -719,8 +729,10 @@ bool roots(const std::vector<Request>& req, std::vector<Root>& out, int threads,
   for (int i = 0; i < N; ++i) if (task[i] >= 0) order[task[i]] = std::max(order[task[i]], req[i].order);
   std::vector<Solved> res(tasks.size());
   const int T = tasks.size();
-  int nt = std::max(1, std::min(threads, T));
+  // the requested team, not cut to the tasks, so that libgomp keeps the threads and cppDE their scratch
+  int nt = T > 1 ? std::max(1, threads) : 1;
 #ifdef _OPENMP
+  nt = std::min(nt, omp_get_num_procs());
   if (omp_in_parallel()) nt = 1;
 #pragma omp parallel for schedule(dynamic) num_threads(nt) if (nt > 1)
 #endif
@@ -808,16 +820,14 @@ DL_FUNC fnOf(SEXP x) {
 // the dependent state `inDep` and the parameters it reads `inPar` (0-based), and `flow`.
 // [[Rcpp::export]]
 SEXP pimpl_state(List spec) {
-  State* s = new State();
+  std::unique_ptr<State> s(new State());
   s->val = reinterpret_cast<dmod::pimpl::EvalFn>(fnOf(spec["val"]));
   s->ad = reinterpret_cast<dmod::pimpl::EvalAd>(fnOf(spec["ad"]));
   s->ad2 = reinterpret_cast<dmod::pimpl::EvalAd2>(fnOf(spec["ad2"]));
   s->influx = reinterpret_cast<dmod::pimpl::EvalFn>(fnOf(spec["influx"]));
   s->ptc = reinterpret_cast<dmod::pimpl::PtcFn>(fnOf(spec["ptc"]));
-  if (s->val == nullptr || s->ad == nullptr || s->ptc == nullptr) {
-    delete s;
+  if (s->val == nullptr || s->ad == nullptr || s->ptc == nullptr)
     stop("Pimpl: the compiled system or cppDE's solver is not available");
-  }
   s->nDep = as<int>(spec["nDep"]);
   s->nPar = as<int>(spec["nPar"]);
   s->k = as<int>(spec["nTotals"]);
@@ -826,7 +836,11 @@ SEXP pimpl_state(List spec) {
   s->inPar = as<std::vector<int>>(spec["inPar"]);
   s->depNames = as<std::vector<std::string>>(spec["depNames"]);
   s->flow = as<bool>(spec["flow"]);
-  SEXP xp = PROTECT(R_MakeExternalPtr(s, R_NilValue, R_NilValue));
+  if (s->nDep < 0 || s->nPar < 0 || s->k < 0 || (int) s->depNames.size() != s->nDep)
+    stop("Pimpl: inconsistent sizes of the native state");
+  for (int j : s->inDep) if (j < 0 || j >= s->nDep) stop("Pimpl: influx state index out of range");
+  for (int j : s->inPar) if (j < 0 || j >= s->nPar) stop("Pimpl: influx parameter index out of range");
+  SEXP xp = PROTECT(R_MakeExternalPtr(s.release(), R_NilValue, R_NilValue));
   R_RegisterCFinalizerEx(xp, finalizeState, TRUE);
   UNPROTECT(1);
   return xp;
@@ -850,6 +864,7 @@ void pimpl_controls(SEXP xp, bool keepRoot, List ctrl) {
   c.seed = dmod::pimpl::num(ctrl, "seed", c.seed);
   if (ctrl.containsElementNamed("startRange")) {
     NumericVector r = ctrl["startRange"];
+    if (r.size() != 2) stop("Pimpl: startRange must have length 2");
     c.lo = r[0];
     c.hi = r[1];
   }

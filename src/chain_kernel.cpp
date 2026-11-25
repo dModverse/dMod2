@@ -763,9 +763,9 @@ SEXP chain_data(List plan, List pre, List raw, bool deriv, bool deriv2, bool bui
                                      seeds_on ? sp.data() + off : nullptr, seeds_on ? ss.data() + off : nullptr);
     }
     if (want_rows && nd > 0) {
-      const int nb = hasDs ? 2 : 1;
-      rowJ[c].assign((std::size_t) nb * n * nd, 0.0);
-      rowU[c].assign((std::size_t) nb * n, 0.0);
+      const int blocks = hasDs ? 2 : 1;
+      rowJ[c].assign((std::size_t) blocks * n * nd, 0.0);
+      rowU[c].assign((std::size_t) blocks * n, 0.0);
       std::copy(dpred.begin(), dpred.end(), rowJ[c].begin());
       std::copy(sp.begin(), sp.end(), rowU[c].begin());
       if (hasDs) {

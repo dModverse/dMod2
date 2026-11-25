@@ -225,9 +225,8 @@ inline void trust_sub(int K, const double* g,
     } else if (f_dn >= 0.0) {
       root = beta_dn;
     } else {
-      // Bisection. fred is monotone increasing, so this converges robustly
-      // to within ~50 iterations even when beta_dn / beta_up span many
-      // orders of magnitude.
+      // Bisection: fred is monotone increasing, so the bracket holds the root
+      // also when beta_dn and beta_up span many orders of magnitude.
       double a = beta_dn, b = beta_up;
       for (int it = 0; it < 100; ++it) {
         double mid = 0.5 * (a + b);

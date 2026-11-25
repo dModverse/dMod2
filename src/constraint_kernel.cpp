@@ -141,7 +141,7 @@ List constraintL2_scalar_kernel(
   std::vector<std::string> allp_names;
   std::vector<double>      allp_vals;
   if (dP_opt.isNotNull()) {
-    // pars are theta-named; we need inner-par values via allp lookup
+    // pars are named by theta; the inner parameter values come from the allp lookup
     NumericVector p = pars;
     CharacterVector pn = p.names();
     for (int i = 0; i < p.size(); ++i) {

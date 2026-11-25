@@ -54,7 +54,7 @@ test_that("the nodes integrate a normal of the posterior precision exactly", {
 })
 
 
-# A one-eta model y = exp(mu + eta) per group, observed once per condition.
+# A model with one random effect per group, observed once per condition.
 .quad_models <- local({
   cache <- NULL
   function() {
@@ -71,7 +71,7 @@ test_that("the nodes integrate a normal of the posterior precision exactly", {
     tr <- branch(define(NULL, "intercept <- exp(mu)"), table = tab)
     tr <- insert(tr, mu ~ 1 + (1 | ID))
     p <- P(tr, method = "explicit", compile = FALSE, modelname = "quad_p", derivMode = "forward-forward")
-    # a group covariate on mu and the parameter s of an error model sigma = exp(s)
+    # a group covariate and an error model with a free parameter
     tw <- branch(define(NULL, "x <- x", x = c("intercept", "s")), table = tab)
     tw <- insert(tw, "intercept <- exp(mu)")
     tw <- insert(tw, mu ~ w + (1 | ID))
@@ -272,4 +272,30 @@ test_that("the Newton decrement of a singular Hessian counts the flat directions
   # a gradient along a flat direction gains rmax times the gradient size
   ev <- list(gradient = c(1, 1e-3), hessian = diag(c(2, 0)))
   expect_equal(dMod2:::.newtonDecrement(ev, rmax = 10), 1 / 4 + 1e-2)
+})
+
+test_that("an adaptive grid without refinement is the Smolyak grid of the level", {
+  for (K in 1:3) for (level in K:(K + 4)) {
+    ref <- sparseGridGK(K, level)
+    g <- adaptiveGridNew(K, level, matrix(0L, 0, K), 100L)
+    z <- adaptiveGridPending(g)
+    adaptiveGridAbsorb(g, z, rep(0, nrow(z)))
+    gr <- adaptiveGridNodes(g)
+    o1 <- do.call(order, as.data.frame(round(ref$nodes, 10)))
+    o2 <- do.call(order, as.data.frame(round(gr$z, 10)))
+    expect_equal(gr$z[o2, , drop = FALSE], ref$nodes[o1, , drop = FALSE], tolerance = 1e-12)
+    expect_equal(gr$weights[o2], ref$weights[o1], tolerance = 1e-12)
+  }
+})
+
+test_that("an adaptive grid refines the direction in which the integrand is not Gaussian", {
+  logf <- function(z) -rowSums(z^2) + 0.3 * z[, 1]^3 - 0.1 * z[, 1]^4
+  exact <- integrate(function(x) exp(-x^2 + 0.3 * x^3 - 0.1 * x^4), -Inf, Inf)$value * sqrt(pi)
+  r <- .adaptiveGrids(2L, 2L, list(NULL), function(which, z) lapply(z, logf), 1e-8)[[1]]
+  est <- sum(r$weights * exp(r$logValues + rowSums(r$z^2)))
+  expect_equal(est, exact, tolerance = 1e-7)
+  expect_false(r$capped)
+  # a direction in which the integrand is Gaussian is not refined
+  expect_lte(max(r$indices[, 2]), 1L)
+  expect_lt(nrow(r$z), nrow(sparseGridGK(2L, 12L)$nodes))
 })

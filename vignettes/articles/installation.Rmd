@@ -59,7 +59,7 @@ libsbml in a separate Python process, whose interpreter `DMOD_LIBSBML_PYTHON` se
 ## symident and msolve
 
 On first use of `symmetryDetection()` or `symmetryReduction()`, dMod2 installs
-[symident](https://github.com/dModverse/symident) from PyPI into the session Python. On failure
+[symident](https://dmodverse.github.io/symident/) from PyPI into the session Python. On failure
 the error names the interpreter; `pip install -U symident` with that interpreter installs it.
 
 Coupled steady states in a steady-state start need [msolve](https://msolve.lip6.fr/).

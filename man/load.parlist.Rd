@@ -11,11 +11,22 @@ load.parlist(folder)
 of the run, which holds one \verb{fit-<i>.Rda} per completed fit.}
 }
 \value{
-A parlist.
+A parlist with one entry per file, in the order of the fit numbers.
 }
 \description{
 Reads the per-fit files that \code{\link[=mstrust]{mstrust()}} writes with
 \code{output = TRUE}, for example after an aborted run.
+}
+\examples{
+folder <- file.path(tempdir(), "interRes")
+dir.create(folder, showWarnings = FALSE)
+for (i in 1:3)
+  saveRDS(list(value = 10 / i, converged = TRUE, iterations = 5L, argument = c(a = i)),
+          file.path(folder, paste0("fit-", i, ".Rda")))
+fits <- load.parlist(folder)
+as.parframe(fits)
+unlink(folder, recursive = TRUE)
+
 }
 \seealso{
 \code{\link[=mstrust]{mstrust()}}

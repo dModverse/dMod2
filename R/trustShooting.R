@@ -2,9 +2,6 @@
 ## Bock's generalized Gauss-Newton method, condensed onto theta, on a trust region
 ## over parameters and nodes; acceptance by filter, l2 penalty or natural level.
 
-## Copyright (C) 2026 Simon Beyer
-
-
 # trust() on an objective holding a normL2 with a multipleShootingControl.
 # Settings a shooting run cannot honor are refused. Every other summand enters
 # the condensed problem with a separate value, gradient and Gauss-Newton Hessian.
@@ -61,7 +58,6 @@
   K <- length(theta)
   lb <- .shootBound(parlower, tnames, -Inf)
   ub <- .shootBound(parupper, tnames, Inf)
-  ps <- rep(1, K)
   if (any(theta < lb | theta > ub)) {
     warning("trust: 'parinit' outside the bounds was clipped.", call. = FALSE)
     theta <- pmin(pmax(theta, lb), ub)
@@ -152,7 +148,7 @@
   thx <- function(th) setNames(c(th, numeric(Kx - K)), tx)
   lbx <- c(lb, rep(-Inf, Kx - K))
   ubx <- c(ub, rep(Inf, Kx - K))
-  psxOf <- function() c(ps, rep(1 / scale[spec$states], nBreak))
+  psxOf <- function() c(rep(1, K), rep(1 / scale[spec$states], nBreak))
   zeroBreaks <- function(gaps) {
     if (!nBreak) return(gaps)
     b <- bkOf()$brk
@@ -172,10 +168,13 @@
   # Horbelt, Timmer and Voss (2002): theta is fitted first with the nodes held,
   # then the nodes are laid out afresh and released. A failing phase is dropped.
   start0 <- NULL
+  # the iterations of the first phase count against iterlim
+  itPh1 <- 0L
   if (isTRUE(step$twoPhase)) {
     ph <- .shootPhaseOne(sobj, theta, nodes, fixed, cores, pv, lb, ub,
                          rinit, rmax, iterlim)
     neval <- neval + ph$neval
+    itPh1 <- as.integer(ph$iterations)
     if (!is.null(ph$theta)) {
       nd <- tryCatch(initNodes(ph$theta), error = function(e) NULL)
       E1 <- if (!is.null(nd)) ev(ph$theta, nd, quiet = TRUE)
@@ -353,7 +352,7 @@
   if (isTRUE(step$anneal)) {
     evGN <- function(th, nd) ev(th, nd, hessian = TRUE, sw = "forward", quiet = TRUE)
     evV <- function(th, nd) ev(th, nd, quiet = TRUE, deriv = FALSE)
-    an <- .shootAnneal(evGN, spec, theta, nodes, tnames, ps, scale, pv, lb, ub,
+    an <- .shootAnneal(evGN, spec, theta, nodes, tnames, scale, pv, lb, ub,
                        rinit, rmax, printIter, evV = evV, brk = bkOf()$brk)
     if (!is.null(an)) {
       theta <- an$theta; nodes <- an$nodes
@@ -370,14 +369,14 @@
 
   # Model Hessian per segment: the Gauss-Newton block, or a quasi-Newton one.
   # Kept by segment across a new layout; a segment that is new gets a seed.
-  seedBlocks <- function(E, which) {
+  seedBlocks <- function(E, ks) {
     if (qn$hessianInit == "gn") {
       Eg <- ev(theta, nodes, hessian = TRUE, sw = "forward")
       if (inherits(Eg, "error"))
         stop("trust: the Gauss-Newton seed failed: ", conditionMessage(Eg), call. = FALSE)
       neval <<- neval + 1L
-      lapply(which, function(k) .shootAlignMat(Eg$segments[[k]]$hess, E$segments[[k]]$vars))
-    } else lapply(which, function(k) {
+      lapply(ks, function(k) .shootAlignMat(Eg$segments[[k]]$hess, E$segments[[k]]$vars))
+    } else lapply(ks, function(k) {
       v <- E$segments[[k]]$vars
       Mc <- spec$segs[[k]]$M
       matrix(diag(ifelse(v %in% tnames, 1 / Mc, 1), length(v)), length(v),
@@ -472,7 +471,7 @@
     f <- E$value + PR$value
     h <- .shootViolation(E$gaps, scale)
     omega <- NA_real_
-    for (iter in seq_len(iterlim)) {
+    for (iter in seq_len(iterlim - itPh1)) {
       if (is.null(C)) C <- condense(E)
       psx <- psxOf()
       opt <- .shootOptimality(thx(theta), C$g0, lbx, ubx, psx)
@@ -568,7 +567,7 @@
   # SR1 learns from rejected trials too, and needs their gradients
   trialDeriv <- hm != "gn" && isTRUE(qn$qnRejected)
   lastAccepted <- TRUE
-  if (acc != "natural") for (iter in seq_len(iterlim - itNat)) {
+  if (acc != "natural") for (iter in seq_len(iterlim - itPh1 - itNat)) {
     if (is.null(C)) C <- condense(E)
     psx <- psxOf()
     opt <- .shootOptimality(thx(theta), C$g0, lbx, ubx, psx)
@@ -796,16 +795,16 @@
   if (acc == "merit") msinfo$mu <- mu
   else if (acc == "filter") msinfo$filterSize <- nrow(filt)
   if (blather) msinfo$trace <- trace
+  # a loop over no iterations leaves `iter` empty
   list(argument = theta, value = f,
        gradient = setNames(as.numeric(C$g0[seq_len(K)]), tnames),
        hessian = C$H[seq_len(K), seq_len(K), drop = FALSE],
-       iterations = itNat + iter, neval = neval,
+       iterations = itPh1 + itNat + sum(iter), neval = neval,
        qnSkipped = qnSkipped,
        converged = converged, stopReason = stopReason,
        atBound = opt$atBound[seq_len(K)],
        multipleShooting = msinfo)
 }
-
 
 # The first of two phases: theta alone by the trust region of trust(), on the
 # data term of the segments with every node held where it is, plus the other
@@ -840,7 +839,6 @@
   list(theta = setNames(as.numeric(r$argument), tnames), value = r$value,
        iterations = r$iterations, neval = neval)
 }
-
 
 ## ---- Condensing ----------------------------------------------------------------
 ## Forwards through each condition's segments: S_{j+1} = A_k L_k and
@@ -972,7 +970,6 @@
   out
 }
 
-
 # Size of the gaps the linearized constraints leave after a step,
 # c_j + A_j d_j - Delta s_{j+1}, scaled per state, with A_j the full end-state
 # Jacobian: the exact linearization, also where condensing decoupled a link.
@@ -1000,7 +997,6 @@
   }
   sqrt(s2)
 }
-
 
 ## ---- Partitioned quasi-Newton ------------------------------------------------
 ## Multipliers by lambda_{j-1} = grad_{s_j} m_j + G_j' lambda_j; segment j's pair
@@ -1051,7 +1047,6 @@
   list(B = B, skipped = skipped)
 }
 
-
 ## ---- Acceptance --------------------------------------------------------------
 
 .shootViolation <- function(gaps, scale) {
@@ -1072,7 +1067,6 @@
   keep <- !(filt[, 1L] >= h & filt[, 2L] >= f)
   rbind(filt[keep, , drop = FALSE], c(h, f))
 }
-
 
 ## ---- Small helpers -------------------------------------------------------------
 
@@ -1269,14 +1263,13 @@
   out
 }
 
-
 ## ---- Annealing of the continuity ---------------------------------------------
 ## Precision annealing (Ye and Abarbanel): f + w ||V c||^2 over parameters and
 ## nodes, uncondensed and sparse, with w rising per stage before the exact method.
 
 # Gauss-Newton model of f + w ||V c||^2 in the scaled variables
-# y = (ps * theta, s / scale), as a sparse matrix and a gradient.
-.shootAnnealModel <- function(E, spec, tnames, ps, scale, w, PR, brk = NULL) {
+# y = (theta, s / scale), as a sparse matrix and a gradient.
+.shootAnnealModel <- function(E, spec, tnames, scale, w, PR, brk = NULL) {
   K <- length(tnames)
   states <- spec$states
   nx <- length(states)
@@ -1291,7 +1284,7 @@
     }
   }
   n <- off
-  dsc <- c(ps, rep(1 / scale[states], (n - K) / nx))   # y = dsc * x
+  dsc <- c(rep(1, K), rep(1 / scale[states], (n - K) / nx))   # y = dsc * x
   # blocks are collected and bound once, so assembly is linear in the segments
   blk <- vector("list", 2L * length(spec$segs) + 1L)
   nb <- 0L
@@ -1375,7 +1368,7 @@
 # Annealing stages, each minimizing f + w ||V c||^2 until a step gains less
 # than `ftol`, until the RMS gap per node is below `hnode`, w reaches `wmax`, or
 # the gaps stall. Returns the point the exact method starts from.
-.shootAnneal <- function(evGN, spec, theta, nodes, tnames, ps, scale, pv, lb, ub,
+.shootAnneal <- function(evGN, spec, theta, nodes, tnames, scale, pv, lb, ub,
                          r, rmax, printIter = FALSE, w0 = 1, factor = 10,
                          wmax = 1e10, hnode = 1e-3, itStage = 30L, ftol = 1e-3,
                          evV = evGN, brk = NULL) {
@@ -1411,7 +1404,7 @@
     # a new weight is a new problem; the radius the last one ended on says
     # nothing about it
     r <- r0
-    Mdl <- .shootAnnealModel(E, spec, tnames, ps, scale, w, PR, brk)
+    Mdl <- .shootAnnealModel(E, spec, tnames, scale, w, PR, brk)
     cont0 <- Mdl$cont
     for (it in seq_len(itStage)) {
       st <- .shootSparseTR(Mdl$H, Mdl$g, r)
@@ -1450,7 +1443,7 @@
         cat(sprintf("anneal w = %.0e  F = %.8g  gaps = %.3g  r = %.3g  %s\n", w,
                     valT, sqrt(contT), r, if (rho >= 0.25) "accept" else "reject"))
       if (rho >= 0.25) {
-        MT <- .shootAnnealModel(ET, spec, tnames, ps, scale, w, PRT, brk)
+        MT <- .shootAnnealModel(ET, spec, tnames, scale, w, PRT, brk)
         dF <- Mdl$value - MT$value
         theta <- thetaT; nodes <- nodesT; E <- ET; PR <- PRT; Mdl <- MT
         if (rho > 0.75 && sqrt(sum(dy^2)) >= 0.9 * r) r <- min(2 * r, rmax)

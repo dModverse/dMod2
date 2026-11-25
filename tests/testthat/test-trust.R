@@ -983,6 +983,23 @@ test_that("a phase hands over after radiusStall iterations at an unchanged radiu
   }
 }
 
+test_that("the sparse choice evaluates the reflective start, which the kernel then reuses", {
+  target <- c(a = 1, b = -2, c = 3)
+  seen <- list()
+  obj <- function(p, ..., hessian = TRUE) {
+    seen[[length(seen) + 1L]] <<- p
+    H <- diag(2, length(p))
+    dimnames(H) <- list(names(p), names(p))
+    if (identical(hessian, "sparse")) H <- Matrix::Matrix(H, sparse = TRUE)
+    list(value = sum((p - target)^2), gradient = 2 * (p - target), hessian = H)
+  }
+  fit <- withr::with_options(list(dMod2.sparseAuto = list(parameters = 0, fill = 1)),
+    trust(obj, c(a = 0, b = 0, c = 0), parlower = c(a = 0), iterlim = 50))
+  expect_true(fit$converged)
+  expect_gt(seen[[1]][["a"]], 0)
+  expect_gt(max(abs(seen[[2]] - seen[[1]])), 1e-8)
+})
+
 # The damped BFGS update of the kernel with the cautious test.
 .bfgs_r <- function(B, s, y, cautious = 1e-8) {
   if (!(sum(s * y) > cautious * sqrt(sum(s^2) * sum(y^2)))) return(B)

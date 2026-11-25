@@ -371,7 +371,8 @@
 ## and the fixed hyperparameters, NA when estimated.
 .designBlock <- function(rows) {
   list(dist = rows$dist[1], prob = rows$prob[1], concentration = rows$concentration[1],
-       tau = rows$tau[1], stems = rows$stem, short = sub("^eta_", "", rows$stem))
+       tau = rows$tau[1], mean = rows$mean[1] %||% 0, spike = rows$spike[1] %||% 0, stems = rows$stem,
+       short = sub("^eta_", "", rows$stem))
 }
 
 ## Names of the hyperparameters of the blocks of one distribution, `hyper` named by `kinds`
@@ -539,4 +540,23 @@
   prob <- !is.na(kind) & kind == "prob"
   out[prob] <- stats::plogis(stats::qlogis(center[prob]) + noise[prob])
   out
+}
+
+## Per spike-and-slab stem with spike -Inf the base b > 1 of the exponential b^(... + eta) in which
+## the etas of the stem are summands, read off the equations of the model; an error where the etas
+## enter otherwise, since the model at -Inf is then not the model at rate 0.
+.spikeBases <- function(design) {
+  stems <- unlist(lapply(Filter(function(b) b$dist == "spikeSlab" && b$spike == -Inf, design$blocks),
+                         `[[`, "stems"))
+  if (!length(stems)) return(numeric(0))
+  leaves <- c(.fnLeaves(design$prdfn), if (!is.null(design$errfn)) .fnLeaves(design$errfn))
+  eqs <- Filter(Negate(is.null), lapply(leaves, function(l) attr(l$kernel, "equations", exact = TRUE)))
+  vapply(setNames(nm = stems), function(st) {
+    etas <- unique(stats::na.omit(as.vector(design$etaNames[, st])))
+    b <- unique(.wrapBases(eqs, etas, summand = TRUE))
+    if (length(b) != 1L || is.na(b) || b <= 1)
+      stop("em: spikeSlab(spike = -Inf) needs ", st, " as a summand in the exponent of one numeric base ",
+           "greater than 1 in every condition, as after insert(trafo, \"x <- exp(x)\").", call. = FALSE)
+    b
+  }, 0)
 }

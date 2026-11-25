@@ -29,7 +29,6 @@ symmetryDetection(
   symEngine = c("modular", "symbolic"),
   mode = c("local", "global"),
   globalOptions = NULL,
-  discrete = FALSE,
   verbose = FALSE
 )
 }
@@ -124,11 +123,8 @@ output of a generic one and reconstructs the maps between them, as \code{\link[=
 gets the reason in \code{info$discrete$unsupported} and a warning.}
 
 \item{globalOptions}{A list of arguments of the global analysis: \code{order}, \code{points},
-\code{timeout} and \code{budget} as in \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}
-
-\item{discrete}{\code{FALSE} (default), \code{TRUE} or a list of arguments of
-\code{\link[=discreteSymmetries]{discreteSymmetries()}}: also search the discrete symmetries; \code{mode = "global"} does the
-same through the detection.}
+\code{memory}, \code{experiments}, \code{msolveEntries}, \code{msolveTerms}, \code{searchEntries} and
+\code{eliminationTerms} as in \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}
 
 \item{verbose}{Logical. Print the result. Defaults to \code{FALSE}.}
 }
@@ -172,7 +168,7 @@ routes), \code{branches} (resting states with several roots modulo a prime, of
 which the first is taken), \code{conditions}, \code{segments}, \code{coordinates},
 \code{settings}, \code{elapsed} and \code{verification}.}
 \item{\code{gauge}}{the coordinates fixed under \code{gaugePreference}.}
-\item{\code{discreteSymmetries}}{with \code{discrete}, see \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}
+\item{\code{discreteSymmetries}}{with \code{mode = "global"}, see \code{\link[=discreteSymmetries]{discreteSymmetries()}}.}
 \item{\code{call}}{the matched call.}
 }
 \code{print()} shows the verdict and the generators, \code{summary()} also the
@@ -201,7 +197,9 @@ The environment variables a user may need
 are \code{SYMIDENT_MSOLVE}, the path of the msolve executable (unset by
 default, msolve is then searched in the symident cache and on the
 \code{PATH}), and \code{SYMIDENT_CACHE}, the directory of that cache (by default
-\verb{~/.cache/symident} on Linux). The other switches are diagnostic, see the
+\verb{~/.cache/symident} on Linux). \code{SYMIDENT_MSOLVE_GB} sets the address space in GiB of
+one call of msolve where \code{memory} of \code{\link[=discreteSymmetries]{discreteSymmetries()}} is not given. The other
+switches are diagnostic, see the
 symident documentation at \url{https://dmodverse.github.io/symident/}.
 }
 \examples{

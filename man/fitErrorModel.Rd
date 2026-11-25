@@ -25,8 +25,8 @@ fitErrorModel(
 combinations define groups. The model is fitted separately per group.}
 
 \item{errorModel}{Character, the variance of a single measurement as an
-expression in the mean \code{x} and the parameters. Default
-\code{"exp(s0)+exp(srel)*x^2"}.}
+expression in the mean \code{x} and the parameters, built from the functions
+\code{\link[stats:deriv]{stats::deriv()}} differentiates. Default \code{"exp(s0)+exp(srel)*x^2"}.}
 
 \item{par}{Named numeric vector of starting values for the parameters of
 \code{errorModel}. Default \code{c(s0 = 1, srel = 0.1)}.}
@@ -50,7 +50,7 @@ the fitted model gives.
 With \code{blather = TRUE}, a data frame with the columns of \code{data}, \code{sigma}
 replaced as above, one column per parameter of \code{errorModel} with the
 fitted value, the variance bands \code{cbLower68}, \code{cbUpper68}, \code{cbLower95} and
-\code{cbUpper95}, the group label \code{condidnt} and the input \code{sigma} as
+\code{cbUpper95}, the group label \code{group} and the input \code{sigma} as
 \code{sigmaLS}. The attribute \code{"errorModel"} holds \code{errorModel}.
 }
 \description{

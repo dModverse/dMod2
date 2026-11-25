@@ -215,10 +215,11 @@ CondInputs gather_one_condition(
       IntegerVector d2_dim = d2_attr.attr("dim");
       if (d2_dim.size() == 4) {
         const int D0 = d2_dim[0], D1 = d2_dim[1], D2 = d2_dim[2];
+        if (n_pred_par > 0 && (D0 != Dp0 || D1 != Dp1 || D2 != n_pred_par || d2_dim[3] != n_pred_par))
+          throw std::runtime_error("normL2_kernel: deriv2 of the prediction does not match deriv.");
         const std::size_t N2 = (std::size_t) n_par_local * (std::size_t) n_par_local;
         C.d2pred.assign((std::size_t) n_data * N2, 0.0);
-        // R d2 attr col-major: [time, obs, par1, par2]
-        // We assume dimnames(d2)[[3]] == dimnames(d2)[[4]] == the prediction's parameters.
+        // col-major [time, obs, par1, par2]; dimnames 3 and 4 are the parameters of deriv
         for (int j = 0; j < n_data; ++j) {
           const int i = perm[j];
           const int ti = t_idx[i] - 1;
@@ -244,10 +245,17 @@ CondInputs gather_one_condition(
     if (!ed_sexp.isNULL()) {
       NumericVector ed_attr(ed_sexp);
       IntegerVector ed_dim = ed_attr.attr("dim");
+      if (ed_dim.size() < 2)
+        throw std::runtime_error("normL2_kernel: deriv of the error model has no dimensions.");
       const int Ed0 = ed_dim[0];
       const int Ed1 = ed_dim[1];
       CharacterVector err_par_names = par_axis_names(ed_attr);
       const int n_err_par = err_par_names.size();
+      if ((R_xlen_t) Ed0 * Ed1 * n_err_par > ed_attr.size())
+        throw std::runtime_error("normL2_kernel: deriv of the error model is shorter than the dimensions.");
+      for (int i = 0; i < n_data; ++i)
+        if (sigma_is_na[i] && (t_idx_err[i] > Ed0 || o_idx_err_d[i] > Ed1))
+          throw std::runtime_error("normL2_kernel: data point outside the error model derivatives.");
       std::vector<int> err_to_local(n_err_par, -1);
       for (int q = 0; q < n_err_par; ++q) {
         std::string nm = as<std::string>(err_par_names[q]);
@@ -285,8 +293,9 @@ CondInputs gather_one_condition(
           IntegerVector ed2_dim = ed2_attr.attr("dim");
           if (ed2_dim.size() == 4) {
             const int E0 = ed2_dim[0], E1 = ed2_dim[1], E2 = ed2_dim[2];
-            // Assumes dimnames(deriv2)[[3]] == dimnames(deriv2)[[4]] ==
-            // err_par_names, so the err_to_local mapping above applies.
+            if (n_err_par > 0 && (E0 != Ed0 || E1 != Ed1 || E2 != n_err_par || ed2_dim[3] != n_err_par))
+              throw std::runtime_error("normL2_kernel: deriv2 of the error model does not match deriv.");
+            // dimnames 3 and 4 are err_par_names, so the err_to_local mapping above applies
             const std::size_t N2 = (std::size_t) n_par_local
                                    * (std::size_t) n_par_local;
             C.d2sigma.assign((std::size_t) n_data * N2, 0.0);

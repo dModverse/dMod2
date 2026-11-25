@@ -11,6 +11,8 @@ plotProfilesAndPaths(
   ncol = 3,
   normalizePaths = FALSE,
   modes = c("data", "prior"),
+  maxvalue = 5,
+  threshold = .profileLines(),
   ...
 )
 }
@@ -29,6 +31,9 @@ absolute value of 1. Defaults to \code{FALSE}.}
 
 \item{modes}{Character vector, the contributions to the objective drawn in
 the profile plot besides the total. Defaults to \code{c("data", "prior")}.}
+
+\item{maxvalue, threshold}{Cut-off of the objective difference and the
+horizontal lines above the optimum, as in \code{\link[=plotProfile]{plotProfile()}}.}
 
 \item{...}{Further arguments passed to \code{\link[cowplot:plot_grid]{cowplot::plot_grid()}}.}
 }

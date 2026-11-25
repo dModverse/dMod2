@@ -280,6 +280,7 @@ conservedQuantities <- function(eqnlist) {
 #'   the detected basis.
 #' @return The eqnlist with `$totals` updated.
 #' @seealso [conservedQuantities()]
+#' @example inst/examples/customTotals.R
 #' @export
 customTotals <- function(eqnlist, totals) {
   if (is.null(totals) || (is.list(totals) && length(totals) == 0L)) {
@@ -784,6 +785,7 @@ getFluxes <- function(eqnlist, type = c("conc", "amount")) {
 #' "Rate" (character) and one column per state, the columns of the
 #' stoichiometric matrix. The compartment layout is kept as attributes and
 #' read back by [as.eqnlist()]. `NULL` for an empty equation list.
+#' @example inst/examples/eqnlist.R
 #' @export
 as.data.frame.eqnlist <- function(x, ...) {
 
@@ -816,6 +818,7 @@ as.data.frame.eqnlist <- function(x, ...) {
 #' @return `NULL`, invisibly. Called for the file it writes.
 #' @seealso [as.data.frame.eqnlist()]
 #'
+#' @example inst/examples/write.eqnlist.R
 #' @export
 #' @importFrom utils file.edit getParseData install.packages installed.packages read.csv str tail write.csv
 write.eqnlist <- function(eqnlist, ...) {
@@ -944,6 +947,7 @@ subset.eqnlist <- function(x, ...) {
 #' @param ... not used.
 #' @return `x`, invisibly.
 #' 
+#' @example inst/examples/eqnlist.R
 #' @export
 print.eqnlist <- function(x, pander = FALSE, ...) {
 
@@ -1042,6 +1046,7 @@ print.eqnlist <- function(x, pander = FALSE, ...) {
 #' @details For an `eqnlist`, the right-hand sides of the ODE are assembled
 #' from [getFluxes()].
 #' @return Object of class [eqnvec].
+#' @example inst/examples/eqnlist.R
 #' @export
 as.eqnvec <- function(x, ...) {
   UseMethod("as.eqnvec", x)
@@ -1196,6 +1201,7 @@ is.eqnvec <- function(x) inherits(x, "eqnvec") && length(names(x)) == length(x)
 #' @param x object of class [eqnvec], or a named parsable character vector.
 #' @param ... not used.
 #' @return Named character vector with spaces around `+`, `-`, `*` and `/`.
+#' @example inst/examples/eqnvec.R
 #' @export format.eqnvec
 #' @export
 format.eqnvec <- function(x, ...) {
@@ -1220,6 +1226,7 @@ format.eqnvec <- function(x, ...) {
 #' @return `x`, invisibly.
 #' 
 #' @import stringr
+#' @example inst/examples/eqnvec.R
 #' @export
 print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
 
@@ -1260,6 +1267,7 @@ print.eqnvec <- function(x, width = 140, pander = FALSE, ...) {
 #' @param ... not used.
 #' @return `object`, invisibly.
 #' 
+#' @example inst/examples/eqnvec.R
 #' @export
 summary.eqnvec <- function(object, ...) {
   symbols <- vapply(object, function(eqn) paste(getSymbols(eqn), collapse = ", "),

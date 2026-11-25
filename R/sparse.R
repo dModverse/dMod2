@@ -96,8 +96,8 @@
   H <- .sparseOver(out$hessian, pnames)
   lr <- .lowrankOver(out$lowrank, pnames)
   if (is.null(lr)) return(list(hessian = H, lowrank = NULL))
-  out <- setdiff(pnames, keep)
-  if (length(out) && any(lr$U[out, ] != 0)) return(list(hessian = .lowrankDense(H, lr), lowrank = NULL))
+  outside <- setdiff(pnames, keep)
+  if (length(outside) && any(lr$U[outside, ] != 0)) return(list(hessian = .lowrankDense(H, lr), lowrank = NULL))
   list(hessian = H, lowrank = .lowrankOver(lr, keep))
 }
 

@@ -1140,3 +1140,77 @@ test_that("SBML roundtrip preserves symbolic volumes, reaction frames and amount
                                function(e) eval(parse(text = e), as.list(pars)), numeric(1))
   expect_equal(value(g), value(f))
 })
+
+
+test_that(".petab_parse_parameters refuses a parameter without estimate", {
+  df <- data.frame(parameterId = c("a", "b"), parameterScale = "lin", lowerBound = 0,
+                   upperBound = 10, nominalValue = 1, estimate = c(1L, NA),
+                   stringsAsFactors = FALSE)
+  expect_error(dMod2:::.petab_parse_parameters(df), "estimate")
+})
+
+
+test_that("condition names that collide with a fallback id keep the keys unique", {
+  tables <- list(
+    conditions = data.frame(conditionId = c("a", "b"), conditionName = c("b", NA),
+                            stringsAsFactors = FALSE),
+    measurements = data.frame(simulationConditionId = c("a", "b"), stringsAsFactors = FALSE))
+  out <- dMod2:::.petab_use_condition_names(tables)
+  expect_false(anyDuplicated(out$conditions$conditionId) > 0)
+  expect_identical(out$conditions$conditionId, c("a", "b"))
+  expect_identical(out$measurements$simulationConditionId, c("a", "b"))
+})
+
+
+test_that("formulas of model files evaluate with the math functions only", {
+  expect_equal(dMod2:::.petab_eval_constant("pow(2, 3) + piecewise(1, 2 > 1, 0) + ln(exp(1))"), 10)
+  f <- tempfile()
+  expect_true(is.na(dMod2:::.petab_eval_constant(sprintf('file.create("%s")', f))))
+  expect_false(file.exists(f))
+})
+
+
+test_that("exportSbml writes a root event as two triggers and importSbml joins them again", {
+  withr::local_dir(tempdir())
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  reactions <- addReaction(eqnlist(), "A", "B", "k1*A", "fwd", compartment = "compartment")
+  events <- eventlist(var = "B", time = NA, value = 0, root = "A - 0.5", method = "replace")
+  out_xml <- file.path(tempdir(), "root_export.xml")
+  exportSbml(reactions, parameters = c(k1 = 0.8, compartment = 1), inits = c(A = 1, B = 0),
+             filepath = out_xml, modelID = "root_export", events = events)
+  xml_text <- gsub("\\s+", " ", paste(readLines(out_xml, warn = FALSE), collapse = " "))
+  trig <- regmatches(xml_text, gregexpr("<trigger.*?</trigger>", xml_text))[[1]]
+  expect_length(trig, 2L)
+  expect_true(any(grepl("<geq/>", trig)) && any(grepl("<leq/>", trig)))
+  expect_true(all(grepl('initialValue="true"', trig)))
+
+  ev <- importSbml(out_xml)$eventsSource
+  expect_equal(nrow(ev), 1L)
+  expect_true(grepl("A", ev$root))
+})
+
+
+test_that("importSbml keeps the symbol of a compartment an event resizes", {
+  if (!.libsbml_works()) skip("libsbml virtualenv not available")
+
+  f <- tempfile(fileext = ".xml")
+  writeLines(c(
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<sbml xmlns="http://www.sbml.org/sbml/level3/version2/core" level="3" version="2">',
+    '<model id="cev"><listOfCompartments>',
+    '<compartment id="c" size="1" constant="false" spatialDimensions="3"/></listOfCompartments>',
+    '<listOfSpecies><species id="A" compartment="c" initialConcentration="2" hasOnlySubstanceUnits="false" boundaryCondition="false" constant="false"/></listOfSpecies>',
+    '<listOfParameters><parameter id="k" value="3" constant="true"/></listOfParameters>',
+    '<listOfReactions><reaction id="r1" reversible="false"><listOfReactants>',
+    '<speciesReference species="A" stoichiometry="1" constant="true"/></listOfReactants>',
+    '<kineticLaw><math xmlns="http://www.w3.org/1998/Math/MathML"><apply><times/><ci> k </ci><ci> c </ci><ci> A </ci></apply></math></kineticLaw>',
+    '</reaction></listOfReactions>',
+    '<listOfEvents><event useValuesFromTriggerTime="true"><trigger initialValue="false" persistent="true">',
+    '<math xmlns="http://www.w3.org/1998/Math/MathML"><apply><geq/><csymbol encoding="text" definitionURL="http://www.sbml.org/sbml/symbols/time"> time </csymbol><cn> 1 </cn></apply></math></trigger>',
+    '<listOfEventAssignments><eventAssignment variable="c"><math xmlns="http://www.w3.org/1998/Math/MathML"><cn> 2 </cn></math></eventAssignment></listOfEventAssignments>',
+    '</event></listOfEvents></model></sbml>'), f)
+  m <- importSbml(f)
+  expect_equal(m$reactions$compartments$c$volume, "c")
+  expect_equal(unname(m$compartmentInits["c"]), "1")
+})

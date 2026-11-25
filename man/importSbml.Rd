@@ -29,6 +29,8 @@ name, already substituted into rates, initial values and observables.}
 states when an event changes a compartment volume.}
 \item{\code{eventsSource}}{An \link{eventlist} or \code{NULL}, the event assignments
 of the SBML file only.}
+\item{\code{compartmentInits}}{Named character, the size at the start of each
+compartment an event assigns to; such a compartment keeps the id as volume.}
 \item{\code{renamed}}{Named character, the new ids of SBML ids that are no
 valid R or C++ names, named by the old ids.}
 }

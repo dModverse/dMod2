@@ -148,12 +148,18 @@ move of the grid with $\psi$ is not differentiated.
 
 `method = "quadrature"` starts from the converged FOCEI fit and alternates:
 
-- **Rebuild.** Grids at the current $\psi$, at the lowest level (never falling) whose error is at
-  most `tol` over the number of groups. The error of level $l$ is estimated by
-  $2\lvert \log L_i^{(l+1)} - \log L_i^{(l)} \rvert$. A level of more than `maxNodes` nodes per
-  group (default 1000) is never evaluated; there the estimate is the change from level $l - 1$,
-  and a group above the tolerance is capped at $l$. For $K = 20$ levels $K + 1$ to $K + 3$ have 41,
-  801 and 10041 nodes, so the default budget ends at $K + 2$.
+- **Rebuild.** Grids at the current $\psi$, refined dimension-adaptively [@gerstner2003dimension]
+  from the union of the grid of the stage level and the grid of the last rebuild, so a grid never
+  shrinks. The grid is a
+  downward closed set of multi-indices $\mathbf{i}$, the sum (6) over it; the forward
+  neighbors that keep the set downward closed are evaluated, and their sum, the change of $\log L_i$ they would make,
+  estimates the error $2 \lvert \log L_i^{+} - \log L_i \rvert$. While it exceeds `tol` over the
+  number of groups, the neighbor of largest term joins the set and the neighbors of that index are evaluated,
+  so the grid grows only in the directions in which $e^{-\Phi_i/2}$ departs from the Gaussian.
+  Refinements beyond `maxNodes` evaluated nodes per group (default 1000) are not made; there the
+  evaluated neighbors join the grid, their change is the estimate, and a group above the tolerance
+  is capped. With no refinement the grid is that of (6); for $K = 20$ levels $K + 1$ to $K + 3$
+  have 41, 801 and 10041 nodes.
 - **Step.** Trust region over all parameters on frozen nodes. For mu-referenced fixed effects,
   $\phi_i = D_i \beta + \eta_i$, nodes are frozen in $\phi$, need no sensitivities and hold over
   larger steps.
@@ -169,11 +175,11 @@ groups whose two estimates differ by more than three standard errors plus the le
 
 ## Laplace EM
 
-`method = "laplaceEM"` runs ECME: a trust-region run of at most `maxCm1Iter` (30) iterations of
+`method = "laplaceEM"` runs ECME: a trust-region run of at most `maxCm1Iter` (default 30) iterations of
 the structural parameters on the likelihood over frozen nodes of level $K + 1$, then every block of $\Omega$ from $S = G^{-1} \sum_i M_i$ with the posterior
 second moments $M_i = \hat\eta_i \hat\eta_i^\top + 2 H_i^{-1}$ (modes alone would shrink
 $\Omega$). It stops when parameter change and extrapolated remaining distance are below `epsEcm`
-(default `1e-5`), or after `maxEcm` (200) iterations. Settings come from `control$quadrature`.
+(default `1e-5`), or after `maxEcm` (default 200) iterations. Settings come from `control$quadrature`.
 
 ## SAEM
 
@@ -212,7 +218,7 @@ $\Pr(z_{ij} = 1) = p$ and a slab value $v_{ij} \sim \mathcal{N}(0, \tau^2)$
   the local model, $v_o = b_o + x\,u_o$, so the state $b$ with $z_{ij} = 0$ and the line stay
   fixed. On this line the slab mass $I = \int f(x)\,dx$, $f$ the joint density of data and
   prior, is a Gauss-Hermite sum on the local Gaussian $\mathcal{N}(m, s^2)$ with the exact data
-  term at `nodes` (3) points, which gives the conditional inclusion probability with the slab value
+  term at `nodes` (default 3) points, which gives the conditional inclusion probability with the slab value
   integrated out [@liu1994collapsed],
 
   $$\hat\pi_{ij} = \frac{I}{I + f_0}, \qquad f_0 = f \text{ at } z_{ij} = 0 . \tag{8}$$

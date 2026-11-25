@@ -8,5 +8,6 @@ normL2_kernel.o constraint_kernel.o residual_kernel.o chain_kernel.o: residual_k
 trust_kernel.o trustL1_kernel.o trust_step.o: trust_driver.h trust_subproblem.h
 trust_kernel.o trust_step.o: trust_qn.h
 trust_kernel.o: trust_model.h
-focei_kernel.o: nlme_kernel.h trust_model.h trust_driver.h
+focei_kernel.o: nlme_kernel.h trust_model.h trust_driver.h trust_subproblem.h
 nlme_kernel.o: nlme_kernel.h residual_kernel.h trust_subproblem.h
+pimpl_kernel.o manifold_kernel.o chain_kernel.o: pimpl_kernel.h

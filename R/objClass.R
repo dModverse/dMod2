@@ -67,13 +67,8 @@ evalConditionResidual <- function(dataI, predictionI,
   if (!is.null(errfn) && (is.null(eCondNames) || cn %in% eCondNames)) {
     if (is.null(cn))
       stop("evalConditionResidual: `cn` must be supplied when `errfn` is set.")
-    pinner     <- getParameters(predictionI)
-    # the `fixed` marker is empty without sensitivities, so the outer names count too
-    fixedinner <- pinner[union(attr(pinner, "fixed"),
-                               intersect(names(pinner), names(fixed)))]
-    pinner     <- as.parvec(pinner[setdiff(names(pinner), names(fixed))])
-    fixedinner <- as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE)
-    err_cn <- errfn(out = predictionI, pars = pinner, fixed = fixedinner,
+    ea <- .errorModelArgs(predictionI, fixed)
+    err_cn <- errfn(out = predictionI, pars = ea$pars, fixed = ea$fixed,
                     deriv = deriv, deriv2 = deriv2, conditions = cn)[[cn]]
   }
 
@@ -462,16 +457,7 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
         attr(pr, "sigma", exact = TRUE)$frame)
     } else if (!is.null(errmodel)) {
       cn_eval <- if (is.null(e.cond)) conditions else intersect(conditions, e.cond)
-      split <- lapply(cn_eval, function(cn) {
-        pinner     <- getParameters(prediction[[cn]])
-        # The `fixed` marker is derived from the sensitivity rows, so it is
-        # empty under deriv = FALSE. Fall back to the outer fixed names, or
-        # the error model loses those parameters entirely.
-        fixedinner <- pinner[union(attr(pinner, "fixed"),
-                                   intersect(names(pinner), names(fixed)))]
-        list(pars  = as.parvec(pinner[setdiff(names(pinner), names(fixed))]),
-             fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
-      })
+      split <- lapply(cn_eval, function(cn) .errorModelArgs(prediction[[cn]], fixed))
       est <- .fnNode(errmodel)
       got <- if (!is.null(est) && length(cn_eval) > 1L) {
         b <- .bundle(conds = cn_eval,
@@ -1346,6 +1332,7 @@ datapointL2 <- function(name, time, parameter, sigma = 1,
 #' each.
 #' @return An [objlist].
 #' @aliases sumobjlist
+#' @example inst/examples/objlist.R
 #' @export
 #'
 "+.objlist" <- function(e1, e2) {
@@ -1571,6 +1558,7 @@ summary.objfn <- function(object, ...) {
 #'   missing on the input.
 #'
 #' @seealso [objframe()], [normL2()]
+#' @example inst/examples/res.R
 #' @export
 res <- function(data, out, err = NULL) {
   
@@ -1733,6 +1721,7 @@ objlist <- function(value, gradient, hessian) {
 #' When `deriv2`/`deriv2.err` are supplied, the corresponding 3D arrays are
 #' attached as `"deriv2"` / `"deriv2.err"`.
 #'
+#' @example inst/examples/res.R
 #' @export
 objframe <- function(mydata, deriv = NULL, deriv.err = NULL,
                      deriv2 = NULL, deriv2.err = NULL) {

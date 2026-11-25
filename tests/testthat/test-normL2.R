@@ -7,7 +7,7 @@ skip_if_no_compile <- function() {
 }
 
 
-# Error-model chains (sigma = sigma_y, sigma = srel * y) and a second-condition
+# Error-model chains (absolute and relative) and a second-condition
 # trafo on the shared decay fixture, in one shared object built on first use.
 # The trafos pass the error parameters through, so normL2's errmodel call sees them.
 .nl2_fx <- local({
@@ -638,8 +638,8 @@ test_that("an error parameter outside the prediction's derivatives has a gradien
 })
 
 
-# A prediction y = a_i at times i and an error model exp(ls) (1 + 0.1 y^2), both with their
-# exact second derivatives, written out so the objectives' Hessians need no compiled model.
+# A prediction and an error model with exact second derivatives written out, so the Hessians of
+# the objectives need no compiled model.
 .nl2_handmade <- function() {
   P2X <- function(times, pars, fixed = NULL, deriv = TRUE, deriv2 = FALSE) {
     p <- c(unclass(pars), unclass(fixed)); an <- paste0("a", 0:3)

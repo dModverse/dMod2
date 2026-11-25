@@ -1,3 +1,57 @@
+# dMod2 0.17.0
+
+* Requires symident >= 0.18.1. The global analysis of symident stops on work limits instead of time
+  limits. `discreteSymmetries()` drops `timeout` and `budget` and takes `memory`, `experiments`,
+  `msolveEntries`, `msolveTerms`, `searchEntries` and `eliminationTerms`, also as `globalOptions` of
+  `symmetryDetection(mode = "global")`; `info$discrete` holds the certificate of the count
+  (`certificate$complete`), `countBound`, `countDomain`, `experiments`, `eliminated` and `relaxed`.
+  `timeout` is removed from `symmetryReduction()` and `reconstControl()`, and `discrete` from
+  `symmetryDetection()`: use `mode = "global"`.
+* `spikeSlab()` takes the slab mean `mean` and the spike `spike`, both given, not estimated:
+  `(1 - prob) delta_spike + prob N(mean, tau^2)`. `spike = -Inf` under an exponential
+  transformation switches the parameter off; `em()` checks that the random effect is a summand in
+  the exponent of a numeric base greater than 1. Defaults keep the former distribution.
+* `gr(dist = )` without a grouping column makes one group `all` of all conditions. With `0 +` the
+  random effect is the parameter itself, so that `k1 + k2 ~ 0 + (1 | gr(dist = spikeSlab(spike =
+  -Inf)))` selects reaction rates; placeholders, `x ~ ... , x = c("k1", "k2")`, share `prob` and
+  `tau` the same way.
+* `em(method = "focei")` fits spike-and-slab random effects with `mean` or `spike` other than 0,
+  also beside normal random effects of the same grouping, by the sum over all subsets per group,
+  each a Laplace integral, with EM for the fixed effects, Omega and the hyperparameters
+  (`control$sparseFit$maxEcm`, `epsEcm`, `budget`). Groups beyond the budget take the expectation
+  consistent (EC) approximation in the rate coordinate, with a log-normal slab and the data term
+  expanded again at the EC mean (`control$sparseFit$ec`). `logLik(method = "importance")` refuses
+  these fits.
+* `em(method = "quadrature")` fits spike-and-slab random effects with any `mean` and `spike`, also
+  beside normal ones: every subset of non-negligible weight on a sparse grid around the inner mode,
+  then `trust()` on -2 log L over the fixed nodes until the rebuilt grids gain less than
+  `control$quadrature$tolDecrement`.
+* `em(method = "saem")` draws spike-and-slab random effects with a given `mean` and `spike`, `-Inf`
+  included, beside normal ones: a move into the slab from a spike at `-Inf` proposes from the
+  Laplace approximation of the coordinate by Newton steps on the model; -2 log L at the estimate is
+  the sum over subsets of `method = "focei"`.
+* The quadrature of `em()` refines the sparse grids dimension-adaptively (Gerstner and Griebel 2003)
+  in C++: from the Smolyak grid of the stage and the grid of the last rebuild, only in the
+  directions in which the integrand departs from the Gaussian at the mode, with the change by the
+  evaluated neighbors as the error. `control$quadrature$maxNodes` counts the evaluated nodes.
+* `fitErrorModel()` fits with the symbolic gradient of the error model and refuses a model without
+  one; the group column of `blather = TRUE` is `group`.
+* `plotPairs()` and `getObservables()`, generics without methods, are removed. `plotProfilesAndPaths()` takes `maxvalue` and `threshold` like
+  `plotProfile()`.
+* `compile(output = )` passes the suffixed name (`_2`, ...) of a shared object to the model names,
+  and `getLocalDLLs()` counts a shared object only below the working directory. Without `output`,
+  `compile()` skips a source whose shared object is loaded instead of unloading and rebuilding it.
+* `*` of two functions whose conditions do not overlap is an error. `objfn * parfn` keeps the
+  prediction of the objective only where it composes with the parameter function.
+* `confint()` compares the extrapolation of a profile with the span of the whole branch.
+  `mstrust()` passes `rinit`, `rmax` and `n` only to an optimizer that takes them.
+  `trust()` with multiple shooting counts the iterations of the first phase against `iterlim`.
+* `distributedComputing(wait = TRUE)` polls ssh nodes and queues every 10 s.
+* `exportSbml()` writes a root event as the trigger `root >= 0`, which fires when the root rises
+  through 0. `importSbml()` keeps a compartment that an event resizes as a symbol and returns the
+  start sizes in `compartmentInits`. Formulas of SBML and PEtab files evaluate with the
+  functions of `?cppDE::expressions` only. `importPEtab()` refuses an `estimate` other than 0 or 1.
+
 # dMod2 0.16.1
 
 * `derivMode` alone selects the derivatives a constructor builds: `odemodel()`, `Y()`, `P()`,
@@ -347,7 +401,7 @@
 
 * American spelling throughout: `trust(stepControl = list(regularize = ))` replaces `regularise`,
   the attribute `run` of the result of `mstrust()` names `optimizer` and `optimizerArgs` instead
-  of `optimiser` and `optimiserArgs`, and the sequential palette `"grey"` of [dMod_palettes()] is `"gray"`.
+  of `optimiser` and `optimiserArgs`, and the sequential palette `"grey"` of [dMod2_palettes()] is `"gray"`.
 
 * `wide2long()`, `%bmm%`, `rref()`, `nullZ()` and `submatrix()` are no longer exported, and
   `ggopen()` is removed. `as.data.frame()` of a prediction returns the long format of

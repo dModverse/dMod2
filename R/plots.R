@@ -306,7 +306,8 @@ scale_fill_dMod2_div <- function(mid = 0, ..., direction = 1, palette = "okabe")
 }
 
 
-ggplot <- function(...) ggplot2::ggplot(...) + scale_color_dMod2() + theme_dMod2()
+# ggplot2::ggplot() with the dMod2 color scale and theme
+.ggplotDMod2 <- function(...) ggplot2::ggplot(...) + scale_color_dMod2() + theme_dMod2()
 
 
 # Transformation of plotted values ---------------------------------------
@@ -758,8 +759,7 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
   out <- as.data.frame(sums[, list(res = sum(res)), keyby = split])
 
   colorBy <- as.name(split[min(2L, length(split))])
-  p <- ggplot(out, aes(!!as.name(split[1]), res, color = !!colorBy, group = !!colorBy)) +
-    theme_dMod2() +
+  p <- .ggplotDMod2(out, aes(!!as.name(split[1]), res, color = !!colorBy, group = !!colorBy)) +
     geom_point() +
     geom_line()
   if (length(split) > 2L) p <- p + facet_wrap(split[-(1:2)])
@@ -780,23 +780,6 @@ plotResiduals.default <- function(parframe, x, data, split = "condition",
 #' @return A `ggplot` object, as returned by the method.
 #' @export
 plotTrace <- function(x, ...) UseMethod("plotTrace", x)
-
-
-
-
-#' Pair Plot of Parameter Samples
-#'
-#' Generic for a corner plot of sampled parameters: scatter plots of pairs in
-#' the lower triangle, marginal densities on the diagonal. dMod2 defines no
-#' method for it; packages and extensions that return samples do.
-#'
-#' @param x Object holding parameter samples.
-#' @param ... Method-specific arguments.
-#' @return A `ggplot` object, as returned by the method.
-#' @export
-plotPairs <- function(x, ...) UseMethod("plotPairs", x)
-
-
 
 
 ## ---- profile / parameter-path plotting ---------
@@ -972,6 +955,8 @@ plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE) {
 #'   absolute value of 1. Defaults to `FALSE`.
 #' @param modes Character vector, the contributions to the objective drawn in
 #'   the profile plot besides the total. Defaults to `c("data", "prior")`.
+#' @param maxvalue,threshold Cut-off of the objective difference and the
+#'   horizontal lines above the optimum, as in [plotProfile()].
 #' @param ... Further arguments passed to [cowplot::plot_grid()].
 #'
 #' @return A `ggplot` object, the grid of [cowplot::plot_grid()].
@@ -986,38 +971,39 @@ plotPathsMulti <- function(profs, whichPar, nPars = 5, normalizePaths = FALSE) {
 #' @export
 plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
                                  normalizePaths = FALSE,
-                                 modes = c("data", "prior"), ...) {
+                                 modes = c("data", "prior"), maxvalue = 5,
+                                 threshold = .profileLines(), ...) {
   dots <- list(...)
   .require_ns("cowplot", "plotProfilesAndPaths()")
 
   # Save original obj.attributes before any subsetting drops them
-  orig_oa <- attr(profs, "obj.attributes")
-  filtered_oa <- if (!is.null(orig_oa)) intersect(orig_oa, modes) else NULL
+  origAttr <- attr(profs, "obj.attributes")
+  keptAttr <- if (!is.null(origAttr)) intersect(origAttr, modes) else NULL
   
   profs <- profs[profs$whichPar %in% whichPar, ]
   
-  cleanProfilePlot <- function(prof_sub) {
+  cleanProfilePlot <- function(profSub) {
     # Remove columns for unwanted modes, so plotProfile cannot plot them
-    cols_to_drop <- setdiff(orig_oa, modes)
-    prof_sub <- prof_sub[, !(colnames(prof_sub) %in% cols_to_drop), drop = FALSE]
-    attr(prof_sub, "obj.attributes") <- filtered_oa
-    p <- plotProfile(prof_sub)
+    dropCols <- setdiff(origAttr, modes)
+    profSub <- profSub[, !(colnames(profSub) %in% dropCols), drop = FALSE]
+    attr(profSub, "obj.attributes") <- keptAttr
+    p <- plotProfile(profSub, maxvalue = maxvalue)
     
     # the total and the requested contributions
     pdata <- attr(p, "data")
     pdata <- pdata[pdata$mode %in% c("total", modes), , drop = FALSE]
     
-    threshold <- c(1, 2.7, 3.84)
-    p_new <- ggplot(pdata, aes(x = par, y = delta, group = interaction(proflist, mode), 
-                               color = proflist, linetype = mode)) +
+    keep <- threshold != 0
+    labels <- c("optimum", .profileLineLabels(threshold)[keep])
+    lines <- c(0, threshold[keep])
+    .ggplotDMod2(pdata, aes(x = par, y = delta, group = interaction(proflist, mode),
+                            color = proflist, linetype = mode)) +
       facet_wrap(~name, scales = "free_x") +
-      geom_hline(yintercept = threshold, lty = 2, color = "gray") +
+      geom_hline(yintercept = lines, lty = 2, color = "gray") +
       geom_line() +
       geom_point(data = subset(pdata, is.zero)) +
       ylab(expression(paste("CL /", Delta * chi^2))) +
-      scale_y_continuous(breaks = c(1, 2.7, 3.84), 
-                         labels = c("68% / 1   ", "90% / 2.71", "95% / 3.84"),
-                         limits = c(NA, 5)) +
+      scale_y_continuous(breaks = lines, labels = labels, limits = c(NA, maxvalue)) +
       xlab("parameter value") +
       labs(title = NULL, x = NULL, linetype = "contrib") +
       theme(
@@ -1031,23 +1017,20 @@ plotProfilesAndPaths <- function(profs, whichPar, nPars = 5, ncol = 3,
       theme(legend.position = "none")
   }
   
-  stacked_list <- vector("list", length(whichPar))
+  stacked <- vector("list", length(whichPar))
   
   for (z in seq_along(whichPar)) {
-    prof_sub <- profs[profs$whichPar == whichPar[z], ]
+    profSub <- profs[profs$whichPar == whichPar[z], ]
     
-    p_prof_noleg <- cleanProfilePlot(prof_sub)
+    pProfile <- cleanProfilePlot(profSub)
     
-    p_paths <- plotPathsMulti(prof_sub, whichPar[z], nPars, normalizePaths = normalizePaths) +
+    pPaths <- plotPathsMulti(profSub, whichPar[z], nPars, normalizePaths = normalizePaths) +
       theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
     
-    aligned_pair <- cowplot::align_plots(p_prof_noleg, p_paths, align = "v", axis = "tb")
-    stacked_list[[z]] <- cowplot::plot_grid(aligned_pair[[1]], aligned_pair[[2]],
-                                            ncol = 1, rel_heights = c(1, 0.7), align = "v", axis = "tb")
+    aligned <- cowplot::align_plots(pProfile, pPaths, align = "v", axis = "tb")
+    stacked[[z]] <- cowplot::plot_grid(aligned[[1]], aligned[[2]], ncol = 1, rel_heights = c(1, 0.7),
+                                       align = "v", axis = "tb")
   }
   
-  body <- do.call(cowplot::plot_grid,
-                  c(list(plotlist = stacked_list, ncol = ncol), dots))
-  
-  return(body)
+  do.call(cowplot::plot_grid, c(list(plotlist = stacked, ncol = ncol), dots))
 }

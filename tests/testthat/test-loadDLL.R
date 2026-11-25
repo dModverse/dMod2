@@ -149,6 +149,41 @@ test_that("compiling into a loaded output name yields a fresh library", {
 })
 
 
+test_that("a suffixed output name reaches the modelname", {
+  dir <- file.path(tempdir(), "dmod_suffix")
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(dir); on.exit(setwd(oldwd), add = TRUE)
+
+  build <- function(nm) {
+    p <- P(eqnvec(a = "exp(la)"), condition = "C1", compile = FALSE, modelname = nm)
+    suppressMessages(compile(p, output = "sfx_all", cores = 1))
+    p
+  }
+
+  p1 <- build("sfx_one")
+  expect_equal(modelname(p1), "sfx_all")
+  expect_warning(p2 <- build("sfx_two"), "already loaded")
+  expect_equal(modelname(p2), "sfx_all_2")
+  expect_true(any(grepl("sfx_all_2", dMod2:::.dllFiles(list(p2)), fixed = TRUE)))
+  expect_equal(as.numeric(p2(c(la = 0))[["C1"]]["a"]), 1)
+})
+
+
+test_that("getLocalDLLs matches the working directory as a path prefix", {
+  dir <- file.path(tempdir(), "dmod_local")
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(dir); on.exit(setwd(oldwd), add = TRUE)
+  wd <- normalizePath(dir, winslash = "/")
+
+  local_mocked_bindings(
+    .loadedDLLPaths = function() c(inside  = file.path(wd, "a.so"),
+                                   below   = file.path(wd, "sub", "b.so"),
+                                   sibling = paste0(wd, "2/c.so")),
+    .package = "dMod2")
+  expect_setequal(getLocalDLLs(), c("inside", "below"))
+})
+
+
 test_that("a multi-condition trafo compiled alone is named by the modelname", {
   fx <- fx_loaddll()
   oldwd <- setwd(fx$dir); on.exit(setwd(oldwd), add = TRUE)
@@ -163,4 +198,17 @@ test_that("a multi-condition trafo compiled alone is named by the modelname", {
   pred <- (fx$g * fx$x * p)(0:2, pars)
   expect_named(pred, c("a", "b"))
   expect_equal(unname(pred$b[, "yB"]), 2 * unname(pred$a[, "yB"]))
+})
+
+test_that("compile() without output skips a source whose shared object is loaded", {
+  dir <- file.path(tempdir(), "dmod_keep")
+  dir.create(dir, showWarnings = FALSE, recursive = TRUE)
+  oldwd <- setwd(dir); on.exit(setwd(oldwd), add = TRUE)
+
+  p <- P(eqnvec(a = "exp(la)"), condition = "C1", compile = FALSE, modelname = "keep_one")
+  suppressMessages(compile(p, cores = 1))
+  path <- getLoadedDLLs()[["keep_one"]][["path"]]
+  expect_message(compile(p, cores = 1), "not rebuilt: keep_one")
+  expect_identical(getLoadedDLLs()[["keep_one"]][["path"]], path)
+  expect_equal(as.numeric(p(c(la = 0))[["C1"]]["a"]), 1)
 })

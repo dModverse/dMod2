@@ -1,4 +1,4 @@
-## NLME plotting and prediction methods for `em` fits.
+## Plot methods for `em` fits.
 
 utils::globalVariables(c("IPRED", "PRED", "eta", "part", "xmin", "xmax", "ymin", "ymax", "inclusion", "label",
                          "group", "estimate", "lower", "upper", "fit", "position", "width"))
@@ -295,6 +295,9 @@ plotRandomEffects.em <- function(x, type = c("conditional", "modes", "inclusion"
 ## `draws` per group from the conditional mixture of 0 and a normal with the conditional variance;
 ## NULL for a fit without spike-and-slab random effects.
 .spikeSlabValues <- function(fit, type, draws) {
+  if (any(vapply(fit$design$blocks, function(b) b$dist == "spikeSlab" && (b$mean != 0 || b$spike != 0), TRUE)))
+    stop("plotRandomEffects: the mixture panels take spikeSlab() with `mean` and `spike` 0 only; ",
+         "fit$random holds p0 and the modes.", call. = FALSE)
   pri <- .spikeSlabPriors(fit)
   r <- fit$random
   if (is.null(pri) || is.null(r$p0)) return(NULL)

@@ -69,7 +69,8 @@ with REML the maximum likelihood fits the rounds start from),
 \code{remlRounds} (the rounds of the restricted likelihood, 0 without),
 \code{seSource} (\code{"Hessian"}, or \code{"Gauss-Newton"} where the reported Hessian
 of a fit with random terms is not positive definite: then the
-Gauss-Newton Schur complement of the expected information over the random effects),
+Gauss-Newton Schur complement of the expected information over the random effects;
+\code{"none"} where that fails too, without standard errors),
 \code{fit}, \code{objfn}, \code{omega}, \code{random} and \code{randomEffects} with random terms,
 and the \code{model}. \code{scaled} also has \code{scaled}, the value of the biological symbol at which the prediction meets
 the reading with the other symbols at the fit (\code{NaN} where none does), and

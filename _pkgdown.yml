@@ -300,7 +300,6 @@ reference:
   - plotArray
   - plotValues
   - plotPars
-  - plotPairs
   - plotResiduals
   - plotTrace
 
@@ -385,6 +384,5 @@ reference:
   - getDerivs
   - getDerivs2
   - getEquations
-  - getObservables
   - getParameters
   - attrs

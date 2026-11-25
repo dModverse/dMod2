@@ -90,6 +90,7 @@ print.eventlist <- function(x, ...) {
 #' @param ... not used.
 #' @return Object of class `eventlist`.
 #' @seealso [eventlist()]
+#' @example inst/examples/as.eventlist.R
 #' @export
 as.eventlist <- function(x, ...) {
   UseMethod("as.eventlist", x)

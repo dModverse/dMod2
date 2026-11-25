@@ -483,6 +483,7 @@ getDerivs2.objlist <- function(x, ...) {
 #'   Default `NULL`. Used by the methods for `fn` and `prdlist`.
 #' @return Character vector of parameter names. For an `odemodel`, the states
 #'   and parameters; for a `prdlist`, a list with one entry per condition.
+#' @example inst/examples/accessors.R
 #' @export
 getParameters <- function(x, ..., conditions = NULL) {
   if (...length() > 0L) {
@@ -545,7 +546,7 @@ getParameters.prdframe <- function(x, ..., conditions = NULL) {
 #' @rdname getParameters
 getParameters.prdlist <- function(x, ..., conditions = NULL) {
 
-  select <- 1:length(x)
+  select <- seq_along(x)
   if (!is.null(conditions)) select <- intersect(names(x), conditions)
   lapply(x[select], function(myx) getParameters(myx))
 
@@ -583,6 +584,7 @@ getParameters.eqnvec <- function(x, ..., conditions = NULL) {
 #' @param ... not used.
 #' @return Character vector of condition names, `NULL` for a function defined
 #'   for every condition.
+#' @example inst/examples/accessors.R
 #' @export
 getConditions <- function(x, ...) {
   UseMethod("getConditions", x)
@@ -620,6 +622,7 @@ getConditions.fn <- function(x, ...) {
 #' @return Character vector of model names. The setter returns `x`.
 #' @seealso [compile()], [loadDLL()]
 #'
+#' @example inst/examples/accessors.R
 #' @export
 modelname <- function(x = NULL, ..., conditions = NULL) {
   if (...length() > 0L) {
@@ -653,7 +656,7 @@ modelname.objfn <- function(x = NULL, ..., conditions = NULL) {
 modelname.fn <- function(x = NULL, ..., conditions = NULL) {
 
   mappings <- attr(x, "mappings")
-  select <- 1:length(mappings)
+  select <- seq_along(mappings)
   if (!is.null(conditions)) select <- intersect(names(mappings), conditions)
   modelnames <- Reduce("union",
                        lapply(mappings[select], function(m) attr(m, "modelname"))
@@ -739,6 +742,7 @@ modelname.fn <- function(x = NULL, ..., conditions = NULL) {
 #' @return A list of `eqnvec` objects, one per condition. If `conditions` has
 #'   length one, the `eqnvec` itself. For an `odemodel`, the `eqnvec` of the
 #'   model.
+#' @example inst/examples/accessors.R
 #' @export
 getEquations <- function(x, conditions = NULL) {
 
@@ -779,17 +783,5 @@ getEquations.fn <- function(x, conditions = NULL) {
     }
   }
 
-}
-
-#' Extract the Observables of an Object
-#'
-#' Generic without methods in dMod2; other packages can provide them.
-#'
-#' @param x object from which the observables are extracted.
-#' @param ... not used.
-#' @return The observables, as a character vector.
-#' @export
-getObservables <- function(x, ...) {
-  UseMethod("getObservables", x)
 }
 

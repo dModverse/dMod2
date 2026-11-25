@@ -2,9 +2,9 @@
 # the objects. The analysis itself is tested in symident.
 
 test_that("argument names go to snake_case and field names back to camelCase", {
-  expect_identical(dMod2:::.symSnake(c("relevanceCapDir", "laurentDegNum", "timeout",
+  expect_identical(dMod2:::.symSnake(c("relevanceCapDir", "laurentDegNum", "msolveEntries",
                                        "perprimeMinPrimes", "stackedMin")),
-                   c("relevance_cap_dir", "laurent_deg_num", "timeout",
+                   c("relevance_cap_dir", "laurent_deg_num", "msolve_entries",
                      "perprime_min_primes", "stacked_min"))
   expect_identical(dMod2:::.symCamel(c("lie_order_used", "rank", "gauge_suggestion")),
                    c("lieOrderUsed", "rank", "gaugeSuggestion"))
@@ -18,6 +18,9 @@ test_that("argument names go to snake_case and field names back to camelCase", {
   expect_identical(names(y$symmetries[[1]]$completeGenerator), "k_on")
   expect_identical(names(y$symmetries[[1]]$generator), "k_off")
   expect_identical(names(y$symmetries[[1]]$stateComponents), "x_c1")
+  z <- dMod2:::.symCamelFields(list(count_bound = 0.1, eliminated = list(x_c1 = "T_1 - x_c2")))
+  expect_identical(names(z), c("countBound", "eliminated"))
+  expect_identical(names(z$eliminated), "x_c1")
 })
 
 test_that("reconstControl() passes homotopy to symident as a flag", {
@@ -177,7 +180,7 @@ test_that("scalings only, the gauge and the control settings", {
   expect_identical(r$identifiable, NA)
   expect_true(all(vapply(r$symmetries, `[[`, "", "type") == "scaling"))
   r <- symmetryDetection(f_ab, eqnvec(y = "s*A"), gaugePreference = NULL,
-                         control = reconstControl(degreeCap = 3L, timeout = 100),
+                         control = reconstControl(degreeCap = 3L),
                          verbose = FALSE)
   expect_length(r$gauge, 1L)
   expect_identical(r$info$settings$degreeCap, 3L)
@@ -233,7 +236,8 @@ test_that("discrete symmetries with a known input, kept by the reduction, and of
   skip_if(inherits(try(reticulate::import("symident.sym.msolve")$`_msolve_binary`(), silent = TRUE), "try-error"),
           "msolve not available")
   f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
-  r <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = list(points = 2))
+  r <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", mode = "global",
+                         globalOptions = list(points = 2, msolveTerms = 1e5))
   expect_true(r$identifiable)
   expect_length(r$discreteSymmetries, 1L)
   s <- r$discreteSymmetries[[1]]
@@ -244,13 +248,15 @@ test_that("discrete symmetries with a known input, kept by the reduction, and of
   expect_identical(r$info$discrete$fundamentalDomain, "k01 < k12")
   expect_identical(nrow(r$info$discrete$counts), 2L)
   expect_true(r$info$discrete$countFinal)
+  expect_true(r$info$discrete$certificate$complete %in% c("exact", "verified", "axiom"))
   red <- symmetryReduction(r)
   expect_length(red$discrete$symmetries, 1L)
   expect_identical(red$discrete$fundamentalDomain, "k01 < k12")
   expect_output(print(r), "fundamental domain: k01 < k12")
   # a model with a scaling is reduced first, the maps in the reduced coordinates
   g <- eqnvec(m = "ktx - dm*m", p = "ktl*m - dp*p")
-  r2 <- discreteSymmetries(symmetryDetection(g, eqnvec(y = "p"), reconstruct = TRUE), points = 2)
+  r2 <- discreteSymmetries(symmetryDetection(g, eqnvec(y = "p"), reconstruct = TRUE), points = 2,
+                           memory = 4, msolveEntries = 4e8)
   expect_false(r2$identifiable)
   expect_s3_class(r2$info$discrete$reduced$trafo, "eqnvec")
   expect_setequal(r2$discreteSymmetries[[1]]$changes, c("m", "dm", "dp"))

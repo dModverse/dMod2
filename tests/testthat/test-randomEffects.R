@@ -89,3 +89,47 @@ test_that("a cluster term shares the concentration and tau over the symbols of t
   expect_length(re$blocks, 1L)
   expect_true(all(is.na(re$terms$concentration)))
 })
+
+test_that("spikeSlab() takes a slab mean and a spike, -Inf included", {
+  d <- spikeSlab(prob = 0.3, mean = -1, spike = -Inf)
+  expect_equal(d[c("mean", "spike")], list(mean = -1, spike = -Inf))
+  expect_equal(spikeSlab()[c("mean", "spike")], list(mean = 0, spike = 0))
+  expect_output(print(d), "spikeSlab\\(prob = 0.3, tau = NULL, mean = -1, spike = -Inf\\)")
+  expect_error(spikeSlab(mean = Inf), "finite")
+  expect_error(spikeSlab(mean = c(0, 1)), "finite")
+  expect_error(spikeSlab(spike = Inf), "-Inf")
+  expect_error(spikeSlab(spike = NA_real_), "-Inf")
+  re <- randomEffects(insert(.tr(), v ~ 1 + (1 | gr(ID, dist = spikeSlab(mean = 2, spike = -Inf)))))
+  expect_equal(re$terms[c("mean", "spike")], data.frame(mean = 2, spike = -Inf))
+  expect_output(print(re), "mean 2, spike -Inf")
+  expect_equal(randomEffects(insert(.tr(), v ~ 1 + (1 | ID)))$terms[c("mean", "spike")],
+               data.frame(mean = 0, spike = 0))
+})
+
+test_that("gr() without a grouping puts all conditions in one group", {
+  tr <- insert(.tr(), ka + cl ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf))))
+  expect_equal(as.character(tr$C2[c("ka", "cl")]), c("(eta_ka_all)", "(eta_cl_all)"))
+  re <- randomEffects(tr)
+  expect_equal(re$subjects$all, list(all = c("C1", "C2", "C3")))
+  expect_equal(unique(re$terms$group), "all")
+  expect_length(re$fixed, 0)
+  # one spike-and-slab block, so the symbols share prob and tau
+  expect_equal(lapply(re$blocks, function(b) re$terms$stem[b]), list(c("eta_ka", "eta_cl")))
+  spikeParams <- c("ka", "cl")
+  expect_identical(insert(.tr(), x ~ 0 + (1 | gr(dist = spikeSlab(spike = -Inf))), x = spikeParams), tr)
+  cov <- .cov; names(cov)[1] <- "all"
+  expect_error(insert(branch(define(NULL, "x <- x", x = "cl"), table = cov), cl ~ 1 + (1 | all)),
+               "rename the column")
+})
+
+test_that("the base of an exponential is read off the equations", {
+  eqs <- list(c(a = "exp(x1)", b = "10^(x2)", c = "exp10(x3) + 2.3^x4", d = "6^(k + x5 - z)"),
+              c(a = "exp(x1)", e = "x6 * exp(x6)", f = "exp(2 * x7)", g = "kb^x8", h = "2^(k - x9)"))
+  ids <- paste0("x", 1:9)
+  expect_equal(dMod2:::.wrapBases(eqs, ids),
+               setNames(c(exp(1), 10, 10, 2.3, NA, NA, NA, NA, NA), ids))
+  expect_equal(dMod2:::.wrapBases(eqs, ids, summand = TRUE),
+               setNames(c(exp(1), 10, 10, 2.3, 6, NA, NA, NA, NA), ids))
+  expect_equal(dMod2:::.petab_detect_scales(eqs, ids[1:4]),
+               c(x1 = "log", x2 = "log10", x3 = "log10", x4 = "lin"))
+})

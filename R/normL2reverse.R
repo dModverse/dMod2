@@ -1,5 +1,4 @@
 ## normL2 backwards --------------------------------------------------------
-## Copyright (C) 2026 Simon Beyer
 
 ## Values forward, the objective's derivative in them pulled back through the
 ## chain: one sweep instead of n_theta. Every data row seeds both prediction and
@@ -33,14 +32,7 @@
   cn_eval <- character(0)
   if (!is.null(errmodel)) {
     cn_eval <- if (is.null(e.cond)) conditions else .intersectU(conditions, e.cond)
-    fixed_names <- names(fixed)
-    split <- lapply(cn_eval, function(cn) {
-      pinner <- getParameters(prediction[[cn]])
-      own <- attr(pinner, "fixed")
-      fixedinner <- pinner[c(own, .setdiffU(.intersectU(names(pinner), fixed_names), own))]
-      list(pars  = as.parvec(pinner[.setdiffU(names(pinner), fixed_names)]),
-           fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
-    })
+    split <- lapply(cn_eval, function(cn) .errorModelArgs(prediction[[cn]], fixed))
     err_pars  <- lapply(split, `[[`, "pars")
     err_fixed <- lapply(split, `[[`, "fixed")
     eb <- .bundle(conds = cn_eval,

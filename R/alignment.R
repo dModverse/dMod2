@@ -1072,7 +1072,7 @@ print.alignmentmodel <- function(x, ...) {
     symbol = rows[[i]]$symbol, origin = origin[i], term = rows[[i]]$term, column = rows[[i]]$column,
     group = rows[[i]]$group, id = rows[[i]]$id, dist = rows[[i]]$dist,
     prob = rows[[i]]$prob, concentration = rows[[i]]$concentration,
-    tau = rows[[i]]$tau,
+    tau = rows[[i]]$tau, mean = rows[[i]]$mean %||% 0, spike = rows[[i]]$spike %||% 0,
     stem = rows[[i]]$stem, stringsAsFactors = FALSE)))
   # per condition the value of a reading column where all readings of the condition share it, else NA
   single <- function(x) vapply(split(x, factor(cond, conds)), function(v) {
@@ -1158,7 +1158,8 @@ print.alignmentmodel <- function(x, ...) {
 #'   `remlRounds` (the rounds of the restricted likelihood, 0 without),
 #'   `seSource` (`"Hessian"`, or `"Gauss-Newton"` where the reported Hessian
 #'   of a fit with random terms is not positive definite: then the
-#'   Gauss-Newton Schur complement of the expected information over the random effects),
+#'   Gauss-Newton Schur complement of the expected information over the random effects;
+#'   `"none"` where that fails too, without standard errors),
 #'   `fit`, `objfn`, `omega`, `random` and `randomEffects` with random terms,
 #'   and the `model`. `scaled` also has `scaled`, the value of the biological symbol at which the prediction meets
 #'   the reading with the other symbols at the fit (`NaN` where none does), and
@@ -1282,7 +1283,7 @@ align <- function(model, fits = 10L, cores = 1L, method = c("focei", "quadrature
     gn <- tryCatch(.alignmentGaussNewton(m, obj, re, best), error = function(e) NULL)
     H <- gn$hessian
     lowrank <- gn$lowrank
-    seSource <- "Gauss-Newton"
+    seSource <- if (is.null(H)) "none" else "Gauss-Newton"
   }
   # with REML the standard errors of the mean parameters at the estimated error parameters
   # (Lindstrom and Bates 1990): the inverse of their block of the information

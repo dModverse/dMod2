@@ -8,7 +8,7 @@
 \usage{
 normal()
 
-spikeSlab(prob = NULL, tau = NULL)
+spikeSlab(prob = NULL, tau = NULL, mean = 0, spike = 0)
 
 dirichletProcess(concentration = NULL, tau = NULL)
 }
@@ -17,6 +17,12 @@ dirichletProcess(concentration = NULL, tau = NULL)
 (default) estimates it.}
 
 \item{tau}{Standard deviation of the slab; \code{NULL} (default) estimates it.}
+
+\item{mean}{Mean of the slab, one finite number, not estimated.}
+
+\item{spike}{Value of the spike, one finite number or \code{-Inf}, not
+estimated. \code{-Inf} needs the random effect as a summand in the exponent
+of a numeric base greater than 1, as after \code{insert(trafo, "x <- exp(x)")}.}
 
 \item{concentration}{Concentration of the Ewens prior, positive; \code{NULL}
 (default) estimates it.}
@@ -32,11 +38,12 @@ estimated by \code{\link[=em]{em()}} unless given.
 \itemize{
 \item \code{normal()}: multivariate normal with mean 0 and a covariance estimated
 per correlation block. The default.
-\item \code{spikeSlab()}: the deviation of a group is exactly 0 (spike) or drawn
-from \eqn{N(0, \tau^2)}{N(0, tau^2)} (slab); every group deviates with
-probability \code{prob}, independently. The spike-and-slab random effects of
-a group are integrated jointly, see section Sparse random effects of
-\code{\link[=em]{em()}}.
+\item \code{spikeSlab()}: the deviation of a group is exactly \code{spike} (spike) or
+drawn from \eqn{N(\mu, \tau^2)}{N(mean, tau^2)} (slab); every group
+deviates with probability \code{prob}, independently. The spike-and-slab
+random effects of a group are integrated jointly, see section Sparse
+random effects of \code{\link[=em]{em()}}. With \code{spike = -Inf} under an exponential
+transformation, the spike switches the parameter off.
 \item \code{dirichletProcess()}: per symbol, the deviations follow a Dirichlet
 process with base measure \eqn{N(0, \tau^2)}{N(0, tau^2)} and
 \code{concentration}, the fixed effect seated first at deviation 0: the
@@ -56,6 +63,7 @@ the clusters of any number of groups.
 normal()
 spikeSlab()
 spikeSlab(prob = 0.2, tau = 0.5)
+spikeSlab(mean = log(0.5), spike = -Inf)
 dirichletProcess()
 dirichletProcess(concentration = 1)
 
@@ -65,6 +73,13 @@ trafo <- branch(define(NULL, "x <- x", x = c("kp", "kd")), table = cov)
 trafo <- insert(trafo, "x <- exp(x)", x = c("kp", "kd"))
 trafo <- insert(trafo, x ~ 1 + (1 | gr(line, dist = dirichletProcess())), x = c("kp", "kd"))
 randomEffects(trafo)
+
+## reaction rates switched off by a spike at -Inf, one group of all conditions
+sel <- branch(define(NULL, "x <- x", x = c("kp", "kd")), table = cov)
+sel <- insert(sel, "x <- exp(x)", x = c("kp", "kd"))
+sel <- insert(sel, x ~ 0 + (1 | gr(dist = spikeSlab(mean = log(0.5), spike = -Inf))),
+              x = c("kp", "kd"))
+randomEffects(sel)
 }
 \seealso{
 \code{\link[=randomEffects]{randomEffects()}}, \code{\link[=insert]{insert()}}

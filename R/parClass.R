@@ -117,7 +117,7 @@ plot.parlist <- function(x, path = FALSE, ...) {
   end <- do.call(rbind, lapply(fits, `[[`, "argument"))
   frame <- data.frame(parameter = rep(colnames(start), each = nrow(start)),
                       x = as.vector(start), y = as.vector(end), run = 1)
-  ggplot(frame, aes(x = x, y = y)) + geom_point() + facet_wrap(~parameter)
+  .ggplotDMod2(frame, aes(x = x, y = y)) + geom_point() + facet_wrap(~parameter)
 }
 
 # Iterates of every fit, one line per fit and one panel per parameter
@@ -131,7 +131,7 @@ plot.parlist <- function(x, path = FALSE, ...) {
                iteration = rep(seq_len(nrow(iterates)), length(pars)),
                path = as.vector(iterates), idx = as.character(i))
   })
-  ggplot(do.call(rbind, steps), aes(x = iteration, y = path, color = idx)) +
+  .ggplotDMod2(do.call(rbind, steps), aes(x = iteration, y = path, color = idx)) +
     geom_line() + facet_wrap(~parameter)
 }
 
@@ -218,6 +218,7 @@ c.parlist <- function(...) {
 #' attribute `"run"` of the parlist is kept.
 #' @seealso [parframe()], [as.parvec.parframe()], and [parlist()] for an
 #'   example.
+#' @example inst/examples/parlist.R
 #' @export
 as.parframe <- function(x, ...) {
   UseMethod("as.parframe", x)
@@ -238,6 +239,7 @@ as.parframe <- function(x, ...) {
 #'   and that fit did not converge.
 #' @seealso [as.parframe()], [parvec()]
 #'
+#' @example inst/examples/parlist.R
 #' @export
 as.parvec.parframe <- function(x, index = 1, ...) {
   if (length(index) != 1L || is.na(index) || index < 1 || index > nrow(x))
@@ -515,7 +517,7 @@ plotValues.list <- function(x, ..., tol = 1, showSteps = FALSE, pseudoLog = FALS
   labels    <- c("optimum", .profileLineLabels(threshold)[keep])
   threshold <- c(0, threshold[keep])
 
-  p <- ggplot(data, aes(x = par, y = delta, group = interaction(proflist, mode),
+  p <- .ggplotDMod2(data, aes(x = par, y = delta, group = interaction(proflist, mode),
                         color = proflist, linetype = mode)) +
     facet_wrap(~name, scales = "free_x", ncol = ncol) +
     geom_hline(yintercept = threshold, lty = 2, color = "gray") +
@@ -649,6 +651,7 @@ rbind.parframe <- function(..., deparse.level = 1) {
 #' @param ... Not used. Select rows first with [`subset()`][subset.parframe], as in
 #'   `unique(subset(x, converged))`.
 #' @return The rows of `x` with distinct values, sorted by value.
+#' @example inst/examples/parlist.R
 #' @export
 unique.parframe <- function(x, incomparables = FALSE, tol = 1, ...) {
   if (!nrow(x)) return(x)
@@ -728,6 +731,7 @@ as.parvec.numeric <- function(x, names = NULL, deriv = NULL, deriv2 = NULL, ...)
 #' @param x object of class `parvec`.
 #' @param ... not used.
 #' @return `x`, invisibly.
+#' @example inst/examples/parvec.R
 #' @export
 print.parvec <- function(x, ...) {
   
@@ -765,6 +769,7 @@ print.parvec <- function(x, ...) {
 #'
 #' @return Object of class `parvec`.
 #'
+#' @example inst/examples/parvec.R
 #' @export
 "[.parvec" <- function(x, ..., drop = FALSE) {
 
@@ -829,6 +834,7 @@ print.parvec <- function(x, ...) {
 #'
 #' @return Object of class `parvec`.
 #'
+#' @example inst/examples/parvec.R
 #' @export
 c.parvec <- function(...) {
 
@@ -952,6 +958,7 @@ c.parvec <- function(...) {
 #' @param ... not used.
 #' @return `x`, invisibly.
 #' 
+#' @example inst/examples/P.R
 #' @export
 print.parfn <- function(x, ...) {
   
@@ -980,7 +987,7 @@ summary.parfn <- function(object, ...) {
   if (!inherits(x, "composed")) {
     
     
-    output <- lapply(1:length(mappings), function(C) {
+    output <- lapply(seq_along(mappings), function(C) {
       
       list(
         equations = attr(mappings[[C]], "equations"),

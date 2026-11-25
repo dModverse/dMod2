@@ -69,6 +69,7 @@ summary(out)
 ## Parameter frame and best fit
 parframe <- as.parframe(out)
 plotValues(parframe)
+unique(parframe)
 bestfit <- as.parvec(parframe)
 plot((g*x)(times, bestfit), data)
 }

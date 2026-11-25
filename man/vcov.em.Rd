@@ -15,9 +15,11 @@
 The inverse of half the Hessian of the marginal -2 log L. A fit with
 spike-and-slab random effects has no Hessian; there it is the
 inverse of the empirical information \code{information} of the group scores,
-see \code{\link[=em]{em()}}, which needs more groups than parameters. A fit
-with Dirichlet-process random effects, whose groups are not independent,
-has neither: an error, as where the scores do not span every direction.
+see \code{\link[=em]{em()}}, which needs more groups than parameters. Fits with
+Dirichlet-process random effects, whose groups are not independent, and
+fits by the sum over subsets (\code{spikeSlab()} with \code{mean} or \code{spike} other
+than 0, or \code{method = "quadrature"} with spike-and-slab random effects)
+have neither: an error, as where the scores do not span every direction.
 }
 \description{
 Covariance of the estimates of a mixed-effects fit

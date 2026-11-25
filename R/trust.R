@@ -527,9 +527,10 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   lbfgs <- all(vapply(ph$phases, function(p) p$hessianMethod %in% c("gn", "exact") ||
     (p$hessianMethod == "bfgs" && identical(p$qnControl$hessianInit, "gn")), TRUE))
   first <- NULL
+  start <- .reflectiveStart(parinit, parlower, parupper)
   if (identical(sparse, "auto")) {
     choice <- if (fromObjective && boundary == "reflective" && !length(.shootingTerms(objfun)))
-      .sparseChoice(objfun, parinit, dots) else list(sparse = FALSE)
+      .sparseChoice(objfun, start, dots) else list(sparse = FALSE)
     sparse <- choice$sparse
     first <- choice$first
   }
@@ -559,11 +560,11 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   # `want` (0 value, 1 gradient, 2 Gauss-Newton, 3 exact) becomes the objective's
   # own arguments here, where the formals of the objective are visible. The exact request is checked
   # up front, since a stop() inside fn reads as "parinit not feasible".
-  .fml   <- names(formals(objfun))
-  .wants_exact <- any(vapply(ph$phases, function(p)
+  fml <- names(formals(objfun))
+  wantsExact <- any(vapply(ph$phases, function(p)
     identical(p$hessianMethod, "exact") || identical(p$qnControl$hessianInit, "exact"),
     TRUE))
-  if (.wants_exact && !any(c("deriv2", "...") %in% .fml))
+  if (wantsExact && !any(c("deriv2", "...") %in% fml))
     stop("trust: hessianMethod or qnControl$hessianInit is \"exact\", but ",
          "this objective has no `deriv2` argument to ask an exact Hessian ",
          "with.", call. = FALSE)
@@ -592,7 +593,7 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   fn <- function(x, want = 2L, phase = 0L) {
     want <- as.integer(want)
     # the evaluation of the sparse choice at parinit is the first one of the kernel
-    if (!is.null(first) && want == 2L && identical(as.vector(x), as.vector(parinit))) {
+    if (!is.null(first) && want == 2L && identical(as.vector(x), as.vector(start))) {
       out <- first
       first <<- NULL
       return(.kernelHessian(out, pnames))
@@ -644,6 +645,29 @@ trust <- function(objfun, parinit, rinit = 0.1, rmax = 10,
   }
   if (!is.null(phases)) fit$phaseSweep <- stats::setNames(sweeps, ph$labels)
   .trustFit(fit)
+}
+
+# The point the reflective kernel starts from: parinit clipped to the bounds and pushed
+# 100 eps inside them, bit for bit as push_interior() in src/trust_driver.h. Named bounds
+# apply by name, an unnamed one to every parameter.
+.reflectiveStart <- function(parinit, parlower, parupper) {
+  bound <- function(b, default) {
+    out <- rep(default, length(parinit))
+    if (!length(b)) return(out)
+    if (is.null(names(b))) return(rep(as.numeric(b[[1L]]), length(parinit)))
+    m <- match(names(parinit), names(b))
+    out[!is.na(m)] <- as.numeric(b[m[!is.na(m)]])
+    out
+  }
+  lb <- bound(parlower, -Inf)
+  ub <- bound(parupper, Inf)
+  z <- pmin(pmax(as.numeric(parinit), lb), ub)
+  eps <- 100 * .Machine$double.eps * pmax(1, abs(z))
+  narrow <- is.finite(lb) & is.finite(ub) & ub - lb <= 2 * eps
+  z <- ifelse(is.finite(ub) & ub - z < eps, ub - eps, z)
+  z <- ifelse(is.finite(lb) & z - lb < eps, lb + eps, z)
+  z[narrow] <- 0.5 * (lb[narrow] + ub[narrow])
+  stats::setNames(z, names(parinit))
 }
 
 # An objlist with the sparse Hessian over `pnames` as the kernel reads it, `kernel`: the upper

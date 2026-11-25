@@ -18,7 +18,7 @@ symmetries <- symmetryDetection(reactions, unbleached, events = events, forcings
 
 ## ---- reduction
 # a section of every orbit of the scalings
-reduction <- symmetryReduction(symmetries, timeout = 120)
+reduction <- symmetryReduction(symmetries)
 
 ## ---- symmetriessave
 dir.create("results", showWarnings = FALSE)

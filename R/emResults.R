@@ -217,9 +217,11 @@ coef.em <- function(object, ...) object$argument
 #' @return The inverse of half the Hessian of the marginal -2 log L. A fit with
 #'   spike-and-slab random effects has no Hessian; there it is the
 #'   inverse of the empirical information `information` of the group scores,
-#'   see [em()], which needs more groups than parameters. A fit
-#'   with Dirichlet-process random effects, whose groups are not independent,
-#'   has neither: an error, as where the scores do not span every direction.
+#'   see [em()], which needs more groups than parameters. Fits with
+#'   Dirichlet-process random effects, whose groups are not independent, and
+#'   fits by the sum over subsets (`spikeSlab()` with `mean` or `spike` other
+#'   than 0, or `method = "quadrature"` with spike-and-slab random effects)
+#'   have neither: an error, as where the scores do not span every direction.
 #' @example inst/examples/emEstimates.R
 #' @export
 vcov.em <- function(object, ...) {
@@ -230,8 +232,9 @@ vcov.em <- function(object, ...) {
          length(object$argument), " parameters, or the Hessian of the terms without random effects is ",
          "indefinite; confint(method = \"profile\") gives intervals.", call. = FALSE)
   if (is.null(H))
-    stop("vcov: the fit has no Hessian of the marginal -2 log L and, with Dirichlet-process random effects, ",
-         "no empirical information; confint(method = \"profile\") gives intervals.", call. = FALSE)
+    stop("vcov: the fit has neither a Hessian of the marginal -2 log L nor an empirical information ",
+         "(Dirichlet-process random effects, or the sum over subsets of spike-and-slab random effects); ",
+         "confint(method = \"profile\") gives intervals.", call. = FALSE)
   if (is.null(object$hessian)) object$lowrank <- NULL
   object$hessian <- H
   vcov.trustfit(object, ...)
@@ -352,6 +355,8 @@ logLik.em <- function(object, method = c("fit", "importance"), draws = 1000L, ..
   method <- match.arg(method)
   out <- structure(-object$value / 2, df = length(object$argument), nobs = object$nObs, class = "logLik")
   if (method == "fit") return(out)
+  if (any(vapply(object$design$blocks, function(b) b$dist == "spikeSlab" && (b$mean != 0 || b$spike != 0), TRUE)))
+    stop("logLik: method = \"importance\" takes spikeSlab() with `mean` and `spike` 0 only.", call. = FALSE)
   is <- .sparseImportance(object, draws)
   out[] <- -is$value / 2
   structure(out, se = is$se / 2, ess = is$ess, approximation = -is$approximation / 2)
@@ -397,12 +402,12 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
   rows <- list()
   for (cn in conds) {
     d <- data[[cn]]
-    pi <- ipred[[cn]]; pp <- pred[[cn]]
+    ip <- ipred[[cn]]; pp <- pred[[cn]]
     si <- sigmaOf(ipred, cn); sp <- sigmaOf(pred, cn)
-    for (nm in intersect(unique(as.character(d$name)), colnames(pi))) {
+    for (nm in intersect(unique(as.character(d$name)), colnames(ip))) {
       dn <- d[d$name == nm, , drop = FALSE]
-      idx <- match(dn$time, pi[, "time"])
-      grid_idx <- setdiff(seq_len(nrow(pi)), idx)
+      idx <- match(dn$time, ip[, "time"])
+      grid_idx <- setdiff(seq_len(nrow(ip)), idx)
       # a recorded sigma wins over the error model, as in normL2()
       sig <- function(sm, i, given) {
         model <- if (!is.null(sm) && nm %in% colnames(sm)) as.numeric(sm[i, nm]) else NA_real_
@@ -411,12 +416,12 @@ predict.em <- function(object, times = NULL, type = c("all", "individual", "popu
       rows[[length(rows) + 1L]] <- data.frame(
         condition = cn, group = group[[cn]], time = dn$time, name = nm, observed = dn$value,
         sigma = sig(si, idx, dn$sigma), sigmaPRED = sig(sp, idx, dn$sigma),
-        IPRED = pi[idx, nm], PRED = pp[idx, nm], source = "obs", stringsAsFactors = FALSE)
+        IPRED = ip[idx, nm], PRED = pp[idx, nm], source = "obs", stringsAsFactors = FALSE)
       if (length(grid_idx))
         rows[[length(rows) + 1L]] <- data.frame(
-          condition = cn, group = group[[cn]], time = pi[grid_idx, "time"], name = nm,
+          condition = cn, group = group[[cn]], time = ip[grid_idx, "time"], name = nm,
           observed = NA_real_, sigma = sig(si, grid_idx, NA_real_),
-          sigmaPRED = sig(sp, grid_idx, NA_real_), IPRED = pi[grid_idx, nm],
+          sigmaPRED = sig(sp, grid_idx, NA_real_), IPRED = ip[grid_idx, nm],
           PRED = pp[grid_idx, nm], source = "grid", stringsAsFactors = FALSE)
     }
   }
@@ -623,7 +628,7 @@ anova.em <- function(object, ...) .anovaTable(c(list(object), list(...)))
 #' @example inst/examples/simulate.em.R
 #' @export
 simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
-  if (!is.null(seed)) set.seed(seed)
+  .localSeed(seed)
   design <- object$design
   pars <- c(object$argument, object$fixed)
   lapply(seq_len(nsim), function(i) {
@@ -680,7 +685,9 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
         }
         next
       }
-      out[as.vector(E[, b$stems, drop = FALSE])] <- stats::rbinom(n, 1, value("prob")) * stats::rnorm(n, 0, value("tau"))
+      slab <- stats::rbinom(n, 1, value("prob")) == 1L
+      out[as.vector(E[, b$stems, drop = FALSE])] <- ifelse(slab, stats::rnorm(n, b$mean %||% 0, value("tau")),
+                                                           b$spike %||% 0)
     }
   }
   out

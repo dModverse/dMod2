@@ -122,13 +122,13 @@ def build_sbml(spec):
         kl.setMath(ast)
 
     # --- events ---
-    # One <event> per trigger; `time` gives `time >= T`, otherwise the root
-    # expression is used as the trigger formula directly.
+    # One <event> per trigger; `initialValue` true keeps a trigger that holds at
+    # the start from firing there.
     for e in spec.get("events", []):
         ev = model.createEvent()
         ev.setUseValuesFromTriggerTime(False)
         trig = ev.createTrigger()
-        trig.setInitialValue(False)
+        trig.setInitialValue(bool(e.get("initialValue", False)))
         trig.setPersistent(True)
         formula = e.get("trigger")
         ast = libsbml.parseL3Formula(_l3(formula))

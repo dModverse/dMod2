@@ -348,11 +348,25 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   for (i in seq_along(info))
     info[[i]]$srcfile <- normalizePath(info[[i]]$srcfile, "/")
 
-  ## Deduplicate by srcfile, keeping the first non-empty flags.
+  ## Deduplicate by srcfile, the first entry wins: compileInfo flags come
+  ## before those of the fallback discovery.
   ord <- order(vapply(info, function(e) e$srcfile, character(1)))
   info <- info[ord]
   keep <- !duplicated(vapply(info, function(e) e$srcfile, character(1)))
   info <- info[keep]
+
+  ## A loaded shared object is never unloaded: that nulls the native symbols the session resolved
+  ## from it. The generators give a new model a name no loaded object has, so a source whose own
+  ## shared object is loaded is the model already built and is skipped.
+  if (is.null(output)) {
+    root <- function(e) sub("\\.[^.]+$", "", basename(e$srcfile))
+    built <- vapply(info, root, character(1)) %in% names(getLoadedDLLs())
+    if (any(built))
+      message("compile: already loaded, not rebuilt: ",
+              paste(vapply(info[built], root, character(1)), collapse = ", "))
+    info <- info[!built]
+    if (!length(info)) return(invisible(TRUE))
+  }
 
   files      <- vapply(info, function(e) e$srcfile, character(1))
 
@@ -458,12 +472,6 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
   }
   .reportToolchain("C",   cc_bin,  base,     "\\.c$")
   .reportToolchain("C++", cxx_bin, cxx_base, "\\.cpp$")
-
-  ## unload stale DLLs
-  loaded <- getLoadedDLLs()
-  for (i in seq_along(roots))
-    if (roots[i] %in% names(loaded)) try(dyn.unload(loaded[[roots[i]]][["path"]]), silent = TRUE)
-  if (!is.null(outfile)) try(dyn.unload(outfile), silent = TRUE)
 
   # A backend's compileArgs can repeat a flag the base already sets (-fopenmp).
   # Compile flags only: repeated -l on a link line can be load-bearing.
@@ -579,7 +587,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     else if (cores > 1 && length(info) > 1L)
       compile_on_cluster(info)
     else for (e in info) compile_one(e)
-    for (r in roots_full) .reloadDLL(paste0(r, so))
+    for (r in roots_full) .loadNewDLL(paste0(r, so))
     .clearSymbols()
   } else {
     ## Combined output: each source compiled to a .o, then one R CMD SHLIB link
@@ -631,7 +639,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     all_compile <- unique(unlist(lapply(info, function(e) strsplit(trimws(e$compileArgs %||% ""), "\\s+")[[1]])))
     all_compile <- all_compile[nzchar(all_compile)]
 
-    output <- basename(sub(paste0("\\", so, "$"), "", output))
+    output <- out_base
 
     ## Past the argument limit the objects go into a static archive in chunks,
     ## and SHLIB gets one anchor source plus the archive. The anchor is C++ when
@@ -711,7 +719,6 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     }
 
     out <- outfile
-    try(dyn.unload(out), silent = TRUE)
     if (file.exists(out)) unlink(out)
     ## Link through system2() pipes, not a `2>&1` token, which on Windows
     ## becomes the make override PKG_LIBS=2>&1. The compiler banner is dropped,
@@ -732,7 +739,7 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
     if (!file.exists(out))
       stop("R CMD SHLIB returned exit 0 but did not produce ", out, ":\n",
            paste(out_lines, collapse = "\n"))
-    .reloadDLL(out)
+    .loadNewDLL(out)
     .clearSymbols()
     ## cOde loads a deSolve leaf's entry points from the shared object the
     ## `modelname` names, which must now be the combined one.
@@ -758,13 +765,12 @@ compile <- function(..., output = NULL, args = NULL, cores = detectFreeCores(),
 #' @return Character vector with the names of the loaded shared objects whose
 #'   path lies in the working directory.
 #' @seealso [loadDLL()]
+#' @example inst/examples/getLocalDLLs.R
 #' @export
 getLocalDLLs <- function() {
-  
-  all.dlls <- getLoadedDLLs()
-  is.local <- sapply(all.dlls, function(x) grepl(getwd(), unclass(x)$path, fixed = TRUE))
-  names(is.local)[is.local]
-  
+  wd <- paste0(sub("/$", "", normalizePath(getwd(), winslash = "/")), "/")
+  paths <- .loadedDLLPaths()
+  names(paths)[startsWith(paths, wd)]
 }
 
 
@@ -790,12 +796,10 @@ getLocalDLLs <- function() {
 }
 
 
-## Loading an already loaded shared object is a no-op in R, so a rebuilt file is
-## unloaded first. Entry points resolve by name, so this is safe for objects in use.
-.reloadDLL <- function(path) {
+## Loads a shared object unless the session holds it already; compile() never rebuilds a loaded one.
+.loadNewDLL <- function(path) {
   p <- normalizePath(path, winslash = "/", mustWork = FALSE)
-  if (p %in% .loadedDLLPaths()) try(dyn.unload(p), silent = TRUE)
-  dyn.load(p)
+  if (!p %in% .loadedDLLPaths()) dyn.load(p)
 }
 
 

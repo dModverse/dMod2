@@ -1,7 +1,7 @@
 Package: dMod2
 Type: Package
 Title: Parameter Estimation in Dynamical Models
-Version: 0.16.1
+Version: 0.17.0
 Date: 2026-11-16
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
@@ -66,7 +66,7 @@ Suggests:
     ragg,
     rjson,
     yaml
-SystemRequirements: C++17 compiler; Python (>= 3.9) with SymPy, NumPy and
+SystemRequirements: C++17 compiler; Python (>= 3.10) with SymPy, NumPy and
     SciPy; the Python packages python-libsbml for SBML and PEtab, and symident
     for symmetryDetection() and symmetryReduction(). reticulate provides the
     Python packages on first use; symident is installed from PyPI.

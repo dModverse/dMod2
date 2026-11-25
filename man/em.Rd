@@ -137,7 +137,9 @@ importance sampling.}
 \item{\code{coupling}}{\code{"expectationConsistent"} where a group needed it,
 else \code{NULL}.}
 \item{\code{boundary}}{the hyperparameters set to 0, see \code{control}.}
-\item{\code{etaModes}, \code{etaSE}, \code{shrinkage}}{}
+\item{\code{etaModes}, \code{etaSE}, \code{shrinkage}}{the modes of the random effects per
+group, their conditional standard errors, and per random effect
+1 - SD(modes) / SD from Omega.}
 \item{\code{certificate}}{with method \code{"quadrature"} per group the
 importance-sampling check at the estimate, section Quadrature.}
 }
@@ -166,11 +168,16 @@ exact derivative of the volume term. The default, and the method for
 several groupings; also for spike-and-slab and Dirichlet-process
 random effects (at most 14 groups).}
 \item{\code{"quadrature"}}{adaptive sparse-grid quadrature around the modes,
-started from the FOCEI fit; section Quadrature.}
+started from the FOCEI fit; section Quadrature. Also for spike-and-slab
+random effects alone, per subset; section Sparse random effects.}
 \item{\code{"laplaceEM"}}{ECM on the Laplace approximation with the
 covariance-corrected update of \code{Omega}.}
 \item{\code{"saem"}}{stochastic-approximation EM, also for spike-and-slab and
-Dirichlet-process random effects; section SAEM.}
+Dirichlet-process random effects; section SAEM. With many structural
+parameters and sparse random effects it does not find the optimum from
+random starts reliably; start it from a \code{"focei"} fit,
+\code{em(obj, random, fit, method = "saem")}, to check that fit without the
+Laplace approximation.}
 }
 }
 \section{Quadrature}{
@@ -180,16 +187,22 @@ modes at the current parameters and one trust step over every parameter on
 these frozen nodes. The nodes of the mu-referenced fixed effects are frozen
 in \verb{phi = X beta + eta}. Entries of \code{control$quadrature}:
 \describe{
-\item{\code{tol}}{allowed change of -2 log L by the next level, default 0.1,
-split over the groups; each group takes the lowest level from the current
-stage of the group up within \code{tol / G} and never a lower one than before.
-Where the next level exceeds \code{maxNodes}, the change from the level below
-is the estimate. \code{Inf} keeps the levels of the stages.}
+\item{\code{tol}}{allowed change of -2 log L by the next refinement, default
+0.1, split over the groups. Each group starts from the Smolyak grid of
+the stage and the grid of the last rebuild, and refines it
+dimension-adaptively (Gerstner and Griebel 2003): the forward neighbors
+of the grid are evaluated, their change of -2 log L is the error, and the
+neighbor of largest change joins the grid until the error is within
+\code{tol / G}. A grid therefore refines only the directions in which the
+integrand departs from the Gaussian at the mode. Where the next
+refinement exceeds \code{maxNodes}, the evaluated neighbors join the grid and
+their change is the estimate. \code{Inf} keeps the grids of the stages.}
 \item{\code{levels}}{the stages, default \code{K + 1} with \code{K} the number of random
 effects of a group; level \code{K + s} integrates polynomials of total
 degree \verb{2 s + 1} exactly.}
 \item{\code{maxLevel}, \code{maxNodes}}{highest level, default \code{K + 8}, and the
-largest node count of a level per group, default 1000. A group whose
+largest number of evaluated nodes per group, default 1000; the level of
+an adaptive grid is that of the smallest Smolyak grid holding it. A group whose
 error exceeds \code{tol / G} at the highest level within both is capped.
 Column \code{capped} of \code{stageTrace} counts the capped groups; attribute
 \code{"levels"} of \code{stageTrace} and the \code{certificate} list level, level error
@@ -212,7 +225,8 @@ proposal at the mode of each group. A group is flagged where the two
 -2 log L differ by more than three standard errors plus the error the
 level of the group allows, or the Pareto shape of the weights exceeds 0.7.}
 \item{\code{epsEcm}, \code{maxEcm}}{for \code{"laplaceEM"}: the extrapolated distance to
-the fixed point at which it stops, default 1e-5, and the iteration limit.}
+the fixed point at which it stops, default 1e-5, and the iteration limit,
+default 200.}
 }
 }
 
@@ -280,8 +294,9 @@ partitions, with \code{valueSE}.
 
 \section{Sparse random effects}{
 
-With spike-and-slab or Dirichlet-process random effects the
-parameters and hyperparameters move in one trust region. The integral of a
+With spike-and-slab random effects of the default \verb{spike = 0, mean = 0} or
+Dirichlet-process random effects, \code{method = "focei"} moves the
+parameters and hyperparameters in one trust region. The integral of a
 group is exact where the data couple none of the factors and the sum over
 the subsets of the spike-and-slab random effects of the group stays within a budget of
 nodes; else it is the expectation consistent (EC) approximation, and a
@@ -291,7 +306,62 @@ trial point at which EC does not converge is a failed evaluation. Entries of \co
 \item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings of the outer search. The modes
 are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
 below 1e-8; of \code{control$innerControl} only \code{sqpIterlim} applies.}
+\item{\code{maxEcm}, \code{epsEcm}, \code{budget}, \code{ec}}{of the sum over subsets, see below.}
 }
+
+Spike-and-slab random effects with \code{mean} or \code{spike} other than 0, see
+\code{\link[=spikeSlab]{spikeSlab()}}, take a separate path of \code{method = "focei"}, beside normal
+random effects of the same grouping but no Dirichlet-process ones. The
+integral of a group is the sum over all subsets of the spike-and-slab random
+effects, each subset a Laplace integral over the normal random effects and
+the slab ones of the subset at the inner mode, the other random effects at
+the spike; \code{spike = -Inf} switches the
+parameter off. The number of subsets summed over all groups is at most
+\code{budget} (default 4096). The fixed effects and hyperparameters follow by EM:
+\code{prob} is the mean inclusion probability, \code{tau^2} the mean squared deviation
+from \code{mean} under the slab, and the fixed effects minimize the data term
+plus slab prior summed over the subsets with their weights, jointly with
+the subset modes; the log determinant of the Laplace integral enters the
+weights only; Omega is the mean of the posterior second moments of the
+normal random effects, restricted to the block structure. EM stops after
+\code{maxEcm} iterations (default 200) or when no
+estimate changes by more than \code{epsEcm} (default 1e-6). The \code{p0} column of
+the random table is the posterior probability of the spike.
+
+\code{method = "saem"} draws them by the moves of section SAEM: a spike at
+\code{-Inf} leaves the other slab values as they are, and a move into the slab
+proposes from the Laplace approximation of the coordinate given the others,
+by Newton steps on the model. The reported -2 log L is the sum over subsets
+of \code{method = "focei"} at the estimate; Dirichlet-process random effects
+beside are refused.
+
+\code{method = "quadrature"} takes the same path for every model with
+spike-and-slab random effects, the default \code{spike = 0} included, after EM on
+the Laplace integrals to their fixed point. Every subset of Laplace weight
+above 1e-8 of the largest is integrated on a dimension-adaptive sparse grid
+around the inner mode as in section Quadrature; a group has
+\code{control$quadrature$tol / G} (default 0.1 / G), a subset of relative weight
+\eqn{w} the share \eqn{1 / w} of it, so that light subsets stay on the first
+grid; the other subsets keep the Laplace value. Then every parameter, the
+Cholesky parameters of Omega and the estimated \code{prob} and \code{tau} included,
+moves by trust steps on the frozen nodes, which are rebuilt after each step
+until a Newton step would lower -2 log L by less than \code{tolDecrement}
+(\code{stopReason} \code{"decrement"}). Of \code{control$quadrature} this path reads \code{tol},
+\code{maxLevel} and \code{maxNodes} (per subset), \code{tolDecrement}, \code{maxEcmPerStage},
+\code{cm1Control} and \code{maxCm1Iter}.
+
+Groups beyond the budget, the largest first, take the expectation consistent
+(EC) approximation in a coordinate in which the spike is 0: the rate
+\eqn{b^\eta}{b^eta} for \code{spike = -Inf}, where the slab is log-normal, and
+\eqn{\eta}{eta} minus the spike else. The data term is a Gaussian in that
+coordinate, expanded first at the mode with every random effect in the slab
+and again at the EC mean until it is stable; normal random effects enter it
+exactly, without sites. These groups take the subset of
+inclusion probability above 1/2 for the fixed effects. Entries of
+\code{control$sparseFit$ec}: \code{nodes} of the Gauss-Hermite rule of the log-normal
+slab (40), \code{maxSweeps} (500) and \code{tolSweep} (1e-5, the change of the
+marginal means in standard deviations), \code{maxRelinearize} (30) and
+\code{tolRelinearize} (1e-4, relative).
 }
 
 \examples{

@@ -102,7 +102,7 @@ With \code{deriv = FALSE} it returns the value alone.
 # Generate a data.frame and corresponding prediction function
 timesD <- seq(0, 2*pi, 0.5)
 mydata <- data.frame(name = "A", time = timesD, value = sin(timesD), 
-                     row.names = paste0("par", 1:length(timesD)))
+                     row.names = paste0("par", seq_along(timesD)))
 x <- Xd(mydata)
 
 # Evaluate the prediction function at different time points

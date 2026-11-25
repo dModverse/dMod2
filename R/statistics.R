@@ -182,9 +182,9 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     stop("profile: whichPar must name or index parameters of pars.", call. = FALSE)
 
   # cores = c(pars = , conditions = ) splits the two axes; see mstrust().
-  .cc <- .splitCores(cores, "pars")
-  coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
-  cores <- .sanitizeCores(min(length(whichPar), .cc$outer))
+  cc <- .splitCores(cores, "pars")
+  coresConditions <- if (!is.null(cc$conditions)) .sanitizeCores(cc$conditions)
+  cores <- .sanitizeCores(min(length(whichPar), cc$outer))
 
   folder <- "profiles-interRes"
   if (cautiousMode) dir.create(folder, showWarnings = FALSE)
@@ -479,6 +479,9 @@ profile.function <- function(fitted, ...) profile.objfn(fitted, ...)
 #'
 #' @return A single number.
 #' @seealso [profile()][profile.objfn], [confint.parframe()]
+#' @examples
+#' profileThreshold(0.95)
+#' profileThreshold(0.95, method = "F", n = 20, p = 3)
 #' @importFrom stats qf
 #' @export
 profileThreshold <- function(level = 0.95, method = c("chisq", "F"),
@@ -545,7 +548,7 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
     whichPar <- d[["whichPar"]][origin]
     
     # Define function to return constraint value where threshold is passed
-    get_xThreshold <- function(branch) {
+    crossing <- function(branch) {
       
       y <- branch[[val.column]] - d[[val.column]][origin]
       x <- branch[["constraint"]]
@@ -557,24 +560,25 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
       # If threshold exceeded, take closest points below and above threshold
       # and interpolate
       if (any(y > threshold)) {
-        i.above <- utils::head(which(y > threshold), 1)
-        i.below <- utils::tail(which(y < threshold), 1)
-        if (i.below > i.above) {
+        iAbove <- utils::head(which(y > threshold), 1)
+        iBelow <- utils::tail(which(y < threshold), 1)
+        if (iBelow > iAbove) {
           return(NA)
         } else {
-          slope <- (y[i.above] - y[i.below])/(x[i.above] - x[i.below])
-          dy <- threshold - y[i.below]
+          slope <- (y[iAbove] - y[iBelow])/(x[iAbove] - x[iBelow])
+          dy <- threshold - y[iBelow]
           dx <- dy/slope
-          x_threshold <- x[i.below] + dx
-          return(x_threshold)
+          xThreshold <- x[iBelow] + dx
+          return(xThreshold)
         }
       }
       
-      # If threshold not exceeded,
-      # take the last 20% of points (at least 3) an perform linear fit
-      n_last20 <- max(3, length(which(x - x[1] > 0.8 * (max(x) - x[1]))))
-      x <- tail(x, n_last20)
-      y <- tail(y, n_last20)
+      # Not reached: linear fit to the last 20 % of the points (at least 3),
+      # extrapolations beyond ten times the span of the whole branch are Inf
+      span <- max(x) - min(x)
+      nLast <- max(3, length(which(x - x[1] > 0.8 * (max(x) - x[1]))))
+      x <- tail(x, nLast)
+      y <- tail(y, nLast)
       slope <- sum((x - mean(x))*(y - mean(y)))/sum((x - mean(x))^2)
       
       # If slope < 0, return Inf
@@ -584,28 +588,24 @@ confint.parframe <- function(object, parm = NULL, level = 0.95, ...,
       # Extrapolate until threshold is passed
       dy <- threshold - tail(y, 1)
       dx <- dy/slope
-      x_threshold <- tail(x, 1) + dx
+      xThreshold <- tail(x, 1) + dx
       
-      # Test if extrapolation takes the point of passage very far
-      # Set to Inf in that case
-      if (x_threshold > 10*(max(x) - min(x)))
-        x_threshold <- Inf
-      
-      return(x_threshold)
-      
-      
-    } 
+      if (xThreshold > 10 * span)
+        xThreshold <- Inf
+
+      return(xThreshold)
+    }
     
     # Right profiles
     right <- d[d[["constraint"]] >= 0,]
     right <- right[order(right[["constraint"]]), ]
-    upper <- d[[whichPar]][origin] + get_xThreshold(right)
+    upper <- d[[whichPar]][origin] + crossing(right)
     
     # Left profile
     left <- d[d[["constraint"]] <= 0,]
     left[["constraint"]] <- - left[["constraint"]]
     left <- left[order(left[["constraint"]]), ]
-    lower <- d[[whichPar]][origin] - get_xThreshold(left)
+    lower <- d[[whichPar]][origin] - crossing(left)
     
     
     data.frame(name = whichPar, 
@@ -874,9 +874,9 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
 
   # cores = c(fits = , conditions = ) splits the two axes. cppDE's batch runs
   # serially inside a fork, so an inner axis > 1 selects PSOCK.
-  .cc <- .splitCores(cores, "fits")
-  coresConditions <- if (!is.null(.cc$conditions)) .sanitizeCores(.cc$conditions)
-  cores <- .sanitizeCores(min(fits, .cc$outer))
+  cc <- .splitCores(cores, "fits")
+  coresConditions <- if (!is.null(cc$conditions)) .sanitizeCores(cc$conditions)
+  cores <- .sanitizeCores(min(fits, cc$outer))
   if (!is.null(coresConditions)) {
     oldCores <- options(dMod2.cores = coresConditions)
     on.exit(options(oldCores), add = TRUE)
@@ -977,14 +977,15 @@ mstrust <- function(objfun, center, rinit = .1, rmax = 10, fits = 20, cores = 1,
 
 # Splits the named arguments of mstrust() by destination: the formals of the
 # optimizer, then those of the sampler, which must be disjoint, and every
-# remaining name that is not mstrust()'s own goes to the objective.
+# remaining name goes to the objective, except mstrust()'s own and rinit, rmax, n.
 .mstrustRoute <- function(given, optfun, samplefun, samplerName) {
   accepts <- function(f) intersect(setdiff(names(formals(f)), "..."), names(given))
   toOptimizer <- accepts(optfun)
   toSampler <- accepts(samplefun)
   if (length(intersect(toOptimizer, toSampler)))
     stop("Argument names of the optimizer and ", samplerName, "() clash.")
-  toObjective <- setdiff(names(given), c(toOptimizer, toSampler, .mstrustOwn))
+  toObjective <- setdiff(names(given), c(toOptimizer, toSampler, .mstrustOwn,
+                                         "rinit", "rmax", "n"))
   list(optimizer = given[toOptimizer], sampler = given[toSampler],
        objective = given[toObjective])
 }
@@ -1092,9 +1093,19 @@ msParframe <- function(pars, n = 20, seed = 12345, samplefun = stats::rnorm,
 #' @param folder The folder `<resultPath>/<name>/trial-<k>-<date>/interRes`
 #'   of the run, which holds one `fit-<i>.Rda` per completed fit.
 #'
-#' @return A parlist.
+#' @return A parlist with one entry per file, in the order of the fit numbers.
 #'
 #' @seealso [mstrust()]
+#'
+#' @examples
+#' folder <- file.path(tempdir(), "interRes")
+#' dir.create(folder, showWarnings = FALSE)
+#' for (i in 1:3)
+#'   saveRDS(list(value = 10 / i, converged = TRUE, iterations = 5L, argument = c(a = i)),
+#'           file.path(folder, paste0("fit-", i, ".Rda")))
+#' fits <- load.parlist(folder)
+#' as.parframe(fits)
+#' unlink(folder, recursive = TRUE)
 #'
 #' @export
 load.parlist <- function(folder) {
@@ -1200,7 +1211,8 @@ reduceReplicates.data.frame <- function(data, select = "condition", datatrans = 
     condition = do.call(paste, c(lapply(data[first, label, drop = FALSE], as.character), sep = "_")),
     data[first, extra, drop = FALSE])
 
-  message("Dropped columns: ", paste(setdiff(names(data), names(out)), collapse = ", "))
+  dropped <- setdiff(names(data), c(names(out), select))
+  if (length(dropped)) message("Dropped columns: ", paste(dropped, collapse = ", "))
   out
 }
 
@@ -1230,8 +1242,8 @@ reduceReplicates.data.frame <- function(data, select = "condition", datatrans = 
 #' @param factors Character vector, the columns of `data` whose value
 #'   combinations define groups. The model is fitted separately per group.
 #' @param errorModel Character, the variance of a single measurement as an
-#'   expression in the mean `x` and the parameters. Default
-#'   `"exp(s0)+exp(srel)*x^2"`.
+#'   expression in the mean `x` and the parameters, built from the functions
+#'   [stats::deriv()] differentiates. Default `"exp(s0)+exp(srel)*x^2"`.
 #' @param par Named numeric vector of starting values for the parameters of
 #'   `errorModel`. Default `c(s0 = 1, srel = 0.1)`.
 #' @param lower,upper Bounds on the parameters, named or in the order of
@@ -1249,7 +1261,7 @@ reduceReplicates.data.frame <- function(data, select = "condition", datatrans = 
 #'   With `blather = TRUE`, a data frame with the columns of `data`, `sigma`
 #'   replaced as above, one column per parameter of `errorModel` with the
 #'   fitted value, the variance bands `cbLower68`, `cbUpper68`, `cbLower95` and
-#'   `cbUpper95`, the group label `condidnt` and the input `sigma` as
+#'   `cbUpper95`, the group label `group` and the input `sigma` as
 #'   `sigmaLS`. The attribute `"errorModel"` holds `errorModel`.
 #'
 #' @seealso [reduceReplicates()]
@@ -1273,6 +1285,15 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
   model <- str2expression(errorModel)
   callEnv <- parent.frame()
   variance <- function(p, x) eval(model[[length(model)]], c(as.list(p), list(x = x)), callEnv)
+  dmodel <- tryCatch(stats::deriv(model[[length(model)]], names(par)), error = function(e)
+    stop("fitErrorModel: errorModel has no symbolic derivative: ", conditionMessage(e), call. = FALSE))
+  # the variance at every x and the n x length(par) Jacobian in the parameters
+  varianceJac <- function(p, x) {
+    v <- eval(dmodel, c(as.list(p), list(x = x)), callEnv)
+    J <- attr(v, "gradient")
+    list(v = rep_len(as.numeric(v), length(x)),
+         J = J[rep_len(seq_len(nrow(J)), length(x)), , drop = FALSE])
+  }
 
   # A single factor column labels the groups as it is, several are pasted.
   label <- if (length(factors) == 1L) data[[factors]] else
@@ -1291,7 +1312,14 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
       v <- variance(p, data$value[rows])
       sum(dof[rows] * (log(v) + sampleSd[rows]^2 / v), na.rm = TRUE)
     }
-    best <- optimx::optimr(par, nll, method = "L-BFGS-B",
+    # rows without a sample variance drop out of the gradient as out of the value
+    grad <- function(p) {
+      m <- varianceJac(p, data$value[rows])
+      w <- dof[rows] * (1 / m$v - sampleSd[rows]^2 / m$v^2)
+      w[is.na(dof[rows] * (log(m$v) + sampleSd[rows]^2 / m$v))] <- 0
+      stats::setNames(as.numeric(crossprod(m$J, w)), names(par))
+    }
+    best <- optimx::optimr(par, nll, grad, method = "L-BFGS-B",
                            lower = bounds$lower, upper = bounds$upper, ...)$par
     estimates[rows, ] <- rep(best, each = length(rows))
     single[rows] <- variance(best, data$value[rows])
@@ -1304,18 +1332,18 @@ fitErrorModel <- function(data, factors, errorModel = "exp(s0)+exp(srel)*x^2",
   result <- cbind(result, as.data.frame(estimates),
                   cbLower68 = band(.683, FALSE), cbUpper68 = band(.683, TRUE),
                   cbLower95 = band(.955, FALSE), cbUpper95 = band(.955, TRUE))
-  result$condidnt <- label
+  result$group <- label
   result$sigmaLS <- data$sigma
   attr(result, "errorModel") <- errorModel
 
   if (plotting) {
     shown <- transform(result, observed = sampleSd^2, predicted = single)
-    print(ggplot(shown, aes(x = value)) +
+    print(ggplot2::ggplot(shown, aes(x = value)) +
             geom_point(aes(y = observed)) +
             geom_line(aes(y = predicted)) +
             geom_ribbon(aes(ymin = cbLower95, ymax = cbUpper95), alpha = 0.3) +
             geom_ribbon(aes(ymin = cbLower68, ymax = cbUpper68), alpha = 0.3) +
-            facet_wrap("condidnt", scales = "free") +
+            facet_wrap("group", scales = "free") +
             scale_y_log10() + ylab("variance") + theme_dMod2())
   }
 

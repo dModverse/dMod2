@@ -2,9 +2,6 @@
 ## Segment j starts from node s_j, continuity c_j = phi(x_j(tau_{j+1})) - s_{j+1}
 ## in the chart phi. Nodes enter as inner initial states; nothing recompiles.
 
-## Copyright (C) 2026 Simon Beyer
-
-
 # obj(pars, nodes, ...) returning the data term, the gaps and, per segment, the
 # blocks on (theta_loc, s_j) and the end state's chart value with the Jacobian.
 # Segment j holds the data and fixed-time events in [tau_j, tau_{j+1}).
@@ -43,7 +40,7 @@
       stop("multiple shooting: condition '", cn, "' has nodes before the start of the condition, t = ",
            tstart, ".", call. = FALSE)
     if (any(tau[-1L] >= tend))
-      stop("multiple shooting: condition '", cn, "' has nodes at or after the last data point ",
+      stop("multiple shooting: condition '", cn, "' has nodes at or after the last data ",
            "point, t = ", tend, "; every segment needs time to run.", call. = FALSE)
     M <- length(tau)
     upper <- c(tau[-1L], tend)
@@ -104,7 +101,6 @@
                              opt.BLOQ = opt.BLOQ)
   myfn
 }
-
 
 ## ---- Setup helpers -----------------------------------------------------------
 
@@ -188,7 +184,6 @@
   invisible(NULL)
 }
 
-
 ## ---- Charts ------------------------------------------------------------------
 
 # State value from a node coordinate, with the derivative.
@@ -212,7 +207,6 @@
   d[lg] <- 1 / (log(10) * v[lg])
   list(value = setNames(s, names(charts)), deriv = setNames(d, names(charts)))
 }
-
 
 ## ---- Inner parameters of the segments ----------------------------------------
 
@@ -302,7 +296,7 @@
              "odemodel(..., includeTimeZero = FALSE).")
     else if (length(tt) && tt[length(tt)] < seg$end)
       paste0(" The solver stopped at t = ", tt[length(tt)], ".")
-    else " The backend extended the grid; fixed-time events need cppDE >= 0.10.2."
+    else " The backend added time points to the grid."
     msg <- paste0("multiple shooting: segment ", seg$j, " of condition '", seg$cond,
                   "' should run on [", seg$start, ", ", seg$end,
                   "], the solver returned [", if (length(tt)) tt[1L] else NA, ", ",
@@ -320,13 +314,7 @@
   segs <- spec$segs
   idx <- which(vapply(segs, function(s) is.null(spec$e.cond) || s$cond %in% spec$e.cond, TRUE))
   if (!length(idx)) return(NULL)
-  split <- lapply(idx, function(k) {
-    pinner <- getParameters(obs[[k]])
-    fixedinner <- pinner[union(attr(pinner, "fixed"),
-                               intersect(names(pinner), names(fixed)))]
-    list(pars  = as.parvec(pinner[setdiff(names(pinner), names(fixed))]),
-         fixed = as.parvec(fixedinner, deriv = FALSE, deriv2 = FALSE))
-  })
+  split <- lapply(idx, function(k) .errorModelArgs(obs[[k]], fixed))
   conds <- vapply(segs[idx], `[[`, "", "cond")
   b <- .bundle(conds = conds, out = obs[idx],
                pars = lapply(split, `[[`, "pars"),
@@ -413,7 +401,6 @@
   }
   out
 }
-
 
 ## ---- Forward evaluation ------------------------------------------------------
 
@@ -545,7 +532,6 @@
   out
 }
 
-
 ## ---- Reverse evaluation ------------------------------------------------------
 ## One backward sweep per segment with 1 + n_x seeds, the data term and each end
 ## state; p's forward Jacobian maps the inner cotangents onto theta.
@@ -655,7 +641,6 @@
   out$env <- env
   out
 }
-
 
 # An observed state's trajectory as a function of time: the replicate means
 # interpolated linearly, or with `smooth` a GCV smoothing spline (Horbelt,
@@ -885,7 +870,6 @@
   setNames(as.list(names(eq)[hit]), trimws(eq[hit]))
 }
 
-
 ## ---- From a normL2 objective ------------------------------------------------
 
 # The pieces of normL2(multipleShootingControl = ): the chain split into
@@ -1036,8 +1020,8 @@
 }
 
 # Nodes just before fast changes of the data, where an observable's rate lies
-# more than `k` robust deviations off the median rate, a twentieth of the median
-# interval before the change. NULL when no condition shows one.
+# more than `k` scaled median absolute deviations off the median rate, a twentieth
+# of the median interval before the change. NULL when no condition shows one.
 .shootTransitionNodes <- function(data, x, times, k = 8, n = 10L) {
   base <- .shootAutoNodes(data, x, times, n)
   span <- .shootSpan(data, times, names(base))

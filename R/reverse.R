@@ -1,5 +1,4 @@
 ## Reverse-mode helpers -----------------------------------------------------
-## Copyright (C) 2026 Simon Beyer
 
 # A cotangent, `out` on the output matrix of the node and `pars` on the node parameters, optional and additive;
 # the trailing axis holds the cotangent and the directional derivatives, or K seeds, and `value` per seed the
@@ -288,10 +287,9 @@
     J <- attr(v, "deriv")
     # A missing Jacobian is an error, not a zero cotangent.
     if (is.null(J) || !is.matrix(J))
-      stop("a transformation returned no Jacobian, so the backward pass has ",
-           "nothing to contract here. A preceding warning usually names the ",
-           "cause; Pimpl falls back to value only when the implicit ",
-           "function theorem cannot be applied at the current root.",
+      stop("a parameter transformation returned no Jacobian, which the reverse sweep ",
+           "needs. Pimpl() returns values only where the implicit function theorem ",
+           "does not apply at the root, see the preceding warning.",
            call. = FALSE)
     wv <- .pickCotangent(w, rownames(J))
     u  <- crossprod(J, wv)

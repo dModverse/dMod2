@@ -10,6 +10,98 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// adaptiveGridNew
+SEXP adaptiveGridNew(int K, int level, IntegerMatrix start, int maxLevel);
+RcppExport SEXP _dMod2_adaptiveGridNew(SEXP KSEXP, SEXP levelSEXP, SEXP startSEXP, SEXP maxLevelSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< int >::type K(KSEXP);
+    Rcpp::traits::input_parameter< int >::type level(levelSEXP);
+    Rcpp::traits::input_parameter< IntegerMatrix >::type start(startSEXP);
+    Rcpp::traits::input_parameter< int >::type maxLevel(maxLevelSEXP);
+    rcpp_result_gen = Rcpp::wrap(adaptiveGridNew(K, level, start, maxLevel));
+    return rcpp_result_gen;
+END_RCPP
+}
+// adaptiveGridPending
+NumericMatrix adaptiveGridPending(SEXP grid);
+RcppExport SEXP _dMod2_adaptiveGridPending(SEXP gridSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    rcpp_result_gen = Rcpp::wrap(adaptiveGridPending(grid));
+    return rcpp_result_gen;
+END_RCPP
+}
+// adaptiveGridAbsorb
+void adaptiveGridAbsorb(SEXP grid, NumericMatrix z, NumericVector logValues);
+RcppExport SEXP _dMod2_adaptiveGridAbsorb(SEXP gridSEXP, SEXP zSEXP, SEXP logValuesSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    Rcpp::traits::input_parameter< NumericMatrix >::type z(zSEXP);
+    Rcpp::traits::input_parameter< NumericVector >::type logValues(logValuesSEXP);
+    adaptiveGridAbsorb(grid, z, logValues);
+    return R_NilValue;
+END_RCPP
+}
+// adaptiveGridRefine
+int adaptiveGridRefine(SEXP grid, double maxNodes);
+RcppExport SEXP _dMod2_adaptiveGridRefine(SEXP gridSEXP, SEXP maxNodesSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    Rcpp::traits::input_parameter< double >::type maxNodes(maxNodesSEXP);
+    rcpp_result_gen = Rcpp::wrap(adaptiveGridRefine(grid, maxNodes));
+    return rcpp_result_gen;
+END_RCPP
+}
+// adaptiveGridAccept
+void adaptiveGridAccept(SEXP grid);
+RcppExport SEXP _dMod2_adaptiveGridAccept(SEXP gridSEXP) {
+BEGIN_RCPP
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    adaptiveGridAccept(grid);
+    return R_NilValue;
+END_RCPP
+}
+// adaptiveGridStatus
+List adaptiveGridStatus(SEXP grid);
+RcppExport SEXP _dMod2_adaptiveGridStatus(SEXP gridSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    rcpp_result_gen = Rcpp::wrap(adaptiveGridStatus(grid));
+    return rcpp_result_gen;
+END_RCPP
+}
+// adaptiveGridNodes
+List adaptiveGridNodes(SEXP grid);
+RcppExport SEXP _dMod2_adaptiveGridNodes(SEXP gridSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    rcpp_result_gen = Rcpp::wrap(adaptiveGridNodes(grid));
+    return rcpp_result_gen;
+END_RCPP
+}
+// adaptiveGridIndices
+IntegerMatrix adaptiveGridIndices(SEXP grid);
+RcppExport SEXP _dMod2_adaptiveGridIndices(SEXP gridSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< SEXP >::type grid(gridSEXP);
+    rcpp_result_gen = Rcpp::wrap(adaptiveGridIndices(grid));
+    return rcpp_result_gen;
+END_RCPP
+}
 // alignmentPredictors
 NumericMatrix alignmentPredictors(List conds, List theta, int S, int threads);
 RcppExport SEXP _dMod2_alignmentPredictors(SEXP condsSEXP, SEXP thetaSEXP, SEXP SSEXP, SEXP threadsSEXP) {
@@ -710,6 +802,14 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_dMod2_adaptiveGridNew", (DL_FUNC) &_dMod2_adaptiveGridNew, 4},
+    {"_dMod2_adaptiveGridPending", (DL_FUNC) &_dMod2_adaptiveGridPending, 1},
+    {"_dMod2_adaptiveGridAbsorb", (DL_FUNC) &_dMod2_adaptiveGridAbsorb, 3},
+    {"_dMod2_adaptiveGridRefine", (DL_FUNC) &_dMod2_adaptiveGridRefine, 2},
+    {"_dMod2_adaptiveGridAccept", (DL_FUNC) &_dMod2_adaptiveGridAccept, 1},
+    {"_dMod2_adaptiveGridStatus", (DL_FUNC) &_dMod2_adaptiveGridStatus, 1},
+    {"_dMod2_adaptiveGridNodes", (DL_FUNC) &_dMod2_adaptiveGridNodes, 1},
+    {"_dMod2_adaptiveGridIndices", (DL_FUNC) &_dMod2_adaptiveGridIndices, 1},
     {"_dMod2_alignmentPredictors", (DL_FUNC) &_dMod2_alignmentPredictors, 4},
     {"_dMod2_alignmentForwardBlocks", (DL_FUNC) &_dMod2_alignmentForwardBlocks, 5},
     {"_dMod2_alignmentVjpBlocks", (DL_FUNC) &_dMod2_alignmentVjpBlocks, 9},

@@ -27,12 +27,8 @@
 #'   `TRUE`.
 #' @param alternatives Logical. Also return the charts of the other valid pins
 #'   in `$alternatives`. Defaults to `FALSE`.
-#' @param timeout Wall time in seconds for the section search of one block; a block not
-#'   solved in time keeps the invariants (`"invariant_only"`) and is named in `limits`.
-#'   `Inf` lets the search run to its end. Unlike `workCap`, it depends on the load of the
-#'   machine. Defaults to 600.
 #' @param branch With a discrete symmetry of `symmetryDetection(mode = "global")`: the side of
-#'   its fixed set as an inequality, e.g. `"k01 > k12"`, whose chart becomes the trafo: free values
+#'   the fixed set of the symmetry as an inequality, e.g. `"k01 > k12"`, whose chart becomes the trafo: free values
 #'   in the positive orthant map one to one onto that side, chained with the section. Without it
 #'   every branch is in `$alternatives`; `$discrete$branches` lists them with `injective`, `reach`,
 #'   `unproven` and the `boundary`. Defaults to `NULL`.
@@ -70,8 +66,7 @@
 #'     \item{`assumptions`}{what the reduction assumes: `domain` (the declared positive
 #'       coordinates) and `starts` (the sides of switches declared at the start), with
 #'       `errorBound`, the probability that a verified closed form is wrong.}
-#'     \item{`limits`}{the work budgets and time limits that stopped a section or
-#'       invariant search.}
+#'     \item{`limits`}{the work caps that stopped a section or invariant search.}
 #'     \item{`checks`}{`pins` and `invariants`, whether every pin holds under the trafo
 #'       and every invariant of a block maps to the matching new parameter over Q, `failed`,
 #'       and with `check = TRUE` `loop`: the `directions` the reduced model has, the
@@ -112,26 +107,24 @@
 symmetryReduction <- function(object, fixed = NULL, positive = NULL, dPoly = 3L,
                               dDarboux = 2L, dExp = 2L, separable = TRUE,
                               reportZeroCompatibility = FALSE, alternatives = FALSE,
-                              timeout = 600, allowOpen = TRUE, allowChecked = TRUE,
+                              allowOpen = TRUE, allowChecked = TRUE,
                               check = TRUE, workCap = 4000L, branch = NULL, ...) {
   if (!inherits(object, "symmetrydetection"))
     stop("symmetryReduction(): `object` must be a symmetrydetection result.", call. = FALSE)
   if (length(list(...)))
     warning("symmetryReduction(): unused argument(s) ignored.", call. = FALSE)
   chr <- function(x) if (is.null(x)) NULL else as.list(as.character(x))
-  args <- list(fixed = chr(fixed),
-               positive = if (is.logical(positive)) isTRUE(positive) else chr(positive),
-               d_poly = as.integer(dPoly), d_darboux = as.integer(dDarboux),
-               d_exp = as.integer(dExp), separable = isTRUE(separable),
-               zero_compatibility = isTRUE(reportZeroCompatibility),
-               alternatives = isTRUE(alternatives),
-               timeout = if (is.infinite(timeout)) "Inf" else timeout,
-               allow_open = isTRUE(allowOpen), allow_checked = isTRUE(allowChecked),
-               check = isTRUE(check),
-               work_cap = as.integer(workCap))
-  if (!is.null(branch)) args$branch <- as.character(branch)
-  if (is.null(fixed)) args$fixed <- NULL
-  if (is.null(positive)) args$positive <- NULL
+  # an argument left NULL is left out, so symident takes the value of the detection
+  args <- Filter(Negate(is.null), list(
+    fixed = chr(fixed),
+    positive = if (is.logical(positive)) isTRUE(positive) else chr(positive),
+    d_poly = as.integer(dPoly), d_darboux = as.integer(dDarboux),
+    d_exp = as.integer(dExp), separable = isTRUE(separable),
+    zero_compatibility = isTRUE(reportZeroCompatibility),
+    alternatives = isTRUE(alternatives),
+    allow_open = isTRUE(allowOpen), allow_checked = isTRUE(allowChecked),
+    check = isTRUE(check), work_cap = as.integer(workCap),
+    branch = if (!is.null(branch)) as.character(branch)))
   red <- .symRedFromPy(.symCall("reduce_json", .symRaw(object), args), match.call())
   d <- object$info$discrete
   if (!is.null(object$discreteSymmetries) || !is.null(d))

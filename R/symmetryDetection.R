@@ -79,10 +79,8 @@
 #'   (needs msolve, implies `reconstruct = TRUE`). A model the global analysis does not handle
 #'   gets the reason in `info$discrete$unsupported` and a warning.
 #' @param globalOptions A list of arguments of the global analysis: `order`, `points`,
-#'   `timeout` and `budget` as in [discreteSymmetries()].
-#' @param discrete `FALSE` (default), `TRUE` or a list of arguments of
-#'   [discreteSymmetries()]: also search the discrete symmetries; `mode = "global"` does the
-#'   same through the detection.
+#'   `memory`, `experiments`, `msolveEntries`, `msolveTerms`, `searchEntries` and
+#'   `eliminationTerms` as in [discreteSymmetries()].
 #' @param verbose Logical. Print the result. Defaults to `FALSE`.
 #'
 #' @return An object of class `symmetrydetection`:
@@ -124,7 +122,7 @@
 #'       which the first is taken), `conditions`, `segments`, `coordinates`,
 #'       `settings`, `elapsed` and `verification`.}
 #'     \item{`gauge`}{the coordinates fixed under `gaugePreference`.}
-#'     \item{`discreteSymmetries`}{with `discrete`, see [discreteSymmetries()].}
+#'     \item{`discreteSymmetries`}{with `mode = "global"`, see [discreteSymmetries()].}
 #'     \item{`call`}{the matched call.}
 #'   }
 #'   `print()` shows the verdict and the generators, `summary()` also the
@@ -139,7 +137,9 @@
 #'   are `SYMIDENT_MSOLVE`, the path of the msolve executable (unset by
 #'   default, msolve is then searched in the symident cache and on the
 #'   `PATH`), and `SYMIDENT_CACHE`, the directory of that cache (by default
-#'   `~/.cache/symident` on Linux). The other switches are diagnostic, see the
+#'   `~/.cache/symident` on Linux). `SYMIDENT_MSOLVE_GB` sets the address space in GiB of
+#'   one call of msolve where `memory` of [discreteSymmetries()] is not given. The other
+#'   switches are diagnostic, see the
 #'   symident documentation at <https://dmodverse.github.io/symident/>.
 #'
 #' @seealso [symmetryReduction()], [reconstControl()]; the guide chapter
@@ -160,7 +160,7 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
                               positive = TRUE, verify = TRUE, cores = 1,
                               control = reconstControl(), scalingsOnly = FALSE,
                               symEngine = c("modular", "symbolic"), mode = c("local", "global"),
-                              globalOptions = NULL, discrete = FALSE, verbose = FALSE) {
+                              globalOptions = NULL, verbose = FALSE) {
   symEngine <- match.arg(symEngine)
   mode <- match.arg(mode)
   if (missing(f) || is.null(f))
@@ -185,15 +185,14 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
   spec$positive <- if (is.logical(positive)) isTRUE(positive) else as.list(as.character(positive))
   spec$sym_engine <- symEngine
   spec$cores <- as.integer(max(1L, cores))
-  spec$control <- setNames(lapply(unclass(control), function(x)
-    if (is.numeric(x) && is.infinite(x)) "Inf" else x), .symControlSnake(names(control)))
+  spec$control <- setNames(unclass(control), .symControlSnake(names(control)))
   if (mode == "global") {
     spec$mode <- "global"
-    if (length(globalOptions)) spec$global_options <- globalOptions
+    if (length(globalOptions))
+      spec$global_options <- setNames(lapply(globalOptions, function(x) if (is.list(x)) x else .symCount(x)),
+                                      .symSnake(names(globalOptions)))
   }
   res <- .symFromPy(.symCall("detect_json", spec), match.call())
-  if (!isFALSE(discrete))
-    res <- do.call(discreteSymmetries, c(list(res, cores = cores), if (is.list(discrete)) discrete))
   if (isTRUE(verbose)) print(res)
   invisible(res)
 }
@@ -209,42 +208,66 @@ symmetryDetection <- function(f, g, trafo = NULL, parameters = NULL,
 #' \eqn{\sigma} of the coordinates, \eqn{\sigma} is reconstructed, checked on the output
 #' at random points (`"checked"`) and, where every state has a free initial value,
 #' proven by a map of the states (`"exact"`). A model with directions is reduced by
-#' [symmetryReduction()] first and the reduced model is analyzed.
+#' [symmetryReduction()] first and the reduced model is analyzed. The search stops on work
+#' limits, never on a clock, so the result is the same on every machine; a count or proof
+#' that reaches a limit ends without a result and names the limit in `limits` or in the
+#' certificate.
 #'
 #' @param object A `symmetrydetection` result from [symmetryDetection()].
 #' @param order Highest Taylor coefficient; `NULL` (default) twice the number of
 #'   coordinates.
 #' @param points Number of random points of the count in the domain, or a list of
 #'   points, each a named list of the coordinates. Defaults to 5.
-#' @param timeout Seconds one call of msolve may take. Defaults to 600.
-#' @param budget Seconds the reconstruction of the maps may take; past it, the counts
-#'   are reported without closed forms. Defaults to 300.
 #' @param cores Threads of msolve. Defaults to 1.
+#' @param memory GiB of address space one call of msolve may take; past it the call
+#'   fails. `NULL` (default) keeps the value of symident (8).
+#' @param experiments Count on several experiments with shared parameters and free
+#'   starts, which bounds the fiber of a model with free starts and no rational first
+#'   integral: `NULL` (default) where a short count of one experiment finds none, `TRUE`
+#'   first with the number of experiments from the rank criterion, a number `K` with `K`
+#'   experiments, `FALSE` never.
+#' @param msolveEntries Nonzero entries of the F4 matrices one call of msolve may reduce.
+#' @param msolveTerms Terms of the largest system given to msolve.
+#' @param searchEntries Entries of the matrices over finite fields the exact count may
+#'   reduce.
+#' @param eliminationTerms Terms of the largest polynomial of the elimination of the
+#'   states in the exact count.
 #'
 #' @return `object` with `discreteSymmetries`, per \eqn{\sigma} the `map` of the
 #'   coordinates it changes (an [eqnvec]), `changes`, `level`, `preservesDomain`
 #'   (`TRUE`, `FALSE`, or `NULL` with the `domainConditions` under which
 #'   \eqn{\sigma(\theta)} lies in the domain) and `fixedSet`, the factors on which
 #'   \eqn{\sigma} fixes \eqn{\theta}; and `info$discrete` with `order`, `count` (the
-#'   solutions over the algebraic closure at a random point modulo a prime), `counts`
-#'   per point (`complex`, `real`, `inDomain`, `undecided`), `closedForms`, `countFinal`
-#'   (every solution is the image of a proven \eqn{\sigma}), `fundamentalDomain`
-#'   (inequalities that keep one point of each orbit), `limits` and, for a model with
-#'   directions, `reduced`.
+#'   solutions over the algebraic closure at a random point modulo a prime), `countBound`
+#'   (the probability that a generic point has more, `NULL` where the count is exact or has
+#'   no bound), `countDomain` (the points of the fiber of a generic point inside the
+#'   domain, where that number is final), `counts` per point (`complex`, `real`,
+#'   `inDomain`, `undecided`), `closedForms`, `countFinal` (every solution is the image of
+#'   a proven \eqn{\sigma}), `fundamentalDomain` (inequalities that keep one point of each
+#'   orbit), `certificate` (what the result rests on, with `complete`: `"exact"`,
+#'   `"verified"`, `"axiom"`, `"no"` or `"open"`), `experiments` (the count on several
+#'   experiments, or why it does not apply), `limits` and, where they apply, `reduced` (for
+#'   a model with directions), `eliminated` (under `reduceCQ`, the species solved through
+#'   the totals), `relaxed` (the model with non-rational terms of the states as new states)
+#'   and `unsupported`.
 #'
 #' @details The search needs msolve; [symmetryDetection()] says where it is searched.
+#'   The defaults of `msolveEntries`, `msolveTerms`, `searchEntries` and `eliminationTerms`
+#'   (`NULL`) keep the values of symident.
 #' @references Godfrey, K. (1983). Compartmental Models and Their Application.
 #'   Academic Press, London.
 #' @seealso [symmetryDetection()], [symmetryReduction()]
 #' @examplesIf requireNamespace("reticulate", quietly = TRUE) && reticulate::py_module_available("symident.install") && !is.null(tryCatch(reticulate::import("symident.install")$find_msolve()[[1]], error = function(e) NULL))
 #' # two compartments, an input u into the first, the second observed
 #' f <- eqnvec(x1 = "-(k21 + k01)*x1 + k12*x2 + u", x2 = "k21*x1 - k12*x2")
-#' res <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", discrete = TRUE)
+#' res <- symmetryDetection(f, eqnvec(y = "x2"), knownInputs = "u", mode = "global")
 #' res
 #' res$discreteSymmetries[[1]]$map
 #' res$info$discrete$fundamentalDomain
 #' @export
-discreteSymmetries <- function(object, order = NULL, points = 5L, timeout = 600, budget = 300, cores = 1) {
+discreteSymmetries <- function(object, order = NULL, points = 5L, cores = 1, memory = NULL,
+                               experiments = NULL, msolveEntries = NULL, msolveTerms = NULL,
+                               searchEntries = NULL, eliminationTerms = NULL) {
   if (!inherits(object, "symmetrydetection"))
     stop("discreteSymmetries(): `object` must be a symmetrydetection result.", call. = FALSE)
   api <- .symident("api")
@@ -257,13 +280,14 @@ discreteSymmetries <- function(object, order = NULL, points = 5L, timeout = 600,
                      known_inputs = spec$known_inputs %||% list(), fixed = spec$fixed %||% list(),
                      parameters = spec$parameters %||% list(), regimes = spec$regimes)
   res <- api$Symmetries(raw, model)
-  env <- Sys.getenv()
-  env <- as.character(jsonlite::toJSON(as.list(env[grepl("^SYMIDENT_", names(env)) & nzchar(env)]),
-                                       auto_unbox = TRUE))
+  env <- .symEnv()
   # the search fills the result it runs on
   search <- function() with(rj$`_context`(env), res$discrete(
-    order = if (!is.null(order)) as.integer(order), timeout = timeout, budget = budget, cores = as.integer(cores),
-    points = if (is.list(points)) points else as.integer(points)))
+    order = if (!is.null(order)) as.integer(order), cores = as.integer(cores),
+    points = if (is.list(points)) points else as.integer(points), memory = memory,
+    experiments = .symCount(experiments), msolve_entries = .symCount(msolveEntries),
+    msolve_terms = .symCount(msolveTerms), search_entries = .symCount(searchEntries),
+    elimination_terms = .symCount(eliminationTerms)))
   tryCatch(search(), symident.sym.msolve.MsolveMissingError = function(e) {
     if (!.offerMsolve())
       stop("discreteSymmetries() needs msolve: confirm the msolve installation in an interactive session, ",
@@ -309,8 +333,6 @@ discreteSymmetries <- function(object, order = NULL, points = 5L, timeout = 600,
 #'   reconstruction under `equilibrate = TRUE`. Defaults to 3.
 #' @param homotopy Whether directions still open under `equilibrate = TRUE` are
 #'   fitted along lines in parameter space as a last route. Defaults to `TRUE`.
-#' @param timeout Time limit in seconds for the reconstruction. Directions not
-#'   finished in time are reported by their support. `Inf` (default) sets no limit.
 #' @param homotopyDegree Total degree bound of the entries the homotopy route fits.
 #' @param degreeCapMax Degree up to which an entry past `degreeCap` is probed again,
 #'   the bound doubled each time.
@@ -326,14 +348,13 @@ discreteSymmetries <- function(object, order = NULL, points = 5L, timeout = 600,
 #' @seealso [symmetryDetection()]
 #' @export
 #' @examples
-#' reconstControl(degreeCap = 6L, timeout = 60)
+#' reconstControl(degreeCap = 6L)
 reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCapSparse = 30L,
                            degreeCap = 4L, sampleSlack = 5L, probeRetries = 8L,
                            laurentDegNum = 4L, laurentDegDen = 2L, laurentCandCap = 200000L,
                            termCap = 60L, generalDegNum = 4L, generalDegDen = 3L,
                            gapOrderCap = 8L, minSupportCandCap = 20000L, perPrimeCap = 120L,
-                           perPrimeMinPrimes = 3L, homotopy = TRUE, timeout = Inf,
-                           homotopyDegree = NULL, degreeCapMax = NULL, exactProof = NULL,
+                           perPrimeMinPrimes = 3L, homotopy = TRUE, homotopyDegree = NULL, degreeCapMax = NULL, exactProof = NULL,
                            exactWorkCap = NULL, seed = NULL) {
   stopifnot(relevanceCap >= 0L, relevanceCapDir >= 1L,
             relevanceCapSparse >= relevanceCap, degreeCap >= 0L,
@@ -341,7 +362,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
             laurentDegNum >= 1L, laurentDegDen >= 0L, laurentCandCap >= 1L,
             generalDegNum >= 1L, generalDegDen >= 1L, gapOrderCap >= 0L,
             minSupportCandCap >= 1L, perPrimeCap >= 1L, perPrimeMinPrimes >= 2L,
-            isTRUE(homotopy) || isFALSE(homotopy), is.numeric(timeout), timeout > 0,
+            isTRUE(homotopy) || isFALSE(homotopy),
             is.null(homotopyDegree) || homotopyDegree >= 1L,
             is.null(degreeCapMax) || degreeCapMax >= 0L,
             is.null(exactProof) || isTRUE(exactProof) || isFALSE(exactProof),
@@ -361,7 +382,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                  minSupportCandCap = as.integer(minSupportCandCap),
                  perPrimeCap = as.integer(perPrimeCap),
                  perPrimeMinPrimes = as.integer(perPrimeMinPrimes), homotopy = homotopy,
-                 timeout = timeout, homotopyDegree = int(homotopyDegree),
+                 homotopyDegree = int(homotopyDegree),
                  degreeCapMax = int(degreeCapMax), exactProof = exactProof,
                  exactWorkCap = if (is.null(exactWorkCap)) NULL else as.numeric(exactWorkCap),
                  seed = int(seed)),
@@ -371,7 +392,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.17.0"
+.symidentMin <- "0.18.1"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later
@@ -398,6 +419,10 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   reticulate::import(paste0("symident.", module))
 }
 
+# a whole number as an integer where it fits, so that symident reads a count, not a float
+.symCount <- function(x)
+  if (is.numeric(x) && length(x) == 1L && x == round(x) && abs(x) <= .Machine$integer.max) as.integer(x) else x
+
 # camelCase to snake_case, the argument names of symident
 .symSnake <- function(x) tolower(gsub("([a-z0-9])([A-Z])", "\\1_\\2", x))
 
@@ -417,7 +442,8 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
                                         "display", "factor", "pins", "new_parameters",
                                         "solved_domain", "trafo", "totals",
                                         "state_components", "input_change", "jets", "map",
-                                        "point", "section", "state_maps", "fiber_coordinates")) {
+                                        "point", "section", "state_maps", "fiber_coordinates",
+                                        "eliminated", "odes", "observables", "rest", "orders", "lift")) {
   if (!is.list(x)) return(x)
   nm <- names(x)
   for (i in seq_along(x))
@@ -434,17 +460,22 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
   if (is.list(x) && !is.null(names(x))) lapply(x, entries) else entries(x)
 }
 
+# the set SYMIDENT_* variables of the session as a JSON object, passed on every call since
+# Python reads the environment once
+.symEnv <- function() {
+  env <- Sys.getenv()
+  as.character(jsonlite::toJSON(as.list(env[grepl("^SYMIDENT_", names(env)) & nzchar(env)]),
+                                auto_unbox = TRUE))
+}
+
 # one call into symident: the arguments as JSON in, the result as JSON out, with the
-# warnings raised and the JSON kept as attribute "json". The SYMIDENT_* environment
-# travels with it, since Python reads the environment once
+# warnings raised and the JSON kept as attribute "json"
 .symCall <- function(fun, ...) {
   si <- .symident()
-  env <- Sys.getenv()
-  env <- as.list(env[grepl("^SYMIDENT_", names(env)) & nzchar(env)])
   args <- lapply(list(...), function(a) if (is.character(a) && length(a) == 1L) a
                  else as.character(jsonlite::toJSON(a, auto_unbox = TRUE, null = "null",
                                                     digits = NA, force = TRUE)))
-  args <- c(args, list(env = as.character(jsonlite::toJSON(env, auto_unbox = TRUE))))
+  args <- c(args, list(env = .symEnv()))
   out <- tryCatch(do.call(si[[fun]], args),
                   symident.sym.msolve.MsolveMissingError = function(e) {
                     if (!.offerMsolve())

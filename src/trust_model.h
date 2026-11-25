@@ -95,7 +95,7 @@ struct SparseModel {
   CHM_FR Q = nullptr;          // LDL' of an indefinite Bhat_S + lambda I, analyzed where needed
   CHM_FR F = nullptr;          // the factor of the last factorization
   std::vector<int> pat_p, pat_i, diag;   // pattern of the last analysis, diagonal positions
-  std::vector<int> map;                  // entry k of S to its position in A
+  std::vector<int> map;                  // entry k of S to the position in A
   std::vector<double> V, E;              // the low-rank part of Bhat: V diag(E) V'
   // at the last factorization: lambda, Z = (Bhat_S + lambda I)^-1 V, Kinv = (diag(1/E) + V'Z)^-1
   double lam_f = std::numeric_limits<double>::quiet_NaN();
@@ -142,7 +142,7 @@ struct SparseModel {
     Rcpp::stop("trust(sparse = TRUE) takes Hessians of the objective; a quasi-Newton phase is dense");
   }
 
-  // A, with its symbolic analysis, for the pattern of `h`; the map of the entries of S into A.
+  // A and the symbolic analysis of A for the pattern of `h`; the map of the entries of S into A.
   void pattern(const Hess& h) {
     if (A && h.p == pat_p && h.i == pat_i) return;
     pat_p = h.p; pat_i = h.i;
@@ -238,7 +238,7 @@ struct SparseModel {
     M_cholmod_free_dense(&B, &c);
   }
 
-  // The LDL' factor of Bhat_S + lambda I and its number of negative pivots; -1 for a zero one.
+  // The LDL' factor of Bhat_S + lambda I and the number of negative pivots; -1 for a zero pivot.
   int factorLDL(double lambda) {
     if (!Q) {
       const int super = c.supernodal, ll = c.final_ll;
@@ -409,8 +409,8 @@ struct SparseModel {
       for (int i = 0; i < K; ++i) q += s[i] * w[i];
       lam = lam + (ns - r) / r * ns * ns / q;
     }
-    // a bracket that closes before the root resolves is the hard case to rounding: the step at its
-    // upper end lies inside the region
+    // a bracket that closes before the root resolves is the hard case to rounding: the step at the
+    // upper end of the bracket lies inside the region
     if (!done) step(lam_in > 0.0 ? lam_in : hi);
     std::copy(s.begin(), s.end(), s_out);
     const double ns = norm(s);

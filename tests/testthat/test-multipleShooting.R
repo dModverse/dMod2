@@ -510,6 +510,20 @@ test_that("the handover from the natural level function keeps the total iterlim"
   expect_false(fit$converged)
 })
 
+test_that("the iterations of the first phase count against iterlim", {
+  mo <- .ms_models()
+  obj <- normL2(mo$data, mo$g * mo$x * mo$p, multipleShootingControl = TRUE)
+  start <- mo$truth + c(0.8, -0.6, 0.4, -0.3, 0.3)
+  out <- utils::capture.output(fit <- trust(obj, start, iterlim = 4, blather = TRUE, printIter = TRUE,
+                                            stepControl = list(twoPhase = TRUE, anneal = FALSE)))
+  ph1 <- as.integer(sub(".* ([0-9]+) iterations.*", "\\1", grep("^phase 1", out, value = TRUE)))
+  expect_length(ph1, 1L)
+  expect_gt(ph1, 0L)
+  expect_gte(fit$iterations, ph1 + length(fit$multipleShooting$trace))
+  expect_lte(length(fit$multipleShooting$trace), 4L - ph1)
+  expect_lte(fit$iterations, 4L)
+})
+
 test_that("a value stop waits for the Newton step to predict no decrease", {
   mo <- .ms_models()
   obj0 <- normL2(mo$data, mo$g * mo$x * mo$p)

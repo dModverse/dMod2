@@ -151,6 +151,23 @@ test_that("plotProfilesAndPaths draws the total besides the contributions", {
   expect_true("total" %in% panels[[1]]$data$mode)
 })
 
+test_that("plotProfilesAndPaths draws the thresholds and the cut-off it is given", {
+  skip_if_not_installed("cowplot")
+  pars <- c(a = 1, b = 0.5)
+  profs <- profile(constraintL2(mu = pars, sigma = 0.1), pars, whichPar = "a",
+                   limits = c(-1, 1), cores = 1)
+  panels <- list()
+  local_mocked_bindings(align_plots = function(...) {
+    if (!length(panels)) panels <<- list(...)
+    list(...)
+  }, .package = "cowplot")
+  plotProfilesAndPaths(profs, "a", nPars = 2, threshold = c(F = 4.5), maxvalue = 8)
+  y <- panels[[1]]$scales$get_scales("y")
+  expect_equal(unname(y$breaks), c(0, 4.5))
+  expect_identical(y$labels, c("optimum", "F"))
+  expect_equal(y$limits, c(NA, 8))
+})
+
 test_that("the parlist overlay of plotProfile draws parameters only", {
   pars <- c(a = 1, b = 0.5)
   profs <- profile(constraintL2(mu = pars, sigma = 0.1), pars, whichPar = c("a", "b"),

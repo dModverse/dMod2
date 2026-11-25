@@ -20,8 +20,8 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   conds <- names(design$data)
   grids <- lapply(conds, function(cn) .emGrid(design, cn))
   pars <- c(object$argument, object$fixed)
-  order <- .emObsRows(design)
-  data <- Map(function(d, o) d[o, , drop = FALSE], design$data, order)
+  rowsOf <- .emObsRows(design)
+  data <- Map(function(d, o) d[o, , drop = FALSE], design$data, rowsOf)
   node <- if (!is.null(design$errfn)) .fnNode(design$errfn)
   one <- function() {
     eta <- .drawEtas(design, pars)
@@ -51,12 +51,12 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
 
 ## The data rows in the order of predict() with their lower limit, -Inf for none.
 .emObsLimits <- function(design) {
-  order <- .emObsRows(design)
+  rowsOf <- .emObsRows(design)
   unlist(Map(function(d, o) {
     l <- d$lloq %||% rep(-Inf, nrow(d))
     l[is.na(l)] <- -Inf
     l[o]
-  }, design$data, order), use.names = FALSE)
+  }, design$data, rowsOf), use.names = FALSE)
 }
 
 ## Normalized prediction distribution errors per data row (Comets et al. 2008), per unit of groups.

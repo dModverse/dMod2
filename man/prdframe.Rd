@@ -34,6 +34,17 @@ Prediction lists (\link{prdlist}) returned by \code{\link[=Xs]{Xs()}}, \code{\li
 of prediction frames. A custom prediction function (see \code{P2X} in \code{\link[=prdfn]{prdfn()}})
 returns one.
 }
+\examples{
+## Prediction frames of a decay at two rates, without derivatives
+times <- 0:4
+frame1 <- prdframe(cbind(time = times, A = exp(-times)), parameters = c(k = 1))
+frame2 <- prdframe(cbind(time = times, A = exp(-2 * times)), parameters = c(k = 2))
+frame1
+
+## One frame per condition, in long format
+pred <- prdlist(slow = frame1, fast = frame2)
+as.data.frame(pred)
+}
 \seealso{
 \code{\link[=getDerivs]{getDerivs()}}, \code{\link[=getDerivs2]{getDerivs2()}}
 }

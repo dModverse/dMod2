@@ -33,8 +33,10 @@ formulas. Missing states default to 0. Default \code{NULL}.}
 \item{modelID}{SBML model identifier. Defaults to \code{"dMod_export"}.}
 
 \item{events}{Object of class \link{eventlist} to emit as \verb{<listOfEvents>}, or
-\code{NULL}. Rows sharing a trigger become one \verb{<event>}. A compartment an event assigns to is written
-as non-constant. Default \code{NULL}.}
+\code{NULL}. Rows sharing a trigger become one \verb{<event>}. A root event becomes two events with
+the triggers \code{root >= 0} and \code{root <= 0}, initially true, so that the SBML model fires at
+crossings in both directions and not at the start, as cppDE does. A compartment an event
+assigns to is written as non-constant. Default \code{NULL}.}
 }
 \value{
 \code{filepath}, invisibly.

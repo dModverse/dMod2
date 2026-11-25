@@ -75,7 +75,7 @@
 ## submatrix --------------------------------------------
 
 # M[rows, cols] that stays a matrix
-.submatrix <- function(M, rows = 1:nrow(M), cols = 1:ncol(M)) {
+.submatrix <- function(M, rows = seq_len(nrow(M)), cols = seq_len(ncol(M))) {
   M[rows, cols, drop = FALSE]
 }
 

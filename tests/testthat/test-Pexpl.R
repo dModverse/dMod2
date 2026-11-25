@@ -89,7 +89,7 @@ test_that("Pexpl log trafo maps theta -> exp(theta) with Jacobian diag(exp(theta
   pv <- inner$C1
   expect_equal(as.numeric(pv), c(1.5, 0.3))
 
-  # J[i, j] = d (inner_i) / d (outer_j). Diagonal entries are exp(theta) = p.
+  # J[i, j] = d (inner_i) / d (outer_j)
   J <- attr(pv, "deriv")
   expect_equal(unname(diag(J)), c(1.5, 0.3))
   expect_equal(J[upper.tri(J)], rep(0, sum(upper.tri(J))))

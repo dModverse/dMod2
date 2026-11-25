@@ -169,7 +169,7 @@ plotCombined.prdlist <- function(prediction, data = NULL, ...,
     grid = facet_grid(rows = vars(name), cols = vars(condition), scales = scales),
     wrap_plain = facet_wrap(vars(name, condition), scales = scales))
 
-  p <- ggplot(plotted, aes(!!!lapply(mapping, rlang::parse_expr))) + panels
+  p <- .ggplotDMod2(plotted, aes(!!!lapply(mapping, rlang::parse_expr))) + panels
   # a legend of one condition says nothing
   if (identical(mapping$color, "condition") && length(conditions) == 1L) p <- p + guides(color = "none")
   if (!is.null(errfn) && !is.null(prediction)) {
@@ -206,10 +206,10 @@ plotPrediction.prdlist <- function(prediction, ..., errfn = NULL,
   frame$condition <- factor(frame$condition, .naturalLevels(frame$condition))
 
   p <- if (facet == "wrap") {
-    ggplot(frame, aes(time, value, group = condition, color = condition)) +
+    .ggplotDMod2(frame, aes(time, value, group = condition, color = condition)) +
       facet_wrap(vars(name), scales = scales)
   } else {
-    ggplot(frame, aes(time, value)) +
+    .ggplotDMod2(frame, aes(time, value)) +
       facet_grid(rows = vars(name), cols = vars(condition), scales = scales)
   }
   band <- if (!is.null(errfn))
@@ -286,7 +286,7 @@ summary.prdfn <- function(object,...) {
   cat("Details:\n")
   if (!inherits(x, "composed")) {
     
-    output <- lapply(1:length(mappings), function(C) {
+    output <- lapply(seq_along(mappings), function(C) {
       
       list(
         equations = attr(mappings[[C]], "equations"),
@@ -334,7 +334,7 @@ summary.obsfn <- function(object, ...) {
   cat("Details:\n")
   if (!inherits(x, "composed")) {
     
-    output <- lapply(1:length(mappings), function(C) {
+    output <- lapply(seq_along(mappings), function(C) {
       
       list(
         equations = attr(mappings[[C]], "equations"),
@@ -521,6 +521,7 @@ obsfn <- function(X2Y, parameters = NULL, condition = NULL) {
 #' @return Object of class `prdframe`, a matrix with the attributes above.
 #' @seealso [getDerivs()], [getDerivs2()]
 #'
+#' @example inst/examples/prdframe.R
 #' @export
 prdframe <- function(prediction = NULL,
                      deriv = NULL,
@@ -546,6 +547,7 @@ prdframe <- function(prediction = NULL,
 #'   are named `"1"`, `"2"`, ... For `as.prdlist()`, not used.
 #' @return Object of class `prdlist`.
 #' @seealso [prdfn()], [plotCombined()]
+#' @example inst/examples/prdframe.R
 #' @export
 prdlist <- function(...) {
   mylist <- .fillNames(list(...), "")

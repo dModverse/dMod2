@@ -22,7 +22,6 @@ reconstControl(
   perPrimeCap = 120L,
   perPrimeMinPrimes = 3L,
   homotopy = TRUE,
-  timeout = Inf,
   homotopyDegree = NULL,
   degreeCapMax = NULL,
   exactProof = NULL,
@@ -75,9 +74,6 @@ reconstruction under \code{equilibrate = TRUE}. Defaults to 3.}
 \item{homotopy}{Whether directions still open under \code{equilibrate = TRUE} are
 fitted along lines in parameter space as a last route. Defaults to \code{TRUE}.}
 
-\item{timeout}{Time limit in seconds for the reconstruction. Directions not
-finished in time are reported by their support. \code{Inf} (default) sets no limit.}
-
 \item{homotopyDegree}{Total degree bound of the entries the homotopy route fits.}
 
 \item{degreeCapMax}{Degree up to which an entry past \code{degreeCap} is probed again,
@@ -105,7 +101,7 @@ default to \code{NULL}, which keeps the value of symident (4, 8, \code{TRUE}, 50
 0).
 }
 \examples{
-reconstControl(degreeCap = 6L, timeout = 60)
+reconstControl(degreeCap = 6L)
 }
 \seealso{
 \code{\link[=symmetryDetection]{symmetryDetection()}}
