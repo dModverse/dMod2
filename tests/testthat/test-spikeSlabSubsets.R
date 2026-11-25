@@ -50,6 +50,11 @@ dir.create(.spkDir, showWarnings = FALSE)
   pMixOff <- P(mixOff, modelname = "spk_pmixoff", derivMode = ff, compile = FALSE)
   pNorm <- P(norm, modelname = "spk_pnorm", derivMode = ff, compile = FALSE)
   pLin <- P(linear, modelname = "spk_plin", compile = FALSE)
+  ten <- insert(branch(define(NULL, "p <- p", p = c("x", "k0", "k1")), table = data.frame(row.names = "C1", one = 1)),
+                "k <- exp10(k)", k = c("k0", "k1"))
+  ten <- insert(ten, k ~ 0 + (1 | gr(dist = spikeSlab(prob = 0.5, mean = log10(0.5), tau = 1 / log(10), spike = -Inf))),
+                k = c("k0", "k1"))
+  pTen <- P(ten, modelname = "spk_pten", compile = FALSE)
   # two independent species with four candidate rates in one group
   ks <- c("a0", "a1", "b0", "b1")
   x2 <- Xs(odemodel(eqnvec(x = "a0 - a1*x", y = "b0 - b1*y"), modelname = "spk_x2", compile = FALSE))
@@ -58,11 +63,11 @@ dir.create(.spkDir, showWarnings = FALSE)
                "k <- exp(k)", k = ks)
   ec <- insert(ec, k ~ 0 + (1 | gr(dist = slab(prob = 0.5, mean = log(0.5)))), k = ks)
   pEC <- P(ec, modelname = "spk_pec", compile = FALSE)
-  compile(g, x, err, xFF, gFF, pSel, pProb, pGrp, pDef, pDefFF, pMix, pMixOff, pNorm, pLin, g2, x2, pEC,
+  compile(g, x, err, xFF, gFF, pSel, pProb, pGrp, pDef, pDefFF, pMix, pMixOff, pNorm, pLin, pTen, g2, x2, pEC,
           output = "spk_all", cores = test_cores())
   list(one = one, two = two, counts = counts, shift = shift, mixed = mixed, pure = pure, x = x, g = g, err = err,
        xFF = xFF, gFF = gFF, pSel = pSel, pProb = pProb, pGrp = pGrp, pDef = pDef, pDefFF = pDefFF, pMix = pMix,
-       pMixOff = pMixOff, pNorm = pNorm, pLin = pLin, x2 = x2, g2 = g2, pEC = pEC, dir = .spkDir)
+       pMixOff = pMixOff, pNorm = pNorm, pLin = pLin, pTen = pTen, x2 = x2, g2 = g2, pEC = pEC, dir = .spkDir)
 })
 
 .spkFit <- function(data, p, ..., errmodel = NULL, method = "focei") {
@@ -86,7 +91,7 @@ dir.create(.spkDir, showWarnings = FALSE)
 }))
 
 test_that("a production term the data do not need is switched off, the decay rate stays", {
-  r <- .spkFit(.spk$one, .spk$pSel, init = c(x = 1))
+  r <- .spkShared("one_sel", .spkFit(.spk$one, .spk$pSel, init = c(x = 1)))
   fit <- r$fit
   expect_true(fit$converged)
   p0 <- setNames(fit$random$p0, fit$random$eta)
@@ -112,6 +117,14 @@ test_that("a production term the data do not need is switched off, the decay rat
   z1 <- m2logZ("eta_k1_all")
   z2 <- m2logZ(c("eta_k0_all", "eta_k1_all"))
   expect_equal(p0[["k0"]], 1 / (1 + exp(-(z2 - z1) / 2)), tolerance = 1e-4)
+})
+
+test_that("exp10() with the slab scaled by 1 / log(10) gives the fit of exp()", {
+  ten <- .spkFit(.spk$one, .spk$pTen, init = c(x = 1))$fit
+  e <- .spkShared("one_sel", .spkFit(.spk$one, .spk$pSel, init = c(x = 1)))$fit
+  expect_equal(ten$random$p0, e$random$p0, tolerance = 1e-4)
+  expect_equal(ten$value, e$value, tolerance = 1e-6)
+  expect_equal(10^ten$random$mode, exp(e$random$mode), tolerance = 1e-4)
 })
 
 test_that("with counts and an error model of the prediction the production term is switched off as well", {

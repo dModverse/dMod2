@@ -1,8 +1,8 @@
 Package: dMod2
 Type: Package
 Title: Parameter Estimation in Dynamical Models
-Version: 0.17.0
-Date: 2026-11-16
+Version: 0.17.1
+Date: 2026-11-25
 Authors@R: c(
     person("Simon", "Beyer", email = "simon.beyer@fdm.uni-freiburg.de",
            role = c("aut", "cre")),
@@ -27,7 +27,7 @@ Imports:
     cOde,
     methods,
     tools,
-    cppDE (>= 0.13.12),
+    cppDE (>= 0.13.16),
     ggplot2 (>= 3.5.0),
     parallel,
     parallelly,

@@ -69,10 +69,13 @@
     if (!is.null(out$hessian)) H <- H + as.matrix(out$hessian)[names(p), names(p)]
     objlist(value = out$value + prior$value, gradient = gr, hessian = H)
   }
+  # a failed inner search stops the fit: every subset stays in the sum over subsets
   fit <- tryCatch(.innerTrust(list(objfun = objfun, parinit = start[on], fixed = fx, rinit = 1, rmax = 10,
                                    iterlim = 100L)),
-                  error = function(e) NULL)
-  if (is.null(fit) || !is.finite(fit$value)) return(NULL)
+                  error = function(e) stop("em: the inner search of group ", g, " with the slab etas ",
+                                           paste(on, collapse = ", "), " and the others at the spike failed: ",
+                                           conditionMessage(e), call. = FALSE))
+  if (!is.finite(fit$value)) return(NULL)
   at <- objfun(fit$argument, fixed = fx)
   H <- (at$hessian + t(at$hessian)) / 2
   ch <- tryCatch(chol(H / 2), error = function(e) NULL)
