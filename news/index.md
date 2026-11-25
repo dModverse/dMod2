@@ -1,5 +1,13 @@
 # Changelog
 
+## dMod2 0.17.1
+
+- Requires cppDE \>= 0.13.16, whose derivatives of `exp10()` are finite
+  at a spike of `-Inf`.
+- [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) with
+  spike-and-slab random effects stops when the inner search of a subset
+  fails, instead of leaving the subset out of the sum over subsets.
+
 ## dMod2 0.17.0
 
 - Requires symident \>= 0.18.1. The global analysis of symident stops on

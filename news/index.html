@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -85,6 +85,12 @@
       <small>Source: <a href="https://github.com/dModverse/dMod2/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.17.1" id="dmod2-0171">dMod2 0.17.1<a class="anchor" aria-label="anchor" href="#dmod2-0171"></a></h2>
+<ul><li>Requires cppDE &gt;= 0.13.16, whose derivatives of <code>exp10()</code> are finite at a spike of <code>-Inf</code>.</li>
+<li>
+<code><a href="../reference/em.html">em()</a></code> with spike-and-slab random effects stops when the inner search of a subset fails, instead of leaving the subset out of the sum over subsets.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.17.0" id="dmod2-0170">dMod2 0.17.0<a class="anchor" aria-label="anchor" href="#dmod2-0170"></a></h2>
 <ul><li>Requires symident &gt;= 0.18.1. The global analysis of symident stops on work limits instead of time limits. <code><a href="../reference/discreteSymmetries.html">discreteSymmetries()</a></code> drops <code>timeout</code> and <code>budget</code> and takes <code>memory</code>, <code>experiments</code>, <code>msolveEntries</code>, <code>msolveTerms</code>, <code>searchEntries</code> and <code>eliminationTerms</code>, also as <code>globalOptions</code> of <code>symmetryDetection(mode = "global")</code>; <code>info$discrete</code> holds the certificate of the count (<code>certificate$complete</code>), <code>countBound</code>, <code>countDomain</code>, <code>experiments</code>, <code>eliminated</code> and <code>relaxed</code>. <code>timeout</code> is removed from <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> and <code><a href="../reference/reconstControl.html">reconstControl()</a></code>, and <code>discrete</code> from <code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code>: use <code>mode = "global"</code>.</li>

@@ -15,7 +15,7 @@ one panel each, with a method for em() fits."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -138,10 +138,10 @@ Dirichlet-process random effects that the trace records (<code>prob_&lt;grouping
 <span class="r-in"><span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>       states <span class="op">=</span> <span class="st">"time"</span>, modelname <span class="op">=</span> <span class="st">"theoph_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, derivMode <span class="op">=</span> <span class="va">dm</span>,</span></span>
 <span class="r-in"><span>       outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpJDzFHt/theoph_obs.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpEh2W6Q/theoph_obs.cpp</span>
 <span class="r-in"><span><span class="va">err</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"sigma_add"</span><span class="op">)</span>, <span class="va">g</span>, attachInput <span class="op">=</span> <span class="cn">FALSE</span>, modelname <span class="op">=</span> <span class="st">"theoph_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
 <span class="r-in"><span>         derivMode <span class="op">=</span> <span class="va">dm</span>, outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpJDzFHt/theoph_err.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpEh2W6Q/theoph_err.cpp</span>
 <span class="r-in"><span><span class="co">## one condition per subject with the subject dose; the effect formula replaces each log parameter</span></span></span>
 <span class="r-in"><span><span class="co">## by an intercept plus a random effect per subject</span></span></span>
 <span class="r-in"><span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">th</span><span class="op">$</span><span class="va">Dose</span> <span class="op">*</span> <span class="va">th</span><span class="op">$</span><span class="va">Wt</span>, <span class="va">th</span><span class="op">$</span><span class="va">Subject</span>, <span class="va">`[`</span>, <span class="fl">1</span><span class="op">)</span><span class="op">[</span><span class="va">subjects</span><span class="op">]</span></span></span>
