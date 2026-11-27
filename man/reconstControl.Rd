@@ -60,7 +60,8 @@ general sparse fits. Defaults to 200000.}
 general sparse rational fit. Default to 4 and 3.}
 
 \item{gapOrderCap}{Maximum order of the power series in the time between
-events. Defaults to 8.}
+events. Curve samples of resting conditions start at this order and double
+it at most twice where a kernel at eps = 1 needs more. Defaults to 8.}
 
 \item{minSupportCandCap}{Maximum number of column subsets searched for
 directions with small support. Defaults to 20000.}

@@ -81,7 +81,7 @@ for \code{\link[=normL2]{normL2()}} the Gauss-Newton matrix; \code{deriv2 = FALS
 profiled parameter alone and the others are reoptimized at every step.
 \code{"hessian"} / \code{"identity"}.}
 \item{\code{reoptimize}}{Whether every step is followed by a fit of the
-other parameters with \code{\link[=trust]{trust()}}. \code{FALSE} / \code{TRUE}.}
+other parameters with \code{\link[=trust]{trust()}}. \code{TRUE} for both methods.}
 \item{\code{correction}}{Relative correction above which \code{gamma}
 is halved; below half of it \code{gamma} doubles up to the initial
 value. \code{1} for both methods.}

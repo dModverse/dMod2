@@ -587,16 +587,19 @@ normT <- function(data, x, errmodel = NULL, df, times = NULL, attrName = "data",
 
 # Evaluate single-condition objectives, one parameter vector each and `fixed` for all, with the
 # predictions in one batched request. Falls back to the reference loop on a
-# missing handle, mixed prdfns, a condition owned twice, or a failing batch.
+# missing handle, mixed prdfns, a condition owned twice, or a failing batch; `hessian` other than NULL
+# (as "expected") goes to every objective in the reference loop.
 .objEvalMany <- function(objList, parsList, deriv = TRUE, deriv2 = FALSE,
-                         cores = getOption("dMod2.cores", 1L), fixed = NULL) {
+                         cores = getOption("dMod2.cores", 1L), fixed = NULL, hessian = NULL) {
   n <- length(parsList)
   objs <- if (is.function(objList)) rep(list(objList), n) else objList
   stopifnot(length(objs) == n)
 
-  serial <- function() lapply(seq_len(n), function(j)
-    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, cores = cores))
-  if (n < 2L) return(serial())
+  serial <- function() lapply(seq_len(n), function(j) {
+    if (is.null(hessian)) return(objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, cores = cores))
+    objs[[j]](parsList[[j]], fixed = fixed, deriv = deriv, deriv2 = deriv2, cores = cores, hessian = hessian)
+  })
+  if (n < 2L || !is.null(hessian)) return(serial())
 
   prd   <- attr(objs[[1L]], "prdfn", exact = TRUE)
   conds <- vapply(objs, function(o) {

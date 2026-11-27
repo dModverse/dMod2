@@ -56,16 +56,17 @@ with identical observables in the model of [Setting up models](guide-model.html)
 
 ## Lie symmetries and detection
 
-Each family is the orbit of a Lie symmetry. symident obtains the generators as the kernel of the
-observability-identifiability matrix and proves scalings exactly
+Each family is the [orbit](methods-symmetries.html#def-orbit) of a [Lie symmetry](methods-symmetries.html#def-lie-symmetry). symident obtains the
+[generators](methods-symmetries.html#def-generator) as the [kernel](methods-steady-states.html#def-kernel) of the
+[observability-identifiability matrix](methods-symmetries.html#def-oim) and proves [scalings](methods-symmetries.html#def-scaling) exactly
 ([Methods > Structural identifiability and Lie symmetries](methods-symmetries.html)).
 
 ## Detection settings
 
-- `equilibrate = TRUE`: initial values are the steady state without TNFα.
+- `equilibrate = TRUE`: initial values are the [steady state](methods-steady-states.html#def-steady-state) without TNFα.
 - `reduceCQ = TRUE`: symmetries act on the conserved totals, the parameters of `Pimpl()`.
 - `forcings = "TNF"`: TNFα is an input state, set by the event at time 0.
-- `conditions`: a direction is non-identifiable only if it is so in both doses.
+- `conditions`: a direction is [non-identifiable](methods-profiles.html#def-non-identifiable) only if it is so in both doses.
 
 The imaging readouts bleach, $y = \log(s x + o) - \tau t$. In the control the states are constant,
 so the bleaching rates are in no symmetry, and `symmetries.R` drops the bleaching terms.
@@ -92,7 +93,7 @@ types <- vapply(symmetries$symmetries, `[[`, "", "type")
 ```
 
 The rank is `r symmetries$rank` of `r symmetries$dim` coordinates, proven; the kernel is spanned
-by `r inWords(length(types))` scalings, each proven over the rationals. The generators are one
+by `r inWords(length(types))` scalings, each proven over the rationals ([level](methods-symmetries.html#def-level)). The generators are one
 basis; up to sums there are four kinds.
 
 - **Unobserved intermediates**, level against driven rate: receptor $X_1$, IκBα transcript $X_4$,
@@ -105,7 +106,7 @@ basis; up to sums there are four kinds.
 ## Symmetry reduction
 
 `symmetryReduction()` returns in `$trafo` a transformation without the directions, for scalings
-by fixing one coordinate per direction
+by fixing one coordinate per direction, a [section](methods-symmetries.html#def-section)
 ([Methods > Gauge and reduction](methods-symmetries.html#gauge-and-reduction)). Loaded from
 `results/reduction.rds`:
 
@@ -119,13 +120,13 @@ reduction
 
 ## Gauge fixing
 
-`model.R` fixes one moved parameter per scaling at 1, 0 on log scale, the gauge:
+`model.R` fixes one moved parameter per scaling at 1, 0 on log scale, the [gauge](methods-symmetries.html#def-gauge):
 
 ```{r gauge}
 ```
 
 The `r inWords(length(gauge))` coordinates remove all `r inWords(length(types))` scalings if their
-weight matrix is regular
+[weight](methods-symmetries.html#def-weights) matrix is regular (invertible)
 ([Methods > Gauge and reduction](methods-symmetries.html#gauge-and-reduction)):
 
 ```{r}
@@ -144,7 +145,7 @@ the A20 imaging scale. [Optimization](guide-optimization.html) fits the remainin
 
 ## Discrete symmetries
 
-A discrete symmetry maps a parameter value to isolated other values with the same output.
+A [discrete symmetry](https://dmodverse.github.io/symident/method/global.html) maps a parameter value to isolated other values with the same output.
 `symmetryDetection(mode = "global")` counts these values and reconstructs rational maps between
 them (requires msolve). `discrete.R` applies it to the reduced model of
 [Profile likelihood](guide-profiles.html#reduced-model), passed as `trafo`; loaded from
@@ -165,14 +166,14 @@ swap <- discrete$discreteSymmetries[[1]]
 swap[c("map", "level", "stateMaps")]
 ```
 
-There are `r inWords(discrete$info$discrete$count)` values with the output of a generic one; the
+There are `r inWords(discrete$info$discrete$count)` values with the output of a [generic](methods-symmetries.html#def-generic) one, the [fiber](https://dmodverse.github.io/symident/method/global.html); the
 map exchanges the degradation rates of the A20 transcript and of A20, `exact` means proven by the
 map of the states. The map moves no coordinate of the scalings and holds in the original
 coordinates as well.
 
 The publication does not name the swap and reports both rates with the same 95 % interval,
 $-5.97$ to $-3.32$ on log scale [@oppelt2018model, Table S7], the union of the two images.
-`symmetryReduction(branch = )` gives a chart of the fundamental domain
+`symmetryReduction(branch = )` gives a [chart](methods-symmetries.html#def-chart) of the [fundamental domain](https://dmodverse.github.io/symident/method/global.html)
 `degrad_A20 < degrad_RnaA20`:
 
 ```{r fundamental, eval = FALSE}

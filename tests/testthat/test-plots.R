@@ -3,14 +3,16 @@
 pdf(NULL)
 
 # a is coupled to b and c, d is independent
-.coupled <- function(pars, ...) {
-  a <- pars[["a"]]; b <- pars[["b"]]; c <- pars[["c"]]; d <- pars[["d"]]
+.coupled <- function(pars, fixed = NULL, ...) {
+  p <- c(pars, fixed)
+  a <- p[["a"]]; b <- p[["b"]]; c <- p[["c"]]; d <- p[["d"]]
   v <- (a - b)^2 + (a - 2*c)^2 + 0.1*(a - 1)^2 + (d - 1)^2
   g <- c(a = 2*(a - b) + 2*(a - 2*c) + 0.2*(a - 1), b = -2*(a - b), c = -4*(a - 2*c), d = 2*(d - 1))
   H <- matrix(0, 4, 4, dimnames = list(names(g), names(g)))
   H["a", "a"] <- 4.2; H["a", "b"] <- H["b", "a"] <- -2; H["a", "c"] <- H["c", "a"] <- -4
   H["b", "b"] <- 2; H["c", "c"] <- 8; H["d", "d"] <- 2
-  objlist(value = v, gradient = g, hessian = H)
+  free <- names(pars)
+  objlist(value = v, gradient = g[free], hessian = H[free, free, drop = FALSE])
 }
 .coupledProfile <- function()
   profile(.coupled, c(a = 1, b = 1, c = 0.5, d = 1), whichPar = "a", limits = c(-1, 1), cores = 1)

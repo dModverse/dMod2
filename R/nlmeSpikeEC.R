@@ -51,8 +51,9 @@
 }
 
 ## EC over the slab candidates `cand` of group `g`, the normal etas `nrm` exact in the Gaussian, expanded first at
-## `start`: -2 log I, inclusion probabilities, E[(eta - mean)^2 | slab], E[eta eta'] of the normal etas and the
-## subset of inclusion above 1/2; NULL where EC or the relinearization does not converge.
+## `start`: -2 log I, inclusion probabilities, E[(eta - mean)^2 | slab], E[eta eta'] of the normal etas, the
+## subset of inclusion above 1/2 and per site the log masses of spike and slab under the cavity and the log
+## mass of their mixture; NULL where EC or the relinearization does not converge.
 .spikeECGroup <- function(design, objs, g, theta, fixed, etas, cand, nrm, pr, alpha, prob, lb, start,
                           control = list()) {
   conds <- design$conditions[[g]]
@@ -80,8 +81,9 @@
   for (outer in seq_len(control$maxRelinearize %||% 30L)) {
     um <- pmax(um, floorU)
     eta <- setNames(etaOf(um), co)
+    # the expected Hessian, positive semidefinite also with an error model of the prediction
     out <- Reduce(`+`, .objEvalMany(objs[conds], rep(list(eta), length(conds)), deriv = TRUE,
-                                    fixed = c(theta, fixed, alpha[.setdiff(etas, co)])))
+                                    fixed = c(theta, fixed, alpha[.setdiff(etas, co)]), hessian = "expected"))
     if (!is.finite(out$value)) return(NULL)
     D <- ifelse(rate, 1 / (um * lbc), 1)
     gu <- D * out$gradient[co]
@@ -143,7 +145,7 @@
     Sigma <- chol2inv(chol(A + diag(lam, N)))
     m <- drop(Sigma %*% (a + gam))
     # the tilted moments and site constants of every site at the converged posterior
-    logC <- incl <- dev2 <- numeric(J)
+    logC <- incl <- dev2 <- massSpike <- massSlab <- logZsite <- numeric(J)
     for (j in seq_len(J)) {
       v <- Sigma[j, j]
       pc <- 1 / v - lam[j]
@@ -157,6 +159,7 @@
       top <- max(lSpike, lSlab)
       logZj <- top + log(exp(lSpike - top) + exp(lSlab - top))
       incl[j] <- exp(lSlab - logZj)
+      massSpike[j] <- lSpike - log1p(-prob[[e]]); massSlab[j] <- lSlab - log(prob[[e]]); logZsite[j] <- logZj
       dev2[j] <- s$dev2
       # the site constant: the tilted mass over the mass of cavity times site
       p <- 1 / vc + lam[j]; r <- mc / vc + gam[j]
@@ -171,5 +174,6 @@
   k <- J + seq_along(nrm)
   normalMoment <- if (length(nrm)) Sigma[k, k, drop = FALSE] + tcrossprod(m[k])
   list(m2logI = -2 * logI, inclusion = setNames(incl, cand), dev2 = setNames(dev2, cand),
-       normalMoment = normalMoment, on = cand[incl > 0.5])
+       normalMoment = normalMoment, on = cand[incl > 0.5], massSpike = setNames(massSpike, cand),
+       massSlab = setNames(massSlab, cand), logZsite = setNames(logZsite, cand))
 }

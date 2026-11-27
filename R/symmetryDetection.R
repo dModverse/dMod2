@@ -324,7 +324,8 @@ discreteSymmetries <- function(object, order = NULL, points = 5L, cores = 1, mem
 #' @param generalDegNum,generalDegDen Numerator and denominator degree bounds of the
 #'   general sparse rational fit. Default to 4 and 3.
 #' @param gapOrderCap Maximum order of the power series in the time between
-#'   events. Defaults to 8.
+#'   events. Curve samples of resting conditions start at this order and double
+#'   it at most twice where a kernel at eps = 1 needs more. Defaults to 8.
 #' @param minSupportCandCap Maximum number of column subsets searched for
 #'   directions with small support. Defaults to 20000.
 #' @param perPrimeCap Maximum number of samples per prime for the reconstruction
@@ -392,7 +393,7 @@ reconstControl <- function(relevanceCap = 6L, relevanceCapDir = 24L, relevanceCa
 
 # ---- the interface to the Python package symident --------------------------------
 
-.symidentMin <- "0.18.1"
+.symidentMin <- "0.18.2"
 .symidentReq <- paste0("symident>=", .symidentMin)
 
 # whether symident is installed in version .symidentMin or later

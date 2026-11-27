@@ -482,7 +482,7 @@
 ## the slab value integrated out by Gauss-Hermite, independence Metropolis-Hastings on the exact posterior
 ## (methods-nlme, SAEM); for a spike at -Inf `override` holds the proposal mean and sd per group.
 .slabCollapsed <- function(V, Z, value, dataAt, model, prob, tau, j, scale, gh, spike = 0 * tau, mu = 0 * tau,
-                           override = NULL) {
+                           override = NULL, beta = NULL) {
   G <- nrow(V); J <- ncol(V)
   go <- !is.na(j)
   base <- V; dir <- matrix(0, G, J); m <- sd <- rep(NA_real_, G)
@@ -517,6 +517,8 @@
   # log p(y, eta) of a group on the line at x from the data term d, with the prior of every
   # coordinate of the group
   lp1 <- matrix(log(prob), G, J, byrow = TRUE); lp0 <- matrix(log1p(-prob), G, J, byrow = TRUE)
+  # the coordinates under a beta prior on prob enter by the count of their block instead
+  if (!is.null(beta)) lp1[, !is.na(beta$block)] <- lp0[, !is.na(beta$block)] <- 0
   sdSlab <- matrix(tau, G, J, byrow = TRUE)
   muSlab <- matrix(mu, G, J, byrow = TRUE)
   xOff <- ifelse(go, spike[ig[, 2]], 0)
@@ -524,6 +526,7 @@
     z <- Z; z[ig] <- slab
     v <- lineAt(ifelse(go, x, 0))
     out <- rowSums(ifelse(z, lp1 + stats::dnorm(v, muSlab, sdSlab, log = TRUE), lp0)) - d / 2
+    if (!is.null(beta)) out <- out + .betaCountPrior(z, beta)
     ifelse(go, out, NA_real_)
   }
   # the data term on the line at the columns of `x`, all in one evaluation; where that fails each
@@ -576,6 +579,19 @@
   out
 }
 
+## Per group the log prior of the indicators `z` (groups x stems) under the beta priors of `beta`: per block
+## log B(a + n, b + K - n) / B(a, b) with n of the K coordinates of the block that reach data in the slab.
+.betaCountPrior <- function(z, beta) {
+  out <- numeric(nrow(z))
+  for (bl in unique(stats::na.omit(beta$block))) {
+    cols <- which(beta$block == bl)
+    n <- rowSums(z[, cols, drop = FALSE] & beta$reach[, cols, drop = FALSE])
+    K <- rowSums(beta$reach[, cols, drop = FALSE])
+    out <- out + lbeta(beta$a[[bl]] + n, beta$b[[bl]] + K - n) - lbeta(beta$a[[bl]], beta$b[[bl]])
+  }
+  out
+}
+
 ## A random-walk Metropolis step on all slab values of every group where the indicator is set, of
 ## size `step` per group times `sd` per coordinate; the acceptance per group.
 .slabWalk <- function(V, Z, value, dataAt, tau, step, sd, mu = 0 * tau) {
@@ -611,7 +627,16 @@
   blockOf <- function(st) Filter(function(b) st %in% b$stems, design$blocks)[[1]]
   spikeS <- vapply(slabStems, function(st) blockOf(st)$spike %||% 0, 0)
   meanS <- vapply(slabStems, function(st) blockOf(st)$mean %||% 0, 0)
-  general <- any(spikeS != 0 | meanS != 0)
+  # beta priors on prob: per slab stem the block, and the shapes by block
+  betaBlock <- vapply(slabStems, function(st) {
+    b <- blockOf(st)
+    if (is.null(b$probPrior)) NA_integer_ else match(TRUE, vapply(design$blocks, identical, TRUE, b))
+  }, 0L)
+  betaS <- if (any(!is.na(betaBlock))) list(block = betaBlock,
+    a = lapply(design$blocks, function(b) b$probPrior$a), b = lapply(design$blocks, function(b) b$probPrior$b))
+  hyperprior <- any(vapply(slabStems, function(st) !is.null(blockOf(st)$probPrior) || !is.null(blockOf(st)$tauPrior),
+                           TRUE))
+  general <- any(spikeS != 0 | meanS != 0) || hyperprior
   if (general && length(dpStems))
     stop("em: spikeSlab() with `mean` or `spike` other than 0 is fitted by method = \"saem\" beside no ",
          "Dirichlet-process random effects.", call. = FALSE)
@@ -668,6 +693,11 @@
   for (st in sl$stem) chain$full[Dp[, st]] <- mode0[, st]
   Ds <- Dp[, slabStems, drop = FALSE]
   reach <- .reachOf(design)[, slabStems, drop = FALSE]
+  # the moves of all groups at once keep the posterior where a beta prior couples no two groups
+  for (bl in unique(stats::na.omit(betaBlock)))
+    if (sum(rowSums(reach[, which(betaBlock == bl), drop = FALSE]) > 0) > 1L)
+      stop("em: method = \"saem\" takes betaPrior() for spike-and-slab random effects that reach the data of one ",
+           "group.", call. = FALSE)
   spikeM <- matrix(spikeS, G, length(slabStems), byrow = TRUE)
   # a slab start without a finite slab-alone mode is the slab mean
   chain$full[Ds] <- ifelse(is.finite(chain$full[Ds]), chain$full[Ds], rep(meanS, each = G))
@@ -710,7 +740,7 @@
     chain <- .saemClusterSweep(chain, Dp, dpStems, density, Oinv, logDet, hyp, burnin)
     if (length(slabStems)) {
       slabs <- .saemSlabMoves(chain, design, objs, E, Ds, reach, fixed, hyp, slabStems, density, Oinv, logDet,
-                              saem, gh, burnin, spikeS, meanS)
+                              saem, gh, burnin, spikeS, meanS, betaS)
       chain <- slabs$chain
       moves <- slabs$moves
     }
@@ -756,10 +786,15 @@
     hypS <- .stemHypers(sl, c(chain$hyper, fixed))
     est <- .spikeEStep(design, objs, lay2, chain$full[.setdiff(names(outer), lay$cholPars)], fixed,
                        list(prob = hypS$prob[lay2$stem], tau = hypS$tau[lay2$stem]), list(), .spikeBases(design),
-                       control$sparseFit$budget %||% .spikeBudget, control$sparseFit$ec, NULL, list(),
+                       control$sparseFit$termBudget %||% .spikeBudget, control$sparseFit$ec, NULL, list(),
                        .spikeOmega(design, c(chain$full, fixed)))
     extra <- .extraObjective(design)
-    value <- sum(vapply(est, `[[`, 0, "m2logI")) +
+    # -2 log p(tau) of the scale priors at the estimate, and the posterior of prob under a beta prior
+    penalty <- sum(vapply(unique(lay2$block), function(b)
+      .spikeTauPenalty(hypS$tau[[lay2$stem[lay2$block == b][1]]], design$blocks[[b]]$tauPrior), 0))
+    probPosterior <- Filter(Negate(is.null), setNames(lapply(unique(lay2$block), function(b)
+      .spikeProbPosterior(lay2, est, b)), lay2$probName[match(unique(lay2$block), lay2$block)]))
+    value <- sum(vapply(est, `[[`, 0, "m2logI")) + penalty +
       if (!is.null(extra)) extra(chain$full[.setdiff(names(outer), lay$cholPars)], fixed = fixed, deriv = FALSE)$value else 0
     cov <- lapply(design$groups, function(g) {
       e <- est[[g]]
@@ -771,7 +806,8 @@
     })
     return(list(argument = psi, value = value, gradient = NULL, hessian = NULL, etaModes = picked$modes,
                 etaCov = setNames(cov, design$groups), clusters = picked$clusters, spike = picked$spike,
-                converged = stationary, iterations = nrow(trace), stageTrace = trace))
+                converged = stationary, iterations = nrow(trace), stageTrace = trace, probPosterior = probPosterior,
+                hyperprior = if (any(!vapply(design$blocks, function(b) is.null(b$tauPrior), TRUE))) penalty))
   }
   # -2 log L as em(method = "focei") defines it, with the second derivatives the models provide
   reachAll <- .reachOf(design)
@@ -848,7 +884,8 @@
 ## refreshed: per sweep the collapsed birth or death move on every indicator once, then random-walk steps on the
 ## slab values; the Rao-Blackwellized inclusion and slab second moment per coordinate and the acceptance rates.
 .saemSlabMoves <- function(chain, design, objs, E, Ds, reach, fixed, hyp, slabStems, density, Oinv, logDet,
-                           saem, gh, burnin, spikeS = 0 * hyp$tau[slabStems], meanS = 0 * hyp$tau[slabStems]) {
+                           saem, gh, burnin, spikeS = 0 * hyp$tau[slabStems], meanS = 0 * hyp$tau[slabStems],
+                           betaS = NULL) {
   G <- nrow(Ds)
   tauS <- hyp$tau[slabStems]; probS <- hyp$prob[slabStems]
   groupPars <- function() lapply(seq_len(G), function(g) {
@@ -911,7 +948,7 @@
     for (r in seq_len(max(lengths(visit), 0L))) {
       j <- vapply(visit, function(i) if (r <= length(i)) i[r] else NA_integer_, 0L)
       fl <- .slabCollapsed(V, incl, value, blockAt, model, probS, tauS, j, saem$laplaceScale, gh, spikeS, meanS,
-                           newton(V, j))
+                           newton(V, j), if (!is.null(betaS)) c(betaS, list(reach = reach)))
       V <- fl$V; incl <- fl$Z; value <- fl$value
       tried <- tried + c(sum(fl$birth, na.rm = TRUE), sum(!fl$birth, na.rm = TRUE))
       taken <- taken + c(sum(fl$ok & fl$birth, na.rm = TRUE), sum(fl$ok & !fl$birth, na.rm = TRUE))
@@ -982,7 +1019,8 @@
     b <- blocks[[j]]
     tn <- unname(b$hyper["tau"]); cn <- unname(b$hyper["concentration"]); pn <- unname(b$hyper["prob"])
     if (tn %in% hypers && averaged["free", j] > 1e-8)
-      chain$hyper[[tn]] <- bound(sqrt(averaged["slab2", j] / averaged["free", j]), chain$hyper[[tn]])
+      chain$hyper[[tn]] <- bound(.spikeTauMode(averaged["slab2", j], averaged["free", j], b$tauPrior,
+                                               chain$hyper[[tn]]), chain$hyper[[tn]])
     if (cn %in% hypers)
       chain$hyper[[cn]] <- bound(.ewensConcentration(averaged["free", j], rep(G, length(b$stems))), chain$hyper[[cn]])
     if (pn %in% hypers && averaged["groups", j] > 0) {

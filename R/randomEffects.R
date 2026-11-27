@@ -72,10 +72,12 @@ print.randomeffects <- function(x, ...) {
               paste(unique(tm$group), collapse = ", ")))
   for (b in seq_along(x$blocks)) {
     r <- tm[x$blocks[[b]], , drop = FALSE]
-    given <- function(v) if (is.na(v)) "estimated" else format(v)
+    given <- function(v, prior = NULL) if (!is.null(prior)) .describeHyperprior(prior)
+                                       else if (is.na(v)) "estimated" else format(v)
     dist <- switch(r$dist[1], normal = "normal",
-                   spikeSlab = sprintf("spikeSlab, prob %s, tau %s, mean %s, spike %s", given(r$prob[1]),
-                                       given(r$tau[1]), format(r$mean[1]), format(r$spike[1])),
+                   spikeSlab = sprintf("spikeSlab, prob %s, tau %s, mean %s, spike %s",
+                                       given(r$prob[1], r$probPrior[[1]]), given(r$tau[1], r$tauPrior[[1]]),
+                                       format(r$mean[1]), format(r$spike[1])),
                    dirichletProcess = sprintf("dirichletProcess, concentration %s, tau %s",
                                               given(r$concentration[1]), given(r$tau[1])))
     cat(sprintf("  block %d (%s, %s): %s\n", b, dist, r$group[1], paste(r$stem, collapse = ", ")))
@@ -114,10 +116,12 @@ print.randomeffects <- function(x, ...) {
 #' [em()] estimates `prob`, `concentration` and `tau` unless given.
 #'
 #' @param prob Probability that a group deviates, in (0, 1); `NULL`
-#'   (default) estimates it.
+#'   (default) estimates it; [betaPrior()] integrates it out.
 #' @param concentration Concentration of the Ewens prior, positive; `NULL`
 #'   (default) estimates it.
-#' @param tau Standard deviation of the slab; `NULL` (default) estimates it.
+#' @param tau Standard deviation of the slab; `NULL` (default) estimates it;
+#'   a scale prior such as [halfCauchyPrior()] estimates it as the posterior
+#'   mode (spike-and-slab only).
 #' @param mean Mean of the slab, one finite number, not estimated.
 #' @param spike Value of the spike, one finite number or `-Inf`, not
 #'   estimated. `-Inf` needs the random effect as a summand in the exponent
@@ -131,14 +135,24 @@ normal <- function() .redist("normal")
 #' @export
 #' @rdname normal
 spikeSlab <- function(prob = NULL, tau = NULL, mean = 0, spike = 0) {
+  probPrior <- if (inherits(prob, "hyperprior")) prob
+  tauPrior <- if (inherits(tau, "hyperprior")) tau
+  if (!is.null(probPrior) && probPrior$dist != "beta")
+    stop("spikeSlab: the prior of `prob` is betaPrior().", call. = FALSE)
+  if (!is.null(tauPrior) && !tauPrior$dist %in% c("halfCauchy", "halfNormal", "invGamma"))
+    stop("spikeSlab: the prior of `tau` is halfCauchyPrior(), halfNormalPrior() or invGammaPrior().", call. = FALSE)
+  if (!is.null(probPrior)) prob <- NULL
+  if (!is.null(tauPrior)) tau <- NULL
   if (!.positiveOrNull(prob) || (!is.null(prob) && prob >= 1))
-    stop("spikeSlab: `prob` is NULL or one number in (0, 1).", call. = FALSE)
-  if (!.positiveOrNull(tau)) stop("spikeSlab: `tau` is NULL or one positive number.", call. = FALSE)
+    stop("spikeSlab: `prob` is NULL, one number in (0, 1) or betaPrior().", call. = FALSE)
+  if (!.positiveOrNull(tau))
+    stop("spikeSlab: `tau` is NULL, one positive number or a scale prior.", call. = FALSE)
   if (!is.numeric(mean) || length(mean) != 1L || !is.finite(mean))
     stop("spikeSlab: `mean` is one finite number.", call. = FALSE)
   if (!is.numeric(spike) || length(spike) != 1L || is.na(spike) || spike == Inf)
     stop("spikeSlab: `spike` is one finite number or -Inf.", call. = FALSE)
-  .redist("spikeSlab", prob = prob, tau = tau, mean = mean, spike = spike)
+  .redist("spikeSlab", prob = prob, tau = tau, mean = mean, spike = spike, probPrior = probPrior,
+          tauPrior = tauPrior)
 }
 
 #' @export
@@ -152,16 +166,109 @@ dirichletProcess <- function(concentration = NULL, tau = NULL) {
 
 .positiveOrNull <- function(x) is.null(x) || (is.numeric(x) && length(x) == 1L && x > 0)
 
-.redist <- function(dist, prob = NULL, concentration = NULL, tau = NULL, mean = 0, spike = 0)
+
+#' Hyperpriors of spike-and-slab random effects
+#'
+#' @description Priors on the hyperparameters of [spikeSlab()], in place of
+#' a given value or an estimate, for blocks with few groups, where an
+#' estimate of `prob` tends to 0 or 1 and an estimate of `tau` follows the
+#' modes.
+#'
+#' - `betaPrior(a, b)`: `prob` ~ Beta(a, b), integrated out. The prior
+#'   weight of a subset of `k` slab deviations among `K` is
+#'   \eqn{B(a + k, b + K - k) / B(a, b)}; `betaPrior(1, 1)` makes every number
+#'   of slab deviations equally likely.
+#' - `halfCauchyPrior(scale)`, `halfNormalPrior(scale)`: on `tau`.
+#' - `invGammaPrior(shape, rate)`: on `tau^2`.
+#'
+#' [em()] estimates `tau` under a scale prior as the posterior mode, or with
+#' `integrate = TRUE` integrates the phase `"exact"` over `log tau`; see
+#' section Sparse random effects of [em()].
+#'
+#' @param a,b Shape parameters of the Beta prior, positive.
+#' @param scale Scale of the half-Cauchy or half-normal prior, positive.
+#' @param shape,rate Shape and rate of the inverse-gamma prior, positive.
+#' @param integrate Logical. `FALSE` (default) takes the posterior mode of
+#'   `tau`, `TRUE` integrates over `log tau` in the phase `"exact"`.
+#' @return An object of class `hyperprior`.
+#' @seealso [spikeSlab()], [em()]
+#' @examples
+#' spikeSlab(prob = betaPrior(1, 1), tau = halfCauchyPrior(1), mean = -1, spike = -Inf)
+#' @export
+betaPrior <- function(a = 1, b = 1) {
+  if (!.positiveNumber(a) || !.positiveNumber(b)) stop("betaPrior: `a` and `b` are positive numbers.", call. = FALSE)
+  .hyperprior("beta", a = a, b = b)
+}
+
+#' @export
+#' @rdname betaPrior
+halfCauchyPrior <- function(scale = 1, integrate = FALSE) {
+  if (!.positiveNumber(scale)) stop("halfCauchyPrior: `scale` is a positive number.", call. = FALSE)
+  .hyperprior("halfCauchy", scale = scale, integrate = .flag(integrate, "halfCauchyPrior"))
+}
+
+#' @export
+#' @rdname betaPrior
+halfNormalPrior <- function(scale = 1, integrate = FALSE) {
+  if (!.positiveNumber(scale)) stop("halfNormalPrior: `scale` is a positive number.", call. = FALSE)
+  .hyperprior("halfNormal", scale = scale, integrate = .flag(integrate, "halfNormalPrior"))
+}
+
+#' @export
+#' @rdname betaPrior
+invGammaPrior <- function(shape = 1, rate = 1, integrate = FALSE) {
+  if (!.positiveNumber(shape) || !.positiveNumber(rate))
+    stop("invGammaPrior: `shape` and `rate` are positive numbers.", call. = FALSE)
+  .hyperprior("invGamma", shape = shape, rate = rate, integrate = .flag(integrate, "invGammaPrior"))
+}
+
+.positiveNumber <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x) && x > 0
+
+.flag <- function(x, fn) {
+  if (!(is.logical(x) && length(x) == 1L && !is.na(x))) stop(fn, ": `integrate` is TRUE or FALSE.", call. = FALSE)
+  x
+}
+
+.hyperprior <- function(dist, ...) structure(list(dist = dist, ...), class = "hyperprior")
+
+## A short description of a hyperprior, as "Beta(1, 1), integrated" or "half-Cauchy(1), mode".
+.describeHyperprior <- function(x) {
+  mode <- if (isTRUE(x$integrate)) "integrated" else "mode"
+  switch(x$dist,
+         beta = sprintf("Beta(%s, %s), integrated", format(x$a), format(x$b)),
+         halfCauchy = sprintf("half-Cauchy(%s), %s", format(x$scale), mode),
+         halfNormal = sprintf("half-normal(%s), %s", format(x$scale), mode),
+         invGamma = sprintf("inverse gamma(%s, %s) on tau^2, %s", format(x$shape), format(x$rate), mode))
+}
+
+#' @export
+format.hyperprior <- function(x, ...) {
+  integrate <- if (isTRUE(x$integrate)) ", integrate = TRUE" else ""
+  switch(x$dist,
+         beta = sprintf("betaPrior(%s, %s)", format(x$a), format(x$b)),
+         halfCauchy = sprintf("halfCauchyPrior(%s%s)", format(x$scale), integrate),
+         halfNormal = sprintf("halfNormalPrior(%s%s)", format(x$scale), integrate),
+         invGamma = sprintf("invGammaPrior(%s, %s%s)", format(x$shape), format(x$rate), integrate))
+}
+
+#' @export
+print.hyperprior <- function(x, ...) {
+  cat(format(x), "\n")
+  invisible(x)
+}
+
+.redist <- function(dist, prob = NULL, concentration = NULL, tau = NULL, mean = 0, spike = 0, probPrior = NULL,
+                    tauPrior = NULL)
   structure(list(dist = dist, prob = prob %||% NA_real_, concentration = concentration %||% NA_real_,
-                 tau = tau %||% NA_real_, mean = mean, spike = spike), class = "redist")
+                 tau = tau %||% NA_real_, mean = mean, spike = spike, probPrior = probPrior, tauPrior = tauPrior),
+            class = "redist")
 
 #' @export
 print.redist <- function(x, ...) {
-  arg <- function(v) if (is.na(v)) "NULL" else format(v)
+  arg <- function(v, prior = NULL) if (!is.null(prior)) format(prior) else if (is.na(v)) "NULL" else format(v)
   cat(switch(x$dist, normal = "normal()",
-             spikeSlab = sprintf("spikeSlab(prob = %s, tau = %s, mean = %s, spike = %s)", arg(x$prob),
-                                 arg(x$tau), format(x$mean %||% 0), format(x$spike %||% 0)),
+             spikeSlab = sprintf("spikeSlab(prob = %s, tau = %s, mean = %s, spike = %s)", arg(x$prob, x$probPrior),
+                                 arg(x$tau, x$tauPrior), format(x$mean %||% 0), format(x$spike %||% 0)),
              dirichletProcess = sprintf("dirichletProcess(concentration = %s, tau = %s)", arg(x$concentration),
                                         arg(x$tau))), "\n")
   invisible(x)
@@ -336,6 +443,7 @@ print.redist <- function(x, ...) {
                                             id = rt$id, dist = rt$dist$dist, prob = rt$dist$prob,
                                             concentration = rt$dist$concentration, tau = rt$dist$tau,
                                             mean = rt$dist$mean %||% 0, spike = rt$dist$spike %||% 0,
+                                            probPrior = rt$dist$probPrior, tauPrior = rt$dist$tauPrior,
                                             stem = stems[k],
                                             etas = ifelse(none, NA_character_, paste0(stems[k], "_", .effectName(g))),
                                             z = Z[, k],
@@ -398,7 +506,8 @@ print.redist <- function(x, ...) {
       row <- data.frame(symbol = r$symbol, origin = pf$origin, term = r$term, column = r$column,
                         group = r$group, id = r$id, dist = r$dist,
                         prob = r$prob, concentration = r$concentration, tau = r$tau,
-                        mean = r$mean, spike = r$spike, stem = r$stem, stringsAsFactors = FALSE)
+                        mean = r$mean, spike = r$spike, probPrior = I(list(r$probPrior)),
+                        tauPrior = I(list(r$tauPrior)), stem = r$stem, stringsAsFactors = FALSE)
       terms <- rbind(terms, row)
       col <- setNames(rep(NA_character_, length(conds)), conds)
       col[rownames(tr)] <- r$etas
@@ -434,7 +543,8 @@ print.redist <- function(x, ...) {
                         column = character(0),
                         group = character(0), id = character(0), dist = character(0),
                         prob = numeric(0), concentration = numeric(0), tau = numeric(0),
-                        mean = numeric(0), spike = numeric(0), stem = character(0))
+                        mean = numeric(0), spike = numeric(0), probPrior = I(list()), tauPrior = I(list()),
+                        stem = character(0))
   key <- ifelse(terms$dist != "normal", paste(terms$dist, terms$origin, terms$term, sep = "\r"),
          ifelse(is.na(terms$id), paste("term", terms$symbol, terms$term, sep = "\r"),
                 paste("id", terms$id, terms$group, terms$dist, sep = "\r")))

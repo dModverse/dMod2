@@ -11,7 +11,7 @@ test_that("a closed cycle started in the steady state stays there", {
 
   x <- Xs(odemodel(cycle, modelname = "ssCycle", compile = FALSE))
   inner <- getParameters(x)
-  p <- P(repar(setNames(inner, inner), "lhs<-rhs", lhs = names(ss), rhs = ss),
+  p <- P(insert(setNames(inner, inner), "lhs<-rhs", lhs = names(ss), rhs = ss),
          condition = "steady", compile = FALSE)
   compile(x, p, output = "ssCycle_all", cores = test_cores())
 
@@ -713,6 +713,52 @@ test_that("a cut does not link to a state cut before", {
     addReaction("B", "C", "k_C*B")
   ss <- steadyStates(r, verbose = FALSE)
   expect_false(identical(ss, 0))
+  chk <- .ssResidual(r, ss)
+  expect_true(all(chk$values > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})
+
+test_that("zeroLoops sets states produced only through one another to zero", {
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("", "M", "k_tx") |> addReaction("M", "", "k_dg_M*M") |>
+    addReaction("", "L", "k_sec*M") |> addReaction("L", "", "k_dg_L*L") |>
+    addReaction("L", "T", "k_act*X*L") |> addReaction("T", "", "k_dg_T*T") |>
+    addReaction("", "X", "k_x*T") |> addReaction("X", "", "k_dg_X*X")
+  ss <- steadyStates(r, zeroLoops = TRUE, verbose = FALSE)
+  expect_identical(unname(ss[c("T", "X")]), c("0", "0"))
+  expect_false(any(c("k_x", "k_act") %in% names(ss)))
+  chk <- .ssResidual(r, ss)
+  expect_lt(max(abs(chk$residual)), 1e-10)
+
+  # by default the loop stays away from zero
+  ss <- steadyStates(r, verbose = FALSE)
+  expect_false(identical(ss, 0))
+  expect_false(any(ss[c("T", "X")] == "0"))
+  chk <- .ssResidual(r, ss)
+  expect_true(all(chk$values > 0))
+  expect_lt(max(abs(chk$residual)), 1e-10)
+})
+
+test_that("a state of a conserved quantity whose balance is left over is solved", {
+  # the first state of each given quantity kept free leaves the balances of Smad2 and Smad3
+  withr::local_dir(tempdir())
+  r <- eqnlist() |>
+    addReaction("", "Ra", "k_ra") |> addReaction("Ra", "", "k_dg_ra*Ra") |>
+    addReaction("", "Rb", "k_rb") |> addReaction("Rb", "", "k_dg_rb*Rb") |>
+    addReaction("Smad2", "pSmad2", "(k_p2a*Ra + k_p2b*Rb)*Smad2/(1 + Ra + Rb)") |>
+    addReaction("Smad3", "pSmad3", "(k_p3a*Ra + k_p3b*Rb)*Smad3/(1 + Ra + Rb)") |>
+    addReaction("pSmad2", "Smad2", "k_dephos2*pSmad2") |>
+    addReaction("pSmad3", "Smad3", "k_dephos3*pSmad3") |>
+    addReaction("pSmad2 + pSmad3 + Smad4", "C234", "k_form*pSmad2*pSmad3*Smad4") |>
+    addReaction("C234", "pSmad2 + pSmad3 + Smad4", "k_dec*C234") |>
+    addReaction("C234", "Smad2 + pSmad3 + Smad4", "k_dephos_C*C234") |>
+    addReaction("C234", "pSmad2 + Smad3 + Smad4", "k_dephos_C*C234")
+  cq <- c("Smad2 + pSmad2 + C234 = t2", "Smad3 + pSmad3 + C234 = t3", "Smad4 + C234 = t4")
+  ss <- steadyStates(r, givenCQs = cq, verbose = FALSE)
+  expect_false(identical(ss, 0))
+  if (identical(ss, 0)) return()
+  expect_setequal(names(ss)[ss == names(ss)], c("pSmad2", "pSmad3", "Smad4"))
   chk <- .ssResidual(r, ss)
   expect_true(all(chk$values > 0))
   expect_lt(max(abs(chk$residual)), 1e-10)

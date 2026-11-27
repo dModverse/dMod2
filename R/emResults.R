@@ -24,7 +24,9 @@
               prdfn = design$prdfn, data = design$data, errfn = design$errfn, design = design,
               trace = fit$trace, stageTrace = fit$stageTrace, certificate = fit$certificate,
               valueSE = fit$valueSE, coupling = fit$coupling, derivMode = fit$derivMode,
-              hessianExact = fit$hessianExact, innerModes = fit$innerModes)
+              hessianExact = fit$hessianExact, innerModes = fit$innerModes, phases = fit$phases,
+              burnin = fit$burnin, probPosterior = fit$probPosterior,
+              hyperprior = fit$hyperprior, tauPosterior = fit$tauPosterior)
   if (is.null(design$groupings)) {
     gr <- .groupingResult(design, pars, .emCurvature(fit), fit$etaModes, fit$etaCov, fit$clusters, fit$spike,
                           design$reach, lowrank = if (!is.null(fit$hessian)) fit$lowrank)
@@ -45,7 +47,7 @@
                                                                    lapply(per, `[[`, f), names(per)))
     out$eta <- fit$etas
   }
-  out$slab <- .slabTable(design, pars, names(fixed))
+  out$slab <- .slabTable(design, pars, names(fixed), c(fit$probPosterior, fit$tauPosterior))
   class(out) <- c("em", "list")
   out
 }
@@ -126,17 +128,37 @@
              estimate = est, se = se, stringsAsFactors = FALSE)[keep, , drop = FALSE]
 }
 
-## The hyperparameters of the spike-and-slab and cluster blocks: the probability of a deviation
-## or the concentration, and the slab standard deviation.
-.slabTable <- function(design, pars, fixed = NULL) {
+## The hyperparameters of the spike-and-slab and cluster blocks: the probability of a deviation, under a beta
+## prior the posterior mean with the 95 % interval of the posterior Beta of `posterior`, a tau integrated over
+## log tau at exp of the posterior mean of log tau with the normal 95 % interval,
+## or the concentration, and the slab standard deviation; with hyperpriors their description.
+.slabTable <- function(design, pars, fixed = NULL, posterior = list()) {
   blocks <- Filter(function(b) b$dist %in% c("spikeSlab", "dirichletProcess"), design$blocks)
   if (!length(blocks)) return(NULL)
-  value <- function(b, kind) if (is.na(b[[kind]])) pars[[b$hyper[[kind]]]] else b[[kind]]
-  do.call(rbind, lapply(blocks, function(b) data.frame(
-    name = unname(b$hyper), distribution = b$dist, symbols = paste(b$short, collapse = ", "),
-    estimate = vapply(names(b$hyper), function(k) value(b, k), 0),
-    fixed = !is.na(unlist(b[names(b$hyper)])) | unname(b$hyper) %in% fixed, row.names = NULL,
-    stringsAsFactors = FALSE)))
+  rows <- do.call(rbind, lapply(blocks, function(b) {
+    kinds <- names(b$hyper)
+    prior <- list(prob = b$probPrior, tau = b$tauPrior)
+    post <- lapply(kinds, function(k) posterior[[b$hyper[[k]]]])
+    estimate <- vapply(seq_along(kinds), function(i) {
+      k <- kinds[i]
+      p <- post[[i]]
+      if (!is.null(p)) return(if ("a" %in% names(p)) p[["a"]] / sum(p) else exp(p[["logMean"]]))
+      if (is.na(b[[k]])) pars[[b$hyper[[k]]]] else b[[k]]
+    }, 0)
+    bound <- function(q) vapply(post, function(p) {
+      if (is.null(p)) return(NA_real_)
+      if ("a" %in% names(p)) return(stats::qbeta(q, p[["a"]], p[["b"]]))
+      exp(p[["logMean"]] + stats::qnorm(q) * p[["logSd"]])
+    }, 0)
+    data.frame(name = unname(b$hyper), distribution = b$dist, symbols = paste(b$short, collapse = ", "),
+               estimate = estimate, lower = bound(0.025), upper = bound(0.975),
+               prior = vapply(kinds, function(k) if (is.null(prior[[k]])) "" else .describeHyperprior(prior[[k]]), ""),
+               fixed = !is.na(unlist(b[kinds])) | unname(b$hyper) %in% fixed, row.names = NULL,
+               stringsAsFactors = FALSE)
+  }))
+  # the columns of the hyperpriors appear where a block has one
+  if (all(rows$prior == "")) rows[c("lower", "upper", "prior")] <- NULL
+  rows
 }
 
 ## The random effects per group: mode and conditional standard error; for spike-and-slab and
@@ -632,7 +654,7 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
   design <- object$design
   pars <- c(object$argument, object$fixed)
   lapply(seq_len(nsim), function(i) {
-    eta <- .drawEtas(design, pars)
+    eta <- .drawEtas(design, pars, object$probPosterior)
     conds <- names(design$data)
     pred <- setNames(.predictMany(design$prdfn, times = lapply(conds, function(cn) .emGrid(design, cn)),
                                   parsList = rep(list(c(object$argument, eta)), length(conds)),
@@ -658,8 +680,8 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
 
 ## One draw of the random effects of every group: normal blocks from Omega, spike-and-slab and
 ## cluster coordinates from their hyperparameters, clusters by the Chinese restaurant with the
-## population value seated first.
-.drawEtas <- function(design, pars) {
+## population value seated first; `prob` under a beta prior drawn from the posterior in `posterior`.
+.drawEtas <- function(design, pars, posterior = list()) {
   out <- setNames(numeric(length(.allEtas(design))), .allEtas(design))
   for (sd in .subDesigns(design)) {
     E <- sd$etaNames
@@ -685,7 +707,9 @@ simulate.em <- function(object, nsim = 1, seed = NULL, ...) {
         }
         next
       }
-      slab <- stats::rbinom(n, 1, value("prob")) == 1L
+      post <- posterior[[b$hyper[["prob"]]]] %||% if (!is.null(b$probPrior)) c(a = b$probPrior$a, b = b$probPrior$b)
+      prob <- if (is.null(post)) value("prob") else stats::rbeta(1, post[["a"]], post[["b"]])
+      slab <- stats::rbinom(n, 1, prob) == 1L
       out[as.vector(E[, b$stems, drop = FALSE])] <- ifelse(slab, stats::rnorm(n, b$mean %||% 0, value("tau")),
                                                            b$spike %||% 0)
     }

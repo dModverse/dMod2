@@ -1089,7 +1089,9 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #' @param trafo Named character or [eqnvec], or a list of those named by
 #'   condition as `branch()` returns it. `NULL` starts a new one.
 #' @param expr `"lhs <- rhs"` string. The symbols in it are replaced by the
-#'   arguments in `...` of the same name; see [repar()]. For `insert()` on a
+#'   arguments in `...` of the same name; inside a name, `_` separates symbols,
+#'   so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`. A `"lhs ~ rhs"` string
+#'   is an error: `~` is reserved for model formulas. For `insert()` on a
 #'   branched transformation also one or several effect formulas, e.g.
 #'   `cl ~ wt + (1 | ID)`, which replace the symbol by a linear predictor
 #'   over the columns of the branch table with fixed and random effects; see
@@ -1119,17 +1121,18 @@ Pimpl <- function(trafo, parameters = NULL, forcings = NULL, condition = NULL,
 #'
 #' @return Same shape as `trafo`, or a list named by condition for
 #'   `branch()`.
-#' @seealso [repar()], [P()]
+#' @seealso [P()]
 #' @export
 #' @example inst/examples/define.R
 define <- function(trafo, expr, ..., conditionMatch = NULL) {
   if (missing(trafo)) trafo <- NULL
+  .trafoFirst(trafo, expr)
   dots <- substitute(alist(...))
   callerEnv <- parent.frame()
   re <- attr(trafo, "randomEffects", exact = TRUE)
   .reparBranches(trafo, dots, callerEnv, conditionMatch, function(tr, args) {
     .guardEffectSymbols(.substitutionSides(expr, args)$lhs, re)
-    do.call(repar, c(list(expr = expr, trafo = tr, reset = TRUE), args))
+    do.call(.repar, c(list(expr = expr, trafo = tr, reset = TRUE), args))
   })
 }
 
@@ -1138,6 +1141,7 @@ define <- function(trafo, expr, ..., conditionMatch = NULL) {
 #' @rdname define
 insert <- function(trafo, expr, ..., conditionMatch = NULL) {
   if (missing(trafo)) trafo <- NULL
+  .trafoFirst(trafo, expr)
   dots <- substitute(alist(...))
   callerEnv <- parent.frame()
   # effect formulas, one or several; named dots are their placeholders
@@ -1156,7 +1160,7 @@ insert <- function(trafo, expr, ..., conditionMatch = NULL) {
     gates <- vapply(args, is.logical, logical(1))
     if (!all(unlist(args[gates]))) return(tr)
     .guardEffectSymbols(.substitutionSides(expr, args[!gates])$lhs, re)
-    do.call(repar, c(list(expr = expr, trafo = tr), args[!gates]))
+    do.call(.repar, c(list(expr = expr, trafo = tr), args[!gates]))
   })
 }
 
@@ -1246,38 +1250,10 @@ branch <- function(trafo, table = NULL,
   gsub(.numprefix, "", gsub(":", "_", x, fixed = TRUE), fixed = TRUE)
 
 
-#' Reparameterization
-#'
-#' @description Replaces the left-hand side of `"lhs <- rhs"` by the
-#' right-hand side in `trafo`, after the symbols of `expr` are replaced by the
-#' arguments in `...`. [define()] and [insert()] build on it.
-#'
-#' @param trafo Named character, [eqnvec] or a list of those. Default `NULL`
-#'   starts from the identity of the left-hand sides, so the result maps each
-#'   left-hand side to the matching right-hand side.
-#' @param expr `"lhs <- rhs"` string. Inside a name, `_` separates symbols,
-#'   so `"Delta_x"` with `x = "a"` becomes `"Delta_a"`. A `"lhs ~ rhs"`
-#'   string or a formula is an error: `~` is reserved for model formulas.
-#' @param ... Named character or numeric vectors of equal length, replacing
-#'   the symbols of `expr` of the same name; element `i` of each gives the
-#'   `i`-th substitution.
-#' @param reset `FALSE` (default) replaces the left-hand side wherever it
-#'   occurs in the expressions, `TRUE` sets the entry it names.
-#' @return Same shape as `trafo`.
-#' @seealso [define()], [insert()]
-#' @export
-#' @examples
-#' innerpars   <- letters[1:3]
-#' constraints <- c(a = "b + c")
-#' mycondition <- "cond1"
-#' trafo <- repar(NULL,  "x <- x",      x = innerpars)
-#' trafo <- repar(trafo, "x <- y",      x = names(constraints), y = constraints)
-#' trafo <- repar(trafo, "x <- exp(x)", x = innerpars)
-#' trafo <- repar(trafo, "x <- x + Delta_x_condition",
-#'                x = innerpars, condition = mycondition)
-repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
-  if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr)))
-    stop("repar: the order is repar(trafo, expr).", call. = FALSE)
+# The left-hand side of `expr` replaced by the right-hand side in `trafo`, after
+# the symbols of `expr` are replaced by the vectors in `...`; with `reset` the entry
+# named by the left-hand side is set instead. The core of define() and insert().
+.repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   sides <- .substitutionSides(expr, list(...))
   lhs <- sides$lhs; rhs <- sides$rhs
 
@@ -1286,6 +1262,12 @@ repar <- function(trafo = NULL, expr, ..., reset = FALSE) {
   else if (is.character(trafo) && !reset)       replaceSymbols(lhs, rhs, trafo)
   else if (is.list(trafo)      &&  reset)       lapply(trafo, function(t) { t[lhs] <- rhs; t })
   else { trafo[lhs] <- rhs; trafo }
+}
+
+# Stops where a substitution is passed in place of the transformation.
+.trafoFirst <- function(trafo, expr) {
+  if (.isReparExpr(trafo) && (missing(expr) || !.isReparExpr(expr)))
+    stop("define() and insert(): the order is (trafo, expr).", call. = FALSE)
 }
 
 # A substitution string, or a formula or `~` string given in place of one, as

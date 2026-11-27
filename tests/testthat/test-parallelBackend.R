@@ -36,6 +36,25 @@ test_that(".parallelLapply propagates worker errors", {
 })
 
 
+
+test_that("a PSOCK cluster leaves the random stream alone and skips a port in use", {
+  # sessions with the same seed on one node: the port comes from the process and the clock
+  set.seed(1)
+  seed <- .Random.seed
+  cl <- dMod2:::.makePSOCK(1L)
+  on.exit(parallel::stopCluster(cl), add = TRUE)
+  expect_identical(.Random.seed, seed)
+  expect_identical(parallel::clusterEvalQ(cl, 1 + 1)[[1]], 2)
+
+  # the first port taken: the cluster opens on the next one
+  busy <- serverSocket(11999L)
+  on.exit(close(busy), add = TRUE)
+  withr::local_envvar(R_PARALLEL_PORT = "11999")
+  cl2 <- dMod2:::.makePSOCK(1L)
+  on.exit(parallel::stopCluster(cl2), add = TRUE)
+  expect_identical(parallel::clusterEvalQ(cl2, 2 + 2)[[1]], 4)
+})
+
 ## ---- Two-axis core budget ------------------------------------------------
 
 test_that(".splitCores reads a scalar as the outer axis only", {

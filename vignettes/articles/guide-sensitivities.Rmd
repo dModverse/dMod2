@@ -16,8 +16,9 @@ source("results/stored.R")
 s <- stored("results/sensitivities.rds", "sensitivities.R")
 ```
 
-dMod2 computes derivatives of the objective exactly from the ODE sensitivities and the chain rule
-through every function object. Code: `sensitivities.R`; details:
+dMod2 computes derivatives of the [objective](methods-profiles.html#def-objective) exactly from the ODE
+[sensitivities](methods-sensitivities.html#def-sensitivity) and the chain rule through every
+[function object](methods-sensitivities.html#def-chain-gxp). Code: `sensitivities.R`; details:
 [Methods > Sensitivities and Hessians](methods-sensitivities.html).
 
 `derivMode` of `odemodel()`, `Y()`, `P()` and `Pimpl()` selects the derivatives a function
@@ -28,25 +29,28 @@ call that asks for a derivative not built is an error.
 ## Forward sensitivities
 
 The default, `derivMode = "forward"`: `Xs()` integrates $\partial x / \partial \theta$ with the
-states, the objective returns gradient and Gauss-Newton Hessian. `sensErrCon` in `optionsSens`
-sets whether sensitivities enter the error test (default `TRUE`).
+states, the objective returns gradient and
+[Gauss-Newton Hessian](methods-sensitivities.html#gauss-newton-with-an-error-model). `sensErrCon`
+in `optionsSens` sets whether sensitivities enter the
+error test (default `TRUE`).
 
 ## Forward over forward
 
 `derivMode = "forward-forward"` in `odemodel()`, `Y()`, `P()` and `Pimpl()` builds second-order
-sensitivities, and a call with `deriv2 = TRUE` returns the exact Hessian from them. The equation
+sensitivities, and a call with `deriv2 = TRUE` returns the
+[exact Hessian](methods-sensitivities.html#forward-over-forward) from them. The equation
 count grows with the square of the parameters (guide model: `r nrow(s$gradients)`); it suits
 small models such as those of
 [Nonlinear mixed-effects models](guide-nlme.html).
 
 ## Reverse sweep
 
-One backward sweep of the adjoint system gives the gradient at a cost independent of the
+One backward sweep of the [adjoint](methods-sensitivities.html#def-adjoint) system gives the gradient at a cost independent of the
 parameter count ([Methods > Reverse sweep](methods-sensitivities.html#reverse-sweep)). Build with
-`derivMode = c("forward", "reverse")` (`Pimpl()` passes the sweep through the Jacobian of the
-root), call with `sweep = "reverse"`. Both passes solve with `options` alone; solves with
+`derivMode = c("forward", "reverse")` (`Pimpl()` passes the sweep through the
+[Jacobian of the root](methods-steady-states.html#derivatives-of-the-root)), call with `sweep = "reverse"`. Both passes solve with `options` alone; solves with
 sensitivities use `optionsSens` merged over `options`. In
-`trust()` the sweep is set per phase:
+`trust()` the sweep is set per [phase](methods-trust.html#hessian-phases):
 
 ```{r, eval = FALSE}
 fit <- trust(obj, start,
@@ -55,11 +59,11 @@ fit <- trust(obj, start,
 fit$phaseSweep
 ```
 
-Without `sweep`, `"bfgs"` and `"sr1"` phases sweep backwards if the objective allows it.
+Without `sweep`, `"bfgs"` and `"sr1"` (quasi-Newton updates) phases sweep backwards if the objective allows it.
 Gauss-Newton needs forward sensitivities: a `"gn"` phase with `sweep = "reverse"` is an error.
 `"exact"` with `sweep = "reverse"` and `deriv2 = TRUE` uses forward over reverse.
 
-The backward sweep follows the step grid of the value pass by default; on the cppDE backend
+The backward sweep follows the step grid of the [value pass](methods-sensitivities.html#def-value-pass) by default; on the cppDE backend
 `optionsReverse` of `Xs()` sets the accuracy, see `cppDE::adjointControl()`:
 
 ```{r, eval = FALSE}
@@ -82,8 +86,9 @@ Under `refine`, value and `chi2` include the change to the refined trajectory, a
 The exact Hessian without second-order sensitivities, one column per parameter
 ([Methods > Forward over reverse](methods-sensitivities.html#forward-over-reverse)). Build with
 `derivMode = c("forward", "reverse", "forward-reverse")`, call with
-`sweep = "reverse", deriv2 = TRUE`. FOCEI in [Nonlinear mixed-effects models](guide-nlme.html)
-uses it for directional second derivatives.
+`sweep = "reverse", deriv2 = TRUE`. [FOCEI](methods-nlme.html#def-focei) in
+[Nonlinear mixed-effects models](guide-nlme.html) uses it for
+[directional second derivatives](methods-sensitivities.html#second-derivatives-along-directions).
 
 ## ODE backends
 
@@ -91,7 +96,7 @@ uses it for directional second derivatives.
 
 | backend | solver | forward | fwd/fwd | reverse | fwd/rev | use |
 |---|---|---|---|---|---|---|
-| `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | duals | discrete adjoint | yes | all models |
+| `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | duals | [discrete adjoint](methods-sensitivities.html#def-discrete-adjoint) | yes | all models |
 | `"Sundials"` | CVODES, `cppDE::cvode()` | CVODES | no | CVODES ASA | no | first-order derivatives |
 | `"deSolve"` | `lsodes`, cOde | sens. equations | no | no | no | dMod models |
 

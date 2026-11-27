@@ -18,9 +18,9 @@ knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/refit.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/fundamental.R")
 ```
 
-The profile likelihood [@raue2009structural] shows how well the data constrain each parameter.
+The [profile likelihood](methods-profiles.html#def-profile-likelihood) [@raue2009structural] shows how well the data constrain each parameter.
 This chapter profiles the full model at the best fit of [Optimization](guide-optimization.html),
-tests the core model of the publication and fits a reduced model.
+tests the core model of the publication and fits a [reduced model](methods-profiles.html#def-reduced-model).
 
 ```{r setup, echo = FALSE}
 ```
@@ -60,18 +60,17 @@ tests the core model of the publication and fits a reduced model.
 
 ## Profile likelihood and confidence intervals
 
-The profile of a parameter is the data term along the path on which the other parameters minimize
-the objective with that parameter fixed. Here the objective has a prior of standard deviation 20
+The profile of a parameter is the [data term](methods-profiles.html#def-data-term) along the path on which the other parameters minimize
+the [objective](methods-profiles.html#def-objective) with that parameter fixed. Here the objective has a [prior](methods-objective.html#prior) of standard deviation 20
 on the log scale at the best fit, so that the data term shapes the profiles. Data terms within
-3.84, the 95 % quantile of $\chi^2_1$, of the minimum form the 95 % confidence interval
+3.84, the 95 % quantile of $\chi^2_1$, of the minimum form the 95 % [confidence interval](methods-profiles.html#def-confidence-interval)
 ([Methods > Profile likelihood](methods-profiles.html)). `stepControl = list(stop = "data")` ends a
 profile there, `confint(val.column = "data")` reads the interval, `profileThreshold()` gives other
 levels. A profile open towards $-\infty$ means the process can be switched off, towards
 $+\infty$ that it can be instantaneous ([Methods > Shapes](methods-profiles.html#shapes)).
 
-`method = "integrate"` (default) follows the constrained optimum as a curve, with
-`algoControl = list(reoptimize = TRUE)` corrected by `trust()`; `method = "optimize"` refits at
-every step.
+`method = "integrate"` (default) follows the [constrained optimum](methods-profiles.html#def-constrained-optimum) as a curve
+and corrects each step by a short fit with `trust()`; `method = "optimize"` refits at every step.
 
 | entry of `stepControl` | `"integrate"` | `"optimize"` | controls |
 |---|---|---|---|
@@ -101,7 +100,7 @@ invisible(stored("results/fits.rds", "fit.R"))
 invisible(stored("results/profiles.rds", "profiles.R"))
 ```
 
-and profiles each side until the data term has risen by the threshold or the parameter has moved
+and profiles each side until the data term has risen by the [threshold](methods-profiles.html#def-threshold) or the parameter has moved
 by 7. The profiles are loaded from `results/profiles.rds`:
 
 ```{r profiles, eval = FALSE}
@@ -168,7 +167,7 @@ plotProfile(profiles, mode %in% c("data", "prior"), name %in% open, ncol = 4) + 
 
 ## Parameter paths
 
-`plotPaths()` shows how the other parameters compensate along a profile. Along `act_Ikb_Base`,
+`plotPaths()` shows how the other parameters compensate along a profile ([parameter path](methods-profiles.html#def-parameter-path)). Along `act_Ikb_Base`,
 `eta_act_Ikb_Base_c_pNfkIkb` rises by the same amount: the data determine the product. Shown are
 the parameters that move by more than 1:
 
@@ -190,7 +189,7 @@ for (par in c("act_Ikb_Base", "int_Nfk"))
 ## Predictions along a profile
 
 `plotArray()` predicts along one side of a profile, colored by the profiled parameter; `fixed`
-adds the gauge. Along the upper side of `degrad_RnaA20`, `RnaA20` falls by two orders of magnitude
+adds the [gauge](methods-symmetries.html#gauge-and-reduction). Along the upper side of `degrad_RnaA20`, `RnaA20` falls by two orders of magnitude
 while A20 stays nearly the same:
 
 ```{r, fig.height = 5}
@@ -296,8 +295,8 @@ The core model with two delay steps, the separate factor and the scale `s_ipNFkB
 ```{r reducedobservables, eval = FALSE}
 ```
 
-As in the publication, all NFκB rests in the complex with IκBα and all IKK is inactive, a steady
-state for every parameter value, so neither `Pimpl()` nor a stability term is needed:
+As in the publication, all NFκB rests in the complex with IκBα and all IKK is inactive, a [steady
+state](methods-steady-states.html#def-steady-state) for every parameter value, so neither `Pimpl()` nor a [stability](methods-steady-states.html#stability) term is needed:
 
 ```{r reducedmodel, eval = FALSE}
 ```
@@ -360,7 +359,7 @@ plateau <- fc$data[which.max(fc$constraint)] - fc$data[fc$constraint == 0][1]
 fcLower <- intervalsReduced$lower[intervalsReduced$name == "form_complex"] / log(10)
 ```
 
-All parameters are identifiable except `form_complex`, bounded below at
+All parameters are [identifiable](methods-profiles.html#def-identifiable) except `form_complex`, bounded below at
 `r signif(fcLower, 2)` on the log10 scale and open above on a plateau `r round(plateau, 2)` above
 the optimum; the publication reports (-0.21, 3.03). The profiles of `degrad_A20`,
 `degrad_RnaA20` and `shuttle_RnaA20` have a second minimum inside the interval. The rate constants:
@@ -395,7 +394,7 @@ atSecond <- sum(abs(fits$shuttle_RnaA20 - second$shuttle_RnaA20) < 0.1 &
 ```
 
 Exchanging `degrad_A20` and `degrad_RnaA20` leaves every readout and the prior unchanged, a
-discrete symmetry ([Symmetries > Discrete symmetries](guide-symmetries.html#discrete-symmetries)).
+[discrete symmetry](https://dmodverse.github.io/symident/method/global.html) ([Symmetries > Discrete symmetries](guide-symmetries.html#discrete-symmetries)).
 Of the `r nrow(best)` best fits of the multistart, `r below` lie on the side
 `degrad_A20 < degrad_RnaA20` and `r nrow(best) - below` at the mirror image. The profile of
 `degrad_RnaA20` passes through the mirror image of the optimum, within
@@ -411,8 +410,8 @@ also lie close to the fixed set.
 
 ## Profiles in the fundamental domain
 
-The fundamental domain `degrad_A20 < degrad_RnaA20` holds the optimum and removes the swap.
-`fundamental.R` fits the reduced model in the chart that
+The [fundamental domain](https://dmodverse.github.io/symident/method/global.html) `degrad_A20 < degrad_RnaA20` holds the optimum and removes the swap.
+`fundamental.R` fits the reduced model in the [chart](methods-symmetries.html#def-chart) that
 `symmetryReduction(branch = "degrad_A20 < degrad_RnaA20")` returns, with
 `define("degrad_RnaA20 <- degrad_A20 + delta_RnaA20")` before `insert("x <- exp(x)")`; the fixed
 set lies at `delta_RnaA20` $\to -\infty$. Only the parameter transformation is new:

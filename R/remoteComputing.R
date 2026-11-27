@@ -158,13 +158,13 @@ detectFreeCores <- function(machine = NULL) {
   sum(nchar(files) + 1L) > .compileCmdLimit()
 
 ## Write the job workspace through zstd, as an uncompressed one can be several
-## GB; without the binary it is saved uncompressed. Returns the file written.
+## GB; without a working binary it is saved uncompressed. Returns the file written.
 .saveWorkspace <- function(input, file, envir = .GlobalEnv, level = 3L) {
-
-  if (!nzchar(Sys.which("zstd"))) {
+  plain <- function() {
     save(list = input, file = file, envir = envir, compress = FALSE)
-    return(file)
+    file
   }
+  if (!nzchar(Sys.which("zstd"))) return(plain())
 
   out <- paste0(file, ".zst")
   # by name: cmd.exe, which runs the pipe on Windows, drops quotes around the command
@@ -172,11 +172,17 @@ detectFreeCores <- function(machine = NULL) {
                      " -q -f -o ", shQuote(out)), "wb")
   ## close() pcloses, so zstd has finished before tar sees the file.
   ok <- try(save(list = input, file = con, envir = envir), silent = TRUE)
-  close(con)
-  if (inherits(ok, "try-error")) {
+  status <- suppressWarnings(close(con))
+  if (inherits(ok, "try-error") && !grepl("pipe|write", conditionMessage(attr(ok, "condition")))) {
     unlink(out)
     stop("Could not write the job workspace: ", attr(ok, "condition")$message,
          call. = FALSE)
+  }
+  # a zstd that fails writes no or an empty file and leaves the exit status in close()
+  if (inherits(ok, "try-error") || !identical(as.integer(status %||% 0L), 0L) ||
+      !file.exists(out) || !file.size(out)) {
+    unlink(out)
+    return(plain())
   }
   out
 }
@@ -907,7 +913,7 @@ print.dMod2Target <- function(x, ...) {
     failed <- sum(state == "failed")
     if (finished && failed)
       warning(failed, " of ", m$ntasks, " tasks failed; log(i) shows the output of task i",
-              call. = FALSE)
+              .tailNote(which(state == "failed")[1L], output), call. = FALSE)
     invisible(finished)
   }
 
@@ -928,13 +934,17 @@ print.dMod2Target <- function(x, ...) {
     if (combine) .combineResults(out) else out
   }
 
+  output <- function(i, lines) {
+    k <- m$taskHost[i]
+    suppressWarnings(.onMachine(
+      m$hosts[k], paste0("tail -n ", as.integer(lines), " task_", i, ".out 2>/dev/null; true"),
+      file.path(m$folder, k), m$wd, intern = TRUE))
+  }
+
   log <- function(i, lines = 20L) {
     i <- .wholeNumber(i, "i", null = FALSE)
     if (i > m$ntasks) stop("the job has ", m$ntasks, " tasks", call. = FALSE)
-    k <- m$taskHost[i]
-    out <- suppressWarnings(.onMachine(
-      m$hosts[k], paste0("tail -n ", as.integer(lines), " task_", i, ".out 2>/dev/null; true"),
-      file.path(m$folder, k), m$wd, intern = TRUE))
+    out <- output(i, lines)
     cat(out, sep = "\n")
     invisible(out)
   }
@@ -971,7 +981,16 @@ print.dMod2Target <- function(x, ...) {
 
   structure(list(check = check, wait = wait, get = get, log = log, purge = purge,
                  terminate = terminate),
-            class = "dMod2Job", manifest = m)
+            class = "dMod2Job", manifest = m, output = output)
+}
+
+## The last lines of the output of the failed task `i`, appended to the warning of a failed job.
+.tailNote <- function(i, output, lines = 5L) {
+  if (is.na(i)) return("")
+  out <- tryCatch(output(i, lines), error = function(e) character(0))
+  out <- out[nzchar(trimws(out))]
+  if (!length(out)) return("")
+  paste0("\n  task ", i, ":\n    ", paste(out, collapse = "\n    "))
 }
 
 ## Where a job runs, from the job manifest.
@@ -1252,13 +1271,15 @@ distributedComputing <- function(expr, tasks = NULL, on = localNode(), jobname =
   .waitTasks(m, .pollInterval(m))
   out <- job$get(combine = FALSE)
   result <- suppressWarnings(.combineResults(out))
-  failed <- sum(vapply(out, function(r) is.null(r) || inherits(r, "try-error"), NA))
+  bad <- vapply(out, function(r) is.null(r) || inherits(r, "try-error"), NA)
+  failed <- sum(bad)
   if (!failed) {
     job$purge(local = TRUE)
     return(result)
   }
   warning(failed, " of ", n, " tasks failed; the job is kept: recover = TRUE returns the job ",
-          "functions, and log(i) shows the output of task i", call. = FALSE)
+          "functions, and log(i) shows the output of task i",
+          .tailNote(which(bad)[1L], attr(job, "output")), call. = FALSE)
   result
 }
 
@@ -1397,6 +1418,23 @@ slurmTemplate <- function(login = NULL, from = login, edit = interactive(),
 
 ## .parallelLapply ---------------------------------------------------------------
 
+# A PSOCK cluster of `cores` workers on a port of 11000 to 11999 drawn from the process id and the
+# clock, not from the random stream: sessions with the same seed on one node get different ports,
+# and .Random.seed stays as it is. A port in use is skipped; R_PARALLEL_PORT, if a number, comes first.
+.makePSOCK <- function(cores, tries = 50L) {
+  first <- suppressWarnings(as.integer(Sys.getenv("R_PARALLEL_PORT")))
+  start <- (Sys.getpid() * 7919 + as.numeric(Sys.time()) * 1000) %% 1000
+  ports <- 11000L + as.integer((start + 389 * seq_len(tries)) %% 1000)
+  if (!is.na(first)) ports <- unique(c(first, ports))
+  for (port in ports) {
+    cluster <- tryCatch(parallel::makeCluster(cores, port = port), error = function(e) e)
+    if (!inherits(cluster, "error")) return(cluster)
+    if (!grepl("cannot be opened", conditionMessage(cluster))) stop(cluster)
+  }
+  stop("no free port for a PSOCK cluster among ", tries, " tries in 11000 to 11999", call. = FALSE)
+}
+
+
 # Cross-platform parallel-apply. Unix forks via doParallel; Windows uses a
 # PSOCK cluster with the library paths of the session. Driven through
 # foreach::%dopar% so the caller body is the same on both platforms.
@@ -1416,7 +1454,7 @@ slurmTemplate <- function(login = NULL, from = login, edit = interactive(),
   use_psock <- Sys.info()[["sysname"]] == "Windows" || wants_inner
 
   if (use_psock) {
-    cluster <- parallel::makeCluster(cores)
+    cluster <- .makePSOCK(cores)
     on.exit({
       parallel::stopCluster(cluster)
       doParallel::stopImplicitCluster()

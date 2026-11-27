@@ -14,28 +14,31 @@ source("results/stored.R")
 knitr::read_chunk("../../examples/oppeltNPJSystBiolAppl2018/model.R")
 ```
 
-A model in dMod2 is a chain of function objects, each returning output and derivatives:
+A model in dMod2 is a [chain of function objects](methods-sensitivities.html#def-chain-gxp), each returning output and derivatives:
 
 | class | constructors | mapping |
 |---|---|---|
-| `parfn` | `P()`, `Pexpl()`, `Pimpl()` | outer to inner parameters, or to a steady state |
-| `prdfn` | `Xs()`, `Xf()` | parameters to trajectories, with (`Xs()`) or without sensitivities |
-| `obsfn` | `Y()` | states to observables, observables to standard deviations |
-| `objfn` | `normL2()`, `constraintL2()`, `datapointL2()`, `constraintStability()` | $-2 \log L$ |
+| `parfn` | `P()`, `Pexpl()`, `Pimpl()` | outer to inner parameters, or to a [steady state](methods-steady-states.html#def-steady-state) |
+| `prdfn` | `Xs()`, `Xf()` | parameters to trajectories, with (`Xs()`) or without [sensitivities](methods-sensitivities.html#def-sensitivity) |
+| `obsfn` | `Y()` | states to observables, observables to standard deviations ([error model](methods-objective.html#def-error-model)) |
+| `objfn` | `normL2()`, `constraintL2()`, `datapointL2()`, `constraintStability()` | [$-2 \log L$](methods-objective.html#def-minus-2-log-l) |
 
 `*` concatenates by the chain rule,
 
 $$\frac{\partial y}{\partial \theta} = \frac{\partial g}{\partial x}\,\frac{\partial x}{\partial p}\,
 \frac{\partial p}{\partial \theta},$$
 
-each factor exact, the middle one from the sensitivity equations; `+` adds objectives.
+each factor exact, the middle one from the
+[sensitivity equations](methods-sensitivities.html#forward-sensitivities); `+` adds
+[objectives](methods-profiles.html#def-objective).
 `normL2(data, g*x*pSS*p, e)` is the objective. Inner parameters are the symbols of the equations,
 per condition; outer parameters are those of the fit.
 
 The guide uses the model of Oppelt et al. [@oppelt2018model], NFκB signaling in HepG2 cells after
 TNFα, from the project
 [`examples/oppeltNPJSystBiolAppl2018`](https://github.com/dModverse/dMod2/tree/master/examples/oppeltNPJSystBiolAppl2018).
-This chapter follows `model.R`. Multistarts, profiles and other expensive results were computed
+This chapter follows `model.R`. Multistarts,
+[profiles](methods-profiles.html#def-profile) and other expensive results were computed
 once by the scripts of the project and are stored in `results/*.rds`; the chapters load them with
 `stored()`, which warns if a source script changed since.
 
@@ -53,7 +56,7 @@ educts (of the products without net educts):
 
 $$\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\, V_{c(r)}\, v_r(x, p),$$
 
-with $S_{ri}$ the stoichiometry and $V_{c(r)}$ the volume of the compartment of reaction $r$.
+with $S_{ri}$ the [stoichiometry](methods-steady-states.html#def-stoichiometry) and $V_{c(r)}$ the volume of the compartment of reaction $r$.
 
 ```{r reactions, echo = FALSE}
 ```
@@ -114,14 +117,15 @@ estimated one. Rows with a value in `sigma` ignore the error model.
 
 ## Steady-state constraints
 
-NFκB and IKK are conserved, so $f(x, p) = 0$ determines the resting state only with the totals:
+NFκB and IKK are [conserved](methods-steady-states.html#conserved-quantities), so $f(x, p) = 0$
+determines the [resting state](methods-steady-states.html#def-resting-state) only with the totals:
 
 ```{r}
 conservedQuantities(reactions)
 ```
 
 `Pimpl()` solves the steady state numerically, with the totals `totalNfk` and `totalIkk` as
-parameters, `TNF` at 0, and exact derivatives of the root
+parameters, `TNF` at 0, and exact derivatives of the [root](methods-steady-states.html#def-root)
 ([Methods > Steady states](methods-steady-states.html)). `steadyStates()` is the analytic
 alternative.
 
@@ -143,9 +147,12 @@ exact sensitivities
 ```{r odemodel}
 ```
 
-The backend `"cppDE"` (default) integrates by BDF, `"Sundials"` uses CVODES, `"deSolve"` deSolve.
-A step is accepted if
-$\bigl(\tfrac1n \sum_i \varepsilon_i^2 / (\mathrm{atol} + \mathrm{rtol}\,|x_i|)^2\bigr)^{1/2} \le 1$:
+The backend `"cppDE"` (default) integrates by
+[BDF](https://dmodverse.github.io/cppDE/articles/methods-stepping.html), `"Sundials"` uses CVODES,
+`"deSolve"` deSolve. A step is accepted if the error test holds
+for the local error estimates $\varepsilon_i$,
+
+$$\Bigl(\frac1n \sum_i \frac{\varepsilon_i^2}{(\mathrm{atol} + \mathrm{rtol}\,|x_i|)^2}\Bigr)^{1/2} \le 1 :$$
 
 | option | default | controls |
 |---|---|---|
@@ -204,9 +211,10 @@ length(getParameters(prd))
 
 ## Likelihood and prior
 
-`normL2(data, prd, e)` returns $-2 \log L$ with gradient and Gauss-Newton Hessian
-([Methods > Likelihood and prior](methods-objective.html)). `constraintL2()` adds a Gaussian prior
-on the log scale, also the start distribution of [Optimization](guide-optimization.html): mean 0
+`normL2(data, prd, e)` returns $-2 \log L$ with gradient and
+[Gauss-Newton Hessian](methods-sensitivities.html#gauss-newton-with-an-error-model)
+([Methods > Likelihood and prior](methods-objective.html)). `constraintL2()` adds a Gaussian
+[prior](methods-objective.html#def-prior) on the log scale, also the start distribution of [Optimization](guide-optimization.html): mean 0
 and standard deviation 4 by default, narrower where the magnitude is known:
 
 | parameters | mean | sd | reason |
@@ -218,8 +226,8 @@ and standard deviation 4 by default, narrower where the magnitude is known:
 | `trigger_iIkk` | $\log(1/240)$ | 2 | IKK recovers over hours |
 
 `pSS` also returns unstable roots (`controlsPTC = list(stability = FALSE)`);
-`constraintStability()` is zero on a stable resting state and reaches 100 per eigenvalue at the
-stability boundary, and needs `Pimpl(derivMode = "forward-forward")`
+`constraintStability()` is zero on a stable resting state and reaches 100 per
+eigenvalue at the stability boundary, and needs `Pimpl(derivMode = "forward-forward")`
 ([Methods > Steady states](methods-steady-states.html#stability)).
 
 ```{r objective}
@@ -234,7 +242,8 @@ stability boundary, and needs `Pimpl(derivMode = "forward-forward")`
 invisible(stored("results/fits.rds", "fit.R"))
 ```
 
-The best fit of [Optimization](guide-optimization.html), with the gauge of
+The best fit of [Optimization](guide-optimization.html), with the
+[gauge](methods-symmetries.html#def-gauge) of
 [Symmetries](guide-symmetries.html):
 
 ```{r gauge, echo = FALSE}

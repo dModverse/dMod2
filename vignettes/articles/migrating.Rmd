@@ -12,14 +12,15 @@ What a dMod [@kaschek2019dmod] script has to change for dMod2.
 Function objects and algebra are the same: `Xs()`, `Xf()`, `Y()`, `P()`, `Pexpl()`, `Pimpl()`,
 `normL2()`, `constraintL2()`, `datapointL2()`, with `*` for concatenation, `+` for conditions or
 objective terms, and `normL2(data, g * x * p)`. `eqnlist()`, `addReaction()`, `define()`,
-`insert()`, `branch()`, `repar()`, `trust()`, `mstrust()`, `profile()` and `plot*()` keep names
+`insert()`, `branch()`, `trust()`, `mstrust()`, `profile()` and `plot*()` keep names
 and main arguments. dMod2 has `getSymbols()` and `replaceSymbols()`, so `library(cOde)` is not
 needed.
 
 ## Substitution syntax
 
-`define()`, `insert()` and `repar()` take `"lhs <- rhs"`; `"lhs ~ rhs"` is an
-error naming the new form.
+`define()` and `insert()` take `"lhs <- rhs"`; `"lhs ~ rhs"` is an
+error naming the new form. `repar()` is internal: `define()` sets an entry, `insert()`
+replaces a symbol wherever it occurs.
 
 | dMod | dMod2 |
 |---|---|

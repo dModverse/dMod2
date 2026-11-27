@@ -68,7 +68,7 @@
 #'       profiled parameter alone and the others are reoptimized at every step.
 #'       \code{"hessian"} / \code{"identity"}.}
 #'     \item{\code{reoptimize}}{Whether every step is followed by a fit of the
-#'       other parameters with [trust()]. \code{FALSE} / \code{TRUE}.}
+#'       other parameters with [trust()]. \code{TRUE} for both methods.}
 #'     \item{\code{correction}}{Relative correction above which \code{gamma}
 #'       is halved; below half of it \code{gamma} doubles up to the initial
 #'       value. \code{1} for both methods.}
@@ -157,7 +157,7 @@ profile.objfn <- function(fitted, pars, whichPar, alpha = 0.05,
     optimize  = list(stepsize = 1e-2, min = 1e-4, max = Inf, atol = 1e-1, rtol = 1e-1,
                      limit = 100, stop = "value"))
   aControl <- switch(method,
-    integrate = list(gamma = 1, W = "hessian", reoptimize = FALSE, correction = 1,
+    integrate = list(gamma = 1, W = "hessian", reoptimize = TRUE, correction = 1,
                      reg = .Machine$double.eps),
     optimize  = list(gamma = 0, W = "identity", reoptimize = TRUE, correction = 1, reg = 0))
   oControl <- switch(method,

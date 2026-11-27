@@ -23,9 +23,10 @@ inFraction <- function(x) if (round(1 / x) %in% 2:10) c("half", "a third", "a qu
 ```
 
 Single shooting integrates from the initial state over the whole time axis. For oscillating or
-spiking systems the objective is rugged: a parameter change shifts every later period, and a peak
-moved by more than the peak width leaves the residuals without direction, so few starts reach the
-narrow valleys. `trust()` offers multiple shooting instead ([trust region](methods-trust.html)).
+spiking systems the objective is [rugged]{#def-rugged-objective}, with many local minima and
+narrow valleys: a parameter change shifts every later period, and a peak moved by more than the
+peak width leaves the residuals without direction, so few starts reach the narrow valleys.
+`trust()` offers multiple shooting instead ([trust region](methods-trust.html)).
 
 ## Usage
 
@@ -65,9 +66,12 @@ phases, `switches`, `hessianReseed`, `qnMemory`, `nonmonotone`, `boundary = "cli
 
 ## Segments and gaps
 
-Multiple shooting [@bock1983recent; @baake1992fitting] cuts the time axis at nodes
-$\tau_1 < \dots < \tau_M$ and integrates segment $j$ from node values $s_j$, the first from the
-initial state of the parameter transformation. Continuity becomes the constraint
+[Multiple shooting]{#def-multiple-shooting} [@bock1983recent; @baake1992fitting] cuts the time axis
+at [nodes]{#def-node} $\tau_1 < \dots < \tau_M$ into [segments]{#def-segment} and integrates
+segment $j$ from node values $s_j$, the first from the initial state of the parameter transformation.
+The node values are fitted with the parameters. The [gap]{#def-gap} $c_j$ is the difference between
+the end state of segment $j$ and the node value of the next segment, and the
+[continuity constraint]{#def-continuity-constraint} demands every gap to be zero:
 
 $$c_j = x(\tau_{j+1};\, \tau_j, s_j, \theta) - s_{j+1} = 0 . \tag{1}$$
 
@@ -77,14 +81,17 @@ single-shooting objective.
 
 ## Condensed step
 
-Bock's generalized Gauss-Newton method linearizes (1). With the end-state sensitivities
+Bock's [generalized Gauss-Newton]{#def-generalized-gauss-newton} method, Gauss-Newton for least
+squares with equality constraints, linearizes the residuals and the constraints (1) and takes the
+step from the linear problem. With the end-state sensitivities
 $G_j = \partial x_j / \partial s_j$ and $P_j = \partial x_j / \partial \theta$,
 
 $$\Delta s_{j+1} = \alpha\, c_j + G_j\, \Delta s_j + P_j\, \Delta \theta , \tag{2}$$
 
 and the recursion gives $\Delta s = \alpha z + S\, \Delta\theta$. Substituted into the linearized
-residuals it leaves a Gauss-Newton model in $\Delta\theta$ alone (condensing), of single-shooting
-size, so subproblem solver and bounds of `trust()` apply unchanged. The nodes follow the step by the
+residuals it leaves a Gauss-Newton model in $\Delta\theta$ alone, of single-shooting size, so
+subproblem solver and bounds of `trust()` apply unchanged. This elimination of the node steps is
+[condensing]{#def-condensing}. The nodes follow the step by the
 linearization, not by simulation, so the gaps close only at convergence.
 
 The trust region bounds parameters and nodes together,
@@ -95,7 +102,9 @@ with $D = \operatorname{diag}(\lvert v \rvert^{1/2})$ for the distances $v$ to t
 [Bound constraints](methods-trust.html#bound-constraints), the identity without bounds, since a
 region on $\theta$ alone leaves $S\, \Delta\theta$ unbounded, which is huge across a spike.
 $V$ is one over the state scale (`multipleShootingControl$scale`): data range for observed states,
-simulation range otherwise, a decade for log10 node values. $\alpha = 1$ closes the linearized gaps
+simulation range otherwise, a decade for log10 node values. The
+[scaled gap size]{#def-scaled-gap-size} $h = \lVert V c \rVert$ is the Euclidean norm of the gaps in
+units of the state scale. $\alpha = 1$ closes the linearized gaps
 (Bock's step); under an active region $\alpha \le 1$ is the share of the node part of the full step
 that the radius allows. A link of the condensing chain that would propagate a gap through expanding
 segments beyond a bound is dropped for the step. Other summands, a prior or a single-shooting
@@ -103,9 +112,9 @@ segments beyond a bound is dropped for the step. Other summands, a prior or a si
 
 | control | effect |
 |---|---|
-| `stepControl$acceptance = "filter"` (default) | filter of Fletcher and Leyffer [@fletcher2002nonlinear] on the objective function $\mathcal{J}(\theta)$, $-2 \log L$ or $-2 \log$ of the posterior, and the scaled gap size $h = \lVert V c \rVert$ |
-| `stepControl$acceptance = "merit"` | $\ell_2$ exact penalty $\mathcal{J} + \mu h$ |
-| `stepControl$soc` (on) | one second-order correction of a rejected step whose gaps did not close as predicted |
+| `stepControl$acceptance = "filter"` (default) | [filter]{#def-filter} of Fletcher and Leyffer [@fletcher2002nonlinear] on the objective function $\ell(\theta)$, $-2 \log L$ or $-2 \log$ of the posterior, and the scaled gap size $h$: a trial point is accepted if it lowers $h$ or $\ell$ by a margin against the current point and every pair $(h, \ell)$ stored from earlier iterates |
+| `stepControl$acceptance = "merit"` | exact penalty $\ell + \mu h$ |
+| `stepControl$soc` (on) | one [second-order correction]{#def-second-order-correction} of a rejected step whose gaps did not close as predicted: the step repeated with the gaps at the trial point closed by the current linearization |
 | `tolControl$ctol` | `converged = TRUE` only for $h$ below it; stagnation, `rmin`, ten failed solves in a row, `iterlim`, and under `acceptance = "natural"` a zero full step or one failed solve end the run with `converged = FALSE` above it |
 | `hessianMethod = "gn"` | condensed Gauss-Newton blocks |
 | `hessianMethod = "bfgs"`, `"sr1"` | one quasi-Newton block per segment Lagrangian, from gradients alone, so usable with `sweep = "reverse"` |
@@ -118,7 +127,7 @@ measure the fit.
 From a distant start the condensed step can be forced through a regime the data never show, such
 as a spike threshold. `stepControl$anneal` (on) therefore first minimizes
 
-$$\mathcal{J} + w \lVert V c \rVert^2 \tag{4}$$
+$$\ell + w \lVert V c \rVert^2 \tag{4}$$
 
 over parameters and nodes on the sparse Gauss-Newton matrix, $w$ rising tenfold per stage from one,
 then hands over to the exact method: precision annealing [@ye2015improved] with a fixed schedule. A
@@ -147,7 +156,7 @@ parameters, cuts nothing, since no node removes it.
 |---|---|
 | `charts = c(phi = "angle")` | gap counted modulo $2\pi$ |
 | `charts` entry `"log10"` | node values of a positive state on the log scale |
-| default | observed states at the data; others from a run with observed states reset to the data at each data time, replacement synchronization [@pecora1990synchronization] |
+| default | observed states at the data; others from a run with observed states reset to the data at each data time, [replacement synchronization]{#def-replacement-synchronization} [@pecora1990synchronization] |
 | `init = "spline"` | smoothing spline, roughness by generalized cross-validation [@horbelt2002parameter] |
 | `init = "simulation"` | simulation at the start parameters |
 | list as `fit$multipleShooting$nodes` | given values, node times in `nodes` |
@@ -164,7 +173,7 @@ the layout.
 
 ## Further step controls
 
-`stepControl$acceptance = "natural"` selects Bock's natural level function
+`stepControl$acceptance = "natural"` selects Bock's [natural level function]{#def-natural-level-function}
 [@peifer2007parameter]: the full Gauss-Newton step damped by a factor from a curvature estimate,
 cut back by a corrector, and accepted when the simplified step at the trial point (current
 Jacobians, trial residuals and gaps) has shrunk. The filter takes over where the damping finds no
@@ -177,7 +186,7 @@ Off by default, since each helps on some problems and costs on others:
 | `stepControl$twoPhase` | fit parameters with nodes held at the start [@horbelt2002parameter], then lay out nodes at the result and release them; helps with noisy node values, as on spiking traces, at several times the cost elsewhere |
 | `stepControl$regularize` | fix condensed directions with singular value below that fraction of the largest [@peifer2007parameter] |
 | `multipleShootingControl$breaks` | nodes without continuity constraint [@voss2004nonlinear]; Gauss-Newton Hessian only |
-| `stepControl$restore` | filter restoration, at most five times: close the linearized gaps, damped if needed, else put the nodes on the current trajectory; on noisy spike trains this makes the layout cut more segments and fewer starts succeed |
+| `stepControl$restore` | filter [restoration]{#def-restoration}, steps that only reduce the gaps where the filter accepts no step, at most five times: close the linearized gaps, damped if needed, else put the nodes on the current trajectory; on noisy spike trains this makes the layout cut more segments and fewer starts succeed |
 
 ## FitzHugh-Nagumo oscillator
 
@@ -195,7 +204,7 @@ Forty starts perturb the initial states by a standard deviation of 1.5 and $a$, 
 ```{r fhnfits, eval = FALSE}
 ```
 
-A hit has a single-shooting objective within 0.1 of the best, evaluated anew because open gaps can
+A [hit]{#def-hit} has a single-shooting objective within 0.1 of the best, evaluated anew because open gaps can
 report a data term below the optimum.
 
 ```{r, echo = FALSE}

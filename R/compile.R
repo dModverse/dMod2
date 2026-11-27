@@ -59,7 +59,7 @@
 ## `FUN`, a function of base R only, over `X` on a PSOCK cluster of `cores`
 ## workers, for Windows, which cannot fork. The workers run no package code.
 .compileOnCluster <- function(X, FUN, cores) {
-  cl <- parallel::makeCluster(min(as.integer(cores), length(X)))
+  cl <- .makePSOCK(min(as.integer(cores), length(X)))
   on.exit(parallel::stopCluster(cl))
   environment(FUN) <- globalenv()
   parallel::parLapplyLB(cl, X, FUN)

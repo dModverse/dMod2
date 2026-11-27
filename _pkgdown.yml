@@ -67,6 +67,9 @@ navbar:
         href: articles/methods-nlme.html
       - text: "Sparsity priors"
         href: articles/methods-sparsity-priors.html
+      - text: "---"
+      - text: "Index"
+        href: articles/index-terms.html
     examples:
       text: Examples
       menu:
@@ -136,6 +139,7 @@ articles:
   - '`articles/methods-multiple-shooting`'
   - '`articles/methods-nlme`'
   - '`articles/methods-sparsity-priors`'
+  - '`articles/index-terms`'
 
 - title: "Examples: signaling models"
   navbar: ~
@@ -222,7 +226,6 @@ reference:
   - Pimpl
   - parfn
   - define
-  - repar
   - print.parfn
   - Id
   - prodfn
@@ -308,6 +311,7 @@ reference:
   contents:
   - randomEffects
   - normal
+  - betaPrior
   - em
   - msem
   - print.em

@@ -112,7 +112,8 @@ of FOCEI over normal random effects on the sparse Gauss-Newton Hessian.
 
 \item{retry}{Logical. If \code{TRUE} (default), a fit that fails with an error,
 for instance at a start where a steady state of \code{\link[=Pimpl]{Pimpl()}} has no stable
-root, is repeated from a new perturbed start, up to \code{nTries} attempts.}
+root or in a phase of the sum over subsets (\code{control$sparseFit}), is
+repeated from a new perturbed start, up to \code{nTries} attempts.}
 
 \item{nTries}{Maximum number of attempts per start, including the first.
 Default \code{10}.}
@@ -138,8 +139,10 @@ of the fit.}
 every attempt failed.}
 \item{\code{failures}}{why evaluations in the trust region failed, and how
 often.}
-\item{\code{error}, \code{boundary}}{the error of a failed start, the variances
-the fit set to 0.}
+\item{\code{error}, \code{phase}, \code{boundary}}{the error of a failed start, the
+failed phase of the last attempt, the variances the fit set to 0.}
+\item{\code{subset}}{the random effects in the slab during the burn-in,
+separated by commas.}
 }
 \code{\link[=plotValues]{plotValues()}} draws it as a waterfall.
 }
@@ -147,7 +150,9 @@ the fit set to 0.}
 Runs \code{\link[=em]{em()}} from \code{fits} starts, the first at \code{init}, the others
 perturbed by normal noise of standard deviation \code{sd} (on the log scale for
 concentrations and slab standard deviations, on the logit scale
-for slab probabilities), and returns the best fit.
+for slab probabilities), and returns the best fit. With the burn-in of
+spike-and-slab random effects at \code{start = "random"}, each attempt also draws
+the start subset; \code{set.seed()} reproduces the starts.
 }
 \examples{
 \donttest{

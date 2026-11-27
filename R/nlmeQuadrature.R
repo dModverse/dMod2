@@ -492,7 +492,7 @@
   qc <- control$quadrature %||% list()
   levels <- qc$levels %||% (lay$K + 1L)
   tol <- qc$tol %||% 0.1
-  nIt <- qc$maxEcmPerStage %||% 10L
+  nIt <- qc$maxECMPerStage %||% 10L
   q <- .quadratureObjective(design, start, fixed, modifyList(control, qc))
   if (!is.null(etaInit)) q$state$modes <- etaInit
   psi <- start
@@ -545,7 +545,7 @@
 
 ## Laplace-EM: CM-1 on the frozen nodes of level K + 1 (one node would drop the posterior
 ## variance), Omega from the moments eta* eta*' + (H / 2)^-1, until the extrapolated distance
-## to the fixed point is below `epsEcm`; the reported value at level K + 2.
+## to the fixed point is below `epsECM`; the reported value at level K + 2.
 .fitLaplaceEM <- function(design, start, fixed, control = list(), verbose = FALSE) {
   lay <- design$normal
   qc <- control$quadrature %||% list()
@@ -558,7 +558,7 @@
                             tolControl = list(ftol = 1e-8, mtol = 1e-8)),
                        qc$cm1Control, label = "cm1Control")
   rows <- list(); conv <- FALSE; last <- Inf
-  for (it in seq_len(qc$maxEcm %||% 200L)) {
+  for (it in seq_len(qc$maxECM %||% 200L)) {
     if (it > 1L) q$rebuild(psi, lay$K + 1L)
     before <- psi
     # with every structural parameter fixed only Omega moves
@@ -580,7 +580,7 @@
     rows[[length(rows) + 1L]] <- data.frame(level = lay$K + 1L, ecmIter = it, OFV = cm$value,
                                             deltaPsi = dpsi, distance = distance)
     if (verbose) message(sprintf("em(laplaceEM) ecm %d: -2 log L %.6f, |delta psi| %.2e", it, cm$value, dpsi))
-    if (max(dpsi, distance) < (qc$epsEcm %||% 1e-5)) { conv <- TRUE; break }
+    if (max(dpsi, distance) < (qc$epsECM %||% 1e-5)) { conv <- TRUE; break }
   }
   q$rebuild(psi, lay$K + 2L)
   .quadratureResult(design, q, psi, fixed, length(rows), conv, do.call(rbind, rows), exact)

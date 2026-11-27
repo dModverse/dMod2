@@ -1,4 +1,4 @@
-# AlyssaPetit version 1.4
+# AlyssaPetit version 1.5
 # Use with python 3.x
 #
 # A new core on the same interface as v1.3. Every flux is expanded into atoms,
@@ -20,6 +20,10 @@
 # separate rate constants is cut with free flux ratios only if nothing else solves.
 # Where the greedy choice of unknowns then runs into a dead end, the unknowns whose
 # solutions block it go last and the search restarts.
+# States rest at zero where their mass only leaks; with zeroLoops also where they
+# form the largest set whose fluxes all vanish with the set at zero.
+# A state of a conserved quantity whose balance is left over is solved in a
+# further round, another state of the quantity kept free.
 
 import os
 import sys
@@ -464,6 +468,19 @@ def _read_model(filename, injections):
     stoich=[[col[i] for i in keep] for col in stoich]
     return states, fluxes, stoich
 
+def _drop_zero(states, fluxes, stoich, zs):
+    # The model with the states zs at 0: their rows removed, fluxes that vanish dropped.
+    rep={s: 0 for s in zs}
+    keep=[i for i, s in enumerate(states) if s not in rep]
+    nf, ns=[], []
+    for f, col in zip(fluxes, stoich):
+        f=f.xreplace(rep)
+        if f==0:
+            continue
+        nf.append(f)
+        ns.append([col[i] for i in keep])
+    return [states[i] for i in keep], nf, ns
+
 def _zero_states(states, fluxes, stoich, volumes):
     # States that are 0 at every steady state: a set whose mass only leaks
     # (v1.3's linear program, in amounts). They are removed and substituted by 0.
@@ -478,18 +495,80 @@ def _zero_states(states, fluxes, stoich, volumes):
             break
         zs=[states[i] for i in cluster]
         zero+=zs
-        rep={s: 0 for s in zs}
-        keep=[i for i in range(len(states)) if i not in cluster]
-        nf, ns=[], []
-        for f, col in zip(fluxes, stoich):
-            f=f.xreplace(rep)
-            if f==0:
-                continue
-            nf.append(f)
-            ns.append([col[i] for i in keep])
-        states=[states[i] for i in keep]
-        fluxes, stoich=nf, ns
+        states, fluxes, stoich=_drop_zero(states, fluxes, stoich, zs)
     return states, fluxes, stoich, zero
+
+def _vanishes_at(f, sub):
+    # The flux is 0 where the symbols of sub are 0, with a denominator that is not.
+    num, den=sympy.fraction(sympy.together(f))
+    return sympy.expand(num.xreplace(sub))==0 and sympy.expand(den.xreplace(sub))!=0
+
+def _left_kernel_modp(J, p):
+    # Basis of the left kernel of the square matrix J (lists of ints) over GF(p).
+    n=len(J)
+    A=[[J[i][k] % p for i in range(n)] for k in range(n)]
+    piv=[]
+    r=0
+    for c in range(n):
+        k=next((i for i in range(r, n) if A[i][c]), None)
+        if k is None:
+            continue
+        A[r], A[k]=A[k], A[r]
+        inv=pow(A[r][c], -1, p)
+        A[r]=[v*inv % p for v in A[r]]
+        for i in range(n):
+            if i!=r and A[i][c]:
+                f=A[i][c]
+                A[i]=[(a-f*b) % p for a, b in zip(A[i], A[r])]
+        piv.append(c)
+        r+=1
+    out=[]
+    for c in (c for c in range(n) if c not in piv):
+        v=[0]*n
+        v[c]=1
+        for i, pc in enumerate(piv):
+            v[pc]=-A[i][c] % p
+        out.append(v)
+    return out
+
+def _zero_face(states, fluxes, stoich):
+    """The largest set of states whose fluxes all vanish where the set is 0, with
+    the Jacobian of their balances on the set invertible at random values: a face
+    of the steady states at 0. A conserved quantity over the set makes the Jacobian
+    singular; the states of the quantity are left out."""
+    p=_MODP_PRIMES[0]
+    touch={s: [j for j, col in enumerate(stoich) if col[i]!=0] for i, s in enumerate(states)}
+    face=[s for s in states if touch[s]]
+    rng=random.Random(1)
+    while face:
+        sub={s: 0 for s in face}
+        drop={s for s in face if not all(_vanishes_at(fluxes[j], sub) for j in touch[s])}
+        if drop:
+            face=[s for s in face if s not in drop]
+            continue
+        row={s: i for i, s in enumerate(states)}
+        J=[[sympy.Add(*[stoich[j][row[s]]*sympy.diff(fluxes[j], x) for j in touch[s]]).xreplace(sub)
+            for x in face] for s in face]
+        syms=set().union(*(e.free_symbols for r in J for e in r))
+        exp_syms=set().union(set(), *(_collect_exponent_syms(e) for r in J for e in r))
+        vals=None
+        for _ in range(20):
+            env={x: (rng.randint(2, 5) if x in exp_syms else rng.randint(1, p-1)) for x in syms}
+            try:
+                vals=[[_eval_modp(e, env, p) for e in r] for r in J]
+                break
+            except _ResampleModp:
+                continue
+            except _UnsupportedModp:
+                return []
+        if vals is None:
+            return []
+        left=_left_kernel_modp(vals, p)
+        if not left:
+            return face
+        out={face[i] for v in left for i in range(len(face)) if v[i]}
+        face=[s for s in face if s not in out]
+    return []
 
 def _atoms(states, fluxes, stoich, volumes=None):
     # Expand every flux into atoms; the balance of state i, in amounts (times the
@@ -902,6 +981,9 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
     deps={}
     solved=[]
     ratios=[]
+    # the forced atoms of an unknown and the span of the used balances only grow
+    # during a run: an unknown without an equation stays without one
+    dead=set()
     state_set=set(row_of)
     unknowns=set(cands)|state_set
     atom_syms=[at.free_symbols for at in atoms]
@@ -924,7 +1006,7 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
         quad=None
         tried_quad=not quadratic
         for u in order:
-            if u in sol:
+            if u in sol or u in dead:
                 continue
             if not tried_quad and u not in state_set:
                 tried_quad=True
@@ -940,6 +1022,7 @@ def _greedy(order, cands, nonlin, atoms, basis, Rnp, r, check_time, B_rows, row_
             if res is not None:
                 picked=(u, res)
                 break
+            dead.add(u)
         if picked is None and quad is None and not tried_quad:
             quad=root_of_some_state()
         if quad is not None:
@@ -1123,7 +1206,7 @@ def _state_graph_after(states, atoms, B, solved):
     return {s: _unsolved_refs(succ, solved) for s, succ in graph.items() if s not in solved}
 
 def _cut_cycles(states, atoms, B, cands, cqs, prio_rank, given, solved=None, locked=(),
-                ratios=True, replay=()):
+                ratios=True, replay=(), avoid=()):
     """Free states and rate constants that remove every cycle of the state graph.
 
     A cycle is cut at a state of a conserved quantity, whose balance is then the
@@ -1135,7 +1218,8 @@ def _cut_cycles(states, atoms, B, cands, cqs, prio_rank, given, solved=None, loc
     constant named in `priority` first and a state named there last, conserved
     quantity, then side type, rewired balances, number of terms, number of
     cycles through the state, and occurrence in other balances; a side with one
-    rate constant before one with ratios. States in `solved` (state ->
+    rate constant before one with ratios. A state in `avoid` is kept free for a
+    conserved quantity only after the other states of the quantity. States in `solved` (state ->
     referenced states) are solved directly beforehand and leave the graph, rate
     constants in `locked` are not cut at, and the cuts in `replay` are made
     first, in their order.
@@ -1185,7 +1269,7 @@ def _cut_cycles(states, atoms, B, cands, cqs, prio_rank, given, solved=None, loc
                 # a given quantity keeps the first state on a cycle free
                 k=next((k for k, c in enumerate(cqs) if not used[k] and c.get(s, 0)!=0), None)
                 if k is not None:
-                    first=0 if not given else list(cqs[k]).index(s)
+                    first=(s in avoid, 0 if not given else list(cqs[k]).index(s))
                     rows.append(((len(prio_rank), str(s) in prio_rank, 0, first, 0, 0, 0)+tail+(0, str(s)),
                                  ('cq', s, k, ())))
                     continue
@@ -1361,7 +1445,7 @@ def _direct_pass(states, atoms, B, cands, neglect, cqs, keep=()):
 
 def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
            walltime=0, simplify=True, solveQuadratic=False, priority=(),
-           verbose=True, volumes=None):
+           verbose=True, volumes=None, zeroLoops=False):
     global _VERBOSE
     _VERBOSE=2 if verbose=='full' else int(bool(verbose))
     del _NOTES[:]
@@ -1380,6 +1464,13 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
     ODE=[sympy.Add(*[col[i]*f for f, col in zip(fluxes, stoich)]) for i in range(len(states))]
     vol=ParseVolumes(volumes)
     states, fluxes, stoich, zero=_zero_states(states, fluxes, stoich, vol)
+    face=_zero_face(states, fluxes, stoich) if zeroLoops else []
+    if face:
+        _note('zeroLoops: the states '+', '.join(str(s) for s in face)+' rest at 0, their fluxes '
+              'vanish where all of them are 0')
+        states, fluxes, stoich=_drop_zero(states, fluxes, stoich, face)
+        states, fluxes, stoich, more=_zero_states(states, fluxes, stoich, vol)
+        zero+=face+more
     vol_syms=set().union(*(v.free_symbols for v in vol.values())) if vol else set()
 
     def balances(fluxes, held, positive=frozenset()):
@@ -1417,7 +1508,7 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
         keep=set().union(*cqs)
         direct, locked=_direct_pass(states, atoms, B, cands_all, neglect, cqs, keep)
 
-    def attempt(direct, locked, use_ratios):
+    def attempt(direct, locked, use_ratios, avoid):
         # A ratio cut substitutes flux_p = r_p * flux_g0 on the side of the cut into
         # every flux; the side then has the common rate constant g0, and the cuts
         # start over with those made so far.
@@ -1427,11 +1518,11 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
         while True:
             at, Bm, bs, Rn, ca, nl, cq=M
             cut=_cut_cycles(states, at, Bm, ca, cq, prio_rank, bool(givenCQs), direct, locked,
-                            use_ratios, replay)
+                            use_ratios, replay, avoid)
             # direct solutions are taken back if they leave more cycles without a cut
             if direct and cut[3] and not replay:
                 plain=_cut_cycles(states, at, Bm, ca, cq, prio_rank, bool(givenCQs), None, (),
-                                  use_ratios)
+                                  use_ratios, (), avoid)
                 if len(plain[3])<len(cut[3]):
                     return None, [], []
             if cut[4] is None:
@@ -1467,6 +1558,9 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
     # rate constants of a side to one scale: they are made only if nothing else solves.
     tries=[(d, lk, use) for use in (False, True)
            for d, lk in ([(direct, locked)] if direct else [])+[({}, set())]]
+    # A state of a conserved quantity whose balance is left over is solved in the next
+    # round, another state of the quantity kept free, before the next kind of attempt.
+    cq_states={s for c in cqs for s in c}
     solution=None
     for k, (d, lk, use) in enumerate(tries):
         if solution is not None or check_time():
@@ -1474,7 +1568,17 @@ def Alyssa(model_csv, injections=(), givenCQs=(), neglect=(), testSteady='fast',
         if k:
             _say('  again'+(' with ratio cuts' if use else '')+
                  (' without direct solutions' if direct and not d else ''))
-        solution, ratios, cq_free=attempt(d, lk, use)
+        avoid=set()
+        while True:
+            solution, ratios, cq_free=attempt(d, lk, use, avoid)
+            if solution is not None or check_time() or _STUCK[0] is None:
+                break
+            new={s for s in cq_states if str(s) in set(_STUCK[0][1])}-avoid
+            if not new:
+                break
+            avoid|=new
+            _say('  again with '+', '.join(sorted(str(s) for s in new))+
+                 ' solved, not kept free for a conserved quantity')
 
     if solution is None:
         if check_time():

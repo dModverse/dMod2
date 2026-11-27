@@ -142,11 +142,22 @@
 #'       `p0` of a deviation of 0; a column `data` where a sparse random effect
 #'       reaches no data of the group; such an effect rests at 0 with the prior.}
 #'     \item{`slab`}{the hyperparameters of the spike-and-slab and
-#'       Dirichlet-process blocks.}
+#'       Dirichlet-process blocks; with hyperpriors also `lower` and `upper`, the
+#'       95 % interval of a `prob` integrated out or a `tau` integrated over, and
+#'       `prior`, the hyperprior.}
+#'     \item{`hyperprior`}{with a scale prior on `tau`, -2 log of the prior
+#'       density at the estimate, which `value` holds as well.}
 #'     \item{`valueSE`}{the standard error of `value` where it comes from
 #'       importance sampling.}
 #'     \item{`coupling`}{`"expectationConsistent"` where a group needed it,
 #'       else `NULL`.}
+#'     \item{`phases`}{with spike-and-slab random effects of a given `mean` or
+#'       `spike`, a row per phase: `approx` (`"burnin"` for the burn-in),
+#'       `iterations` (0 for a skipped phase), `value` (-2 log L of the
+#'       approximation, for the burn-in data plus penalty), `converged`,
+#'       `seconds` and `failed`, the subsets of weight 0.}
+#'     \item{`burnin`}{the spike-and-slab random effects in the slab at the
+#'       start of the burn-in, `NULL` without burn-in.}
 #'     \item{`boundary`}{the hyperparameters set to 0, see `control`.}
 #'     \item{`etaModes`, `etaSE`, `shrinkage`}{the modes of the random effects per
 #'       group, their conditional standard errors, and per random effect
@@ -190,7 +201,7 @@
 #'     (`"resolution"`). `converged` means stationary at the levels reached,
 #'     capped ones included; the fit returns the iterate of lowest -2 log L on
 #'     the highest levels.}
-#'   \item{`maxEcmPerStage`, `cm1Control`, `maxCm1Iter`}{rebuilds per stage
+#'   \item{`maxECMPerStage`, `cm1Control`, `maxCm1Iter`}{rebuilds per stage
 #'     (default 10, `stopReason` `"iterlim"` where they run out), [trust()]
 #'     settings and iterations of a step (default 30).}
 #'   \item{`pruneTol`}{nodes whose weight lies this much in log below the
@@ -200,7 +211,7 @@
 #'     proposal at the mode of each group. A group is flagged where the two
 #'     -2 log L differ by more than three standard errors plus the error the
 #'     level of the group allows, or the Pareto shape of the weights exceeds 0.7.}
-#'   \item{`epsEcm`, `maxEcm`}{for `"laplaceEM"`: the extrapolated distance to
+#'   \item{`epsECM`, `maxECM`}{for `"laplaceEM"`: the extrapolated distance to
 #'     the fixed point at which it stops, default 1e-5, and the iteration limit,
 #'     default 200.}
 #' }
@@ -276,26 +287,25 @@
 #'   \item{`trustControl`}{the [trust()] settings of the outer search. The modes
 #'     are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
 #'     below 1e-8; of `control$innerControl` only `sqpIterlim` applies.}
-#'   \item{`maxEcm`, `epsEcm`, `budget`, `ec`}{of the sum over subsets, see below.}
+#'   \item{`burnin`, `phases`, `termBudget`, `ec`}{of the sum over subsets,
+#'     see below.}
 #' }
 #'
-#' Spike-and-slab random effects with `mean` or `spike` other than 0, see
-#' [spikeSlab()], take a separate path of `method = "focei"`, beside normal
+#' Spike-and-slab random effects with `mean` or `spike` other than 0, or with
+#' a hyperprior ([betaPrior()]), see [spikeSlab()], take a separate path of
+#' `method = "focei"`, beside normal
 #' random effects of the same grouping but no Dirichlet-process ones. The
 #' integral of a group is the sum over all subsets of the spike-and-slab random
 #' effects, each subset a Laplace integral over the normal random effects and
 #' the slab ones of the subset at the inner mode, the other random effects at
 #' the spike; `spike = -Inf` switches the
-#' parameter off. The number of subsets summed over all groups is at most
-#' `budget` (default 4096). The fixed effects and hyperparameters follow by EM:
+#' parameter off. The fixed effects and hyperparameters follow by EM:
 #' `prob` is the mean inclusion probability, `tau^2` the mean squared deviation
 #' from `mean` under the slab, and the fixed effects minimize the data term
 #' plus slab prior summed over the subsets with their weights, jointly with
 #' the subset modes; the log determinant of the Laplace integral enters the
 #' weights only; Omega is the mean of the posterior second moments of the
-#' normal random effects, restricted to the block structure. EM stops after
-#' `maxEcm` iterations (default 200) or when no
-#' estimate changes by more than `epsEcm` (default 1e-6). The `p0` column of
+#' normal random effects, restricted to the block structure. The `p0` column of
 #' the random table is the posterior probability of the spike.
 #'
 #' `method = "saem"` draws them by the moves of section SAEM: a spike at
@@ -317,15 +327,43 @@
 #' moves by trust steps on the frozen nodes, which are rebuilt after each step
 #' until a Newton step would lower -2 log L by less than `tolDecrement`
 #' (`stopReason` `"decrement"`). Of `control$quadrature` this path reads `tol`,
-#' `maxLevel` and `maxNodes` (per subset), `tolDecrement`, `maxEcmPerStage`,
+#' `maxLevel` and `maxNodes` (per subset), `tolDecrement`, `maxECMPerStage`,
 #' `cm1Control` and `maxCm1Iter`.
 #'
-#' Groups beyond the budget, the largest first, take the expectation consistent
-#' (EC) approximation in a coordinate in which the spike is 0: the rate
+#' `phases` lists the approximations of the sum over subsets in the order they
+#' run, each from the estimates and inner modes of the phase before: a
+#' character vector, or a named list whose entries set `maxECM`, the ECM
+#' iterations (default 200), and `epsECM`, the largest change of an estimate
+#' at which the phase ends (default 1e-2, in the last phase 1e-6). Each name
+#' at most once; default `c("meanfield", "ec", "exact")`:
+#' \describe{
+#'   \item{`"meanfield"`}{factorized inclusion per random effect, from the
+#'     Laplace integrals of a reference subset and of the subsets that differ
+#'     from it in one random effect; the reference is the subset of inclusion
+#'     above 1/2. A subset whose inner search fails has weight 0.}
+#'   \item{`"ec"`}{EC for every group, see below.}
+#'   \item{`"exact"`}{the sum over all subsets. Where the subsets summed over
+#'     the groups exceed `termBudget` (default 4096), the phase is skipped and
+#'     the fit ends with phase `"ec"`; without it, an error.}
+#' }
+#' `burnin` fits the fixed effects first, with `prob`, `tau` and `Omega` held,
+#' in one trust region at the joint mode of a start subset of the
+#' spike-and-slab random effects in the slab, the prior densities as penalty;
+#' the others stay at the spike. `FALSE` (default) no burn-in, `TRUE` the
+#' defaults, or a list of `start`, `"random"` (default, each in the slab with
+#' probability `prob`, drawn from the random number stream), `"spike"`, `"slab"`
+#' or the names of the random effects in the slab, and `iterlim`, the trust
+#' iterations (default 200). The first phase starts from that subset. The fit
+#' reports `burnin`, the start subset. `converged` is that of the last phase;
+#' an error names the phase.
+#'
+#' EC is the
+#' expectation consistent approximation in a coordinate in which the spike is 0: the rate
 #' \eqn{b^\eta}{b^eta} for `spike = -Inf`, where the slab is log-normal, and
 #' \eqn{\eta}{eta} minus the spike else. The data term is a Gaussian in that
-#' coordinate, expanded first at the mode with every random effect in the slab
-#' and again at the EC mean until it is stable; normal random effects enter it
+#' coordinate, expanded first at the mode with the random effects of inclusion
+#' above 1/2 of the step before in the slab (at the first step every one), and
+#' again at the EC mean until it is stable; normal random effects enter it
 #' exactly, without sites. These groups take the subset of
 #' inclusion probability above 1/2 for the fixed effects. Entries of
 #' `control$sparseFit$ec`: `nodes` of the Gauss-Hermite rule of the log-normal
@@ -350,6 +388,7 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   cont <- .emContinue(obj, random, init, fixed)
   random <- cont$random; init <- cont$init; fixed <- cont$fixed
   design <- .emDesign(obj, random)
+  .hyperpriorHint(design, names(fixed))
   start <- .emStart(design, init, fixed, sd = control$sd %||% 0.3)
   control$modes <- cont$modes
   control$selected <- cont$selected
@@ -361,10 +400,10 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 .checkEmControl <- function(control) {
   known <- list(control = c("sd", "inner", "innerControl", "trustControl", "secondOrderCorrection", "derivMode",
                             "quadrature", "saem", "sparseFit", "boundary"),
-                sparseFit = c("maxOuter", "trustControl", "maxEcm", "epsEcm", "budget", "ec"),
+                sparseFit = c("maxOuter", "trustControl", "termBudget", "burnin", "phases", "ec"),
                 ec = c("nodes", "maxSweeps", "tolSweep", "maxRelinearize", "tolRelinearize"),
-                quadrature = c("tol", "levels", "maxLevel", "maxNodes", "tolDecrement", "maxEcmPerStage",
-                               "cm1Control", "maxCm1Iter", "pruneTol", "certificate", "epsEcm", "maxEcm"),
+                quadrature = c("tol", "levels", "maxLevel", "maxNodes", "tolDecrement", "maxECMPerStage",
+                               "cm1Control", "maxCm1Iter", "pruneTol", "certificate", "epsECM", "maxECM"),
                 saem = c("nBurnin", "nEM", "nMcmc", "nLaplace", "laplaceEvery", "laplaceScale", "window", "mcTol",
                          "particles", "cm1Control", "nFlip", "nodes", "integral"),
                 innerControl = c("rinit", "rmax", "iterlim", "mtol", "steptol", "eigenFloorRelative", "sqpIterlim"))
@@ -376,6 +415,11 @@ em <- function(obj, random, init = NULL, fixed = NULL,
       stop("em: unknown entries of `", where, "`: ",
            paste(bad, collapse = ", "), ".", call. = FALSE)
   }
+  .spikePhases(control$sparseFit)
+  .spikeBurninOf(control$sparseFit)
+  tb <- control$sparseFit$termBudget
+  if (!is.null(tb) && !(is.numeric(tb) && length(tb) == 1L && !is.na(tb) && tb >= 0))
+    stop("em: `control$sparseFit$termBudget` is one number of at least 0.", call. = FALSE)
   inner <- control[["inner"]]
   if (!is.null(inner) && !(length(inner) == 1L && inner %in% c("nested", "sqp")))
     stop("em: `control$inner` is \"nested\" or \"sqp\".", call. = FALSE)
@@ -388,6 +432,19 @@ em <- function(obj, random, init = NULL, fixed = NULL,
   bd <- control$boundary
   if (!is.null(bd) && !isFALSE(bd) && !(is.numeric(bd) && length(bd) == 1L && is.finite(bd) && bd >= 0))
     stop("em: `control$boundary` is FALSE or one number of at least 0.", call. = FALSE)
+}
+
+## A message where a spike-and-slab block of a design with one group estimates prob or tau: from the few
+## deviations of the block an estimate of prob tends to 0 or 1, one of tau follows the modes.
+.hyperpriorHint <- function(design, fixed = character(0)) {
+  if (!is.null(design$groupings) || length(design$groups) != 1L) return(invisible())
+  estimated <- function(b, kind, prior) is.na(b[[kind]]) && is.null(prior) && !b$hyper[[kind]] %in% fixed
+  one <- Filter(function(b) b$dist == "spikeSlab" &&
+                  (estimated(b, "prob", b$probPrior) || estimated(b, "tau", b$tauPrior)), design$blocks)
+  if (length(one))
+    message("em: a spike-and-slab block of one group estimates prob or tau from the few deviations of the block; ",
+            "spikeSlab(prob = betaPrior(), tau = halfCauchyPrior()) are priors for this case.")
+  invisible()
 }
 
 ## `expr` evaluated with `cores` cores over the conditions of an evaluation.
@@ -403,7 +460,9 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #' @description Runs [em()] from `fits` starts, the first at `init`, the others
 #' perturbed by normal noise of standard deviation `sd` (on the log scale for
 #' concentrations and slab standard deviations, on the logit scale
-#' for slab probabilities), and returns the best fit.
+#' for slab probabilities), and returns the best fit. With the burn-in of
+#' spike-and-slab random effects at `start = "random"`, each attempt also draws
+#' the start subset; `set.seed()` reproduces the starts.
 #'
 #' @inheritParams em
 #' @param fits Number of starts. Default 20.
@@ -414,7 +473,8 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #'   perturbs, the others keeping their start. Default 0.5.
 #' @param retry Logical. If `TRUE` (default), a fit that fails with an error,
 #'   for instance at a start where a steady state of [Pimpl()] has no stable
-#'   root, is repeated from a new perturbed start, up to `nTries` attempts.
+#'   root or in a phase of the sum over subsets (`control$sparseFit`), is
+#'   repeated from a new perturbed start, up to `nTries` attempts.
 #' @param nTries Maximum number of attempts per start, including the first.
 #'   Default `10`.
 #' @param verbose Logical. If `TRUE`, print the table of the starts; the fits
@@ -438,8 +498,10 @@ em <- function(obj, random, init = NULL, fixed = NULL,
 #'       every attempt failed.}
 #'     \item{`failures`}{why evaluations in the trust region failed, and how
 #'       often.}
-#'     \item{`error`, `boundary`}{the error of a failed start, the variances
-#'       the fit set to 0.}
+#'     \item{`error`, `phase`, `boundary`}{the error of a failed start, the
+#'       failed phase of the last attempt, the variances the fit set to 0.}
+#'     \item{`subset`}{the random effects in the slab during the burn-in,
+#'       separated by commas.}
 #'   }
 #'   [plotValues()] draws it as a waterfall.
 #' @seealso [em()]
@@ -455,6 +517,7 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
   cont <- .emContinue(obj, random, init, fixed)
   random <- cont$random; init <- cont$init; fixed <- cont$fixed
   design <- .emDesign(obj, random)
+  .hyperpriorHint(design, names(fixed))
   center <- .emStart(design, init, fixed, sd = control$sd %||% 0.3)
   control$modes <- cont$modes
   control$selected <- cont$selected
@@ -487,10 +550,10 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
       }, dMod2DerivModeMessage = function(m) {
         note <<- conditionMessage(m)
         invokeRestart("muffleMessage")
-      }), error = function(e) conditionMessage(e))
+      }), error = function(e) structure(conditionMessage(e), phase = e$phase %||% NA_integer_))
       if (!is.character(fit)) break
     }
-    if (is.character(fit)) return(structure(fit, tries = a))
+    if (is.character(fit)) return(structure(fit, tries = a, phase = attr(fit, "phase")))
     fit$derivModeNote <- note
     fit$tries <- a
     fit
@@ -516,7 +579,11 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
                                     else as.character(r$stopReason %||% NA_character_), ""),
                       failures = vapply(runs, function(r) if (is.character(r) || !length(r$failures)) ""
                                         else paste0(names(r$failures), " (", r$failures, ")", collapse = "; "), ""),
-                      error = vapply(runs, function(r) if (is.character(r)) r else NA_character_, ""),
+                      error = vapply(runs, function(r) if (is.character(r)) as.character(r) else NA_character_, ""),
+                      phase = vapply(runs, function(r) if (!is.character(r)) NA_integer_
+                                     else as.integer(attr(r, "phase") %||% NA_integer_), 0L),
+                      subset = vapply(runs, function(r) if (is.character(r) || is.null(r$burnin)) NA_character_
+                                      else paste(r$burnin, collapse = ","), ""),
                       boundary = vapply(runs, function(r) if (is.character(r)) "" else paste(r$boundary, collapse = ", "), ""))
   if (verbose) print(table)
   if (!any(ok)) stop("msem: every fit failed; the first error: ", table$error[1], call. = FALSE)
@@ -640,7 +707,9 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     return(.emResult(design, .fitFoceiJoint(design, joint, start, fixed, control), method, fixed))
   }
   if (any(vapply(design$blocks, function(b) b$dist != "normal", TRUE))) {
-    general <- any(vapply(design$blocks, function(b) b$dist == "spikeSlab" && (b$mean != 0 || b$spike != 0), TRUE))
+    # a given slab mean or spike, or a hyperprior, takes the sum over subsets
+    general <- any(vapply(design$blocks, function(b) b$dist == "spikeSlab" &&
+                            (b$mean != 0 || b$spike != 0 || !is.null(b$probPrior) || !is.null(b$tauPrior)), TRUE))
     noProcess <- !any(vapply(design$blocks, function(b) b$dist == "dirichletProcess", TRUE))
     if (general || (method == "quadrature" && noProcess)) {
       # stops where a spike at -Inf is not the rate 0
@@ -659,6 +728,9 @@ msem <- function(obj, random, init = NULL, fixed = NULL,
     if (method != "focei")
       stop("em: spike-and-slab and Dirichlet-process random effects are fitted by method = \"focei\" ",
            "or \"saem\".", call. = FALSE)
+    if (!is.null(control$sparseFit$phases) || !isFALSE(control$sparseFit$burnin %||% FALSE))
+      stop("em: `control$sparseFit$phases` and `burnin` apply to spikeSlab() with `mean` or `spike` other than 0 ",
+           "or a hyperprior, and to method = \"quadrature\".", call. = FALSE)
     return(.emResult(design, .fitSparse(design, start, fixed, control, verbose), method, fixed))
   }
   joint <- design$objfn + .normalPrior(design)

@@ -367,12 +367,13 @@
 .allEtas <- function(design) unlist(lapply(.subDesigns(design), function(sd) as.vector(sd$etaNames)))
 
 
-## One distribution block: the stems (random-effect columns) and short names, the distribution
-## and the fixed hyperparameters, NA when estimated.
+## One distribution block: the stems (random-effect columns) and short names, the distribution,
+## the fixed hyperparameters, NA when estimated, and the hyperpriors of `prob` and `tau`, NULL without.
 .designBlock <- function(rows) {
   list(dist = rows$dist[1], prob = rows$prob[1], concentration = rows$concentration[1],
        tau = rows$tau[1], mean = rows$mean[1] %||% 0, spike = rows$spike[1] %||% 0, stems = rows$stem,
-       short = sub("^eta_", "", rows$stem))
+       short = sub("^eta_", "", rows$stem), probPrior = (rows$probPrior %||% list(NULL))[[1]],
+       tauPrior = (rows$tauPrior %||% list(NULL))[[1]])
 }
 
 ## Names of the hyperparameters of the blocks of one distribution, `hyper` named by `kinds`
@@ -387,8 +388,12 @@
   }, blocks, suffix)
 }
 
-## The estimated hyperparameters of a block, named by kind.
-.estimatedHypers <- function(b) b$hyper[is.na(unlist(b[names(b$hyper)]))]
+## The estimated hyperparameters of a block, named by kind; `prob` under a beta prior is integrated out.
+.estimatedHypers <- function(b) {
+  h <- b$hyper[is.na(unlist(b[names(b$hyper)]))]
+  if (!is.null(b$probPrior)) h <- h[names(h) != "prob"]
+  h
+}
 
 
 ## Cholesky layout of the normal random effects: one lower-triangular factor over all normal

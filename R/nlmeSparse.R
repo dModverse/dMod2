@@ -12,7 +12,8 @@
   do.call(rbind, lapply(seq_along(blocks), function(i) {
     b <- blocks[[i]]
     data.frame(stem = b$stems, block = i, dist = b$dist, probName = name(b, "prob"),
-               concentrationName = name(b, "concentration"), tauName = name(b, "tau"), prob = b$prob,
+               concentrationName = name(b, "concentration"), tauName = name(b, "tau"),
+               prob = if (is.null(b$probPrior)) b$prob else b$probPrior$a / (b$probPrior$a + b$probPrior$b),
                concentration = b$concentration, tau = b$tau, stringsAsFactors = FALSE)
   }))
 }

@@ -131,11 +131,22 @@ cluster, 0 for the population value, and the posterior probability
 \code{p0} of a deviation of 0; a column \code{data} where a sparse random effect
 reaches no data of the group; such an effect rests at 0 with the prior.}
 \item{\code{slab}}{the hyperparameters of the spike-and-slab and
-Dirichlet-process blocks.}
+Dirichlet-process blocks; with hyperpriors also \code{lower} and \code{upper}, the
+95 \% interval of a \code{prob} integrated out or a \code{tau} integrated over, and
+\code{prior}, the hyperprior.}
+\item{\code{hyperprior}}{with a scale prior on \code{tau}, -2 log of the prior
+density at the estimate, which \code{value} holds as well.}
 \item{\code{valueSE}}{the standard error of \code{value} where it comes from
 importance sampling.}
 \item{\code{coupling}}{\code{"expectationConsistent"} where a group needed it,
 else \code{NULL}.}
+\item{\code{phases}}{with spike-and-slab random effects of a given \code{mean} or
+\code{spike}, a row per phase: \code{approx} (\code{"burnin"} for the burn-in),
+\code{iterations} (0 for a skipped phase), \code{value} (-2 log L of the
+approximation, for the burn-in data plus penalty), \code{converged},
+\code{seconds} and \code{failed}, the subsets of weight 0.}
+\item{\code{burnin}}{the spike-and-slab random effects in the slab at the
+start of the burn-in, \code{NULL} without burn-in.}
 \item{\code{boundary}}{the hyperparameters set to 0, see \code{control}.}
 \item{\code{etaModes}, \code{etaSE}, \code{shrinkage}}{the modes of the random effects per
 group, their conditional standard errors, and per random effect
@@ -214,7 +225,7 @@ of unchanged levels, so the step lies below what the levels resolve
 (\code{"resolution"}). \code{converged} means stationary at the levels reached,
 capped ones included; the fit returns the iterate of lowest -2 log L on
 the highest levels.}
-\item{\code{maxEcmPerStage}, \code{cm1Control}, \code{maxCm1Iter}}{rebuilds per stage
+\item{\code{maxECMPerStage}, \code{cm1Control}, \code{maxCm1Iter}}{rebuilds per stage
 (default 10, \code{stopReason} \code{"iterlim"} where they run out), \code{\link[=trust]{trust()}}
 settings and iterations of a step (default 30).}
 \item{\code{pruneTol}}{nodes whose weight lies this much in log below the
@@ -224,7 +235,7 @@ largest are dropped, default \code{Inf}.}
 proposal at the mode of each group. A group is flagged where the two
 -2 log L differ by more than three standard errors plus the error the
 level of the group allows, or the Pareto shape of the weights exceeds 0.7.}
-\item{\code{epsEcm}, \code{maxEcm}}{for \code{"laplaceEM"}: the extrapolated distance to
+\item{\code{epsECM}, \code{maxECM}}{for \code{"laplaceEM"}: the extrapolated distance to
 the fixed point at which it stops, default 1e-5, and the iteration limit,
 default 200.}
 }
@@ -306,26 +317,25 @@ trial point at which EC does not converge is a failed evaluation. Entries of \co
 \item{\code{trustControl}}{the \code{\link[=trust]{trust()}} settings of the outer search. The modes
 are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
 below 1e-8; of \code{control$innerControl} only \code{sqpIterlim} applies.}
-\item{\code{maxEcm}, \code{epsEcm}, \code{budget}, \code{ec}}{of the sum over subsets, see below.}
+\item{\code{burnin}, \code{phases}, \code{termBudget}, \code{ec}}{of the sum over subsets,
+see below.}
 }
 
-Spike-and-slab random effects with \code{mean} or \code{spike} other than 0, see
-\code{\link[=spikeSlab]{spikeSlab()}}, take a separate path of \code{method = "focei"}, beside normal
+Spike-and-slab random effects with \code{mean} or \code{spike} other than 0, or with
+a hyperprior (\code{\link[=betaPrior]{betaPrior()}}), see \code{\link[=spikeSlab]{spikeSlab()}}, take a separate path of
+\code{method = "focei"}, beside normal
 random effects of the same grouping but no Dirichlet-process ones. The
 integral of a group is the sum over all subsets of the spike-and-slab random
 effects, each subset a Laplace integral over the normal random effects and
 the slab ones of the subset at the inner mode, the other random effects at
 the spike; \code{spike = -Inf} switches the
-parameter off. The number of subsets summed over all groups is at most
-\code{budget} (default 4096). The fixed effects and hyperparameters follow by EM:
+parameter off. The fixed effects and hyperparameters follow by EM:
 \code{prob} is the mean inclusion probability, \code{tau^2} the mean squared deviation
 from \code{mean} under the slab, and the fixed effects minimize the data term
 plus slab prior summed over the subsets with their weights, jointly with
 the subset modes; the log determinant of the Laplace integral enters the
 weights only; Omega is the mean of the posterior second moments of the
-normal random effects, restricted to the block structure. EM stops after
-\code{maxEcm} iterations (default 200) or when no
-estimate changes by more than \code{epsEcm} (default 1e-6). The \code{p0} column of
+normal random effects, restricted to the block structure. The \code{p0} column of
 the random table is the posterior probability of the spike.
 
 \code{method = "saem"} draws them by the moves of section SAEM: a spike at
@@ -347,15 +357,43 @@ Cholesky parameters of Omega and the estimated \code{prob} and \code{tau} includ
 moves by trust steps on the frozen nodes, which are rebuilt after each step
 until a Newton step would lower -2 log L by less than \code{tolDecrement}
 (\code{stopReason} \code{"decrement"}). Of \code{control$quadrature} this path reads \code{tol},
-\code{maxLevel} and \code{maxNodes} (per subset), \code{tolDecrement}, \code{maxEcmPerStage},
+\code{maxLevel} and \code{maxNodes} (per subset), \code{tolDecrement}, \code{maxECMPerStage},
 \code{cm1Control} and \code{maxCm1Iter}.
 
-Groups beyond the budget, the largest first, take the expectation consistent
-(EC) approximation in a coordinate in which the spike is 0: the rate
+\code{phases} lists the approximations of the sum over subsets in the order they
+run, each from the estimates and inner modes of the phase before: a
+character vector, or a named list whose entries set \code{maxECM}, the ECM
+iterations (default 200), and \code{epsECM}, the largest change of an estimate
+at which the phase ends (default 1e-2, in the last phase 1e-6). Each name
+at most once; default \code{c("meanfield", "ec", "exact")}:
+\describe{
+\item{\code{"meanfield"}}{factorized inclusion per random effect, from the
+Laplace integrals of a reference subset and of the subsets that differ
+from it in one random effect; the reference is the subset of inclusion
+above 1/2. A subset whose inner search fails has weight 0.}
+\item{\code{"ec"}}{EC for every group, see below.}
+\item{\code{"exact"}}{the sum over all subsets. Where the subsets summed over
+the groups exceed \code{termBudget} (default 4096), the phase is skipped and
+the fit ends with phase \code{"ec"}; without it, an error.}
+}
+\code{burnin} fits the fixed effects first, with \code{prob}, \code{tau} and \code{Omega} held,
+in one trust region at the joint mode of a start subset of the
+spike-and-slab random effects in the slab, the prior densities as penalty;
+the others stay at the spike. \code{FALSE} (default) no burn-in, \code{TRUE} the
+defaults, or a list of \code{start}, \code{"random"} (default, each in the slab with
+probability \code{prob}, drawn from the random number stream), \code{"spike"}, \code{"slab"}
+or the names of the random effects in the slab, and \code{iterlim}, the trust
+iterations (default 200). The first phase starts from that subset. The fit
+reports \code{burnin}, the start subset. \code{converged} is that of the last phase;
+an error names the phase.
+
+EC is the
+expectation consistent approximation in a coordinate in which the spike is 0: the rate
 \eqn{b^\eta}{b^eta} for \code{spike = -Inf}, where the slab is log-normal, and
 \eqn{\eta}{eta} minus the spike else. The data term is a Gaussian in that
-coordinate, expanded first at the mode with every random effect in the slab
-and again at the EC mean until it is stable; normal random effects enter it
+coordinate, expanded first at the mode with the random effects of inclusion
+above 1/2 of the step before in the slab (at the first step every one), and
+again at the EC mean until it is stable; normal random effects enter it
 exactly, without sites. These groups take the subset of
 inclusion probability above 1/2 for the fixed effects. Entries of
 \code{control$sparseFit$ec}: \code{nodes} of the Gauss-Hermite rule of the log-normal

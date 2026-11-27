@@ -1073,6 +1073,7 @@ print.alignmentmodel <- function(x, ...) {
     group = rows[[i]]$group, id = rows[[i]]$id, dist = rows[[i]]$dist,
     prob = rows[[i]]$prob, concentration = rows[[i]]$concentration,
     tau = rows[[i]]$tau, mean = rows[[i]]$mean %||% 0, spike = rows[[i]]$spike %||% 0,
+    probPrior = I(list(rows[[i]]$probPrior)), tauPrior = I(list(rows[[i]]$tauPrior)),
     stem = rows[[i]]$stem, stringsAsFactors = FALSE)))
   # per condition the value of a reading column where all readings of the condition share it, else NA
   single <- function(x) vapply(split(x, factor(cond, conds)), function(v) {
@@ -1733,7 +1734,8 @@ simulate.alignment <- function(object, nsim = 1, seed = NULL, ...) {
   pars <- object$parameters
   lapply(seq_len(nsim), function(i) {
     if (!is.null(object$randomEffects))
-      pars[names(.etaVector(object$fit))] <- .drawEtas(object$fit$design, c(object$fit$argument, object$fit$fixed))[names(.etaVector(object$fit))]
+      pars[names(.etaVector(object$fit))] <- .drawEtas(object$fit$design, c(object$fit$argument, object$fit$fixed),
+                                                               object$fit$probPosterior)[names(.etaVector(object$fit))]
     y <- .alignmentEval(m, seq_len(nrow(m$data)), pars, deriv = FALSE)$y
     noise <- if (m$distribution == "t") stats::rt(nrow(y), m$df) else stats::rnorm(nrow(y))
     d <- m$data

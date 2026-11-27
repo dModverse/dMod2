@@ -27,18 +27,33 @@ main p, main li, main dd, main table, main pre, main div.sourceCode, main img, m
   }
 }
 
-/* Display math wider than the text column scrolls inside it instead of running over the margin. */
+/* Display math wider than the text column scrolls inside it instead of running over the margin; the
+   inline min-width MathJax sets on numbered equations would widen the page instead. */
 mjx-container[display="true"] {
   display: block;
   max-width: 100%;
+  min-width: 0 !important;
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.2em 0;
 }
 
+/* Code in a table cell breaks inside long names, so that a table fits the text column; on a narrow
+   screen a table wider than the column scrolls inside it. */
+main td code {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 576px) {
+  main table {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}
+
 /* A folded code block (pkgdown/extra.js): the summary as a quiet control above the block. */
 main details.fold {
-  max-width: 100ch;
+  max-width: min(100ch, 100%);
   margin-bottom: 1rem;
 }
 main details.fold > summary {
@@ -48,6 +63,12 @@ main details.fold > summary {
 }
 main details.fold[open] > summary {
   margin-bottom: 0.5rem;
+}
+
+/* A figure never runs over the text column; it scales down with the height in proportion. */
+main img {
+  max-width: 100%;
+  height: auto;
 }
 
 /* A figure in a div of class wide takes the full width of the text column. */

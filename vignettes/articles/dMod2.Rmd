@@ -20,7 +20,8 @@ starts and profiled. The [guide](guide-model.html) covers each step on a larger 
 ## Data and conditions
 
 Bile acid in buffer and cells, measured with closed and opened tight junctions, one data set per
-condition.
+[condition]{#def-condition}. A condition, here `closed` or `open`, is one experimental setting with
+own data and own model parameters.
 
 ```{r data}
 ```
@@ -37,8 +38,10 @@ from the canaliculi back into the buffer.
 ```{r reactions}
 ```
 
-`odemodel()` generates C++ code for ODE and sensitivities, `Xs()` makes the prediction function,
-`Y()` the observables: cells and canaliculi are measured together, both observables with scale `s`.
+`odemodel()` generates C++ code for ODE and sensitivities, `Xs()` makes the
+[prediction function]{#def-prdfn} (`prdfn`) from parameters to trajectories, `Y()` the
+[observation function]{#def-obsfn} (`obsfn`) from trajectories to observables: cells and canaliculi are
+measured together, both observables with scale `s`.
 Expressions follow the
 [expression language of cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
 including switches such as `piecewise()`.
@@ -46,17 +49,25 @@ including switches such as `piecewise()`.
 ```{r model}
 ```
 
-`P()` maps estimated to model parameters, all on log10 scale, with an empty buffer at the start.
+`P()` is a [parameter transformation]{#def-parfn} (`parfn`). It maps the
+[outer parameters]{#def-outer-parameters}, which the optimizer sees (`K_IMPORT`, `S`, ... on log10
+scale), to the [inner parameters]{#def-inner-parameters} of ODE and observables in one condition
+(`k_import`, `s`, ...), with an empty buffer at the start.
 `branch()` makes one transformation per condition, open junctions with a separate reflux rate
 `K_REFLUX_OPEN`. All three function objects compile into one shared object.
 
 ```{r trafo}
 ```
 
+`+` and `branch()` join conditions; `*` composes function objects by the chain rule, so every
+call returns values with their derivatives in the outer parameters, the objective value, gradient
+and Hessian.
+
 ## Likelihood, prior and fit
 
-`normL2()` returns $-2 \log L$ of the data; a weak prior from `constraintL2()` keeps parameters
-the data do not determine finite.
+`normL2()` returns an [objective function]{#def-objfn} (`objfn`), here $-2 \log L$ of the data; a
+weak prior from `constraintL2()` keeps parameters the data do not determine finite, and the sum is
+$-2 \log$ of the posterior.
 
 ```{r objective}
 ```
@@ -110,21 +121,5 @@ amounts compensate a larger scale. [Symmetries](guide-symmetries.html) finds and
 systematically; the [bile acid project](bileAcidTransport.html) fixes the scale, starts the
 canaliculi in steady state and goes on to prediction bands. `K_EXPORT_SINUS` and `K_REFLUX_OPEN`
 are bounded on one side only, a practical non-identifiability.
-
-## Terminology
-
-| term | meaning |
-|---|---|
-| outer parameters | parameters the optimizer sees, here `K_IMPORT`, `S`, ... on log10 scale |
-| inner parameters | parameters of ODE and observables in one condition, here `k_import`, `s`, ... |
-| condition | one experimental setting with own data and inner parameters, here `closed`, `open` |
-| `parfn` | parameter transformation, outer to inner: `P()`, `Pexpl()`, `Pimpl()` |
-| `prdfn` | prediction function, parameters to trajectories: `Xs()`, `Xf()` |
-| `obsfn` | observation function, trajectories to observables or errors: `Y()` |
-| `objfn` | objective function, $-2 \log L$ or with a prior $-2 \log$ of the posterior: `normL2()`, `constraintL2()` |
-
-`+` and `branch()` join conditions; `*` composes function objects by the chain rule, so every
-call returns values with their derivatives in the outer parameters, the objective value, gradient
-and Hessian.
 
 [1. Setting up models →](guide-model.html)

@@ -15,7 +15,7 @@ saved <- stored("results/guide-alignment.rds", "results/guide-alignment.R", envi
 ```
 
 Western blots, plate readers and similar assays read on experiment-specific scales.
-`alignmentModel()` and `align()` bring all experiments onto one common scale by maximum likelihood,
+`alignmentModel()` and `align()` bring all experiments onto one common scale by [maximum likelihood](methods-objective.html#def-maximum-likelihood),
 with the reading model written as an expression, as in the R package
 [blotIt](https://github.com/JetiLab/blotIt).
 
@@ -37,7 +37,7 @@ three lanes. Simulated: 20 % biological variability per sample, exposure and bac
 
 ## Alignment model
 
-A reading is value `yi` times gel scale `sj` plus background `bj`, with relative error. Each
+A reading is value `yi` times gel scale `sj` plus background `bj`, with [relative error](methods-objective.html#def-relative-error). Each
 symbol is a linear predictor over the data columns, on log scale. `technical = "lane"` averages
 the lanes of a sample, see
 [technical and biological replicates](#technical-and-biological-replicates).
@@ -49,7 +49,7 @@ The geometric mean of the values is held at 1 within each block of experiments s
 
 ## Fit by restricted likelihood
 
-`align()` fits from several perturbed starts and keeps the best; error parameters by restricted
+`align()` fits from several perturbed starts and keeps the best; [error parameters](methods-objective.html#def-error-parameters) by restricted
 maximum likelihood. The fits of this chapter are loaded from `results/guide-alignment.rds`,
 computed by `results/guide-alignment.R`.
 
@@ -95,7 +95,7 @@ ggplot(fit$aligned, aes(time, value)) +
 Technical replicates (lanes, wells) measure the same sample and share the biological deviation
 of that sample. `technical = "lane"` averages them before the alignment; readings agreeing in all
 columns but `value`, `lloq` and the technical columns form one sample. The mean is geometric for a
-relative error model, arithmetic for an absolute one. The same data with every lane as a reading:
+relative [error model](methods-objective.html#def-error-model), arithmetic for an absolute one. The same data with every lane as a reading:
 
 ```{r lanes, eval = FALSE}
 ```
@@ -120,8 +120,8 @@ The lane fit reports standard errors smaller by about $\sqrt{3}$; the errors rea
 
 ## Random background per gel
 
-A random effect per gel around a common background, integrated by FOCEI as in
-[Nonlinear mixed-effects models](guide-nlme.html). A prior on `omega_bj_bj`, the log standard
+A [random effect](methods-nlme.html#def-random-effect) per gel around a common background, integrated by [FOCEI](methods-nlme.html#def-focei) as in
+[Nonlinear mixed-effects models](guide-nlme.html). A [prior](methods-objective.html#def-prior) on `omega_bj_bj`, the log standard
 deviation, normal around $\log 0.3$ with standard deviation 0.3:
 
 ```{r background, eval = FALSE}
@@ -169,7 +169,7 @@ sample in two wells. 36 - Ct is the log2 concentration in arbitrary units; a wel
 
 ### qPCR data
 
-Column `lloq` holds the limit of each reading; an `NA` reading is censored there. Standard
+Column `lloq` holds the limit of each reading; an `NA` reading is censored there, known only to lie below the limit. Standard
 deviation 0.5 cycles between samples, 0.25 between wells.
 
 ```{r qpcrdata}
@@ -308,8 +308,8 @@ plotResiduals(fit)
 
 ### Random background
 
-Standard deviation of the log2 background between gels, and per gel the mode with conditional
-standard error:
+Standard deviation of the log2 background between gels, and per gel the [mode](methods-sparsity-priors.html#def-mode) with [conditional
+standard error](methods-nlme.html#def-conditional-standard-error):
 
 ```{r}
 fit$omega
@@ -323,13 +323,13 @@ not depend on the modes.
 fit$fit$shrinkage
 ```
 
-Conditional draws against the estimated normal:
+Conditional draws from the [posterior](methods-nlme.html#def-posterior) against the estimated normal:
 
 ```{r fig.height = 5}
 plotRandomEffects(fit$fit)
 ```
 
-Individual (IPRED) and population prediction (PRED):
+Individual (IPRED) and population prediction (PRED), as in [Model diagnostics](guide-nlme.html#model-diagnostics):
 
 ```{r fig.height = 3.5}
 plot(fit$fit) + theme(legend.position = "right") + labs(color = "gel")

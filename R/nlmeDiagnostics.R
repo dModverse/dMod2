@@ -24,7 +24,7 @@ utils::globalVariables(c("lo", "mid", "hi", "percentile", "blq", "blqLo", "blqMi
   data <- Map(function(d, o) d[o, , drop = FALSE], design$data, rowsOf)
   node <- if (!is.null(design$errfn)) .fnNode(design$errfn)
   one <- function() {
-    eta <- .drawEtas(design, pars)
+    eta <- .drawEtas(design, pars, object$probPosterior)
     preds <- setNames(.predictMany(design$prdfn, times = grids, parsList = rep(list(c(object$argument, eta)), length(conds)),
                                    conditions = conds, fixed = object$fixed, deriv = FALSE), conds)
     errs <- if (!is.null(node)) {

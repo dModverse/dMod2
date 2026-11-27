@@ -22,7 +22,9 @@ branch(
 condition as \code{branch()} returns it. \code{NULL} starts a new one.}
 
 \item{expr}{\code{"lhs <- rhs"} string. The symbols in it are replaced by the
-arguments in \code{...} of the same name; see \code{\link[=repar]{repar()}}. For \code{insert()} on a
+arguments in \code{...} of the same name; inside a name, \verb{_} separates symbols,
+so \code{"Delta_x"} with \code{x = "a"} becomes \code{"Delta_a"}. A \code{"lhs ~ rhs"} string
+is an error: \code{~} is reserved for model formulas. For \code{insert()} on a
 branched transformation also one or several effect formulas, e.g.
 \code{cl ~ wt + (1 | ID)}, which replace the symbol by a linear predictor
 over the columns of the branch table with fixed and random effects; see
@@ -93,5 +95,5 @@ trafoL <- define(trafoL, "A <- dose", dose = dose)
 trafoL
 }
 \seealso{
-\code{\link[=repar]{repar()}}, \code{\link[=P]{P()}}
+\code{\link[=P]{P()}}
 }

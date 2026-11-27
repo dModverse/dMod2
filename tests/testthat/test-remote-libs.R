@@ -131,6 +131,21 @@ test_that("tasks run on localhost without ssh, with task, taskId and the calling
   expect_identical(nrow(dMod2Jobs()), 0L)
 })
 
+test_that("a zstd that fails leaves the workspace uncompressed, and the tasks read it", {
+  skip_on_cran()
+  # the stand-in zstd is a POSIX shell script
+  skip_on_os("windows")
+  local_no_ssh()
+  bin <- withr::local_tempdir()
+  writeLines(c("#!/bin/sh", "cat > /dev/null", "exit 1"), file.path(bin, "zstd"))
+  Sys.chmod(file.path(bin, "zstd"), "755")
+  withr::local_envvar(PATH = paste(bin, Sys.getenv("PATH"), sep = .Platform$path.sep))
+  x0 <- 3
+  out <- suppressMessages(distributedComputing(x0 + task, tasks = list(a = 1, b = 2), input = "x0",
+                                               jobname = "jz", wait = TRUE))
+  expect_identical(out, list(a = 4, b = 5))
+})
+
 test_that("detectFreeCores() reports the local machine", {
   skip_on_cran()
   free <- detectFreeCores("localhost")
@@ -482,7 +497,7 @@ test_that("a failing task returns the error, a running job keeps the name, and t
   local_no_ssh()
   expect_warning(out <- suppressMessages(distributedComputing(
     stop("no"), input = character(0), jobname = "je", wait = TRUE)),
-    "1 of 1 tasks failed; the job is kept")
+    "1 of 1 tasks failed; the job is kept.*task 1:.*Error.*no")
   expect_length(out, 0L)
   failed <- distributedComputing(NULL, jobname = "je", recover = TRUE)
   expect_output(failed$log(1), "no")

@@ -6,6 +6,7 @@ workers <- as.integer(commandArgs(TRUE)[1])
 if (is.na(workers)) workers <- 8L
 
 unlink("docs", recursive = TRUE)
+source("dev/build-index.R")
 pkg <- pkgdown::as_pkgdown(".")
 pkgdown::init_site(pkg)
 

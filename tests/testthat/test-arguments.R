@@ -35,20 +35,20 @@ test_that("plotArray takes more simulations than the profile has points", {
                   "ggplot")
 })
 
-test_that("repar takes the transformation first and refuses the other order", {
+test_that("define and insert take the transformation first and refuse the other order", {
   tr <- c(a = "a", b = "b")
-  expect_identical(repar(tr, "x <- exp(x)", x = "a"), c(a = "exp(a)", b = "b"))
-  expect_error(repar("x <- exp(x)", tr, x = "a"), "repar\\(trafo, expr\\)")
-  expect_equal(unclass(repar(NULL, "x <- x", x = "a")), c(a = "a"))
+  expect_identical(insert(tr, "x <- exp(x)", x = "a"), c(a = "exp(a)", b = "b"))
+  expect_error(insert("x <- exp(x)", tr, x = "a"), "\\(trafo, expr\\)")
+  expect_error(define("x <- exp(x)", tr, x = "a"), "\\(trafo, expr\\)")
+  expect_equal(unclass(define(NULL, "x <- x", x = "a")), c(a = "a"))
 })
 
 test_that("a substitution is written with <-; ~ and formulas are refused", {
   tr <- c(a = "a", b = "b")
-  expect_identical(repar(tr, "a <- b + 1"), c(a = "b + 1", b = "b"))
-  expect_error(repar(tr, "a ~ b"), "lhs <- rhs")
+  expect_identical(insert(tr, "a <- b + 1"), c(a = "b + 1", b = "b"))
   expect_error(insert(tr, "a ~ b"), "reserved for model formulas")
   expect_error(define(tr, a ~ b), "reserved for model formulas")
-  expect_error(repar(tr, "a == b"), "lhs <- rhs")
+  expect_error(insert(tr, "a == b"), "lhs <- rhs")
 })
 
 test_that("a transformation started from NULL keeps the right-hand side", {

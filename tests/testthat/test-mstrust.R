@@ -208,10 +208,14 @@ test_that("the integrated profile takes the exact Hessian where the objective ha
   fit <- trust(obj, c(a = 1, b = 1.5), rinit = 1, rmax = 10, hessianMethod = "exact")
   along <- function(pr) max(abs(pr$value - vapply(pr$a, function(a)
     optimize(function(b) obj(c(b = b), fixed = c(a = a))$value, c(0, 5))$objective, 0)))
-  exact <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1)
-  gn <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1, deriv2 = FALSE)
+  alone <- list(reoptimize = FALSE)
+  exact <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1, algoControl = alone)
+  gn <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1, deriv2 = FALSE, algoControl = alone)
   expect_lt(along(exact), 1e-4)
   expect_gt(along(gn), 1e-3)
+  # by default every step is refitted, so the Gauss-Newton path follows the optimum as well
+  refit <- profile(obj, fit$argument, "a", limits = c(-1, 1), cores = 1, deriv2 = FALSE)
+  expect_lt(along(refit), 1e-4)
 })
 
 test_that("a reoptimized profile follows the other parameters when the profiled one is on a small scale", {
@@ -575,7 +579,8 @@ test_that("profile checks whichPar and the stop criterion and drops failed profi
     if (abs(c(pars, fixed)[["b"]] - 2) > 1e-12) stop("boom")
     obj(pars, fixed = fixed, ...)
   }
-  expect_message(pr <- profile(failB, p0, c("a", "b"), limits = c(-1, 1), cores = 1),
+  expect_message(expect_warning(pr <- profile(failB, p0, c("a", "b"), limits = c(-1, 1), cores = 1),
+                                "reoptimizations failed"),
                  "profile b.*boom")
   expect_setequal(unique(pr$whichPar), c("a", "b"))
   bad <- function(pars, ...) stop("boom")

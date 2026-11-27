@@ -1,3 +1,53 @@
+# dMod2 0.18.0
+
+* `symmetryDetection()` and `symmetryReduction()` need symident >= 0.18.2: under `equilibrate`
+  with continued conditions, the Lie order certificate ranks at resting points drawn forward
+  instead of at the start of the continuation, and reconstruction and checks take curve samples
+  where a direct solve of the resting balances needs msolve past short work limits.
+* `em()` and `msem()` with spike-and-slab random effects of a given `mean` or `spike` fit in phases,
+  each from the estimates and inner modes of the phase before. `control$sparseFit$phases` lists
+  the approximations of the sum over subsets in the order they run, `"meanfield"`, `"ec"` and
+  `"exact"` (default all three), each with `maxECM` and `epsECM`. `"meanfield"` factorizes the
+  inclusion per random effect from the Laplace integrals of a reference subset and of the subsets
+  that differ from it in one random effect. `"exact"` beyond `termBudget` is skipped after `"ec"`
+  and an error without it. `control$sparseFit$burnin` (`FALSE` by default, `TRUE` or a list of
+  `start` and `iterlim`) first fits the fixed effects in one trust region with a start subset of
+  the spike-and-slab random effects in the slab, `"random"` (default), `"spike"`, `"slab"` or
+  given names; the others stay at the spike. The fit reports `phases`, a row per phase, and
+  `burnin`, the start subset; an error names the phase. `msem()` draws the start subset per
+  attempt; `multistart` has the columns `phase` and `subset`.
+* Hyperpriors of spike-and-slab random effects: `spikeSlab(prob = betaPrior(a, b))` integrates
+  `prob` out, with the beta-binomial weight of the number of deviations in the slab over the groups
+  of a block, in the exact sum, mean field, EC, SAEM and the quadrature; `tau = halfCauchyPrior()`,
+  `halfNormalPrior()` or `invGammaPrior()` estimates `tau` as the posterior mode, and with
+  `integrate = TRUE` the phase `"exact"` integrates over `log tau`. `fit$slab` reports the posterior
+  of `prob` and the priors, `fit$hyperprior` the term of the scale prior in `value`. SAEM and the
+  quadrature take `betaPrior()` for deviations of one group. `em()` notes a spike-and-slab block of
+  one group with `prob` or `tau` estimated.
+* `distributedComputing()` saves the job workspace uncompressed where `zstd` is found but fails;
+  before, the tasks started without a workspace and failed. The warning about failed tasks shows the
+  last lines of the output of the first failed task.
+* The PSOCK clusters of `mstrust()`, `profile()`, `msem()` with a condition axis and of the
+  compilation on Windows open on a port drawn from the process id and the clock, not from the
+  random stream, and skip a port in use. Jobs with the same seed on one node no longer fail with
+  "port ... cannot be opened", and `.Random.seed` stays as it is.
+* The expectation consistent (EC) approximation takes the expected Hessian of the data term, so that
+  it converges with an error model of the prediction. It expands the data term at the subset of
+  inclusion above 1/2 of the step before.
+* `profile()` with the default `method = "integrate"` corrects every step by a short fit of the other
+  parameters with `trust()` (`algoControl$reoptimize = TRUE`), so that the path does not drift from
+  the constrained optimum; `reoptimize = FALSE` restores the integration alone.
+* `repar()` is no longer exported: transformations are built with `define()`, which sets an entry,
+  `insert()`, which replaces a symbol wherever it occurs, and `branch()`. Both stop with the
+  expected order where the substitution is passed in place of the transformation.
+* Renamed: `control$sparseFit$budget` to `termBudget`; `maxEcm`, `epsEcm` and `maxEcmPerStage` of
+  `control$quadrature` to `maxECM`, `epsECM` and `maxECMPerStage`.
+* `steadyStates()` (AlyssaPetit 1.5) takes `zeroLoops`: `TRUE` sets to zero the largest set of
+  states that are only produced through one another, whose fluxes all vanish where the set is zero
+  and on which no conserved quantity lies, as a feedback loop that is off. A state of a conserved quantity whose balance is
+  left without a positive unknown is solved in a further round, with another state of the quantity
+  kept free. An unknown without an equation is not tried again within a run of the greedy search.
+
 # dMod2 0.17.1
 
 * Requires cppDE >= 0.13.16, whose derivatives of `exp10()` are finite at a spike of `-Inf`.

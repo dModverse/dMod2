@@ -14,9 +14,11 @@ dirichletProcess(concentration = NULL, tau = NULL)
 }
 \arguments{
 \item{prob}{Probability that a group deviates, in (0, 1); \code{NULL}
-(default) estimates it.}
+(default) estimates it; \code{\link[=betaPrior]{betaPrior()}} integrates it out.}
 
-\item{tau}{Standard deviation of the slab; \code{NULL} (default) estimates it.}
+\item{tau}{Standard deviation of the slab; \code{NULL} (default) estimates it;
+a scale prior such as \code{\link[=halfCauchyPrior]{halfCauchyPrior()}} estimates it as the posterior
+mode (spike-and-slab only).}
 
 \item{mean}{Mean of the slab, one finite number, not estimated.}
 

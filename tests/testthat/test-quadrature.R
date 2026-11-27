@@ -192,7 +192,7 @@ test_that("a fit returns the best iterate when the rebuilds run out", {
   fit <- suppressMessages(em(m$objE, randomEffects(m$pw), c(mu = 0.7, mu_w = 0.1, s = log(0.3)),
                              method = "quadrature", verbose = FALSE,
                              control = list(quadrature = list(maxLevel = 2, tol = 1e-12, tolDecrement = 0,
-                                                              maxEcmPerStage = 2, certificate = FALSE))))
+                                                              maxECMPerStage = 2, certificate = FALSE))))
   tr <- fit$stageTrace
   expect_false(fit$converged)
   expect_identical(fit$stopReason, "iterlim")

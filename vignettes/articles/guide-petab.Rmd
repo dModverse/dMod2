@@ -53,16 +53,18 @@ prd <- g * x * pSS * p
 
 ## PEtab export
 
-`exportPEtab()` writes reactions as SBML, observables, errors, data, and the transformation `p`
-with fixed values and values per condition. PEtab 2, the default, has no parameter scales: values
-of parameters entering as `exp()` are written on linear scale, with a warning. The gauge of
+`exportPEtab()` writes reactions as SBML, observables, errors, data, and the
+[parameter transformation](methods-steady-states.html#def-parameter-transformation) `p` with fixed values and values per condition. PEtab 2, the default, has no parameter scales: values
+of parameters entering as `exp()` are written on linear scale, with a warning. The [gauge](methods-symmetries.html#def-gauge) of
 [Symmetries](guide-symmetries.html) becomes fixed values.
 
-- **State at rest.** `steadyState = pSS` gives a pre-equilibration before time 0, shared by both
-  conditions. One species per conserved total starts at the total (`NfkIkb`, `Ikk`), all others
+- **State at rest.** `steadyState = pSS` gives a pre-equilibration, a
+  [steady state](methods-steady-states.html#def-steady-state) before time 0, shared by both
+  conditions. One species per
+  [conserved total](methods-steady-states.html#conserved-quantities) starts at the total (`NfkIkb`, `Ikk`), all others
   at 0.
-- **Event.** `events = events` writes the event at time 0 as the `TNF` value of the condition.
-- **Errors.** Imaging readouts get the error model, blots the data standard deviations as noise
+- **Event.** `events = events` writes the [event](methods-sensitivities.html#def-event) at time 0 as the `TNF` value of the condition.
+- **Errors.** Imaging readouts get the [error model](methods-objective.html#def-error-model), blots the data standard deviations as noise
   parameters per measurement.
 
 ```{r, include = FALSE}
@@ -82,7 +84,7 @@ read.delim("results/petab/conditions_oppelt.tsv")
 
 ## PEtab import
 
-`importPEtab()` builds `prdfn`, the `obsfn`s of observables and errors, the `parfn`, data and
+`importPEtab()` builds `prdfn`, the [`obsfn`s](methods-objective.html#def-obsfn) of observables and errors, the `parfn`, data and
 `objfn`; a pre-equilibration becomes a `Pimpl()`. With `compile = FALSE`, `compile()` builds the
 sources.
 
@@ -100,13 +102,14 @@ compile(g, x, pSS, p, e, petab$prd, petab$e, output = "oppelt_petab_guide", core
 ```{r petabcompare}
 ```
 
-The imported problem reproduces the data term of `model.R` at the best fit. `petab$bestfit` holds
+The imported problem reproduces the [data term](methods-objective.html#data-term) of `model.R` at the best fit. `petab$bestfit` holds
 the nominal values on the problem scales, `petab$parlower` and `petab$parupper` the bounds.
 
 ## SBML models
 
 `exportSbml()` writes species with compartments, reactions, parameters and initial assignments;
-concentration rates are multiplied by the compartment volume, `importSbml()` divides again.
+concentration rates are multiplied by the
+[compartment volume](methods-steady-states.html#def-compartment-volume), `importSbml()` divides again.
 `importSbml()` returns the equation list in `reactions`, parameter and initial values,
 observables, assignment rules and events:
 

@@ -18,7 +18,7 @@ inWords <- function(n) if (n %in% 1:12) c("one", "two", "three", "four", "five",
   "eight", "nine", "ten", "eleven", "twelve")[n] else format(n)
 ```
 
-The prediction profile likelihood [@kreutz2012likelihood] gives the confidence band of a
+The [prediction profile likelihood](methods-profiles.html#def-prediction-profile-likelihood) [@kreutz2012likelihood] gives the confidence band of a
 prediction, here of unmeasured nuclear IκBα after TNFα [@oppelt2018model, Fig. 5] in the reduced
 model of [Profile likelihood](guide-profiles.html). Code: `prediction.R`.
 
@@ -76,10 +76,10 @@ prdReduced <- gReduced * xReduced * pReduced
 
 ## Prediction profiles and validation data points
 
-`datapointL2()` ties a parameter `v` to the prediction by a validation data point of small
-standard deviation; the profile of `v` is the prediction profile, and the values within the
-$\chi^2_1$ threshold form the confidence interval. `attrName = "data"` adds the validation term to
-the data term, so `stop = "data"` and `confint(val.column = "data")` leave the prior out
+`datapointL2()` ties a parameter `v` to the prediction by a [validation data point](methods-profiles.html#def-validation-data-point) of small
+standard deviation; the [profile](methods-profiles.html#def-profile) of `v` is the prediction profile, and the values within the
+$\chi^2_1$ threshold form the [confidence interval](methods-profiles.html#def-confidence-interval). `attrName = "data"` adds the validation term to
+the [data term](methods-profiles.html#def-data-term), so `stop = "data"` and `confint(val.column = "data")` leave the [prior](methods-objective.html#prior) out
 ([Methods > Prediction profiles](methods-profiles.html#prediction-profiles)).
 
 ## Prediction band
@@ -98,7 +98,7 @@ decades <- log10(range(band$value[band$value > 0]))
 `prediction.R` computes the profile at `r nrow(band)` times of the stimulated condition, from 2
 minutes on; the results are loaded from `results/prediction.rds`. The prediction spans
 `r inWords(floor(diff(decades)))` orders of magnitude, so the validation point has standard
-deviation $0.01\,\hat v(t)$. The profiles run on linear scale, since the resting state holds no
+deviation $0.01\,\hat v(t)$. The profiles run on linear scale, since the [resting state](methods-steady-states.html#stability) holds no
 nuclear IκBα.
 
 ```{r predictionsetup, eval = FALSE}
@@ -161,7 +161,7 @@ ggplot2::ggplot(course, ggplot2::aes(time, value)) +
   theme_dMod2()
 ```
 
-Units of total NFκB follow from the gauge of [Symmetries](guide-symmetries.html).
+Units of total NFκB follow from the [gauge](methods-symmetries.html#gauge-and-reduction) of [Symmetries](guide-symmetries.html).
 
 ## All prediction profiles
 

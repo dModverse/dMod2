@@ -2,10 +2,14 @@
 #'
 #' Computes symbolic steady-state expressions for use in a parameter
 #' transformation, following the AlyssaPetit method \[1\], \[2\]. States whose
-#' own balance gives a ratio of positive sums are solved from it first. The
+#' mass only leaks are set to zero first, with `zeroLoops = TRUE` also states
+#' that are only produced through one another. States whose own balance gives a
+#' ratio of positive sums are solved from it first. The
 #' cycles of the graph of states left are cut then: at a state of a conserved
 #' quantity, or at a state whose balance is solved for a rate constant of one
-#' flux side instead. Each cut state stays a free parameter. The remaining
+#' flux side instead. Each cut state stays a free parameter. A state of a
+#' conserved quantity whose balance is left without a positive unknown is solved
+#' in a further round, with another state of the quantity free. The remaining
 #' states and the rate constants of the cuts are then solved, each from a
 #' balance or a combination of balances in amounts, such that the result is a
 #' ratio of sums of positive terms. Only if that fails, a flux side with
@@ -40,6 +44,13 @@
 #' @param priority Character vector of state and rate-parameter names, most
 #'   preferred first: named states are solved rather than kept free and solved
 #'   earlier, named rate parameters are preferred as pivots. Default `NULL`.
+#' @param zeroLoops Logical. `FALSE` (default) looks for a steady state with
+#'   every state away from zero. `TRUE` sets to zero the largest set of states
+#'   that are only produced through one another, such as a ligand that only
+#'   the receptor complexes it forms activate: all fluxes of these states vanish
+#'   where they are zero, and no conserved quantity lies on them. This is the
+#'   steady state of a feedback loop that is off, as under
+#'   `symmetryDetection(equilibrate = TRUE)`.
 #' @param resolve Logical, whether the result is passed through
 #'   [resolveRecurrence()] so that no equation refers to another. Default
 #'   `TRUE`.
@@ -58,7 +69,7 @@
 #' @references \[2\] <https://github.com/marcusrosenblatt/AlyssaPetit>
 #'
 #'
-#' @seealso [repar()], [P()]
+#' @seealso [define()], [P()]
 #'
 #' @export
 #' @importFrom utils write.table
@@ -78,13 +89,13 @@
 #'
 #' # Parameter transformation that puts the model in steady state
 #' parameters <- getParameters(reactions)
-#' trafo <- repar(eqnvec(setNames(parameters, parameters)), "x <- y",
-#'                x = names(steadies), y = steadies)
+#' trafo <- define(NULL, "x <- x", x = parameters)
+#' trafo <- insert(trafo, "x <- y", x = names(steadies), y = steadies)
 #' trafo
 steadyStates <- function(model, file = NULL, forcings = NULL,
                          givenCQs = NULL, neglect = NULL, testSteady = c("fast", "skip"),
                          walltime = 0L, simplify = TRUE, solveQuadratic = FALSE,
-                         priority = NULL, resolve = TRUE, verbose = FALSE) {
+                         priority = NULL, zeroLoops = FALSE, resolve = TRUE, verbose = FALSE) {
 
   .require_ns("reticulate", "steadyStates()")
   testSteady <- match.arg(testSteady)
@@ -149,7 +160,8 @@ steadyStates <- function(model, file = NULL, forcings = NULL,
                     solveQuadratic = as.logical(solveQuadratic),
                     priority       = as.list(as.character(priority)),
                     verbose        = verbose,
-                    volumes        = as.list(volumes))
+                    volumes        = as.list(volumes),
+                    zeroLoops      = isTRUE(zeroLoops))
 
   if (is.null(m_ss) || identical(m_ss, 0L)) return(0)
 
