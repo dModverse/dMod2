@@ -6,13 +6,15 @@ them. `gr(group, dist = )` in an effect formula sets the distribution:
 
 | distribution | deviation \\\eta\\ of a group | hyperparameters |
 |----|----|----|
-| [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\; `spike` and `mean` set other values, see [Spike at a given value](#spike-at-a-given-value) | `prob_<grouping>`, `tau_<grouping>` |
+| [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md) | \\0\\ with probability \\1 - \rho\\, else \\\mathcal{N}(0, \tau^2)\\; `spike` and `mean` set other values, see [Spike at a given value](#spike-at-a-given-value) | `prob_<grouping>`, `tau_<grouping>`, or priors on them ([Hyperpriors](#hyperpriors)) |
 | [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md) | value of the cluster of the group: \\0\\ for the population cluster, else one \\\mathcal{N}(0, \tau^2)\\ draw per cluster | `concentration_<grouping>`, `tau_<grouping>` |
 
-The spike and slab decides for every group alone whether it deviates.
-The Dirichlet process also groups the groups: the groups of one cluster
-share one deviation, so a fit tells which groups behave alike, not only
-which differ from the population value.
+The spike and slab decides for every group alone whether it deviates:
+the spike puts the deviation at one value, 0 by default, the slab draws
+it from a normal distribution. The Dirichlet process also groups the
+groups: the groups of one cluster share one deviation, so a fit tells
+which groups behave alike, not only which differ from the population
+value.
 
 Guide: [Sparse
 deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md);
@@ -27,6 +29,8 @@ normal coordinates \\N\\ and sparse ones \\S\\.
 
 ### Joint mode
 
+The mode of a group is the value of the random effects that maximizes
+data likelihood times prior.
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) first finds
 the joint mode \\\hat\eta\\, minimizing
 
@@ -137,7 +141,9 @@ y)\\ is the term of \\F\\ over \\Z\\; given \\F\\, \\\eta_F \sim
 \end{aligned} \tag{8}\\
 
 \\\mu_F\\, \\V_F\\ zero-filled outside \\F\\; the second moment is full
-within the factor. Summed over coordinates sharing them,
+within the factor. \\1 - p\_{0k}\\ is the inclusion probability of
+coordinate \\k\\, the posterior probability of the slab; `p0` reports
+\\p\_{0k}\\. Summed over coordinates sharing them,
 
 \\\begin{aligned} \frac{\partial \log Z}{\partial \rho} &= \sum_k \Bigl(
 \frac{1 - p\_{0k}}{\rho} - \frac{p\_{0k}}{1 - \rho} \Bigr), \\
@@ -168,16 +174,20 @@ integrated one by one, a group exactly where the data do not couple the
 factors of the group and the joint spike-and-slab sum stays within the
 budget. Where a Dirichlet-process symbol joins two groups, all groups
 are integrated together, exactly where this holds for every group.
-Otherwise \\I\\ is the EC approximation
+Otherwise \\I\\ is the expectation consistent (EC) approximation
 [\[3\]](#ref-opper2005expectation), of the group, or of all groups where
-they are integrated together. With the coupling \\\mathcal{G}(\eta) =
-\prod_i \exp(-\tfrac12 \eta_i^\top P_i \eta_i + b_i^\top \eta_i)\\ and
-the statistics \\\phi(\eta) = (\eta_k, -\eta_k^2/2)\_k\\:
+they are integrated together, which replaces an intractable integral by
+two tractable ones whose means and variances agree. With the coupling
+\\\mathcal{G}(\eta) = \prod_i \exp(-\tfrac12 \eta_i^\top P_i \eta_i +
+b_i^\top \eta_i)\\ and the statistics \\\phi(\eta) = (\eta_k,
+-\eta_k^2/2)\_k\\:
 
-- \\q \propto p\\ e^{\lambda^\top \phi}\\, every factor exact against a
-  diagonal cavity \\\lambda\\;
+- \\q \propto p\\ e^{\lambda^\top \phi}\\, the tilted distribution:
+  every factor exact against a diagonal cavity \\\lambda\\, the Gaussian
+  of all other factors;
 - \\r \propto \mathcal{G}\\ e^{\gamma^\top \phi}\\, the coupling exact
-  under diagonal sites \\\gamma\\, a Gaussian of precision \\P_i +
+  under diagonal sites \\\gamma\\, Gaussian factors in place of the
+  exact prior factors, a Gaussian of precision \\P_i +
   \operatorname{diag}(\gamma_t)\\ per group.
 
 With \\A_q(\lambda) = \log \int p\\ e^{\lambda^\top \phi}\\,
@@ -232,7 +242,7 @@ starting the next inner loop near the solution.
 | loop | ends |
 |----|----|
 | inner | means within \\10^{-10}\\ standard deviations and variances within \\10^{-10}\\ relative; or within \\10^{-4}\\ when Newton no longer lowers \\\Psi\\ |
-| outer | marginals of \\r\\ match the Gaussians of \\\nu\\ to \\10^{-10}\\; or within \\10^{-4}\\ when a fixed-point step no longer raises the free energy \\F = A_q + A_r - A_s\\ (rounding of an ill-conditioned Gaussian part) |
+| outer | marginals of \\r\\ match the Gaussians of \\\nu\\ to \\10^{-10}\\; or within \\10^{-4}\\ when a fixed-point step no longer raises the free energy \\F = A_q + A_r - A_s\\, the right side of (10) (rounding of an ill-conditioned Gaussian part) |
 | outer Newton step | accepted where it raises \\F\\ by the Armijo condition, the step halved down to a sixteenth; else the fixed-point step, which always raises \\F\\ |
 | failure | a failed evaluation; the trust region shortens the step |
 
@@ -520,7 +530,8 @@ subset. This removes flat directions of mode and integral.
 
 `fit$slab` lists the probabilities, concentrations and slab standard
 deviations, each with the symbols, the estimate and whether it was
-fixed.
+fixed; with hyperpriors, priors on hyperparameters, also the 95 %
+interval and the prior ([Hyperpriors](#hyperpriors)).
 
 ## Selection of deviations
 
@@ -540,10 +551,11 @@ scan](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html#l1
 
 The spike and slab separates decision and size: a deviation is 0 or from
 the slab, which shrinks little, and (7) weighs every structure by the
-marginal likelihood, with \\\rho\\ and \\\tau\\ estimated instead of
-scanned. Coupled coordinates the data cannot separate share the
-posterior, with intermediate \\p_0\\. Both statements hold within the
-Laplace approximation of the data term.
+marginal likelihood, with \\\rho\\ and \\\tau\\ estimated, given, or
+under a prior ([Hyperpriors](#hyperpriors)) instead of scanned. Coupled
+coordinates the data cannot separate share the posterior, with
+intermediate \\p_0\\. Both statements hold within the Laplace
+approximation of the data term.
 
 Groups that deviate alike are a second structure. The Dirichlet process
 ([Dirichlet-process random effects](#dirichlet-process-random-effects))
@@ -734,29 +746,42 @@ slab](#spike-and-slab) to
 to enter the model only as a summand of an exponent \\b^{(\cdots +
 \eta_k)}\\ with a numeric base \\b \> 1\\, read off the equations of the
 model; the spike is then the model at rate 0. The quadratic model of (7)
-cannot reach \\-\infty\\, so every subset \\F\\ of slab coordinates of a
-group is a separate Laplace integral, at the inner mode \\\hat\eta_F\\
-of
+cannot reach \\-\infty\\, so the sum over subsets of this section takes
+the data term of every subset itself. The same path fits spike-and-slab
+random effects under a hyperprior ([Hyperpriors](#hyperpriors)) and
+every spike-and-slab model with `method = "quadrature"`, the default
+spike 0 included.
 
-\\f_F(\eta_F) = -2 \log L(\eta_F,\\ \eta\_{\bar F} = \alpha) + \sum\_{k
-\in F} \frac{(\eta_k - \mu_0)^2}{\tau^2} , \qquad -2 \log Z_F =
-f_F(\hat\eta_F) + \|F\| \log \tau^2 + \log \bigl\| \tfrac12 H_F \bigr\|
-, \tag{42}\\
+### Sum over subsets
 
-\\H_F\\ the Gauss-Newton Hessian, and \\Z = \sum_F \rho^{\|F\|} (1 -
-\rho)^{K - \|F\|} Z_F\\. With \\\Pr(F \mid y)\\ the term of \\F\\ over
-\\Z\\ and \\C_F = 2 H_F^{-1}\\, EM updates
+Every subset \\F\\ of slab coordinates of a group is a separate Laplace
+integral, at the inner mode \\\hat\eta_F\\ of
+
+\\\begin{aligned} f_F(\eta_F) &= -2 \log L(\eta_F,\\ \eta\_{\bar F} =
+\alpha) + \sum\_{k \in F} \frac{(\eta_k - \mu_0)^2}{\tau^2} , \\ -2 \log
+Z_F &= f_F(\hat\eta_F) + \|F\| \log \tau^2 + \log \bigl\| \tfrac12 H_F
+\bigr\| , \end{aligned} \tag{42}\\
+
+\\H_F\\ the Hessian of \\f_F\\ the objective returns (Gauss-Newton
+without an error model of the prediction), and \\Z = \sum_F \rho^{\|F\|}
+(1 - \rho)^{K - \|F\|} Z_F\\. With \\\Pr(F \mid y)\\ the term of \\F\\
+over \\Z\\ and \\C_F = 2 H_F^{-1}\\, EM updates
 
 \\\rho \leftarrow \frac1K \sum_k (1 - p\_{0k}), \qquad \tau^2 \leftarrow
 \frac{\sum_F \Pr(F \mid y) \sum\_{k \in F} \bigl\[ (\hat\eta\_{Fk} -
 \mu_0)^2 + C\_{F,kk} \bigr\]} {\sum_F \Pr(F \mid y)\\ \|F\|} ,
 \tag{43}\\
 
-per block, and the fixed effects minimize \\\sum_F \Pr(F \mid y)\\ f_F\\
-jointly with one copy of \\\eta_F\\ per subset; the log determinant of
-(42) enters the weights only.
+per block, a random effect without data of the group entering both sums
+at the prior, with weight \\\rho\\ and second moment \\\tau^2\\. The
+fixed effects minimize \\\sum_F \Pr(F \mid y)\\ f_F\\ jointly with one
+copy of \\\eta_F\\ per subset; the log determinant of (42) enters the
+weights only. Phase `"exact"` sums over all subsets, up to `termBudget`
+of them over all groups; the other phases approximate the sum.
 
-Beyond the budget a group takes EC (see [Expectation consistent
+### Expectation consistent approximation in the rate
+
+Phase `"ec"` integrates by EC (see [Expectation consistent
 approximation](#expectation-consistent-approximation)) in a coordinate
 in which the spike is 0: \\u_k = b^{\eta_k}\\ for \\\alpha = -\infty\\,
 with a log-normal slab \\\ln u_k \sim \mathcal{N}(\mu_0 \ln b, (\tau \ln
@@ -767,12 +792,101 @@ in \\u\\, from one evaluation in \\\eta\\ at the expansion point
 \\g_u = D\\ g\_\eta, \qquad H_u = D\\ H\_\eta\\ D, \qquad D =
 \operatorname{diag}\bigl( 1 / (u^\circ_k \ln b) \bigr) , \tag{44}\\
 
-with no second-order term, since \\H\_\eta\\ is Gauss-Newton.
-\\u^\circ\\ starts at the mode with every coordinate in the slab and
-moves to the EC mean until it is stable. The sites update one at a time;
-a site of negative precision is replaced by the one that matches the
-tilted mean at the cavity variance. The fixed effects are fitted with
-the slab coordinates of inclusion probability above 1/2.
+\\D = 1\\ for \\u = \eta - \alpha\\, with no second-order term, since
+\\H\_\eta\\ is the expected Hessian (Gauss-Newton without an error model
+of the prediction), positive semidefinite also with one. \\u^\circ\\
+starts at the mode with the coordinates of inclusion probability above
+1/2 of the EM step before in the slab, at the first step every
+coordinate, no lower than \\b^{\mu_0 - 4\tau}\\, and moves to the EC
+mean until it is stable. The sites update one at a time, each by half
+the step to the matched moments; a site of negative precision is
+replaced by the one that matches the tilted mean at the cavity variance.
+The slab mass of a log-normal site is a Gauss-Hermite sum at the mode in
+\\\ln u\\. The fixed effects take the slab coordinates of inclusion
+probability above 1/2. A single expansion of the data term holds only
+near the data: from a start far from them, EC may not converge.
+
+### Mean field
+
+Phase `"meanfield"` is a mean field approximation: it approximates the
+posterior over the indicators \\z_k = \[k \in F\]\\ by independent
+Bernoulli factors, one per coordinate. It takes \\\log Z_F\\ linear in
+\\z\\ around a reference subset \\R\\, from the \\K + 1\\ Laplace
+integrals (42) of \\R\\ and of the subsets \\R \triangle \\k\\\\ that
+differ from it in one coordinate:
+
+\\\log Z_F \approx \log Z_R + \sum_k (z_k - z^R_k)\\ d_k , \qquad d_k =
+\log Z\_{R \cup \\k\\} - \log Z\_{R \setminus \\k\\} , \tag{45}\\
+
+\\d_k\\ the log Bayes factor of the slab of \\k\\ given the reference. A
+Bayes factor is the ratio of the marginal likelihoods of two models,
+each integrated over the prior of the model parameters; here \\Z\_{R
+\cup \\k\\} / Z\_{R \setminus \\k\\}\\, coordinate \\k\\ in the slab,
+integrated over \\\mathcal{N}(\mu_0, \tau^2)\\, against \\k\\ at the
+spike, the other coordinates as in \\R\\. It turns the prior odds of the
+slab into the posterior odds, \\\Pr(z_k = 1 \mid y) / \Pr(z_k = 0 \mid
+y) = e^{d_k}\\ \rho / (1 - \rho)\\, and is below 1 where the gain in fit
+does not pay for the width of the slab. The sum over subsets then
+factorizes,
+
+\\Z \approx Z_R\\ e^{-\sum_k z^R_k d_k} \prod_k \bigl( 1 - \rho + \rho\\
+e^{d_k} \bigr) , \qquad 1 - p\_{0k} = \frac{\rho\\ e^{d_k}}{1 - \rho +
+\rho\\ e^{d_k}} . \tag{46}\\
+
+For a log-density linear in \\z\\ the variational mean-field solution, a
+product of Bernoulli factors, is the posterior itself, so (46) is the
+mean field of the linear model (45). The approximation lies in the terms
+(45) leaves out, the interactions of the coordinates: with \\c_k = \[z_k
+\ne z^R_k\]\\ the coordinates on the other side of the reference,
+
+\\\begin{aligned} \log Z_F &= \log Z_R + \sum_k c_k\\ \delta_k +
+\sum\_{k \< l} c_k c_l\\ \delta\_{kl} + \dots , \\ \delta\_{kl} &= \log
+Z\_{R \triangle \\k, l\\} - \log Z\_{R \triangle \\k\\} - \log Z\_{R
+\triangle \\l\\} + \log Z_R , \end{aligned} \tag{47}\\
+
+\\\delta_k = \log Z\_{R \triangle \\k\\} - \log Z_R\\ the terms of (45).
+\\\delta\_{kl}\\ vanishes where \\k\\ and \\l\\ act on separate data or
+one does not change what the other explains; it is large for coordinates
+that substitute for each other, such as two routes to the same effect,
+where mean field counts the gain of each as if the other were absent.
+Mean field is then too confident in both together, EC and the exact sum
+split the posterior between them.
+
+\\R\\ starts at the start subset of the burn-in, without one at every
+coordinate, and moves to the coordinates with \\1 - p\_{0k} \>
+\tfrac12\\ until it stays or returns to an earlier reference; every
+Laplace integral of the step is computed once and starts the inner
+search at the mode of the same subset in the step before. A subset whose
+inner search fails has \\Z_F = 0\\. \\\tau^2\\ follows (43) with \\\Pr(F
+\mid y)\\ replaced by the factors of (46), each coordinate at the mode
+of the subset of \\R\\ and \\R \triangle \\k\\\\ that holds it; the
+fixed effects and \\\Omega\\ take \\R\\.
+
+Mean field and EC fail in opposite places. Mean field evaluates the data
+term of every subset it uses exactly, at \\K + 1\\ inner searches per
+step against \\2^K\\ for the exact sum, and stays defined far from the
+data, where a single quadratic model is poor; it misses the interactions
+(47). EC holds the interactions of all coordinates in one Gaussian of
+the data term, at one evaluation per relinearization, but that Gaussian
+holds only near the data. The default phases run mean field, then EC,
+then the exact sum.
+
+### Phases and burn-in
+
+The phases run in the order of `phases`, default
+`c("meanfield", "ec", "exact")`, each EM until no estimate changes by
+more than `epsECM`, from the estimates and the inner modes
+\\\hat\eta_F\\ of the phase before. `"exact"` is the sum over all \\F\\;
+where the subsets exceed `termBudget` it is skipped after `"ec"` and an
+error without it. A burn-in before them minimizes \\f_F\\ of one start
+subset \\F\\ jointly in the fixed effects and \\\eta_F\\ by one trust
+region, without the log determinant and with \\\rho\\, \\\tau\\ and
+\\\Omega\\ held; the coordinates outside \\F\\ stay at \\\alpha\\. \\F\\
+holds each slab coordinate with probability \\\rho\\
+(`start = "random"`, under a beta prior the prior mean), none, every
+one, or the given ones, and starts the first phase.
+
+### Normal random effects beside
 
 Normal random effects of the same grouping join every subset: \\F\\
 holds them as well, with the prior \\\mathcal{N}(0, \Omega)\\ in (42)
@@ -780,6 +894,8 @@ and \\\log\lvert\Omega\rvert\\ in the normalizer; \\\Omega\\ follows by
 EM from \\\sum_F \Pr(F \mid y)\\ (\hat\eta_F \hat\eta_F^\top + C_F)\\
 restricted to the normal coordinates, and in EC groups they enter the
 Gaussian exactly, without sites.
+
+### SAEM
 
 SAEM draws the indicators by the collapsed moves of
 [SAEM](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#spike-and-slab-random-effects)
@@ -790,9 +906,11 @@ the minimum of the data term plus slab prior in the coordinate by Newton
 steps on the model; the Metropolis-Hastings step on the exact posterior
 keeps the chain exact.
 
-With `method = "quadrature"` every subset of weight above \\10^{-8}\\ of
-the largest is integrated on a dimension-adaptive sparse grid
-[\[14\]](#ref-smolyak1963quadrature),
+### Quadrature
+
+With `method = "quadrature"`, after the phases, every subset of weight
+above \\10^{-8}\\ of the largest is integrated on a dimension-adaptive
+sparse grid [\[14\]](#ref-smolyak1963quadrature),
 [\[15\]](#ref-gerstner2003dimension) around \\\hat\eta_F\\ with
 precision \\\tfrac12 H_F\\, a subset of relative weight \\w_F\\ to the
 tolerance of the group over \\w_F\\: nodes \\\eta_i\\ with signed
@@ -800,7 +918,7 @@ weights \\w_i\\,
 
 \\Z_F \approx (2\pi\tau^2)^{-\|F\|/2} \sum_i w_i\\ e^{-f_F(\eta_i)/2} ,
 \qquad \omega_i = \frac{w_i\\ e^{-f_F(\eta_i)/2}}{\sum_j w_j\\
-e^{-f_F(\eta_j)/2}} , \tag{45}\\
+e^{-f_F(\eta_j)/2}} , \tag{48}\\
 
 the grid refined in the direction of the largest error estimate until
 the estimated error of \\-2 \log Z_F\\ is below the tolerance. On these
@@ -812,6 +930,121 @@ minimizes it, with the gradient \\\sum_F \Pr(F \mid y) \sum_i \omega_i\\
 \nabla f_F(\eta_i)\\ by Fisher’s identity and the Hessian by Louis’
 identity; then the modes and grids are rebuilt, until \\-2 \log L\\
 decreases by less than `tolDecrement`.
+
+## Hyperpriors
+
+With few groups, \\\rho\\ and \\\tau\\ of (43) rest on the \\K\\
+deviations of a block. With \\B_k\\ the Bayes factor of the slab of
+deviation \\k\\ ([Mean field](#mean-field)), the inclusion is \\\pi_k =
+\rho B_k / (1 - \rho + \rho B_k)\\, and near \\\rho = 1\\ the update of
+(43) is
+
+\\\rho \leftarrow \frac1K \sum_k \pi_k(\rho) \approx 1 - (1 - \rho)\\
+\frac1K \sum_k \frac{1}{B_k} . \tag{49}\\
+
+\\\rho = 1\\ attracts where \\\frac1K \sum_k 1 / B_k \< 1\\: where the
+deviations on average cost no likelihood, every one ends in the slab,
+and the prior odds \\\rho / (1 - \rho)\\ no longer charge for the number
+of candidates. Empirical Bayes, which estimates hyperparameters by
+maximizing the marginal likelihood of the same data, puts \\\rho\\ at 0
+or 1 with positive probability for small \\K\\
+[\[16\]](#ref-scott2010bayes). For \\\tau\\, the Occam term \\\|F\| \log
+\tau^2 + \log \|\tfrac12 H_F\|\\ of (42), the part of \\-2 \log Z_F\\
+that grows with the ratio of prior to posterior width and so charges a
+model for the room the parameters had before the data, charges a
+deviation of posterior variance \\V\\ about \\\log(\tau^2 / V)\\; (43)
+sets \\\tau^2\\ to the mean of \\(\hat\eta - \mu_0)^2 + V\\ over the
+slab, so the slab follows the modes and the charge shrinks. A hyperprior
+moves
+[`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md)
+of the default spike and slab mean to the sum over subsets of [Spike at
+a given value](#spike-at-a-given-value).
+
+### Inclusion probability under a beta prior
+
+`spikeSlab(prob = betaPrior(a, b))` integrates \\\rho\\ out. A subset
+\\F\\ of \\n\\ of the \\K\\ deviations of a block that reach data has
+the prior weight
+
+\\W(n) = \frac{B(a + n,\\ b + K - n)}{B(a, b)} , \qquad W(n) =
+\frac{1}{(K + 1) \binom{K}{n}} \text{ for } a = b = 1 , \tag{50}\\
+
+so that under Beta(1, 1) every number of deviations in the slab is
+equally likely, the multiplicity correction of
+[\[16\]](#ref-scott2010bayes): with more candidates, each needs stronger
+evidence. A deviation without data leaves the sum unchanged, since the
+beta-binomial distribution of the slab count of \\K\\ indicators,
+\\\rho\\ integrated out, is the margin of that of more. \\W\\ depends on
+the count over all groups of the block, so the sum over subsets no
+longer factorizes over the groups; with \\T_g(n)\\ the sum of the terms
+of group \\g\\ with \\n\\ deviations in the slab,
+
+\\I = \sum_n W(n)\\ (T_1 \* T_2 \* \cdots \* T_G)(n) , \tag{51}\\
+
+\\\*\\ the convolution in \\n\\, \\K_g + 1\\ terms for the \\K_g\\
+deviations of group \\g\\, and the weight of a subset of group \\g\\
+follows from the convolution of the other groups.
+
+| phase or method | with a beta prior |
+|----|----|
+| `"exact"` | \(51\) exactly |
+| `"meanfield"` | \(51\) with the table \\\\0: w\_{0k},\\ 1: w\_{1k}\\\\ of every deviation in place of \\T_g\\, \\w\_{0k}\\ and \\w\_{1k}\\ the log mass of spike and slab of (45) (0 on the side of the reference, \\\delta_k\\ on the other); exact for the linear model (45), the inclusion of \\k\\ the convolution of the other tables shifted by one |
+| `"ec"` | the same with the tilted masses of spike and slab at the cavity; the sites take the prior probability \\(a + \bar n\_{-k}) / (a + b + K - 1)\\, \\\bar n\_{-k}\\ the expected number of the other deviations in the slab after the step before |
+| SAEM | an indicator moves with \\W\\ of the count in place of \\\rho^n (1 - \rho)^{K - n}\\; deviations of one group |
+| quadrature | the frozen nodes weigh their subsets by \\W\\; deviations of one group |
+
+`fit$slab` reports the posterior mean \\(a + \bar n) / (a + b + K)\\ and
+the 95 % interval of \\\mathrm{Beta}(a + \bar n,\\ b + K - \bar n)\\,
+\\\bar n\\ the expected number in the slab; the posterior of \\\rho\\ is
+a mixture of beta distributions, of which this is the beta of the same
+mean count.
+
+### Slab width under a scale prior
+
+A scale prior on \\\tau\\,
+[`halfCauchyPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+[\[17\]](#ref-gelman2006prior), [\[18\]](#ref-polson2012half),
+[`halfNormalPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+or `invGammaPrior(shape, rate)` on \\\tau^2\\, makes the M-step of (43)
+the posterior mode:
+
+\\\hat\tau = \arg\min\_\tau\\ \bar n \log \tau^2 + \frac{S}{\tau^2} - 2
+\log p(\tau) , \qquad S = \textstyle\sum \Pr(\text{slab}) \bigl\[
+(\hat\eta - \mu_0)^2 + V \bigr\] , \tag{52}\\
+
+with \\p\\ the density in \\\tau\\, for the inverse gamma in \\\tau^2\\.
+The inverse gamma of shape \\\kappa\\ and rate \\\beta\\ has the closed
+form \\\hat\tau^2 = (S + 2\beta) / (\bar n + 2\kappa + 2)\\; half-Cauchy
+and half-normal take Newton steps in \\\log \tau\\, where (52) is
+convex, the slab term \\\bar n \log \tau^2 + S / \tau^2\\ having the
+curvature \\4 S / \tau^2\\ in \\\log \tau\\. SAEM takes the same mode
+from the averaged statistics of the chain, the quadrature adds \\-2 \log
+p(\tau)\\ with gradient and curvature on the \\\log \tau\\ coordinate of
+the frozen nodes. `fit$value` holds \\-2 \log p(\hat\tau)\\ as well,
+`fit$hyperprior` the term alone.
+
+With `integrate = TRUE` the phase `"exact"` integrates over \\u = \log
+\tau\\ instead,
+
+\\I = \int I(e^u)\\ p(e^u)\\ e^u \\ du \approx \sqrt2\\ s \sum\_{i}
+w_i\\ e^{x_i^2}\\ I(e^{u_i})\\ p(e^{u_i})\\ e^{u_i} , \qquad u_i = m +
+\sqrt2\\ s\\ x_i , \tag{53}\\
+
+for the inverse gamma with \\p(e^{2u})\\ 2 e^{2u}\\ in place of
+\\p(e^u)\\ e^u\\; seven Gauss-Hermite nodes \\x_i\\, weights \\w_i\\,
+every node an exact sum with the inner modes of the others as start. The
+subsets of all nodes enter the M-step with their node weight, each with
+the slab width of the node, and \\m\\, \\s\\ move to the posterior mean
+and standard deviation of \\u\\, the start \\m = \log \tau\\, \\s =
+0.5\\. The prior is part of the integral, so `fit$hyperprior` holds no
+term of that block. Integrating costs seven exact sums per step; one
+block per fit, not with `method = "quadrature"`.
+
+| situation | `prob` | `tau` |
+|----|----|----|
+| many groups | estimated (`NULL`) | estimated (`NULL`) |
+| one group or few, no prior knowledge | `betaPrior(1, 1)` | [`halfCauchyPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md) with the scale of a typical effect |
+| a known effect size | `betaPrior(1, 1)` | given, with `mean` at that size, so that the slab means “acts” |
 
 ## References
 
@@ -916,3 +1149,22 @@ vol. 148, no. 5, pp. 1042–1045, 1963, Available:
 T. Gerstner and M. Griebel, “Dimension-adaptive tensor-product
 quadrature,” *Computing*, vol. 71, no. 1, pp. 65–87, 2003, doi:
 [10.1007/s00607-003-0015-5](https://doi.org/10.1007/s00607-003-0015-5).
+
+\[16\]
+
+J. G. Scott and J. O. Berger, “Bayes and empirical-Bayes multiplicity
+adjustment in the variable-selection problem,” *The Annals of
+Statistics*, vol. 38, no. 5, pp. 2587–2619, 2010, doi:
+[10.1214/10-AOS792](https://doi.org/10.1214/10-AOS792).
+
+\[17\]
+
+A. Gelman, “Prior distributions for variance parameters in hierarchical
+models,” *Bayesian Analysis*, vol. 1, no. 3, pp. 515–534, 2006, doi:
+[10.1214/06-BA117A](https://doi.org/10.1214/06-BA117A).
+
+\[18\]
+
+N. G. Polson and J. G. Scott, “On the half-Cauchy prior for a global
+scale parameter,” *Bayesian Analysis*, vol. 7, no. 4, pp. 887–902, 2012,
+doi: [10.1214/12-BA730](https://doi.org/10.1214/12-BA730).

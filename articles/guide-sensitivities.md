@@ -1,8 +1,12 @@
 # 3. Sensitivities
 
-dMod2 computes derivatives of the objective exactly from the ODE
-sensitivities and the chain rule through every function object. Code:
-`sensitivities.R`; details: [Methods \> Sensitivities and
+dMod2 computes derivatives of the
+[objective](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-objective)
+exactly from the ODE
+[sensitivities](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-sensitivity)
+and the chain rule through every [function
+object](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-chain-gxp).
+Code: `sensitivities.R`; details: [Methods \> Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
 
 `derivMode` of
@@ -20,8 +24,10 @@ computes; a call that asks for a derivative not built is an error.
 The default, `derivMode = "forward"`:
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) integrates
 \\\partial x / \partial \theta\\ with the states, the objective returns
-gradient and Gauss-Newton Hessian. `sensErrCon` in `optionsSens` sets
-whether sensitivities enter the error test (default `TRUE`).
+gradient and [Gauss-Newton
+Hessian](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model).
+`sensErrCon` in `optionsSens` sets whether sensitivities enter the error
+test (default `TRUE`).
 
 ## Forward over forward
 
@@ -31,23 +37,29 @@ whether sensitivities enter the error test (default `TRUE`).
 [`P()`](https://dmodverse.github.io/dMod2/reference/P.md) and
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) builds
 second-order sensitivities, and a call with `deriv2 = TRUE` returns the
-exact Hessian from them. The equation count grows with the square of the
-parameters (guide model: 63); it suits small models such as those of
-[Nonlinear mixed-effects
+[exact
+Hessian](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#forward-over-forward)
+from them. The equation count grows with the square of the parameters
+(guide model: 63); it suits small models such as those of [Nonlinear
+mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
 ## Reverse sweep
 
-One backward sweep of the adjoint system gives the gradient at a cost
-independent of the parameter count ([Methods \> Reverse
+One backward sweep of the
+[adjoint](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-adjoint)
+system gives the gradient at a cost independent of the parameter count
+([Methods \> Reverse
 sweep](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep)).
 Build with `derivMode = c("forward", "reverse")`
 ([`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md)
-passes the sweep through the Jacobian of the root), call with
-`sweep = "reverse"`. Both passes solve with `options` alone; solves with
-sensitivities use `optionsSens` merged over `options`. In
+passes the sweep through the [Jacobian of the
+root](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#derivatives-of-the-root)),
+call with `sweep = "reverse"`. Both passes solve with `options` alone;
+solves with sensitivities use `optionsSens` merged over `options`. In
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) the
-sweep is set per phase:
+sweep is set per
+[phase](https://dmodverse.github.io/dMod2/articles/methods-trust.html#hessian-phases):
 
 ``` r
 
@@ -57,13 +69,15 @@ fit <- trust(obj, start,
 fit$phaseSweep
 ```
 
-Without `sweep`, `"bfgs"` and `"sr1"` phases sweep backwards if the
-objective allows it. Gauss-Newton needs forward sensitivities: a `"gn"`
-phase with `sweep = "reverse"` is an error. `"exact"` with
-`sweep = "reverse"` and `deriv2 = TRUE` uses forward over reverse.
+Without `sweep`, `"bfgs"` and `"sr1"` (quasi-Newton updates) phases
+sweep backwards if the objective allows it. Gauss-Newton needs forward
+sensitivities: a `"gn"` phase with `sweep = "reverse"` is an error.
+`"exact"` with `sweep = "reverse"` and `deriv2 = TRUE` uses forward over
+reverse.
 
-The backward sweep follows the step grid of the value pass by default;
-on the cppDE backend `optionsReverse` of
+The backward sweep follows the step grid of the [value
+pass](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-value-pass)
+by default; on the cppDE backend `optionsReverse` of
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) sets the
 accuracy, see
 [`cppDE::adjointControl()`](https://dmodverse.github.io/cppDE/reference/adjointControl.html):
@@ -90,10 +104,12 @@ The exact Hessian without second-order sensitivities, one column per
 parameter ([Methods \> Forward over
 reverse](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#forward-over-reverse)).
 Build with `derivMode = c("forward", "reverse", "forward-reverse")`,
-call with `sweep = "reverse", deriv2 = TRUE`. FOCEI in [Nonlinear
-mixed-effects
+call with `sweep = "reverse", deriv2 = TRUE`.
+[FOCEI](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-focei)
+in [Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md) uses
-it for directional second derivatives.
+it for [directional second
+derivatives](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#second-derivatives-along-directions).
 
 ## ODE backends
 
@@ -101,7 +117,7 @@ it for directional second derivatives.
 
 | backend | solver | forward | fwd/fwd | reverse | fwd/rev | use |
 |----|----|----|----|----|----|----|
-| `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | duals | discrete adjoint | yes | all models |
+| `"cppDE"` (default) | C++: BDF/NDF, Adams, Rosenbrock, Tsitouras | duals | duals | [discrete adjoint](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-discrete-adjoint) | yes | all models |
 | `"Sundials"` | CVODES, [`cppDE::cvode()`](https://dmodverse.github.io/cppDE/reference/cvode.html) | CVODES | no | CVODES ASA | no | first-order derivatives |
 | `"deSolve"` | `lsodes`, cOde | sens. equations | no | no | no | dMod models |
 

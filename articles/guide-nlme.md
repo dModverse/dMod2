@@ -2,7 +2,10 @@
 
 A mixed-effects model writes each individual parameter as a population
 value plus a random deviation and integrates the deviations out of the
-likelihood. Random effects are declared in the `parfn`;
+[likelihood](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-likelihood).
+[Random
+effects](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-random-effect)
+are declared in the `parfn`;
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) fits the
 model. Example: theophylline, twelve subjects, one oral dose each.
 
@@ -113,7 +116,8 @@ The formula acts after the log transformation: \\\log \mathrm{Cl}\_i =
 \mathcal{N}(0, \omega\_{\mathrm{Cl}}^2)\\. Further forms:
 
 - `Cl ~ 1 + (1 | ID)`: random intercept per subject.
-- `Cl ~ 1 + logWeight + (1 | ID)`: a covariate, fixed effect
+- `Cl ~ 1 + logWeight + (1 | ID)`: a covariate, [fixed
+  effect](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-fixed-effect)
   `Cl_logWeight` on a table column.
 - `Ka + Cl ~ 1 + (1 | p | ID)`: random effects of `Ka` and `Cl`
   correlated (same ID `p`).
@@ -121,28 +125,33 @@ The formula acts after the log transformation: \\\log \mathrm{Cl}\_i =
   correlated with the intercept.
 - `Cl ~ 1 + (1 | ID) + (1 | ID:OCC)`: variability between subjects and
   between occasions.
-- `Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))`: spike-and-slab instead of
-  normal random effects.
+- `Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))`:
+  [spike-and-slab](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-spike-and-slab)
+  instead of normal random effects.
 
-Conditions of one group share the group random effects. The random
-effects of one ID form a block with full covariance; `omega_<a>_<b>` are
-the entries of the Cholesky factor of the block, with the log of the
-diagonal. Spike-and-slab and Dirichlet-process random effects: [Sparse
+Conditions of one
+[group](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-group)
+share the group random effects. The random effects of one ID form a
+[block](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-block)
+with full covariance; `omega_<a>_<b>` are the entries of the Cholesky
+factor of the block, with the log of the diagonal. Spike-and-slab and
+Dirichlet-process random effects: [Sparse
 deviations](https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.md).
 
 ## Marginal likelihood
 
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) maximizes
-the likelihood of fixed effects, \\\Omega\\ and error parameters with
-the random effects integrated out. It takes
+the marginal likelihood of fixed effects, \\\Omega\\ and [error
+parameters](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-error-parameters)
+with the random effects integrated out. It takes
 `normL2(data, g * x * p, errmodel = e)`, or `normT(..., df = 4)` for
 Student-t residuals, and builds the prior from `randomEffects(p)`.
 `method`:
 
 | method | use | reported \\-2 \log L\\ |
 |----|----|----|
-| `"focei"` | default, fast, Laplace’s approximation at the modes | Laplace |
-| `"quadrature"` | skewed posteriors, few random effects per group | quadrature |
+| `"focei"` | default, fast, Laplace’s approximation at the [modes](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-mode) | Laplace |
+| `"quadrature"` | skewed [posteriors](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-posterior), few random effects per group | quadrature |
 | `"laplaceEM"` | EM on the Laplace approximation | quadrature of level \\K + 2\\ |
 | `"saem"` | many random effects per group, non-Gaussian posteriors | quadrature of level \\K + 2\\ |
 
@@ -197,8 +206,9 @@ The fit is loaded from `results/guide-nlme.rds`, computed by
 `omega_*` are log standard deviations here. Shrinkage near 1 means the
 data of a subject hardly move the individual parameter.
 
-`value` is \\-2 \log L\\; `valueNonmem` compares with the NONMEM `OBJ`
-(`NA` for
+`value` is [\\-2 \log
+L\\](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-minus-2-log-l);
+`valueNonmem` compares with the NONMEM `OBJ` (`NA` for
 [`normT()`](https://dmodverse.github.io/dMod2/reference/normT.md)). The
 fit holds `Omega`, `omega`, `random`, `etaModes`, `etaSE` and
 `shrinkage`. Methods: [`coef()`](https://rdrr.io/r/stats/coef.html),
@@ -219,9 +229,9 @@ below.
 | entry of `control` | default | controls |
 |----|----|----|
 | `sd` | `0.3` | start of standard deviations not in `init` |
-| `innerControl` | `rinit = 1`, `rmax = 10`, `iterlim = 30`, `steptol = 1e-8`, `mtol = 1e-12` | trust region of the modes |
+| `innerControl` | `rinit = 1`, `rmax = 10`, `iterlim = 30`, `steptol = 1e-8`, `mtol = 1e-12` | [trust region](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-trust-region) of the modes |
 | `trustControl` | `rinit = 1`, `rmax = 10`, `iterlim = 200`, `ftol = 1e-7`, `mtol = 1e-5` | trust region of population parameters |
-| `derivMode` | `"forward-reverse"` | volume-term second derivatives, or `"forward-forward"` |
+| `derivMode` | `"forward-reverse"` | [volume-term](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#volume-term) second derivatives, or `"forward-forward"` |
 | `secondOrderCorrection` | `TRUE` | derivative of the volume term |
 
 `"forward-forward"` needs models built with
@@ -236,9 +246,12 @@ computing](https://dmodverse.github.io/dMod2/articles/guide-remote-computing.htm
 ## Adaptive sparse-grid quadrature
 
 `method = "quadrature"` starts from the FOCEI fit and integrates on a
-sparse grid around each group mode; level \\K\\ is Laplace’s
-approximation. A certificate flags groups whose posterior the grid does
-not resolve. [Methods \> Adaptive sparse-grid
+[sparse
+grid](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-sparse-grid)
+around each group mode;
+[level](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-level)
+\\K\\ is Laplace’s approximation. A certificate flags groups whose
+posterior the grid does not resolve. [Methods \> Adaptive sparse-grid
 quadrature](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#adaptive-sparse-grid-quadrature).
 
 | entry of `control$quadrature` | default | controls |
@@ -246,8 +259,8 @@ quadrature](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#adaptiv
 | `tol` | `0.1` | allowed change of \\-2 \log L\\ by the next level, split over groups; `Inf` keeps stage levels |
 | `levels` | `K + 1` | stages; level `K + s` is exact for total degree `2 s + 1` |
 | `maxLevel` | `K + 8` | highest level |
-| `tolDecrement` | `1e-4` | Newton decrement that ends a stage |
-| `maxEcmPerStage` | `10` | rebuilds per stage |
+| `tolDecrement` | `1e-4` | [Newton decrement](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-newton-decrement) that ends a stage |
+| `maxECMPerStage` | `10` | rebuilds per stage |
 | `cm1Control`, `maxCm1Iter` | `rinit = 1`, `ftol = mtol = 1e-8`; `30` | [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) settings and iterations of a step |
 | `pruneTol` | `Inf` | drop nodes with log weight this far below the largest |
 | `certificate` | `points = 256`, `seed = 1` | importance-sampling check, `FALSE` skips |
@@ -259,8 +272,8 @@ and `certificate`; `plotTrace(fit)` draws the trace.
 
 `method = "laplaceEM"`: expectation conditional maximization on the
 Laplace approximation, reporting the quadrature of level \\K + 2\\,
-without certificate. `control$quadrature` takes `epsEcm` (default
-`1e-5`), `maxEcm` (default 200) and `cm1Control`, `maxCm1Iter`,
+without certificate. `control$quadrature` takes `epsECM` (default
+`1e-5`), `maxECM` (default 200) and `cm1Control`, `maxCm1Iter`,
 `pruneTol`, `maxLevel`. [Methods \> Laplace
 EM](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#laplace-em).
 
@@ -381,7 +394,9 @@ plotResiduals(fit, type = c("CWRES", "NPDE"), nsim = 200, seed = 1)
 
 ![](guide-nlme_files/figure-html/unnamed-chunk-9-1.png)
 
-Visual predictive check:
+Visual predictive check, the 5th, 50th and 95th percentiles of the
+readings per time bin against the prediction intervals of the same
+percentiles of data simulated from the fit:
 
 ``` r
 

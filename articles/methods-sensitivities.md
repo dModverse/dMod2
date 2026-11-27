@@ -16,21 +16,30 @@ integrators: [cppDE](https://dmodverse.github.io/cppDE/).
 ## Forward sensitivities
 
 The sensitivities \\S = \partial x / \partial \theta\\ of \\\dot x =
-f(x, \theta)\\, \\x(t_0) = x_0(\theta)\\, solve
+f(x, \theta)\\, \\x(t_0) = x_0(\theta)\\, the derivatives of the
+trajectory with respect to the parameters, solve
 
 \\\dot S = \frac{\partial f}{\partial x}\\ S + \frac{\partial
 f}{\partial \theta}, \qquad S(t_0) = \frac{\partial x_0}{\partial
 \theta}, \tag{1}\\
 
 \\n_x n\_\theta\\ further equations. cppDE evaluates \\f\\ on dual
-numbers, one tangent per parameter, and steps states and tangents
-together. The step-size control includes the tangents (`sensErrCon`), so
-the sensitivities are as accurate as the states ([forward
+numbers, numbers with a value part and derivative parts whose arithmetic
+propagates first derivatives exactly by the chain rule, one tangent
+(derivative part) per parameter. States and tangents step forward in
+time together, the forward sweep of forward mode differentiation. The
+step-size control includes the tangents (`sensErrCon`), so the
+sensitivities are as accurate as the states ([forward
 sensitivities](https://dmodverse.github.io/cppDE/articles/methods-forward.html)).
-An event passes the tangents through the saltation matrix of the jump
+An event, a jump of the states at a time or on a condition, passes the
+tangents through the saltation matrix of the jump, which maps the
+sensitivities before the jump to those after it
 ([events](https://dmodverse.github.io/cppDE/articles/methods-events.html)).
-Every further function object of `g*x*p` multiplies by the Jacobian of
-that object, e.g. \\g_x S + g\_\theta\\ for \\y = g(x, \theta)\\.
+Every further function object of the chain `g*x*p`, parameter
+transformation `p`, prediction `x` and observation `g` ([Setting up
+models](https://dmodverse.github.io/dMod2/articles/guide-model.md)),
+multiplies by the Jacobian of that object, e.g. \\g_x S + g\_\theta\\
+for \\y = g(x, \theta)\\.
 
 ## Gradient and Hessian of the objective
 
@@ -40,9 +49,10 @@ Each data point adds, up to a constant,
 y_j}{\sigma_j}, \tag{2}\\
 
 the summand of [the data
-term](https://dmodverse.github.io/dMod2/articles/methods-objective.html#data-term).
-For fixed \\\sigma_j\\ and \\J = \partial r / \partial \theta\\, the
-gradient is \\2 J^\top r\\ and the Hessian
+term](https://dmodverse.github.io/dMod2/articles/methods-objective.html#data-term),
+with the residual \\r_j\\, the difference of prediction and data divided
+by the standard deviation. For fixed \\\sigma_j\\ and \\J = \partial r /
+\partial \theta\\, the gradient is \\2 J^\top r\\ and the Hessian
 
 \\\nabla^2 \sum_j r_j^2 = 2 J^\top J + 2 \sum_j r_j\\ \nabla^2 r_j .
 \tag{3}\\
@@ -73,14 +83,17 @@ the second derivatives of \\g_j\\ and \\\sigma_j\\, weighted by \\2 r_j
 
 ## Forward over forward
 
-Differentiating (1) again gives \\n_x n\_\theta (n\_\theta + 1) / 2\\
-equations and the exact Hessian, for small models.
+Forward over forward applies forward tangents to the forward
+sensitivities. Differentiating (1) again gives \\n_x n\_\theta
+(n\_\theta + 1) / 2\\ equations and the exact Hessian, for small models.
 
 ## Reverse sweep
 
-The gradient of the objective alone follows from one backward sweep with
-the multipliers \\\lambda(t)\\, zero after the last measurement, and the
-terms \\\ell_j\\ of the data at the measurement times \\t_j\\,
+The adjoint or multiplier \\\lambda(t)\\ is the sensitivity of the
+objective to a change of the state at time \\t\\. The gradient of the
+objective alone follows from one reverse sweep, backward in time from
+the data to the start, with \\\lambda\\ zero after the last measurement
+and the terms \\\ell_j\\ of the data at the measurement times \\t_j\\,
 
 \\\begin{aligned} \dot\lambda &= -\left(\frac{\partial f}{\partial
 x}\right)^{\\\top} \lambda, \qquad \lambda(t_j^-) = \lambda(t_j^+) +
@@ -90,13 +103,15 @@ x}\right)^{\\\top} \lambda, \qquad \lambda(t_j^-) = \lambda(t_j^+) +
 \frac{\partial x_0}{\partial \theta} + \sum_j \frac{\partial
 \ell_j}{\partial \theta} . \end{aligned} \tag{5}\\
 
-cppDE uses the *discrete adjoint* of the integrator steps, the exact
-derivative of the computed objective, with checkpoints of the forward
-trajectory ([reverse
+cppDE uses the *discrete adjoint* of the integrator steps, the reverse
+mode applied to the steps instead of to the ODE and the exact derivative
+of the computed objective. Checkpoints store the start of every accepted
+forward step (state, time, step size, controller state), and the sweep
+applies the transposed steps from these, last to first ([reverse
 mode](https://dmodverse.github.io/cppDE/articles/methods-reverse.html)).
 The cost is a few times the value, independent of \\n\_\theta\\. The
-value pass solves without sensitivities, and the sweep uses the step
-grid of that pass.
+value pass, the forward solve that computes the objective value, runs
+without sensitivities, and the sweep uses the step grid of that pass.
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) passes
 the sweep through the Jacobian of the root ([Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#derivatives-of-the-root)).
@@ -120,11 +135,11 @@ does not keep the relative error small ([checking the
 sweep](https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html)).
 
 A refined sweep differentiates the trajectory with substeps, not the
-computed one. Under `refine` it therefore returns, per seed, the
-first-order change of the seeded functional between the two: over the
-steps, the adjoint at the step end times the difference of the end
-states, plus the seeds times the difference of the observed values
-([value
+computed one. Under `refine` it therefore returns, per seed, the vector
+the sweep starts from in the observed values, the first-order change of
+the seeded functional between the two: over the steps, the adjoint at
+the step end times the difference of the end states, plus the seeds
+times the difference of the observed values ([value
 correction](https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html#value-correction)).
 The [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
 seed gives the change of the objective, a second seed the change of
@@ -135,11 +150,11 @@ correction.
 
 ## Forward over reverse
 
-Forward tangents, one per parameter, ride on the backward sweep, which
-returns one Hessian column per tangent. Cost grows like a forward solve;
-the \\n\_\theta^2\\ Hessian entries are accumulated, but no \\n_x
-n\_\theta^2\\ second-order sensitivities are integrated or stored
-([forward over
+Forward over reverse applies forward tangents, one per parameter, to the
+backward sweep, which returns one Hessian column per tangent. Cost grows
+like a forward solve; the \\n\_\theta^2\\ Hessian entries are
+accumulated, but no \\n_x n\_\theta^2\\ second-order sensitivities are
+integrated or stored ([forward over
 reverse](https://dmodverse.github.io/cppDE/articles/methods-forward-reverse.html)).
 
 ### Second derivatives along directions
@@ -158,20 +173,25 @@ along tangent \\k\\, returns \\J^\top w\\ and
 
 for every \\k\\, \\z_r\\ prediction or sigma of row \\r\\, \\J\\ their
 Jacobian. With the gradient of the row loss as seed and \\L_r J_r v_k\\
-as tangent derivative, \\L_r\\ the Hessian (4), the sweep gives
-\\\Phi_i^{\eta\eta}\\, \\\Phi_i^{\eta\psi}\\ and the mode shift
-\\\mathrm{d}\hat\eta / \mathrm{d}\psi = -(\Phi_i^{\eta\eta})^{-1}
-\Phi_i^{\eta\psi}\\. The trace gradients are linear in \\M\\: seed \\j\\
-is \\2 L_r J\_{r,j}\\, with tangent derivative the derivative of \\L_r\\
-contracted with \\J\_{r,j}\\ and \\J\_{r,k}\\. With \\U\_{jk}\\ slice
-\\k\\ of the result for seed \\j\\,
+as tangent derivative, \\L_r\\ the Hessian (4), the sweep gives the
+second derivatives \\\Phi_i^{\eta\eta}\\ and \\\Phi_i^{\eta\psi}\\ of
+\\\Phi_i\\ in \\\eta\\ and in \\\eta\\, \\\psi\\, and the mode shift
+
+\\\frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} = -(\Phi_i^{\eta\eta})^{-1}
+\Phi_i^{\eta\psi} .\\
+
+The trace gradients are linear in \\M\\: seed \\j\\ is \\2 L_r
+J\_{r,j}\\, with tangent derivative the derivative of \\L_r\\ contracted
+with \\J\_{r,j}\\ and \\J\_{r,k}\\. With \\U\_{jk}\\ slice \\k\\ of the
+result for seed \\j\\,
 
 \\\nabla \operatorname{tr}(M H_i) = \sum\_{j,k} M\_{jk}\\ U\_{jk}
 \tag{7}\\
 
 for every symmetric \\M\\: \\K\\ seeds for any number of matrices.
-Hessian rows and trace seeds go back in one sweep, every cotangent with
-\\K + 1\\ blocks, the seed and the derivative of the seed along each
+Hessian rows and trace seeds go back in one sweep. Every cotangent, the
+derivative of the output propagated back to an intermediate quantity,
+has \\K + 1\\ blocks, the seed and the derivative of the seed along each
 tangent.
 
 Reference:

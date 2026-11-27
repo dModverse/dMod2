@@ -17,6 +17,7 @@
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-sensitivities.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-sparse-deviations.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/guide-symmetries.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/articles/index-terms.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/index.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/installation.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/articles/kokMSB2020.html</loc></url>
@@ -60,6 +61,7 @@
 <url><loc>https://dmodverse.github.io/dMod2/reference/attrs.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/bachmann.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/badata.html</loc></url>
+<url><loc>https://dmodverse.github.io/dMod2/reference/betaPrior.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/boehm.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/c.parvec.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/coef.em.html</loc></url>
@@ -189,7 +191,6 @@
 <url><loc>https://dmodverse.github.io/dMod2/reference/reduceReplicates.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/reml.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/remlLeverage.html</loc></url>
-<url><loc>https://dmodverse.github.io/dMod2/reference/repar.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/replaceSymbols.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/res.html</loc></url>
 <url><loc>https://dmodverse.github.io/dMod2/reference/residuals.em.html</loc></url>

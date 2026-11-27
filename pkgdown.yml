@@ -17,6 +17,7 @@ articles:
   articles/guide-sensitivities: guide-sensitivities.html
   articles/guide-sparse-deviations: guide-sparse-deviations.html
   articles/guide-symmetries: guide-symmetries.html
+  articles/index-terms: index-terms.html
   articles/installation: installation.html
   articles/kokMSB2020: kokMSB2020.html
   articles/methods-multiple-shooting: methods-multiple-shooting.html
@@ -32,7 +33,7 @@ articles:
   articles/oppeltNPJSystBiolAppl2018: oppeltNPJSystBiolAppl2018.html
   articles/pharmacometrics: pharmacometrics.html
   articles/TMDD: TMDD.html
-last_built: 2026-11-25T14:06Z
+last_built: 2026-11-27T23:08Z
 urls:
   reference: https://dmodverse.github.io/dMod2/reference
   article: https://dmodverse.github.io/dMod2/articles

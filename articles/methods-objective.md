@@ -1,11 +1,17 @@
 # Likelihood and prior
 
-Without a prior, dMod2 estimates by maximum likelihood and minimizes
-\\-2 \log L\\. With a prior, it minimizes \\-2 \log\\ of the posterior
-up to a constant, and the minimum is the maximum a posteriori estimate
-[\[1\]](#ref-kaschek2019dmod). The methods articles call the minimized
-quantity the objective function \\\mathcal{J}(\theta)\\, \\-2 \log L\\
-or \\-2 \log\\ of the posterior. Guide: [Setting up
+Without a prior, dMod2 estimates by maximum likelihood: it chooses the
+parameters \\\theta\\ that maximize the likelihood \\L(\theta)\\, the
+probability density of the observed data read as a function of
+\\\theta\\, and minimizes \\-2 \log L\\, minus twice the log-likelihood,
+(1). With a prior, a probability density \\\pi(\theta)\\ of the
+parameters before the data ([Prior](#prior)), it minimizes \\-2 \log\\
+of the posterior up to a constant, and the minimum is the maximum a
+posteriori estimate [\[1\]](#ref-kaschek2019dmod). The methods articles
+call the minimized quantity the objective function \\\ell(\theta)\\,
+\\-2 \log L\\ or \\-2 \log\\ of the posterior; in dMod2 it is an
+`objfn`, a function object that returns value, gradient and Hessian.
+Guide: [Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.html#likelihood-and-prior);
 derivatives: [Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
@@ -14,8 +20,11 @@ Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.md).
 
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
 computes twice the negative log-likelihood of independent Gaussian
-errors, for data \\y_j\\, predictions \\g_j(\theta)\\ and standard
-deviations \\\sigma_j(\theta)\\:
+errors, for data \\y_j\\, predictions \\g_j(\theta)\\, the model values
+of the observables at the measurement times from the chain `g*x*p`
+([Setting up
+models](https://dmodverse.github.io/dMod2/articles/guide-model.md)), and
+standard deviations \\\sigma_j(\theta)\\:
 
 \\-2 \log L(\theta) = \sum_j \left( \frac{(y_j -
 g_j(\theta))^2}{\sigma_j(\theta)^2} + \log \sigma_j(\theta)^2 \right) +
@@ -28,9 +37,14 @@ grows, the second rises.
 ## Error model
 
 \\\sigma_j\\ comes from the data column `sigma` where set, otherwise
-from the error model, an `obsfn` \\\sigma = e(g, \theta)\\ of prediction
-and parameters. A constant \\\sigma\\ on a log-scale observable \\y =
-\log(s\\ x + o)\\ is a relative error: to first order, \\\sigma\\ in
+from the error model \\\sigma = e(g, \theta)\\, a function of prediction
+and parameters. The error model is an `obsfn`, a function object from
+[`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) that maps
+states to observables or, here, to standard deviations. The parameters
+of \\\theta\\ that enter \\e\\ are the error parameters; (1) estimates
+them with the model parameters. A constant \\\sigma\\ on a log-scale
+observable \\y = \log(s\\ x + o)\\ is a relative error, a standard
+deviation proportional to the value: to first order, \\\sigma\\ in
 \\\log z\\ is \\\sigma z\\ in \\z\\.
 
 ## Prior
@@ -48,7 +62,11 @@ has no minimum: \\\theta_k = \mu_k\\ with \\s_k \to 0\\ lowers it
 without limit, so an estimated \\s_k\\ needs a lower bound. On the log
 scale, a prior far wider than the data leaves determined parameters in
 place and keeps undetermined ones finite, so the minimum exists without
-bounds. The Hessian of (2) is \\2/s_k^2\\ on the diagonal.
+bounds. A determined parameter has a profile likelihood with a
+confidence interval of finite length
+([Profiles](https://dmodverse.github.io/dMod2/articles/methods-profiles.md));
+an undetermined one moves to \\\pm\infty\\ at almost constant \\-2 \log
+L\\. The Hessian of (2) is \\2/s_k^2\\ on the diagonal.
 
 ## Further terms
 
@@ -58,7 +76,9 @@ bounds. The Hessian of (2) is \\2/s_k^2\\ on the diagonal.
   stable ([Steady
   states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)).
 - [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md):
-  a data point whose value is a parameter, for validation profiles
+  a data point whose value is a parameter, for validation profiles,
+  profiles over the value of a hypothetical data point that give a
+  confidence interval of a prediction
   [\[2\]](#ref-kreutz2012likelihood).
 
 Each term is an `objfn`; a sum keeps the parts as attributes, so

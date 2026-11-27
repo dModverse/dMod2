@@ -123,8 +123,6 @@ parameter transformations, concatenation and direct sum.
   [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md)
   [`branch()`](https://dmodverse.github.io/dMod2/reference/define.md) :
   Construct and Modify Parameter Transformations
-- [`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md) :
-  Reparameterization
 - [`print(`*`<parfn>`*`)`](https://dmodverse.github.io/dMod2/reference/print.parfn.md)
   : Print Parameter Transformations
 - [`Id()`](https://dmodverse.github.io/dMod2/reference/Id.md) : Identity
@@ -302,6 +300,11 @@ and their diagnostics.
   [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   [`dirichletProcess()`](https://dmodverse.github.io/dMod2/reference/normal.md)
   : Distributions of random effects
+- [`betaPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+  [`halfCauchyPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+  [`halfNormalPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+  [`invGammaPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+  : Hyperpriors of spike-and-slab random effects
 - [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) :
   Mixed-effects fit by marginal maximum likelihood
 - [`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) :

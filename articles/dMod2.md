@@ -14,7 +14,9 @@ options(dMod2.outdir = tempdir())
 ## Data and conditions
 
 Bile acid in buffer and cells, measured with closed and opened tight
-junctions, one data set per condition.
+junctions, one data set per condition. A condition, here `closed` or
+`open`, is one experimental setting with own data and own model
+parameters.
 
 ``` r
 
@@ -55,11 +57,12 @@ reactions
 [`odemodel()`](https://dmodverse.github.io/dMod2/reference/odemodel.md)
 generates C++ code for ODE and sensitivities,
 [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md) makes the
-prediction function,
+prediction function (`prdfn`) from parameters to trajectories,
 [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) the
-observables: cells and canaliculi are measured together, both
-observables with scale `s`. Expressions follow the [expression language
-of cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
+observation function (`obsfn`) from trajectories to observables: cells
+and canaliculi are measured together, both observables with scale `s`.
+Expressions follow the [expression language of
+cppDE](https://dmodverse.github.io/cppDE/reference/expressions.html),
 including switches such as `piecewise()`.
 
 ``` r
@@ -69,9 +72,11 @@ observables <- eqnvec(buffer = "s*TCA_buffer", cellular = "s*(TCA_cana + TCA_cel
 g <- Y(observables, x, modelname = "start_g", compile = FALSE)
 ```
 
-[`P()`](https://dmodverse.github.io/dMod2/reference/P.md) maps estimated
-to model parameters, all on log10 scale, with an empty buffer at the
-start.
+[`P()`](https://dmodverse.github.io/dMod2/reference/P.md) is a parameter
+transformation (`parfn`). It maps the outer parameters, which the
+optimizer sees (`K_IMPORT`, `S`, … on log10 scale), to the inner
+parameters of ODE and observables in one condition (`k_import`, `s`, …),
+with an empty buffer at the start.
 [`branch()`](https://dmodverse.github.io/dMod2/reference/define.md)
 makes one transformation per condition, open junctions with a separate
 reflux rate `K_REFLUX_OPEN`. All three function objects compile into one
@@ -116,12 +121,20 @@ p <- P(trafo, modelname = "start_p", compile = FALSE)
 compile(x, g, p, output = "start", cores = 6)
 ```
 
+`+` and
+[`branch()`](https://dmodverse.github.io/dMod2/reference/define.md) join
+conditions; `*` composes function objects by the chain rule, so every
+call returns values with their derivatives in the outer parameters, the
+objective value, gradient and Hessian.
+
 ## Likelihood, prior and fit
 
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
-returns \\-2 \log L\\ of the data; a weak prior from
+returns an objective function (`objfn`), here \\-2 \log L\\ of the data;
+a weak prior from
 [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md)
-keeps parameters the data do not determine finite.
+keeps parameters the data do not determine finite, and the sum is \\-2
+\log\\ of the posterior.
 
 ``` r
 
@@ -231,24 +244,6 @@ project](https://dmodverse.github.io/dMod2/articles/bileAcidTransport.md)
 fixes the scale, starts the canaliculi in steady state and goes on to
 prediction bands. `K_EXPORT_SINUS` and `K_REFLUX_OPEN` are bounded on
 one side only, a practical non-identifiability.
-
-## Terminology
-
-| term | meaning |
-|----|----|
-| outer parameters | parameters the optimizer sees, here `K_IMPORT`, `S`, … on log10 scale |
-| inner parameters | parameters of ODE and observables in one condition, here `k_import`, `s`, … |
-| condition | one experimental setting with own data and inner parameters, here `closed`, `open` |
-| `parfn` | parameter transformation, outer to inner: [`P()`](https://dmodverse.github.io/dMod2/reference/P.md), [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md), [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) |
-| `prdfn` | prediction function, parameters to trajectories: [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md), [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) |
-| `obsfn` | observation function, trajectories to observables or errors: [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) |
-| `objfn` | objective function, \\-2 \log L\\ or with a prior \\-2 \log\\ of the posterior: [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md) |
-
-`+` and
-[`branch()`](https://dmodverse.github.io/dMod2/reference/define.md) join
-conditions; `*` composes function objects by the chain rule, so every
-call returns values with their derivatives in the outer parameters, the
-objective value, gradient and Hessian.
 
 [1. Setting up models
 →](https://dmodverse.github.io/dMod2/articles/guide-model.md)

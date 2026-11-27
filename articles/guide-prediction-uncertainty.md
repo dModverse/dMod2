@@ -1,20 +1,27 @@
 # 6. Prediction uncertainty
 
-The prediction profile likelihood [\[1\]](#ref-kreutz2012likelihood)
-gives the confidence band of a prediction, here of unmeasured nuclear
-IκBα after TNFα [\[2, Fig. 5\]](#ref-oppelt2018model) in the reduced
-model of [Profile
+The [prediction profile
+likelihood](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-prediction-profile-likelihood)
+[\[1\]](#ref-kreutz2012likelihood) gives the confidence band of a
+prediction, here of unmeasured nuclear IκBα after TNFα [\[2, Fig.
+5\]](#ref-oppelt2018model) in the reduced model of [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md).
 Code: `prediction.R`.
 
 ## Prediction profiles and validation data points
 
 [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md)
-ties a parameter `v` to the prediction by a validation data point of
-small standard deviation; the profile of `v` is the prediction profile,
-and the values within the \\\chi^2_1\\ threshold form the confidence
-interval. `attrName = "data"` adds the validation term to the data term,
-so `stop = "data"` and `confint(val.column = "data")` leave the prior
+ties a parameter `v` to the prediction by a [validation data
+point](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-validation-data-point)
+of small standard deviation; the
+[profile](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-profile)
+of `v` is the prediction profile, and the values within the \\\chi^2_1\\
+threshold form the [confidence
+interval](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-confidence-interval).
+`attrName = "data"` adds the validation term to the [data
+term](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-data-term),
+so `stop = "data"` and `confint(val.column = "data")` leave the
+[prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#prior)
 out ([Methods \> Prediction
 profiles](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#prediction-profiles)).
 
@@ -24,8 +31,9 @@ profiles](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#predi
 condition, from 2 minutes on; the results are loaded from
 `results/prediction.rds`. The prediction spans seven orders of
 magnitude, so the validation point has standard deviation \\0.01\\\hat
-v(t)\\. The profiles run on linear scale, since the resting state holds
-no nuclear IκBα.
+v(t)\\. The profiles run on linear scale, since the [resting
+state](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)
+holds no nuclear IκBα.
 
 ``` r
 
@@ -130,7 +138,9 @@ ggplot2::ggplot(course, ggplot2::aes(time, value)) +
 
 ![](guide-prediction-uncertainty_files/figure-html/unnamed-chunk-8-1.png)
 
-Units of total NFκB follow from the gauge of
+Units of total NFκB follow from the
+[gauge](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction)
+of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md).
 
 ## All prediction profiles

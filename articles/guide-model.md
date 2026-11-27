@@ -1,14 +1,15 @@
 # 1. Setting up models
 
-A model in dMod2 is a chain of function objects, each returning output
-and derivatives:
+A model in dMod2 is a [chain of function
+objects](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-chain-gxp),
+each returning output and derivatives:
 
 | class | constructors | mapping |
 |----|----|----|
-| `parfn` | [`P()`](https://dmodverse.github.io/dMod2/reference/P.md), [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md), [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) | outer to inner parameters, or to a steady state |
-| `prdfn` | [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md), [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) | parameters to trajectories, with ([`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)) or without sensitivities |
-| `obsfn` | [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) | states to observables, observables to standard deviations |
-| `objfn` | [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md), [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md), [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md) | \\-2 \log L\\ |
+| `parfn` | [`P()`](https://dmodverse.github.io/dMod2/reference/P.md), [`Pexpl()`](https://dmodverse.github.io/dMod2/reference/Pexpl.md), [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) | outer to inner parameters, or to a [steady state](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-steady-state) |
+| `prdfn` | [`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md), [`Xf()`](https://dmodverse.github.io/dMod2/reference/Xf.md) | parameters to trajectories, with ([`Xs()`](https://dmodverse.github.io/dMod2/reference/Xs.md)) or without [sensitivities](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-sensitivity) |
+| `obsfn` | [`Y()`](https://dmodverse.github.io/dMod2/reference/Y.md) | states to observables, observables to standard deviations ([error model](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-error-model)) |
+| `objfn` | [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md), [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md), [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md), [`constraintStability()`](https://dmodverse.github.io/dMod2/reference/constraintStability.md) | [\\-2 \log L\\](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-minus-2-log-l) |
 
 `*` concatenates by the chain rule,
 
@@ -16,18 +17,22 @@ and derivatives:
 x}\\\frac{\partial x}{\partial p}\\ \frac{\partial p}{\partial
 \theta},\\
 
-each factor exact, the middle one from the sensitivity equations; `+`
-adds objectives. `normL2(data, g*x*pSS*p, e)` is the objective. Inner
-parameters are the symbols of the equations, per condition; outer
-parameters are those of the fit.
+each factor exact, the middle one from the [sensitivity
+equations](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#forward-sensitivities);
+`+` adds
+[objectives](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-objective).
+`normL2(data, g*x*pSS*p, e)` is the objective. Inner parameters are the
+symbols of the equations, per condition; outer parameters are those of
+the fit.
 
 The guide uses the model of Oppelt et al. [\[1\]](#ref-oppelt2018model),
 NFκB signaling in HepG2 cells after TNFα, from the project
 [`examples/oppeltNPJSystBiolAppl2018`](https://github.com/dModverse/dMod2/tree/master/examples/oppeltNPJSystBiolAppl2018).
-This chapter follows `model.R`. Multistarts, profiles and other
-expensive results were computed once by the scripts of the project and
-are stored in `results/*.rds`; the chapters load them with `stored()`,
-which warns if a source script changed since.
+This chapter follows `model.R`. Multistarts,
+[profiles](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-profile)
+and other expensive results were computed once by the scripts of the
+project and are stored in `results/*.rds`; the chapters load them with
+`stored()`, which warns if a source script changed since.
 
 ``` r
 
@@ -53,8 +58,9 @@ products without net educts):
 
 \\\dot x_i = \frac{1}{V_i} \sum_r S\_{ri}\\ V\_{c(r)}\\ v_r(x, p),\\
 
-with \\S\_{ri}\\ the stoichiometry and \\V\_{c(r)}\\ the volume of the
-compartment of reaction \\r\\.
+with \\S\_{ri}\\ the
+[stoichiometry](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-stoichiometry)
+and \\V\_{c(r)}\\ the volume of the compartment of reaction \\r\\.
 
 | reaction | rate | description |
 |:---|:---|:---|
@@ -229,8 +235,11 @@ errors <- eqnvec(nucNFkB = "sigma_nucNFkB", cytNFkB = "sigma_cytNFkB", A20GFP = 
 
 ## Steady-state constraints
 
-NFκB and IKK are conserved, so \\f(x, p) = 0\\ determines the resting
-state only with the totals:
+NFκB and IKK are
+[conserved](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#conserved-quantities),
+so \\f(x, p) = 0\\ determines the [resting
+state](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-resting-state)
+only with the totals:
 
 ``` r
 
@@ -247,8 +256,9 @@ conservedQuantities(reactions)
 
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) solves
 the steady state numerically, with the totals `totalNfk` and `totalIkk`
-as parameters, `TNF` at 0, and exact derivatives of the root ([Methods
-\> Steady
+as parameters, `TNF` at 0, and exact derivatives of the
+[root](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-root)
+([Methods \> Steady
 states](https://dmodverse.github.io/dMod2/articles/methods-steady-states.md)).
 [`steadyStates()`](https://dmodverse.github.io/dMod2/reference/steadyStates.md)
 is the analytic alternative.
@@ -288,10 +298,13 @@ g <- Y(observables, x, modelname = "oppelt_obs", compile = FALSE)
 e <- Y(errors, g, modelname = "oppelt_err", compile = FALSE)
 ```
 
-The backend `"cppDE"` (default) integrates by BDF, `"Sundials"` uses
-CVODES, `"deSolve"` deSolve. A step is accepted if \\\bigl(\tfrac1n
-\sum_i \varepsilon_i^2 / (\mathrm{atol} +
-\mathrm{rtol}\\\|x_i\|)^2\bigr)^{1/2} \le 1\\:
+The backend `"cppDE"` (default) integrates by
+[BDF](https://dmodverse.github.io/cppDE/articles/methods-stepping.html),
+`"Sundials"` uses CVODES, `"deSolve"` deSolve. A step is accepted if the
+error test holds for the local error estimates \\\varepsilon_i\\,
+
+\\\Bigl(\frac1n \sum_i \frac{\varepsilon_i^2}{(\mathrm{atol} +
+\mathrm{rtol}\\\|x_i\|)^2}\Bigr)^{1/2} \le 1 :\\
 
 | option | default | controls |
 |----|----|----|
@@ -430,10 +443,14 @@ length(getParameters(prd))
 ## Likelihood and prior
 
 `normL2(data, prd, e)` returns \\-2 \log L\\ with gradient and
-Gauss-Newton Hessian ([Methods \> Likelihood and
+[Gauss-Newton
+Hessian](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)
+([Methods \> Likelihood and
 prior](https://dmodverse.github.io/dMod2/articles/methods-objective.md)).
 [`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md)
-adds a Gaussian prior on the log scale, also the start distribution of
+adds a Gaussian
+[prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-prior)
+on the log scale, also the start distribution of
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md):
 mean 0 and standard deviation 4 by default, narrower where the magnitude
 is known:
@@ -500,7 +517,9 @@ tolerances <- list(ftol = 1e-4, mtol = 1e-4, gtol = 1e-2)
 
 The best fit of
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md),
-with the gauge of
+with the
+[gauge](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-gauge)
+of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md):
 
 ``` r

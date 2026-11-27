@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,8 +120,8 @@
 
     
     
-<p>A model in dMod2 is a chain of function objects, each returning
-output and derivatives:</p>
+<p>A model in dMod2 is a <a href="methods-sensitivities.html#def-chain-gxp">chain of function
+objects</a>, each returning output and derivatives:</p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -137,20 +139,21 @@ output and derivatives:</p>
 <td>
 <code><a href="../reference/P.html">P()</a></code>, <code><a href="../reference/Pexpl.html">Pexpl()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code>
 </td>
-<td>outer to inner parameters, or to a steady state</td>
+<td>outer to inner parameters, or to a <a href="methods-steady-states.html#def-steady-state">steady state</a>
+</td>
 </tr>
 <tr class="even">
 <td><code>prdfn</code></td>
 <td>
 <code><a href="../reference/Xs.html">Xs()</a></code>, <code><a href="../reference/Xf.html">Xf()</a></code>
 </td>
-<td>parameters to trajectories, with (<code><a href="../reference/Xs.html">Xs()</a></code>) or without
-sensitivities</td>
+<td>parameters to trajectories, with (<code><a href="../reference/Xs.html">Xs()</a></code>) or without <a href="methods-sensitivities.html#def-sensitivity">sensitivities</a>
+</td>
 </tr>
 <tr class="odd">
 <td><code>obsfn</code></td>
 <td><code><a href="../reference/Y.html">Y()</a></code></td>
-<td>states to observables, observables to standard deviations</td>
+<td>states to observables, observables to standard deviations (<a href="methods-objective.html#def-error-model">error model</a>)</td>
 </tr>
 <tr class="even">
 <td><code>objfn</code></td>
@@ -158,7 +161,7 @@ sensitivities</td>
 <code><a href="../reference/normL2.html">normL2()</a></code>, <code><a href="../reference/constraintL2.html">constraintL2()</a></code>,
 <code><a href="../reference/datapointL2.html">datapointL2()</a></code>, <code><a href="../reference/constraintStability.html">constraintStability()</a></code>
 </td>
-<td><span class="math inline">\(-2 \log L\)</span></td>
+<td><a href="methods-objective.html#def-minus-2-log-l"><span class="math inline">\(-2 \log L\)</span></a></td>
 </tr>
 </tbody>
 </table>
@@ -166,17 +169,17 @@ sensitivities</td>
 <p><span class="math display">\[\frac{\partial y}{\partial \theta} =
 \frac{\partial g}{\partial x}\,\frac{\partial x}{\partial p}\,
 \frac{\partial p}{\partial \theta},\]</span></p>
-<p>each factor exact, the middle one from the sensitivity equations;
-<code>+</code> adds objectives. <code>normL2(data, g*x*pSS*p, e)</code>
-is the objective. Inner parameters are the symbols of the equations, per
-condition; outer parameters are those of the fit.</p>
+<p>each factor exact, the middle one from the <a href="methods-sensitivities.html#forward-sensitivities">sensitivity
+equations</a>; <code>+</code> adds <a href="methods-profiles.html#def-objective">objectives</a>.
+<code>normL2(data, g*x*pSS*p, e)</code> is the objective. Inner
+parameters are the symbols of the equations, per condition; outer
+parameters are those of the fit.</p>
 <p>The guide uses the model of Oppelt et al. <span class="citation"><a href="#ref-oppelt2018model">[1]</a></span>, NFκB signaling in HepG2
 cells after TNFα, from the project <a href="https://github.com/dModverse/dMod2/tree/master/examples/oppeltNPJSystBiolAppl2018" class="external-link"><code>examples/oppeltNPJSystBiolAppl2018</code></a>.
-This chapter follows <code>model.R</code>. Multistarts, profiles and
-other expensive results were computed once by the scripts of the project
-and are stored in <code>results/*.rds</code>; the chapters load them
-with <code>stored()</code>, which warns if a source script changed
-since.</p>
+This chapter follows <code>model.R</code>. Multistarts, <a href="methods-profiles.html#def-profile">profiles</a> and other
+expensive results were computed once by the scripts of the project and
+are stored in <code>results/*.rds</code>; the chapters load them with
+<code>stored()</code>, which warns if a source script changed since.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dmodverse.github.io/dMod2/">dMod2</a></span><span class="op">)</span></span>
 <span></span>
@@ -196,7 +199,7 @@ Rates are concentration rates in the compartment of the educts (of the
 products without net educts):</p>
 <p><span class="math display">\[\dot x_i = \frac{1}{V_i} \sum_r S_{ri}\,
 V_{c(r)}\, v_r(x, p),\]</span></p>
-<p>with <span class="math inline">\(S_{ri}\)</span> the stoichiometry
+<p>with <span class="math inline">\(S_{ri}\)</span> the <a href="methods-steady-states.html#def-stoichiometry">stoichiometry</a>
 and <span class="math inline">\(V_{c(r)}\)</span> the volume of the
 compartment of reaction <span class="math inline">\(r\)</span>.</p>
 <table class="table">
@@ -592,8 +595,9 @@ value in <code>sigma</code> ignore the error model.</p>
 <div class="section level2">
 <h2 id="steady-state-constraints">Steady-state constraints<a class="anchor" aria-label="anchor" href="#steady-state-constraints"></a>
 </h2>
-<p>NFκB and IKK are conserved, so <span class="math inline">\(f(x, p) =
-0\)</span> determines the resting state only with the totals:</p>
+<p>NFκB and IKK are <a href="methods-steady-states.html#conserved-quantities">conserved</a>, so
+<span class="math inline">\(f(x, p) = 0\)</span> determines the <a href="methods-steady-states.html#def-resting-state">resting state</a>
+only with the totals:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/conservedQuantities.html">conservedQuantities</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $TNF</span></span>
@@ -606,7 +610,7 @@ value in <code>sigma</code> ignore the error model.</p>
 <span><span class="co">#&gt; [1] "1*NfkIkb+1*NfkpIkb+1*pNfkIkb+1*pNfkpIkb+1*Nfk+1*pNfk+1*Vnuc*pnNfk+1*Vnuc*nNfk+1*Vnuc*nNfkIkb"</span></span></code></pre></div>
 <p><code><a href="../reference/Pimpl.html">Pimpl()</a></code> solves the steady state numerically, with the
 totals <code>totalNfk</code> and <code>totalIkk</code> as parameters,
-<code>TNF</code> at 0, and exact derivatives of the root (<a href="methods-steady-states.html">Methods &gt; Steady states</a>).
+<code>TNF</code> at 0, and exact derivatives of the <a href="methods-steady-states.html#def-root">root</a> (<a href="methods-steady-states.html">Methods &gt; Steady states</a>).
 <code><a href="../reference/steadyStates.html">steadyStates()</a></code> is the analytic alternative.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the cells rest before TNFα is added: a steady state with the amounts of NFκB and IKK conserved;</span></span>
@@ -638,11 +642,13 @@ error model <code>e</code>; <code>compile = FALSE</code> defers to one
 <span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Xs.html">Xs</a></span><span class="op">(</span><span class="va">model</span>, options <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>atol <span class="op">=</span> <span class="fl">1e-10</span>, rtol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">observables</span>, <span class="va">x</span>, modelname <span class="op">=</span> <span class="st">"oppelt_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="va">e</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">errors</span>, <span class="va">g</span>, modelname <span class="op">=</span> <span class="st">"oppelt_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p>The backend <code>"cppDE"</code> (default) integrates by BDF,
+<p>The backend <code>"cppDE"</code> (default) integrates by <a href="https://dmodverse.github.io/cppDE/articles/methods-stepping.html" class="external-link">BDF</a>,
 <code>"Sundials"</code> uses CVODES, <code>"deSolve"</code> deSolve. A
-step is accepted if <span class="math inline">\(\bigl(\tfrac1n \sum_i
-\varepsilon_i^2 / (\mathrm{atol} + \mathrm{rtol}\,|x_i|)^2\bigr)^{1/2}
-\le 1\)</span>:</p>
+step is accepted if the error test holds for the local error estimates
+<span class="math inline">\(\varepsilon_i\)</span>,</p>
+<p><span class="math display">\[\Bigl(\frac1n \sum_i
+\frac{\varepsilon_i^2}{(\mathrm{atol} +
+\mathrm{rtol}\,|x_i|)^2}\Bigr)^{1/2} \le 1 :\]</span></p>
 <table class="table">
 <colgroup>
 <col width="33%">
@@ -802,10 +808,10 @@ dose.</li>
 <div class="section level2">
 <h2 id="likelihood-and-prior">Likelihood and prior<a class="anchor" aria-label="anchor" href="#likelihood-and-prior"></a>
 </h2>
-<p><code>normL2(data, prd, e)</code> returns <span class="math inline">\(-2 \log L\)</span> with gradient and Gauss-Newton
-Hessian (<a href="methods-objective.html">Methods &gt; Likelihood and
-prior</a>). <code><a href="../reference/constraintL2.html">constraintL2()</a></code> adds a Gaussian prior on the log
-scale, also the start distribution of <a href="guide-optimization.html">Optimization</a>: mean 0 and standard
+<p><code>normL2(data, prd, e)</code> returns <span class="math inline">\(-2 \log L\)</span> with gradient and <a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Gauss-Newton
+Hessian</a> (<a href="methods-objective.html">Methods &gt; Likelihood
+and prior</a>). <code><a href="../reference/constraintL2.html">constraintL2()</a></code> adds a Gaussian <a href="methods-objective.html#def-prior">prior</a> on the log scale, also
+the start distribution of <a href="guide-optimization.html">Optimization</a>: mean 0 and standard
 deviation 4 by default, narrower where the magnitude is known:</p>
 <table class="table">
 <colgroup>
@@ -907,7 +913,7 @@ states</a>).</p>
 <h2 id="model-evaluation">Model evaluation<a class="anchor" aria-label="anchor" href="#model-evaluation"></a>
 </h2>
 <p>The best fit of <a href="guide-optimization.html">Optimization</a>,
-with the gauge of <a href="guide-symmetries.html">Symmetries</a>:</p>
+with the <a href="methods-symmetries.html#def-gauge">gauge</a> of <a href="guide-symmetries.html">Symmetries</a>:</p>
 <div class="sourceCode" id="cb18"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">best</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/parvec.html">as.parvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fits.rds"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">value</span> <span class="op">&lt;-</span> <span class="fu">obj</span><span class="op">(</span><span class="va">best</span>, fixed <span class="op">=</span> <span class="va">gauge</span><span class="op">)</span></span>

@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,7 +120,8 @@
 
     
     
-<p>The prediction profile likelihood <span class="citation"><a href="#ref-kreutz2012likelihood">[1]</a></span> gives the confidence
+<p>The <a href="methods-profiles.html#def-prediction-profile-likelihood">prediction
+profile likelihood</a> <span class="citation"><a href="#ref-kreutz2012likelihood">[1]</a></span> gives the confidence
 band of a prediction, here of unmeasured nuclear IκBα after TNFα <span class="citation"><a href="#ref-oppelt2018model">[2, Fig. 5]</a></span>
 in the reduced model of <a href="guide-profiles.html">Profile
 likelihood</a>. Code: <code>prediction.R</code>.</p>
@@ -126,12 +129,13 @@ likelihood</a>. Code: <code>prediction.R</code>.</p>
 <h2 id="prediction-profiles-and-validation-data-points">Prediction profiles and validation data points<a class="anchor" aria-label="anchor" href="#prediction-profiles-and-validation-data-points"></a>
 </h2>
 <p><code><a href="../reference/datapointL2.html">datapointL2()</a></code> ties a parameter <code>v</code> to the
-prediction by a validation data point of small standard deviation; the
-profile of <code>v</code> is the prediction profile, and the values
-within the <span class="math inline">\(\chi^2_1\)</span> threshold form
-the confidence interval. <code>attrName = "data"</code> adds the
-validation term to the data term, so <code>stop = "data"</code> and
-<code>confint(val.column = "data")</code> leave the prior out (<a href="methods-profiles.html#prediction-profiles">Methods &gt; Prediction
+prediction by a <a href="methods-profiles.html#def-validation-data-point">validation data
+point</a> of small standard deviation; the <a href="methods-profiles.html#def-profile">profile</a> of <code>v</code>
+is the prediction profile, and the values within the <span class="math inline">\(\chi^2_1\)</span> threshold form the <a href="methods-profiles.html#def-confidence-interval">confidence
+interval</a>. <code>attrName = "data"</code> adds the validation term to
+the <a href="methods-profiles.html#def-data-term">data term</a>, so
+<code>stop = "data"</code> and <code>confint(val.column = "data")</code>
+leave the <a href="methods-objective.html#prior">prior</a> out (<a href="methods-profiles.html#prediction-profiles">Methods &gt; Prediction
 profiles</a>).</p>
 </div>
 <div class="section level2">
@@ -141,7 +145,8 @@ profiles</a>).</p>
 stimulated condition, from 2 minutes on; the results are loaded from
 <code>results/prediction.rds</code>. The prediction spans seven orders
 of magnitude, so the validation point has standard deviation <span class="math inline">\(0.01\,\hat v(t)\)</span>. The profiles run on
-linear scale, since the resting state holds no nuclear IκBα.</p>
+linear scale, since the <a href="methods-steady-states.html#stability">resting state</a> holds no
+nuclear IκBα.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the readouts of the reduced model and nuclear IκBα, which is 0 at rest</span></span>
 <span><span class="va">gPrediction</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="va">observablesReduced</span>, nIkb <span class="op">=</span> <span class="st">"nIkb"</span><span class="op">)</span>, <span class="va">xReduced</span>,</span>
@@ -222,7 +227,7 @@ linear scale, since the resting state holds no nuclear IκBα.</p>
 <span>  <span class="fu">ggplot2</span><span class="fu">::</span><span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>x <span class="op">=</span> <span class="st">"time [min]"</span>, y <span class="op">=</span> <span class="st">"nuclear IκBα [total NFκB]"</span><span class="op">)</span> <span class="op">+</span></span>
 <span>  <span class="fu"><a href="../reference/theme_dMod2.html">theme_dMod2</a></span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-prediction-uncertainty_files/figure-html/unnamed-chunk-8-1.png" class="r-plt" alt="" width="768"></p>
-<p>Units of total NFκB follow from the gauge of <a href="guide-symmetries.html">Symmetries</a>.</p>
+<p>Units of total NFκB follow from the <a href="methods-symmetries.html#gauge-and-reduction">gauge</a> of <a href="guide-symmetries.html">Symmetries</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="all-prediction-profiles">All prediction profiles<a class="anchor" aria-label="anchor" href="#all-prediction-profiles"></a>

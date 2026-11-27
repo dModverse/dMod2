@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,44 +120,46 @@
 
     
     
-<p>A model at rest before a stimulus starts from a root of the
-right-hand side. <code><a href="../reference/Pimpl.html">Pimpl()</a></code> computes it numerically,
+<p>A <span id="def-steady-state">steady state</span> is a state <span class="math inline">\(x\)</span> at which the <span id="def-right-hand-side">right-hand side</span> <span class="math inline">\(f\)</span> of the ODE <span class="math inline">\(\dot x = f(x, p)\)</span> of states <span class="math inline">\(x\)</span> and parameters <span class="math inline">\(p\)</span> vanishes, a <span id="def-root">root</span> of <span class="math inline">\(f\)</span>. A
+model at rest before a stimulus starts from a steady state.
+<code><a href="../reference/Pimpl.html">Pimpl()</a></code> computes it numerically,
 <code><a href="../reference/steadyStates.html">steadyStates()</a></code> in closed form. Guide: <a href="guide-model.html#steady-state-constraints">Setting up
 models</a>.</p>
 <div class="section level2">
 <h2 id="conserved-quantities">Conserved quantities<a class="anchor" aria-label="anchor" href="#conserved-quantities"></a>
 </h2>
-<p>With compartment volumes <span class="math inline">\(V_i\)</span>,
-stoichiometric coefficients <span class="math inline">\(S_{ri}\)</span>
-of species <span class="math inline">\(i\)</span> in reaction <span class="math inline">\(r\)</span>, and rates <span class="math inline">\(v_r\)</span> in a frame of volume <span class="math inline">\(V_{c(r)}\)</span>, the right-hand side is</p>
+<p>With <span id="def-compartment-volume">compartment volumes</span>
+<span class="math inline">\(V_i\)</span>, the volume of the compartment
+that holds species <span class="math inline">\(i\)</span>, <span id="def-stoichiometric-coefficient">stoichiometric coefficients</span>
+<span class="math inline">\(S_{ri}\)</span>, the net number of molecules
+of species <span class="math inline">\(i\)</span> that reaction <span class="math inline">\(r\)</span> produces, negative where it consumes
+them, the entries of the <span id="def-stoichiometry">stoichiometry</span> matrix <span class="math inline">\(S\)</span>, and rates <span class="math inline">\(v_r\)</span> in a frame of volume <span class="math inline">\(V_{c(r)}\)</span>, the right-hand side is</p>
 <p><span class="math display">\[\dot x_i = f_i(x, p) = \frac{1}{V_i}
 \sum_r S_{ri}\, V_{c(r)}\, v_r(x, p). \tag{1}\]</span></p>
 <p>Every <span class="math inline">\(w\)</span> with <span class="math inline">\(S w = 0\)</span> conserves the amount</p>
 <p><span class="math display">\[\sum_i w_i V_i x_i \tag{2}\]</span></p>
-<p>by (1); <code><a href="../reference/conservedQuantities.html">conservedQuantities()</a></code> lists these amounts. Then
-<span class="math inline">\(f(x, p) = 0\)</span> does not determine
-<span class="math inline">\(x\)</span>: every conservation class, the
-states with given totals, has separate roots.</p>
+<p>by (1), a <span id="def-conserved-quantity">conserved
+quantity</span>; <code><a href="../reference/conservedQuantities.html">conservedQuantities()</a></code> lists these amounts.
+Then <span class="math inline">\(f(x, p) = 0\)</span> does not determine
+<span class="math inline">\(x\)</span>: every <span id="def-conservation-class">conservation class</span>, the states with
+given totals, has separate roots.</p>
 </div>
 <div class="section level2">
 <h2 id="pseudo-transient-continuation">Pseudo-transient continuation<a class="anchor" aria-label="anchor" href="#pseudo-transient-continuation"></a>
 </h2>
-<p>For an <code>eqnlist</code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> adds the
-conservation laws <span class="math inline">\(C(p)\, x = T\)</span> of
-the stoichiometry, totals <span class="math inline">\(T\)</span> as
-parameters:</p>
+<p>For an <code>eqnlist</code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> adds the <span id="def-conservation-law">conservation laws</span> <span class="math inline">\(C(p)\, x = T\)</span> of the stoichiometry, which
+set the conserved quantities to totals <span class="math inline">\(T\)</span> that enter as parameters:</p>
 <p><span class="math display">\[G(x, p) = \begin{pmatrix} f(x, p) \\
 C(p)\, x - T \end{pmatrix} = 0 . \tag{3}\]</span></p>
 <p>Equations given as an <code>eqnvec</code> or character vector have no
 stoichiometry and are solved as they are, so they have to determine
 <span class="math inline">\(x\)</span> themselves. With
-<code>flow = TRUE</code>, the default for an <code>eqnlist</code>,
-pseudo-transient continuation solves (3) by implicit Euler steps of
-<span class="math inline">\(\dot x = f(x, p)\)</span> on the
-conservation manifold, with a pseudo-time step that grows as the
-residual falls. It follows the flow far from the root and becomes
-Newton’s method near it. Newton steps may also reach an unstable root,
-which the <a href="#stability">stability test</a> catches. With
+<code>flow = TRUE</code>, the default for an <code>eqnlist</code>, <span id="def-pseudo-transient-continuation">pseudo-transient
+continuation</span> solves (3) by implicit Euler steps of <span class="math inline">\(\dot x = f(x, p)\)</span> on the <span id="def-conservation-manifold">conservation manifold</span>, the affine
+subspace <span class="math inline">\(C x = T\)</span> that a trajectory
+never leaves, with a pseudo-time step that grows as the residual falls.
+It follows the flow far from the root and becomes Newton’s method near
+it. Newton steps may also reach an unstable root, which the <a href="#stability">stability test</a> catches. With
 <code>flow = FALSE</code>, the default otherwise, the equations need not
 be the right-hand side of an ODE: the solver takes damped Newton steps,
 without stability test, and returns any regular root. A state no
@@ -177,9 +181,15 @@ gives</p>
 <p><span class="math display">\[\frac{\partial G}{\partial x}\,
 \frac{\partial x}{\partial p} = -\frac{\partial G}{\partial p},
 \tag{4}\]</span></p>
-<p>regular where <span class="math inline">\(J = \partial f / \partial
-x\)</span> restricted to the conservation manifold, <span class="math inline">\(N^\top J N\)</span> for a basis <span class="math inline">\(N\)</span> of <span class="math inline">\(\ker
-C\)</span>, is nonsingular; such a root is isolated in the conservation
+<p>solvable for <span class="math inline">\(\partial x / \partial
+p\)</span> at a regular root. A root is <span id="def-regular-root">regular</span> where the <span id="def-jacobian">Jacobian</span> <span class="math inline">\(J =
+\partial f / \partial x\)</span> restricted to the conservation
+manifold, <span class="math inline">\(N^\top J N\)</span>, is
+nonsingular, with the columns of <span class="math inline">\(N\)</span>
+a <span id="def-basis">basis</span> of the <span id="def-kernel">kernel</span> <span class="math inline">\(\ker
+C\)</span>, the vectors <span class="math inline">\(v\)</span> with
+<span class="math inline">\(C v = 0\)</span>, the directions within the
+conservation class. A regular root is isolated in the conservation
 class. Where the matrix is singular, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> takes the
 pseudo-inverse and warns. Differentiating (4) again gives the second
 derivatives, <code>Pimpl(derivMode = "forward-forward")</code>, with the
@@ -189,7 +199,9 @@ Hessians</a>).</p>
 <div class="section level2">
 <h2 id="stability">Stability<a class="anchor" aria-label="anchor" href="#stability"></a>
 </h2>
-<p>A root is a resting state only if every eigenvalue <span class="math inline">\(\lambda_k\)</span> of <span class="math inline">\(J = \partial f / \partial x\)</span> on the
+<p>A <span id="def-resting-state">resting state</span> is a stable
+steady state, the state of the model before a stimulus. A root is a
+resting state only if every eigenvalue <span class="math inline">\(\lambda_k\)</span> of <span class="math inline">\(J = \partial f / \partial x\)</span> on the
 conservation manifold has negative real part. At a root whose leading
 eigenvalue has real part above the larger of <span class="math inline">\(10^{-8} s\)</span>, <span class="math inline">\(s\)</span> the largest eigenvalue modulus on the
 conservation manifold and <span class="math inline">\(10^{-8} s\)</span>
@@ -202,13 +214,13 @@ root.</p>
 <p><code><a href="../reference/constraintStability.html">constraintStability()</a></code> adds a term that rises on a ramp
 below <span class="math inline">\(\lambda_{tol}\)</span>, the sum of
 squares of the residuals</p>
-<p><span class="math display">\[\rho_k = \sqrt{\kappa} \begin{cases}
-r_k^{3/2}, &amp; r_k \le 1, \\
-  1 + \tfrac{3}{2}(r_k - 1), &amp; r_k &gt; 1, \end{cases} \qquad
-  r_k = \frac{\max\bigl(0,\ \mathrm{Re}\,\lambda_k -
+<p><span class="math display">\[\begin{aligned}
+\rho_k &amp;= \sqrt{\kappa} \begin{cases} r_k^{3/2}, &amp; r_k \le 1, \\
+  1 + \tfrac{3}{2}(r_k - 1), &amp; r_k &gt; 1, \end{cases} \\
+r_k &amp;= \frac{\max\bigl(0,\ \mathrm{Re}\,\lambda_k -
 \lambda_0\bigr)}{\lambda_{tol} - \lambda_0},
   \qquad \lambda_0 = \lambda_{tol} - \max(d, m s),
-  \tag{5}\]</span></p>
+\end{aligned} \tag{5}\]</span></p>
 <p>with weight <span class="math inline">\(\kappa\)</span> and the width
 <span class="math inline">\(\max(d, m s)\)</span> of the ramp: at least
 the absolute <code>width</code> <span class="math inline">\(d\)</span>,
@@ -227,12 +239,14 @@ with right and left eigenvectors <span class="math inline">\(u_k\)</span>, <span
   \tag{6}
 \]</span></p>
 <p>and <span class="math inline">\(s = |\lambda_m|\)</span>, <span class="math inline">\(\lambda_m\)</span> the eigenvalue of largest
-modulus, has the derivative <span class="math inline">\(\mathrm{Re}(\bar\lambda_m\, \mathrm{d}\lambda_m /
-\mathrm{d}p) / s\)</span> by (6), continuous except where the eigenvalue
-of largest modulus changes. Eigenvalues that coincide within the error
-of the eigenvalues, as a defective double eigenvalue of a chain of
-states with equal rates, have no derivative each; each takes the mean
-<span class="math inline">\(\mathrm{tr}(P\, \mathrm{d}J/\mathrm{d}p) /
+modulus, has the derivative</p>
+<p><span class="math display">\[\frac{\mathrm{d}s}{\mathrm{d}p} =
+\frac{\mathrm{Re}(\bar\lambda_m\, \mathrm{d}\lambda_m /
+\mathrm{d}p)}{s}\]</span></p>
+<p>by (6), continuous except where the eigenvalue of largest modulus
+changes. Eigenvalues that coincide within the error of the eigenvalues,
+as a defective double eigenvalue of a chain of states with equal rates,
+have no derivative each; each takes the mean <span class="math inline">\(\mathrm{tr}(P\, \mathrm{d}J/\mathrm{d}p) /
 n_c\)</span> over the cluster of <span class="math inline">\(n_c\)</span> eigenvalues with spectral projector
 <span class="math inline">\(P\)</span>, which is (6) for a simple
 eigenvalue and exact for a cluster that stays degenerate. Where two real
@@ -242,13 +256,14 @@ of both diverge and the gradient of (5) has a kink. Both need
 assumption, not data: profiles with <code>stop = "data"</code> and
 likelihood ratios leave it out.</p>
 <p>The Gauss-Newton Hessian of (5),</p>
-<p><span class="math display">\[2 \sum_{k \,:\, \mathrm{Re}\,\lambda_k
-&gt; \lambda_0}
+<p><span class="math display">\[\begin{aligned}
+&amp;2 \sum_{k \,:\, \mathrm{Re}\,\lambda_k &gt; \lambda_0}
   \frac{\mathrm{d} \rho_k}{\mathrm{d}p} \frac{\mathrm{d}
-\rho_k}{\mathrm{d}p}^{\mathsf T},
-  \qquad \frac{\mathrm{d} \rho_k}{\mathrm{d}p} = \frac{3}{2}
-\sqrt{\kappa}\, \min(r_k, 1)^{1/2}\,
-  \frac{\mathrm{d} r_k}{\mathrm{d}p}, \tag{7}\]</span></p>
+\rho_k}{\mathrm{d}p}^{\mathsf T}, \\
+&amp;\frac{\mathrm{d} \rho_k}{\mathrm{d}p} = \frac{3}{2} \sqrt{\kappa}\,
+\min(r_k, 1)^{1/2}\,
+  \frac{\mathrm{d} r_k}{\mathrm{d}p},
+\end{aligned} \tag{7}\]</span></p>
 <p>vanishes at the onset with the term and the gradient and is
 continuous at <span class="math inline">\(r_k = 1\)</span>. Outside the
 ramp the term and (7) vanish, so the model of a trust-region step sees
@@ -269,39 +284,44 @@ the term.</p>
 <h2 id="analytical-steady-state-constraints">Analytical steady-state constraints<a class="anchor" aria-label="anchor" href="#analytical-steady-state-constraints"></a>
 </h2>
 <p><code><a href="../reference/steadyStates.html">steadyStates()</a></code> solves <span class="math inline">\(f(x,
-p) = 0\)</span> in closed form <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a>, <a href="#ref-kaschek2019dmod">[2]</a></span>. The balances are taken in
-amounts, so that a quantity conserved across compartments is a dependent
-balance. First, a state whose balance is linear in the state, with all
-terms of the state on one side, is solved from that balance, influx over
-outflux rate, unless the rate constants of the solution leave a cycle of
-the graph of states without a cut; the states of conserved quantities
-are left to the cuts. Then the cycles are cut, each at a state of a
-conserved quantity, which stays free, or at a state whose balance is
-solved for a rate constant common to the flux terms of one side. The
-cuts are ranked as by <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a></span>: conserved
-quantities first, then sides whose flux terms occur in no other balance,
-fewer balances changed, fewer terms, more cycles through the state. Then
-each unknown, a state or a kinetic parameter, is solved from a
-combination of balances such that the solution is a ratio of sums of
-positive terms. The solution is thus positive for positive parameters,
-also with <code>solveQuadratic = TRUE</code>, which takes the positive
-root of a balance quadratic in the state. A state whose balance is spent
-on a kinetic parameter stays free, as the parameter of the steady-state
-value of the state. States that are zero in every steady state are set
-to 0. A conserved quantity keeps one state free. Volumes are never
-solved for.</p>
+p) = 0\)</span> in closed form <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a>, <a href="#ref-kaschek2019dmod">[2]</a></span>. The <span id="def-balance">balance</span> of state <span class="math inline">\(i\)</span> is the equation <span class="math inline">\(V_i\, \dot x_i = 0\)</span> in amounts, a sum of
+<span id="def-flux-term">flux terms</span> <span class="math inline">\(S_{ri} V_{c(r)} v_r\)</span>, so that a quantity
+conserved across compartments is a dependent balance. First, a state
+whose balance is linear in the state, with all terms of the state on one
+side, is solved from that balance, influx over outflux rate, unless the
+rate constants of the solution leave a <span id="def-cycle">cycle</span>
+without a <span id="def-cut">cut</span>. A cycle is a closed path of the
+graph of states with an edge from each state to every state in the
+balance of that state; a cut is a state on a cycle that stays a free
+parameter. The states of conserved quantities are left to the cuts. Then
+the cycles are cut, each at a state of a conserved quantity, which stays
+free, or at a state whose balance is solved for a rate constant common
+to the flux terms of one side. The cuts are ranked as by <span class="citation"><a href="#ref-rosenblatt2016customized">[1]</a></span>:
+conserved quantities first, then sides whose flux terms occur in no
+other balance, fewer balances changed, fewer terms, more cycles through
+the state. Then each unknown, a state or a kinetic parameter, is solved
+from a combination of balances such that the solution is a ratio of sums
+of positive terms; the unknown a balance is solved for is the <span id="def-pivot">pivot</span>. The solution is thus positive for positive
+parameters, also with <code>solveQuadratic = TRUE</code>, which takes
+the positive root of a balance quadratic in the state. A state whose
+balance is spent on a kinetic parameter stays free, as the parameter of
+the steady-state value of the state. States that are zero in every
+steady state are set to 0. A conserved quantity keeps one state free.
+Volumes are never solved for.</p>
 <p>Only if no solution of this form exists, a side whose flux terms have
 separate rate constants <span class="math inline">\(k_0, \dots,
 k_m\)</span> is a cut as well. The fluxes <span class="math inline">\(v_j\)</span> of the side get free ratios <span class="math inline">\(r_{x,j} = v_j / v_0 &gt; 0\)</span>, named
 <code>r_&lt;state&gt;_&lt;j&gt;</code>; <span class="math inline">\(k_0\)</span> is solved, each <span class="math inline">\(k_j\)</span> follows from <span class="math inline">\(r_{x,j}\)</span> and <span class="math inline">\(k_0\)</span>. The ratios are new parameters of the
 transformation.</p>
 <p>The result, one equation per solved unknown, replaces identity
-entries of a parameter transformation:</p>
+entries of a <span id="def-parameter-transformation">parameter
+transformation</span>, the map from outer to inner parameters that
+<code><a href="../reference/P.html">P()</a></code> builds:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">steady</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/steadyStates.html">steadyStates</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span>
 <span><span class="va">parameters</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span>
-<span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/repar.html">repar</a></span><span class="op">(</span><span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="va">parameters</span>, <span class="va">parameters</span><span class="op">)</span><span class="op">)</span>, <span class="st">"x &lt;- y"</span>,</span>
-<span>               x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">steady</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">steady</span><span class="op">)</span></span>
+<span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="cn">NULL</span>, <span class="st">"x &lt;- x"</span>, x <span class="op">=</span> <span class="va">parameters</span><span class="op">)</span></span>
+<span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/define.html">insert</a></span><span class="op">(</span><span class="va">trafo</span>, <span class="st">"x &lt;- y"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">steady</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">steady</span><span class="op">)</span></span>
 <span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/P.html">P</a></span><span class="op">(</span><span class="va">trafo</span><span class="op">)</span></span></code></pre></div>
 <table class="table">
 <colgroup>
@@ -328,7 +348,9 @@ derived</td>
 </tr>
 <tr class="even">
 <td><code>forcings</code></td>
-<td>states held at zero as exogenous inputs</td>
+<td>
+<span id="def-forcing">forcings</span>, states given as external
+inputs, held at zero</td>
 </tr>
 <tr class="odd">
 <td><code>solveQuadratic</code></td>

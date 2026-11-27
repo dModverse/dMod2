@@ -21,7 +21,7 @@ objective functions and plain R functions."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -61,6 +61,8 @@ objective functions and plain R functions."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -214,7 +216,7 @@ profiled parameter alone and the others are reoptimized at every step.
 
 <dt><code>reoptimize</code></dt>
 <dd><p>Whether every step is followed by a fit of the
-other parameters with <code><a href="trust.html">trust()</a></code>. <code>FALSE</code> / <code>TRUE</code>.</p></dd>
+other parameters with <code><a href="trust.html">trust()</a></code>. <code>TRUE</code> for both methods.</p></dd>
 
 <dt><code>correction</code></dt>
 <dd><p>Relative correction above which <code>gamma</code>
@@ -341,8 +343,8 @@ and <a href="https://dmodverse.github.io/dMod2/articles/guide-remote-computing.h
 <span class="r-plt img"><img src="profile-2.png" alt="" width="700" height="433"></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint</a></span><span class="op">(</span><span class="va">profiles.approx</span>, val.column <span class="op">=</span> <span class="st">"value"</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>      name      value      lower      upper</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> logA logA  0.6774738  0.6369418  0.7167919</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> logk logk -0.7369431 -0.8051821 -0.6699116</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> logA logA  0.6774738  0.6369417  0.7167936</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> logk logk -0.7369431 -0.8051900 -0.6699037</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span><span class="va">old</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="co"># }</span></span></span>

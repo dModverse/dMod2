@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -120,9 +122,9 @@
     
 <p>Western blots, plate readers and similar assays read on
 experiment-specific scales. <code><a href="../reference/alignmentModel.html">alignmentModel()</a></code> and
-<code><a href="../reference/align.html">align()</a></code> bring all experiments onto one common scale by
-maximum likelihood, with the reading model written as an expression, as
-in the R package <a href="https://github.com/JetiLab/blotIt" class="external-link">blotIt</a>.</p>
+<code><a href="../reference/align.html">align()</a></code> bring all experiments onto one common scale by <a href="methods-objective.html#def-maximum-likelihood">maximum
+likelihood</a>, with the reading model written as an expression, as in
+the R package <a href="https://github.com/JetiLab/blotIt" class="external-link">blotIt</a>.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dmodverse.github.io/dMod2/">dMod2</a></span><span class="op">)</span></span>
 <span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://ggplot2.tidyverse.org" class="external-link">ggplot2</a></span><span class="op">)</span></span>
@@ -160,8 +162,8 @@ noise per lane.</p>
 <h2 id="alignment-model">Alignment model<a class="anchor" aria-label="anchor" href="#alignment-model"></a>
 </h2>
 <p>A reading is value <code>yi</code> times gel scale <code>sj</code>
-plus background <code>bj</code>, with relative error. Each symbol is a
-linear predictor over the data columns, on log scale.
+plus background <code>bj</code>, with <a href="methods-objective.html#def-relative-error">relative error</a>.
+Each symbol is a linear predictor over the data columns, on log scale.
 <code>technical = "lane"</code> averages the lanes of a sample, see <a href="#technical-and-biological-replicates">technical and biological
 replicates</a>.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
@@ -184,8 +186,9 @@ experiments sharing values.</p>
 <h2 id="fit-by-restricted-likelihood">Fit by restricted likelihood<a class="anchor" aria-label="anchor" href="#fit-by-restricted-likelihood"></a>
 </h2>
 <p><code><a href="../reference/align.html">align()</a></code> fits from several perturbed starts and keeps the
-best; error parameters by restricted maximum likelihood. The fits of
-this chapter are loaded from <code>results/guide-alignment.rds</code>,
+best; <a href="methods-objective.html#def-error-parameters">error
+parameters</a> by restricted maximum likelihood. The fits of this
+chapter are loaded from <code>results/guide-alignment.rds</code>,
 computed by <code>results/guide-alignment.R</code>.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/align.html">align</a></span><span class="op">(</span><span class="va">m</span>, fits <span class="op">=</span> <span class="fl">4</span><span class="op">)</span></span>
@@ -238,8 +241,9 @@ error <code>se</code>:</p>
 the biological deviation of that sample. <code>technical = "lane"</code>
 averages them before the alignment; readings agreeing in all columns but
 <code>value</code>, <code>lloq</code> and the technical columns form one
-sample. The mean is geometric for a relative error model, arithmetic for
-an absolute one. The same data with every lane as a reading:</p>
+sample. The mean is geometric for a relative <a href="methods-objective.html#def-error-model">error model</a>,
+arithmetic for an absolute one. The same data with every lane as a
+reading:</p>
 <div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">mLanes</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/alignmentModel.html">alignmentModel</a></span><span class="op">(</span><span class="va">d</span>, model <span class="op">=</span> <span class="st">"yi * sj + bj"</span>, errmodel <span class="op">=</span> <span class="st">"sigmaR * prediction"</span>,</span>
 <span>                         biological <span class="op">=</span> <span class="va">yi</span> <span class="op">~</span> <span class="va">time</span>, scaling <span class="op">=</span> <span class="va">sj</span> <span class="op">~</span> <span class="va">gel</span>, error <span class="op">=</span> <span class="va">bj</span> <span class="op">+</span> <span class="va">sigmaR</span> <span class="op">~</span> <span class="fl">1</span>,</span>
@@ -263,11 +267,11 @@ errors, those of the fit of means stay within two.</p>
 <div class="section level2">
 <h2 id="random-background-per-gel">Random background per gel<a class="anchor" aria-label="anchor" href="#random-background-per-gel"></a>
 </h2>
-<p>A random effect per gel around a common background, integrated by
-FOCEI as in <a href="guide-nlme.html">Nonlinear mixed-effects
-models</a>. A prior on <code>omega_bj_bj</code>, the log standard
-deviation, normal around <span class="math inline">\(\log 0.3\)</span>
-with standard deviation 0.3:</p>
+<p>A <a href="methods-nlme.html#def-random-effect">random effect</a> per
+gel around a common background, integrated by <a href="methods-nlme.html#def-focei">FOCEI</a> as in <a href="guide-nlme.html">Nonlinear mixed-effects models</a>. A <a href="methods-objective.html#def-prior">prior</a> on
+<code>omega_bj_bj</code>, the log standard deviation, normal around
+<span class="math inline">\(\log 0.3\)</span> with standard deviation
+0.3:</p>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">m2</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/alignmentModel.html">alignmentModel</a></span><span class="op">(</span><span class="va">d</span>, model <span class="op">=</span> <span class="st">"yi * sj + bj"</span>, errmodel <span class="op">=</span> <span class="st">"sigmaR * prediction"</span>,</span>
 <span>                     biological <span class="op">=</span> <span class="va">yi</span> <span class="op">~</span> <span class="va">time</span>, scaling <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va">sj</span> <span class="op">~</span> <span class="va">gel</span>, <span class="va">bj</span> <span class="op">~</span> <span class="fl">1</span> <span class="op">+</span> <span class="op">(</span><span class="fl">1</span> <span class="op">|</span> <span class="va">gel</span><span class="op">)</span><span class="op">)</span>,</span>
@@ -363,8 +367,9 @@ below -4.</p>
 <h3 id="qpcr-data">qPCR data<a class="anchor" aria-label="anchor" href="#qpcr-data"></a>
 </h3>
 <p>Column <code>lloq</code> holds the limit of each reading; an
-<code>NA</code> reading is censored there. Standard deviation 0.5 cycles
-between samples, 0.25 between wells.</p>
+<code>NA</code> reading is censored there, known only to lie below the
+limit. Standard deviation 0.5 cycles between samples, 0.25 between
+wells.</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/Random.html" class="external-link">set.seed</a></span><span class="op">(</span><span class="fl">5</span><span class="op">)</span></span>
 <span><span class="va">times</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">0.5</span>, <span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">4</span>, <span class="fl">8</span>, <span class="fl">24</span><span class="op">)</span></span>
@@ -598,7 +603,8 @@ unchanged:</p>
 <h3 id="random-background">Random background<a class="anchor" aria-label="anchor" href="#random-background"></a>
 </h3>
 <p>Standard deviation of the log2 background between gels, and per gel
-the mode with conditional standard error:</p>
+the <a href="methods-sparsity-priors.html#def-mode">mode</a> with <a href="methods-nlme.html#def-conditional-standard-error">conditional
+standard error</a>:</p>
 <div class="sourceCode" id="cb36"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span><span class="op">$</span><span class="va">omega</span></span>
 <span><span class="co">#&gt;     type eta1 eta2  estimate         se</span></span>
@@ -623,11 +629,12 @@ depend on the modes.</p>
 <code class="sourceCode R"><span><span class="va">fit</span><span class="op">$</span><span class="va">fit</span><span class="op">$</span><span class="va">shrinkage</span></span>
 <span><span class="co">#&gt; eta_bj </span></span>
 <span><span class="co">#&gt; 0.8728</span></span></code></pre></div>
-<p>Conditional draws against the estimated normal:</p>
+<p>Conditional draws from the <a href="methods-nlme.html#def-posterior">posterior</a> against the
+estimated normal:</p>
 <div class="sourceCode" id="cb38"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotRandomEffects.html">plotRandomEffects</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">fit</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-29-1.png" class="r-plt" alt="" width="768"></p>
-<p>Individual (IPRED) and population prediction (PRED):</p>
+<p>Individual (IPRED) and population prediction (PRED), as in <a href="guide-nlme.html#model-diagnostics">Model diagnostics</a>:</p>
 <div class="sourceCode" id="cb39"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/graphics/plot.default.html" class="external-link">plot</a></span><span class="op">(</span><span class="va">fit</span><span class="op">$</span><span class="va">fit</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/theme.html" class="external-link">theme</a></span><span class="op">(</span>legend.position <span class="op">=</span> <span class="st">"right"</span><span class="op">)</span> <span class="op">+</span> <span class="fu"><a href="https://ggplot2.tidyverse.org/reference/labs.html" class="external-link">labs</a></span><span class="op">(</span>color <span class="op">=</span> <span class="st">"gel"</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-alignment_files/figure-html/unnamed-chunk-30-1.png" class="r-plt" alt="" width="768"></p>

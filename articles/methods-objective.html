@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,20 +120,26 @@
 
     
     
-<p>Without a prior, dMod2 estimates by maximum likelihood and minimizes
-<span class="math inline">\(-2 \log L\)</span>. With a prior, it
-minimizes <span class="math inline">\(-2 \log\)</span> of the posterior
-up to a constant, and the minimum is the maximum a posteriori estimate
-<span class="citation"><a href="#ref-kaschek2019dmod">[1]</a></span>.
-The methods articles call the minimized quantity the objective function
-<span class="math inline">\(\mathcal{J}(\theta)\)</span>, <span class="math inline">\(-2 \log L\)</span> or <span class="math inline">\(-2 \log\)</span> of the posterior. Guide: <a href="guide-model.html#likelihood-and-prior">Setting up models</a>;
+<p>Without a prior, dMod2 estimates by <span id="def-maximum-likelihood">maximum likelihood</span>: it chooses the
+parameters <span class="math inline">\(\theta\)</span> that maximize the
+<span id="def-likelihood">likelihood</span> <span class="math inline">\(L(\theta)\)</span>, the probability density of the
+observed data read as a function of <span class="math inline">\(\theta\)</span>, and minimizes <span id="def-minus-2-log-l"><span class="math inline">\(-2 \log
+L\)</span></span>, minus twice the log-likelihood, (1). With a <span id="def-prior">prior</span>, a probability density <span class="math inline">\(\pi(\theta)\)</span> of the parameters before the
+data (<a href="#prior">Prior</a>), it minimizes <span class="math inline">\(-2 \log\)</span> of the posterior up to a
+constant, and the minimum is the maximum a posteriori estimate <span class="citation"><a href="#ref-kaschek2019dmod">[1]</a></span>. The
+methods articles call the minimized quantity the <span id="def-objective-function">objective function</span> <span class="math inline">\(\ell(\theta)\)</span>, <span class="math inline">\(-2 \log L\)</span> or <span class="math inline">\(-2 \log\)</span> of the posterior; in dMod2 it is
+an <span id="def-objfn"><code>objfn</code></span>, a function object
+that returns value, gradient and Hessian. Guide: <a href="guide-model.html#likelihood-and-prior">Setting up models</a>;
 derivatives: <a href="methods-sensitivities.html">Sensitivities and
 Hessians</a>.</p>
 <div class="section level2">
 <h2 id="data-term">Data term<a class="anchor" aria-label="anchor" href="#data-term"></a>
 </h2>
 <p><code><a href="../reference/normL2.html">normL2()</a></code> computes twice the negative log-likelihood of
-independent Gaussian errors, for data <span class="math inline">\(y_j\)</span>, predictions <span class="math inline">\(g_j(\theta)\)</span> and standard deviations <span class="math inline">\(\sigma_j(\theta)\)</span>:</p>
+independent Gaussian errors, for data <span class="math inline">\(y_j\)</span>, <span id="def-prediction">predictions</span> <span class="math inline">\(g_j(\theta)\)</span>, the model values of the
+observables at the measurement times from the chain <code>g*x*p</code>
+(<a href="guide-model.html">Setting up models</a>), and standard
+deviations <span class="math inline">\(\sigma_j(\theta)\)</span>:</p>
 <p><span class="math display">\[-2 \log L(\theta) = \sum_j \left(
 \frac{(y_j - g_j(\theta))^2}{\sigma_j(\theta)^2} +
 \log \sigma_j(\theta)^2 \right) + \text{const}. \tag{1}\]</span></p>
@@ -145,10 +153,12 @@ second rises.</p>
 <h2 id="error-model">Error model<a class="anchor" aria-label="anchor" href="#error-model"></a>
 </h2>
 <p><span class="math inline">\(\sigma_j\)</span> comes from the data
-column <code>sigma</code> where set, otherwise from the error model, an
-<code>obsfn</code> <span class="math inline">\(\sigma = e(g,
-\theta)\)</span> of prediction and parameters. A constant <span class="math inline">\(\sigma\)</span> on a log-scale observable <span class="math inline">\(y = \log(s\, x + o)\)</span> is a relative error:
-to first order, <span class="math inline">\(\sigma\)</span> in <span class="math inline">\(\log z\)</span> is <span class="math inline">\(\sigma z\)</span> in <span class="math inline">\(z\)</span>.</p>
+column <code>sigma</code> where set, otherwise from the <span id="def-error-model">error model</span> <span class="math inline">\(\sigma = e(g, \theta)\)</span>, a function of
+prediction and parameters. The error model is an <span id="def-obsfn"><code>obsfn</code></span>, a function object from
+<code><a href="../reference/Y.html">Y()</a></code> that maps states to observables or, here, to standard
+deviations. The parameters of <span class="math inline">\(\theta\)</span> that enter <span class="math inline">\(e\)</span> are the <span id="def-error-parameters">error parameters</span>; (1) estimates them
+with the model parameters. A constant <span class="math inline">\(\sigma\)</span> on a log-scale observable <span class="math inline">\(y = \log(s\, x + o)\)</span> is a <span id="def-relative-error">relative error</span>, a standard deviation
+proportional to the value: to first order, <span class="math inline">\(\sigma\)</span> in <span class="math inline">\(\log z\)</span> is <span class="math inline">\(\sigma z\)</span> in <span class="math inline">\(z\)</span>.</p>
 </div>
 <div class="section level2">
 <h2 id="prior">Prior<a class="anchor" aria-label="anchor" href="#prior"></a>
@@ -164,7 +174,9 @@ no minimum: <span class="math inline">\(\theta_k = \mu_k\)</span> with
 so an estimated <span class="math inline">\(s_k\)</span> needs a lower
 bound. On the log scale, a prior far wider than the data leaves
 determined parameters in place and keeps undetermined ones finite, so
-the minimum exists without bounds. The Hessian of (2) is <span class="math inline">\(2/s_k^2\)</span> on the diagonal.</p>
+the minimum exists without bounds. A <span id="def-determined-parameter">determined parameter</span> has a profile
+likelihood with a confidence interval of finite length (<a href="methods-profiles.html">Profiles</a>); an undetermined one moves to
+<span class="math inline">\(\pm\infty\)</span> at almost constant <span class="math inline">\(-2 \log L\)</span>. The Hessian of (2) is <span class="math inline">\(2/s_k^2\)</span> on the diagonal.</p>
 </div>
 <div class="section level2">
 <h2 id="further-terms">Further terms<a class="anchor" aria-label="anchor" href="#further-terms"></a>
@@ -175,7 +187,9 @@ the minimum exists without bounds. The Hessian of (2) is <span class="math inlin
 <code><a href="../reference/Pimpl.html">Pimpl()</a></code> stable (<a href="methods-steady-states.html#stability">Steady states</a>).</li>
 <li>
 <code><a href="../reference/datapointL2.html">datapointL2()</a></code>: a data point whose value is a parameter,
-for validation profiles <span class="citation"><a href="#ref-kreutz2012likelihood">[2]</a></span>.</li>
+for <span id="def-validation-profile">validation profiles</span>,
+profiles over the value of a hypothetical data point that give a
+confidence interval of a prediction <span class="citation"><a href="#ref-kreutz2012likelihood">[2]</a></span>.</li>
 </ul>
 <p>Each term is an <code>objfn</code>; a sum keeps the parts as
 attributes, so profiles and likelihood ratios read the data term

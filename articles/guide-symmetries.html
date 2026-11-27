@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -125,17 +127,17 @@ the model of <a href="guide-model.html">Setting up models</a>. Code:
 <div class="section level2">
 <h2 id="lie-symmetries-and-detection">Lie symmetries and detection<a class="anchor" aria-label="anchor" href="#lie-symmetries-and-detection"></a>
 </h2>
-<p>Each family is the orbit of a Lie symmetry. symident obtains the
-generators as the kernel of the observability-identifiability matrix and
-proves scalings exactly (<a href="methods-symmetries.html">Methods &gt;
-Structural identifiability and Lie symmetries</a>).</p>
+<p>Each family is the <a href="methods-symmetries.html#def-orbit">orbit</a> of a <a href="methods-symmetries.html#def-lie-symmetry">Lie symmetry</a>.
+symident obtains the <a href="methods-symmetries.html#def-generator">generators</a> as the <a href="methods-steady-states.html#def-kernel">kernel</a> of the <a href="methods-symmetries.html#def-oim">observability-identifiability
+matrix</a> and proves <a href="methods-symmetries.html#def-scaling">scalings</a> exactly (<a href="methods-symmetries.html">Methods &gt; Structural identifiability
+and Lie symmetries</a>).</p>
 </div>
 <div class="section level2">
 <h2 id="detection-settings">Detection settings<a class="anchor" aria-label="anchor" href="#detection-settings"></a>
 </h2>
 <ul>
 <li>
-<code>equilibrate = TRUE</code>: initial values are the steady state
+<code>equilibrate = TRUE</code>: initial values are the <a href="methods-steady-states.html#def-steady-state">steady state</a>
 without TNFα.</li>
 <li>
 <code>reduceCQ = TRUE</code>: symmetries act on the conserved
@@ -144,8 +146,8 @@ totals, the parameters of <code><a href="../reference/Pimpl.html">Pimpl()</a></c
 <code>forcings = "TNF"</code>: TNFα is an input state, set by the
 event at time 0.</li>
 <li>
-<code>conditions</code>: a direction is non-identifiable only if it
-is so in both doses.</li>
+<code>conditions</code>: a direction is <a href="methods-profiles.html#def-non-identifiable">non-identifiable</a>
+only if it is so in both doses.</li>
 </ul>
 <p>The imaging readouts bleach, <span class="math inline">\(y = \log(s x
 + o) - \tau t\)</span>. In the control the states are constant, so the
@@ -155,11 +157,9 @@ the bleaching terms.</p>
 <div class="section level2">
 <h2 id="symmetries-of-the-full-model">Symmetries of the full model<a class="anchor" aria-label="anchor" href="#symmetries-of-the-full-model"></a>
 </h2>
-<pre><code><span><span class="co">#&gt; Warning: symmetries.rds was computed from an earlier version of symmetries.R</span></span>
-<span><span class="co">#&gt; Warning: reduction.rds was computed from an earlier version of symmetries.R</span></span></code></pre>
 <p>Computed by <code>symmetries.R</code>, loaded from
 <code>results/symmetries.rds</code>:</p>
-<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># at rest without TNFα, which an event adds at time 0 in the stimulated condition; the moieties</span></span>
 <span><span class="co"># of NFκB and IKK by their totals, the parameters of Pimpl()</span></span>
 <span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>dose_TNF <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, row.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"control"</span>, <span class="st">"TNF"</span><span class="op">)</span><span class="op">)</span></span>
@@ -169,7 +169,7 @@ the bleaching terms.</p>
 <span><span class="va">symmetries</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryDetection.html">symmetryDetection</a></span><span class="op">(</span><span class="va">reactions</span>, <span class="va">unbleached</span>, events <span class="op">=</span> <span class="va">events</span>, forcings <span class="op">=</span> <span class="st">"TNF"</span>,</span>
 <span>                                conditions <span class="op">=</span> <span class="va">doses</span>, equilibrate <span class="op">=</span> <span class="cn">TRUE</span>, reduceCQ <span class="op">=</span> <span class="cn">TRUE</span>, reconstruct <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>                                cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">symmetries</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/symmetries.rds"</span><span class="op">)</span></span>
 <span><span class="va">symmetries</span></span>
 <span><span class="co">#&gt; Result:  rank 57 / 65  |  8 non-identifiable directions</span></span>
@@ -233,8 +233,8 @@ the bleaching terms.</p>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; Discrete symmetries: 0</span></span></code></pre></div>
 <p>The rank is 57 of 65 coordinates, proven; the kernel is spanned by
-eight scalings, each proven over the rationals. The generators are one
-basis; up to sums there are four kinds.</p>
+eight scalings, each proven over the rationals (<a href="methods-symmetries.html#def-level">level</a>). The generators are
+one basis; up to sums there are four kinds.</p>
 <ul>
 <li>
 <strong>Unobserved intermediates</strong>, level against driven
@@ -257,12 +257,12 @@ times <code>eta_split_pNfkpIkb</code>, <span class="math inline">\(X_8\)</span>.
 </h2>
 <p><code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> returns in <code>$trafo</code> a
 transformation without the directions, for scalings by fixing one
-coordinate per direction (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
+coordinate per direction, a <a href="methods-symmetries.html#def-section">section</a> (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
 and reduction</a>). Loaded from <code>results/reduction.rds</code>:</p>
-<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># a section of every orbit of the scalings</span></span>
 <span><span class="va">reduction</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryReduction.html">symmetryReduction</a></span><span class="op">(</span><span class="va">symmetries</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">reduction</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/reduction.rds"</span><span class="op">)</span></span>
 <span><span class="va">reduction</span></span>
 <span><span class="co">#&gt; Reduced 8 of 8 directions.</span></span>
@@ -290,15 +290,15 @@ and reduction</a>). Loaded from <code>results/reduction.rds</code>:</p>
 <h2 id="gauge-fixing">Gauge fixing<a class="anchor" aria-label="anchor" href="#gauge-fixing"></a>
 </h2>
 <p><code>model.R</code> fixes one moved parameter per scaling at 1, 0 on
-log scale, the gauge:</p>
-<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+log scale, the <a href="methods-symmetries.html#def-gauge">gauge</a>:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># one coordinate of each scaling (symmetries.R) fixed at 1, at 0 on the log scale</span></span>
 <span><span class="va">gauge</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>Vnuc <span class="op">=</span> <span class="fl">0</span>, totalNfk <span class="op">=</span> <span class="fl">0</span>, totalIkk <span class="op">=</span> <span class="fl">0</span>, uptake <span class="op">=</span> <span class="fl">0</span>, prod_Ikb <span class="op">=</span> <span class="fl">0</span>, build_RnaA20 <span class="op">=</span> <span class="fl">0</span>,</span>
 <span>           split_NfkIkb <span class="op">=</span> <span class="fl">0</span>, s_A20GFP <span class="op">=</span> <span class="fl">0</span><span class="op">)</span></span></code></pre></div>
-<p>The eight coordinates remove all eight scalings if their weight
-matrix is regular (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
+<p>The eight coordinates remove all eight scalings if their <a href="methods-symmetries.html#def-weights">weight</a> matrix is regular
+(invertible) (<a href="methods-symmetries.html#gauge-and-reduction">Methods &gt; Gauge
 and reduction</a>):</p>
-<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">W</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/t.html" class="external-link">t</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="va">symmetries</span><span class="op">$</span><span class="va">symmetries</span>, <span class="kw">function</span><span class="op">(</span><span class="va">X</span><span class="op">)</span></span>
 <span>  <span class="fu"><a href="https://rdrr.io/r/base/lapply.html" class="external-link">vapply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gauge</span><span class="op">)</span>, <span class="kw">function</span><span class="op">(</span><span class="va">cn</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">X</span><span class="op">$</span><span class="va">weights</span><span class="op">[[</span><span class="va">cn</span><span class="op">]</span><span class="op">]</span> <span class="op"><a href="https://rdrr.io/r/base/Control.html" class="external-link">%||%</a></span> <span class="fl">0</span><span class="op">)</span>, <span class="fl">0</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">numeric</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">gauge</span><span class="op">)</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/dimnames.html" class="external-link">dimnames</a></span><span class="op">(</span><span class="va">W</span><span class="op">)</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html" class="external-link">paste0</a></span><span class="op">(</span><span class="st">"X"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">W</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">gauge</span><span class="op">)</span><span class="op">)</span></span>
@@ -323,14 +323,14 @@ which the data determine.</p>
 <div class="section level2">
 <h2 id="discrete-symmetries">Discrete symmetries<a class="anchor" aria-label="anchor" href="#discrete-symmetries"></a>
 </h2>
-<p>A discrete symmetry maps a parameter value to isolated other values
-with the same output. <code>symmetryDetection(mode = "global")</code>
-counts these values and reconstructs rational maps between them
-(requires msolve). <code>discrete.R</code> applies it to the reduced
-model of <a href="guide-profiles.html#reduced-model">Profile
-likelihood</a>, passed as <code>trafo</code>; loaded from
+<p>A <a href="https://dmodverse.github.io/symident/method/global.html" class="external-link">discrete
+symmetry</a> maps a parameter value to isolated other values with the
+same output. <code>symmetryDetection(mode = "global")</code> counts
+these values and reconstructs rational maps between them (requires
+msolve). <code>discrete.R</code> applies it to the reduced model of <a href="guide-profiles.html#reduced-model">Profile likelihood</a>, passed
+as <code>trafo</code>; loaded from
 <code>results/discrete.rds</code>:</p>
-<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the settings of symmetries.R; the resting state and the fixed values of reduced.R enter as</span></span>
 <span><span class="co"># initial values and parameters of the detection</span></span>
 <span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>dose_TNF <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>, row.names <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"control"</span>, <span class="st">"TNF"</span><span class="op">)</span><span class="op">)</span></span>
@@ -341,7 +341,7 @@ likelihood</a>, passed as <code>trafo</code>; loaded from
 <span>                              trafo <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character</a></span><span class="op">(</span><span class="va">known</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">known</span><span class="op">)</span><span class="op">)</span>, events <span class="op">=</span> <span class="va">events</span>,</span>
 <span>                              forcings <span class="op">=</span> <span class="st">"TNF"</span>, conditions <span class="op">=</span> <span class="va">doses</span>, mode <span class="op">=</span> <span class="st">"global"</span>,</span>
 <span>                              cores <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">getOption</a></span><span class="op">(</span><span class="st">"dMod2.cores"</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">saved</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/discrete.rds"</span><span class="op">)</span></span>
 <span><span class="va">discrete</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">discrete</span></span>
 <span><span class="va">discrete</span><span class="op">$</span><span class="va">info</span><span class="op">$</span><span class="va">discrete</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"count"</span>, <span class="st">"countFinal"</span>, <span class="st">"fundamentalDomain"</span><span class="op">)</span><span class="op">]</span></span>
@@ -372,21 +372,21 @@ likelihood</a>, passed as <code>trafo</code>; loaded from
 <span><span class="co">#&gt; $stateMaps[[2]]</span></span>
 <span><span class="co">#&gt; $stateMaps[[2]]$RnaA20</span></span>
 <span><span class="co">#&gt; [1] "-A20*degrad_A20 + A20*degrad_RnaA20 + RnaA20"</span></span></code></pre></div>
-<p>There are two values with the output of a generic one; the map
-exchanges the degradation rates of the A20 transcript and of A20,
-<code>exact</code> means proven by the map of the states. The map moves
-no coordinate of the scalings and holds in the original coordinates as
-well.</p>
+<p>There are two values with the output of a <a href="methods-symmetries.html#def-generic">generic</a> one, the <a href="https://dmodverse.github.io/symident/method/global.html" class="external-link">fiber</a>;
+the map exchanges the degradation rates of the A20 transcript and of
+A20, <code>exact</code> means proven by the map of the states. The map
+moves no coordinate of the scalings and holds in the original
+coordinates as well.</p>
 <p>The publication does not name the swap and reports both rates with
 the same 95 % interval, <span class="math inline">\(-5.97\)</span> to
 <span class="math inline">\(-3.32\)</span> on log scale <span class="citation"><a href="#ref-oppelt2018model">[1]</a>, Table
 S7</span>, the union of the two images.
-<code>symmetryReduction(branch = )</code> gives a chart of the
-fundamental domain <code>degrad_A20 &lt; degrad_RnaA20</code>:</p>
-<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
+<code>symmetryReduction(branch = )</code> gives a <a href="methods-symmetries.html#def-chart">chart</a> of the <a href="https://dmodverse.github.io/symident/method/global.html" class="external-link">fundamental
+domain</a> <code>degrad_A20 &lt; degrad_RnaA20</code>:</p>
+<div class="sourceCode" id="cb9"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the side degrad_A20 &lt; degrad_RnaA20 of the fixed set, in a chart of positive coordinates</span></span>
 <span><span class="va">fundamental</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/symmetryReduction.html">symmetryReduction</a></span><span class="op">(</span><span class="va">discrete</span>, branch <span class="op">=</span> <span class="st">"degrad_A20 &lt; degrad_RnaA20"</span><span class="op">)</span></span></code></pre></div>
-<div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
+<div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fundamental</span> <span class="op">&lt;-</span> <span class="va">saved</span><span class="op">$</span><span class="va">fundamental</span></span>
 <span><span class="va">fundamental</span><span class="op">$</span><span class="va">trafo</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"degrad_A20"</span>, <span class="st">"degrad_RnaA20"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt; Idx         Inner &lt;- Outer</span></span>

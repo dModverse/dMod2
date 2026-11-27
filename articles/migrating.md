@@ -22,7 +22,6 @@ with `*` for concatenation, `+` for conditions or objective terms, and
 [`define()`](https://dmodverse.github.io/dMod2/reference/define.md),
 [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md),
 [`branch()`](https://dmodverse.github.io/dMod2/reference/define.md),
-[`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md),
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md),
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 [`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
@@ -34,10 +33,14 @@ so [`library(cOde)`](https://rdrr.io/r/base/library.html) is not needed.
 
 ## Substitution syntax
 
-[`define()`](https://dmodverse.github.io/dMod2/reference/define.md),
-[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md) and
-[`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md) take
-`"lhs <- rhs"`; `"lhs ~ rhs"` is an error naming the new form.
+[`define()`](https://dmodverse.github.io/dMod2/reference/define.md) and
+[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md) take
+`"lhs <- rhs"`; `"lhs ~ rhs"` is an error naming the new form. `repar()`
+is internal:
+[`define()`](https://dmodverse.github.io/dMod2/reference/define.md) sets
+an entry,
+[`insert()`](https://dmodverse.github.io/dMod2/reference/define.md)
+replaces a symbol wherever it occurs.
 
 | dMod | dMod2 |
 |----|----|

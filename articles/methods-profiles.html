@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -123,37 +125,63 @@ predictions of nonlinear models without a quadratic approximation <span class="c
 <div class="section level2">
 <h2 id="profile-and-threshold">Profile and threshold<a class="anchor" aria-label="anchor" href="#profile-and-threshold"></a>
 </h2>
-<p>The objective function <span class="math inline">\(\mathcal{J}(\theta) = -2 \log L(\theta) - 2 \log
-\pi(\theta)\)</span> is the data term plus the prior <span class="math inline">\(\pi\)</span> (<a href="methods-objective.html">Likelihood and prior</a>). Along the
-profile of <span class="math inline">\(\theta_i\)</span> the other
-parameters minimize <span class="math inline">\(\mathcal{J}\)</span>,</p>
+<p>The <span id="def-objective">objective</span> function <span class="math inline">\(\ell(\theta) = -2 \log L(\theta) - 2 \log
+\pi(\theta)\)</span> is the <span id="def-data-term">data term</span>
+<span class="math inline">\(-2 \log L\)</span> plus the <span id="def-prior-term">prior term</span> <span class="math inline">\(-2
+\log \pi\)</span> of the prior <span class="math inline">\(\pi\)</span>
+(<a href="methods-objective.html">Likelihood and prior</a>).
+<code><a href="../reference/normL2.html">normL2()</a></code> returns the data term as attribute
+<code>data</code>, <code><a href="../reference/constraintL2.html">constraintL2()</a></code> the prior term as
+<code>prior</code>, and <code><a href="../reference/profile.html">profile()</a></code> keeps both as columns.
+The <span id="def-profile">profile</span> of <span class="math inline">\(\theta_i\)</span> is <span class="math inline">\(\ell\)</span> minimized over all other parameters
+as a function of <span class="math inline">\(\theta_i = c\)</span>. The
+minimizing values of the other parameters form the <span id="def-parameter-path">parameter path</span> <span class="math inline">\(\hat\theta(c)\)</span>,</p>
 <p><span class="math display">\[\hat\theta(c) =
-\operatorname*{arg\,min}_{\theta \,:\, \theta_i = c} \mathcal{J}(\theta)
-, \tag{1}\]</span></p>
-<p>and the profile likelihood is the data term along this path,</p>
-<p><span class="math display">\[\mathrm{PL}_i(c) = -2 \log
-L\bigl(\hat\theta(c)\bigr) . \tag{2}\]</span></p>
+\operatorname*{arg\,min}_{\theta \,:\, \theta_i = c}\, \ell(\theta) ,
+\tag{1}\]</span></p>
+<p>and the <span id="def-profile-likelihood">profile likelihood</span>
+is the objective along this path,</p>
+<p><span class="math display">\[\mathrm{PL}_i(c) =
+\ell\bigl(\hat\theta(c)\bigr) . \tag{2}\]</span></p>
+<p>A parameter that moves with <span class="math inline">\(\theta_i\)</span> along the path compensates the
+change of <span class="math inline">\(\theta_i\)</span> in the
+predictions (<code><a href="../reference/plotPaths.html">plotPaths()</a></code>).</p>
 <p>Without a prior, (2) is the minimum of <span class="math inline">\(-2
 \log L\)</span> with <span class="math inline">\(\theta_i = c\)</span>.
 By the likelihood ratio test, the rise <span class="math inline">\(\mathrm{PL}_i(c) -
-\mathrm{PL}_i(\hat\theta_i)\)</span> from the optimum <span class="math inline">\(\hat\theta_i\)</span> below the <span class="math inline">\(1 - \alpha\)</span> quantile of <span class="math inline">\(\chi^2_1\)</span> (3.84 for 95 %) defines an
-asymptotic confidence interval, invariant under reparameterization of
-<span class="math inline">\(\theta_i\)</span>. Without a prior the
-optimum is the minimum of (2); with a prior (2) may fall below the value
-at the optimum, and the rise is still measured from there.
-<code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> computes the threshold,
-<code>method = "F"</code> the finite-sample one for estimated standard
-deviations. A prior wide against the data curvature keeps (1) finite
-where the data do not determine <span class="math inline">\(\theta_i\)</span> and changes (2) little where
-they do.</p>
-<p><code><a href="../reference/profile.html">profile()</a></code> stops on <span class="math inline">\(\mathcal{J}\)</span> by default;
+\mathrm{PL}_i(\hat\theta_i)\)</span> from the optimum <span class="math inline">\(\hat\theta_i\)</span> below the <span id="def-threshold">threshold</span>, the <span class="math inline">\(1 -
+\alpha\)</span> quantile of <span class="math inline">\(\chi^2_1\)</span> (3.84 for 95 %), defines an
+asymptotic <span id="def-confidence-interval">confidence
+interval</span>, the set of values <span class="math inline">\(c\)</span> compatible with the data, invariant
+under reparameterization of <span class="math inline">\(\theta_i\)</span>. The optimum is the minimum of
+(2). <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> computes the threshold,
+<code>method = "F"</code> the <span id="def-finite-sample-threshold">finite-sample threshold</span> <span class="math inline">\(n \log(1 + F_{1,\nu,1-\alpha}/\nu)\)</span> with
+<span class="math inline">\(n\)</span> data points and <span class="math inline">\(\nu = n - p\)</span> for <span class="math inline">\(p\)</span> estimated mean parameters, exact for
+Gaussian errors with one estimated standard deviation. A prior wide
+against the data curvature keeps (1) finite where the data do not
+determine <span class="math inline">\(\theta_i\)</span> and changes (2)
+little where they do.</p>
+<p><code><a href="../reference/profile.html">profile()</a></code> stops on (2) by default;
 <code>stepControl = list(stop = "data")</code> ends a profile at the
-threshold of (2), and <code>confint(val.column = "data")</code> reads
-the interval off (2).</p>
+threshold of the data term <span class="math inline">\(-2 \log
+L\bigl(\hat\theta(c)\bigr)\)</span> along the path, and
+<code>confint(val.column = "data")</code> reads the interval off that
+term.</p>
 </div>
 <div class="section level2">
 <h2 id="shapes">Shapes<a class="anchor" aria-label="anchor" href="#shapes"></a>
 </h2>
+<p>A parameter is <span id="def-identifiable">identifiable</span> when
+(2) exceeds the threshold on both sides, otherwise <span id="def-non-identifiable">non-identifiable</span>: <span id="def-practical-non-identifiability">practically
+non-identifiable</span> when the profile stays below the threshold on
+one side or both for the given data, <span id="def-structural-non-identifiability">structurally
+non-identifiable</span> when different parameter values give the same
+prediction of every observable and the profile is flat (<a href="methods-symmetries.html#structural-identifiability">Structural
+identifiability</a>). A <span id="def-symmetry">symmetry</span> is a
+transformation of the parameters that leaves every observable unchanged;
+a <span id="def-gauge">gauge</span> fixes coordinates so that each orbit
+of the symmetry meets the fixed values in one point (<a href="methods-symmetries.html#gauge-and-reduction">Gauge and
+reduction</a>).</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -182,7 +210,8 @@ the interval off (2).</p>
 switched off, towards <span class="math inline">\(+\infty\)</span> that
 the process is in equilibrium on the time scale of the data, replaceable
 by a large fixed value or the quasi-steady state. Both limits give a
-smaller model with the same fit <span class="citation"><a href="#ref-maiwald2016driving">[3]</a></span>. Each profile tests one
+<span id="def-reduced-model">reduced model</span>, the model with the
+parameter at the limit, with the same fit <span class="citation"><a href="#ref-maiwald2016driving">[3]</a></span>. Each profile tests one
 limit with all other parameters free; several limits together need a
 likelihood ratio test of the reduced model.</p>
 </div>
@@ -195,22 +224,28 @@ last point.</p>
 <li><p><code>method = "optimize"</code> steps <span class="math inline">\(\theta_i\)</span> and refits the others with
 <code><a href="../reference/trust.html">trust()</a></code>, one converged fit per point.</p></li>
 <li>
-<p><code>method = "integrate"</code> follows the constrained optimum
-of the Lagrangian <span class="math inline">\(\mathcal{J}(\theta) +
-\lambda\,(\theta_i - c)\)</span>, where <span class="math inline">\(\nabla \mathcal{J} + \lambda e_i = 0\)</span> and
-<span class="math inline">\(\theta_i = c\)</span>. Differentiating in
-<span class="math inline">\(c\)</span> gives the path equation</p>
+<p><code>method = "integrate"</code>, the <span id="def-integration-based-profile">integration-based profile</span>,
+follows the <span id="def-constrained-optimum">constrained
+optimum</span> <span class="math inline">\(\hat\theta(c)\)</span> of
+(1), the stationary point of the Lagrangian <span class="math inline">\(\ell(\theta) + \lambda\,(\theta_i - c)\)</span>,
+where <span class="math inline">\(\nabla \ell + \lambda e_i = 0\)</span>
+and <span class="math inline">\(\theta_i = c\)</span>. Differentiating
+in <span class="math inline">\(c\)</span> gives the <span id="def-path-equation">path equation</span>, the linear system for <span class="math inline">\(\mathrm{d}\theta/\mathrm{d}c\)</span> that the
+profile follows in Euler steps,</p>
 <p><span class="math display">\[\begin{pmatrix} H &amp; e_i \\ e_i^\top
 &amp; 0 \end{pmatrix}
   \begin{pmatrix} \mathrm{d}\theta/\mathrm{d}c \\
 \mathrm{d}\lambda/\mathrm{d}c \end{pmatrix}
   = \begin{pmatrix} 0 \\ 1 \end{pmatrix} \tag{3}\]</span></p>
-<p>with the Hessian <span class="math inline">\(H\)</span> of <span class="math inline">\(\mathcal{J}\)</span>: one evaluation and one
-linear solve per step. The step solves (3) with <span class="math inline">\(-\gamma \nabla \mathcal{J}\)</span> in place of
-the upper zero, which pulls it back to the constrained optimum (<span class="math inline">\(\gamma = 1\)</span> by default, adapted to the
-size of the pull); with a Gauss-Newton <span class="math inline">\(H\)</span> the path still drifts, and
-<code>algoControl = list(reoptimize = TRUE)</code> corrects each step by
-a short fit.</p>
+<p>with the Hessian <span class="math inline">\(H\)</span> of <span class="math inline">\(\ell\)</span>: one evaluation and one linear solve
+per step. The step solves (3) with <span class="math inline">\(-\gamma
+\nabla \ell\)</span> in place of the upper zero, which pulls it back to
+the constrained optimum (<span class="math inline">\(\gamma = 1\)</span>
+by default, adapted to the size of the pull). With a Gauss-Newton <span class="math inline">\(H\)</span> the path still drifts, so each step is
+then corrected by a short fit of the other parameters with
+<code><a href="../reference/trust.html">trust()</a></code>, at most <code>optControl$iterlim = 10</code>
+iterations; <code>algoControl = list(reoptimize = FALSE)</code> leaves
+out the fit.</p>
 </li>
 </ul>
 <p>Step control and stops:</p>
@@ -242,31 +277,38 @@ threshold; <code>limits</code> relative to the optimum reached;
 </tr>
 </tbody>
 </table>
-<p>A point of <span class="math inline">\(\mathcal{J}\)</span> below the
-start value is a better optimum: fit and profiles are then to be
-repeated from it. Where the curvature jumps, the step shrinks to
-<code>min</code> and stays on the profile.</p>
+<p>A point of <span class="math inline">\(\ell\)</span> below the start
+value is a better optimum: fit and profiles are then to be repeated from
+it. Where the curvature jumps, the step shrinks to <code>min</code> and
+stays on the profile.</p>
 </div>
 <div class="section level2">
 <h2 id="prediction-profiles">Prediction profiles<a class="anchor" aria-label="anchor" href="#prediction-profiles"></a>
 </h2>
 <p>A prediction <span class="math inline">\(z = g(t, \theta)\)</span>
-has the profile likelihood</p>
-<p><span class="math display">\[\mathrm{PPL}(z) = -2 \log
-L\bigl(\hat\theta(z)\bigr) , \quad
-\hat\theta(z) = \operatorname*{arg\,min}_{\theta \,:\, g(t, \theta) = z}
-\mathcal{J}(\theta) , \tag{4}\]</span></p>
-<p>whose threshold gives a confidence interval of the prediction <span class="citation"><a href="#ref-kreutz2012likelihood">[2]</a></span>;
-without a prior it is the image of the parameter region at the <span class="math inline">\(\chi^2_1\)</span> threshold, not of the joint
-region.</p>
-<p>A validation data point makes <span class="math inline">\(z\)</span>
-a parameter <span class="math inline">\(v\)</span>, tied to the
-prediction by</p>
+has the <span id="def-prediction-profile-likelihood">prediction profile
+likelihood</span>, the objective minimized under the constraint <span class="math inline">\(g(t, \theta) = z\)</span>,</p>
+<p><span class="math display">\[\begin{aligned}
+\mathrm{PPL}(z) &amp;= \ell\bigl(\hat\theta(z)\bigr) , \\
+\hat\theta(z) &amp;= \operatorname*{arg\,min}_{\theta \,:\, g(t, \theta)
+= z}\, \ell(\theta) ,
+\end{aligned} \tag{4}\]</span></p>
+<p>whose threshold gives a confidence interval of the prediction <span class="citation"><a href="#ref-kreutz2012likelihood">[2]</a></span>,
+over several <span class="math inline">\(t\)</span> a pointwise
+confidence band. Without a prior the interval is the image of the <span id="def-parameter-region">parameter region</span> at the <span class="math inline">\(\chi^2_1\)</span> threshold, the set of <span class="math inline">\(\theta\)</span> with <span class="math inline">\(-2 \log L\)</span> less than 3.84 above the
+minimum, not of the <span id="def-joint-region">joint region</span>,
+which uses the <span class="math inline">\(\chi^2_p\)</span> quantile of
+all <span class="math inline">\(p\)</span> parameters at once and is
+larger.</p>
+<p>A <span id="def-validation-data-point">validation data point</span>,
+a hypothetical measurement <span class="math inline">\(v\)</span> of the
+prediction with standard deviation <span class="math inline">\(\sigma_v\)</span>, makes <span class="math inline">\(z\)</span> a parameter <span class="math inline">\(v\)</span>, tied to the prediction by</p>
 <p><span class="math display">\[\left( \frac{g(t, \theta) - v}{\sigma_v}
 \right)^2 . \tag{5}\]</span></p>
-<p>The profile of <span class="math inline">\(v\)</span> is (4) for
-<span class="math inline">\(\sigma_v \to 0\)</span> and lies below (4)
-otherwise, so the interval of <span class="math inline">\(v\)</span> is
+<p>The <span id="def-validation-profile">validation profile</span>, the
+profile of <span class="math inline">\(v\)</span>, is (4) for <span class="math inline">\(\sigma_v \to 0\)</span> and lies below (4)
+otherwise. The interval of <span class="math inline">\(v\)</span>, the
+range of a new measurement compatible with model and data, is therefore
 wider: for a quadratic (4) of half-width <span class="math inline">\(w\)</span> the half-width becomes <span class="math inline">\((w^2 + \Delta \sigma_v^2)^{1/2}\)</span>, <span class="math inline">\(\Delta\)</span> the threshold.
 <code><a href="../reference/datapointL2.html">datapointL2()</a></code> builds (5) as an <code>objfn</code> from the
 evaluation of <code><a href="../reference/normL2.html">normL2()</a></code>, which therefore predicts at <span class="math inline">\(t\)</span> (<code>times = t</code>). With

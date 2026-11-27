@@ -13,7 +13,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -53,6 +53,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -85,6 +87,25 @@
       <small>Source: <a href="https://github.com/dModverse/dMod2/blob/master/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.18.0" id="dmod2-0180">dMod2 0.18.0<a class="anchor" aria-label="anchor" href="#dmod2-0180"></a></h2>
+<ul><li>
+<code><a href="../reference/symmetryDetection.html">symmetryDetection()</a></code> and <code><a href="../reference/symmetryReduction.html">symmetryReduction()</a></code> need symident &gt;= 0.18.2: under <code>equilibrate</code> with continued conditions, the Lie order certificate ranks at resting points drawn forward instead of at the start of the continuation, and reconstruction and checks take curve samples where a direct solve of the resting balances needs msolve past short work limits.</li>
+<li>
+<code><a href="../reference/em.html">em()</a></code> and <code><a href="../reference/msem.html">msem()</a></code> with spike-and-slab random effects of a given <code>mean</code> or <code>spike</code> fit in phases, each from the estimates and inner modes of the phase before. <code>control$sparseFit$phases</code> lists the approximations of the sum over subsets in the order they run, <code>"meanfield"</code>, <code>"ec"</code> and <code>"exact"</code> (default all three), each with <code>maxECM</code> and <code>epsECM</code>. <code>"meanfield"</code> factorizes the inclusion per random effect from the Laplace integrals of a reference subset and of the subsets that differ from it in one random effect. <code>"exact"</code> beyond <code>termBudget</code> is skipped after <code>"ec"</code> and an error without it. <code>control$sparseFit$burnin</code> (<code>FALSE</code> by default, <code>TRUE</code> or a list of <code>start</code> and <code>iterlim</code>) first fits the fixed effects in one trust region with a start subset of the spike-and-slab random effects in the slab, <code>"random"</code> (default), <code>"spike"</code>, <code>"slab"</code> or given names; the others stay at the spike. The fit reports <code>phases</code>, a row per phase, and <code>burnin</code>, the start subset; an error names the phase. <code><a href="../reference/msem.html">msem()</a></code> draws the start subset per attempt; <code>multistart</code> has the columns <code>phase</code> and <code>subset</code>.</li>
+<li>Hyperpriors of spike-and-slab random effects: <code>spikeSlab(prob = betaPrior(a, b))</code> integrates <code>prob</code> out, with the beta-binomial weight of the number of deviations in the slab over the groups of a block, in the exact sum, mean field, EC, SAEM and the quadrature; <code>tau = halfCauchyPrior()</code>, <code><a href="../reference/betaPrior.html">halfNormalPrior()</a></code> or <code><a href="../reference/betaPrior.html">invGammaPrior()</a></code> estimates <code>tau</code> as the posterior mode, and with <code>integrate = TRUE</code> the phase <code>"exact"</code> integrates over <code>log tau</code>. <code>fit$slab</code> reports the posterior of <code>prob</code> and the priors, <code>fit$hyperprior</code> the term of the scale prior in <code>value</code>. SAEM and the quadrature take <code><a href="../reference/betaPrior.html">betaPrior()</a></code> for deviations of one group. <code><a href="../reference/em.html">em()</a></code> notes a spike-and-slab block of one group with <code>prob</code> or <code>tau</code> estimated.</li>
+<li>
+<code><a href="../reference/distributedComputing.html">distributedComputing()</a></code> saves the job workspace uncompressed where <code>zstd</code> is found but fails; before, the tasks started without a workspace and failed. The warning about failed tasks shows the last lines of the output of the first failed task.</li>
+<li>The PSOCK clusters of <code><a href="../reference/mstrust.html">mstrust()</a></code>, <code><a href="../reference/profile.html">profile()</a></code>, <code><a href="../reference/msem.html">msem()</a></code> with a condition axis and of the compilation on Windows open on a port drawn from the process id and the clock, not from the random stream, and skip a port in use. Jobs with the same seed on one node no longer fail with “port … cannot be opened”, and <code>.Random.seed</code> stays as it is.</li>
+<li>The expectation consistent (EC) approximation takes the expected Hessian of the data term, so that it converges with an error model of the prediction. It expands the data term at the subset of inclusion above 1/2 of the step before.</li>
+<li>
+<code><a href="../reference/profile.html">profile()</a></code> with the default <code>method = "integrate"</code> corrects every step by a short fit of the other parameters with <code><a href="../reference/trust.html">trust()</a></code> (<code>algoControl$reoptimize = TRUE</code>), so that the path does not drift from the constrained optimum; <code>reoptimize = FALSE</code> restores the integration alone.</li>
+<li>
+<code>repar()</code> is no longer exported: transformations are built with <code><a href="../reference/define.html">define()</a></code>, which sets an entry, <code><a href="../reference/define.html">insert()</a></code>, which replaces a symbol wherever it occurs, and <code><a href="../reference/define.html">branch()</a></code>. Both stop with the expected order where the substitution is passed in place of the transformation.</li>
+<li>Renamed: <code>control$sparseFit$budget</code> to <code>termBudget</code>; <code>maxEcm</code>, <code>epsEcm</code> and <code>maxEcmPerStage</code> of <code>control$quadrature</code> to <code>maxECM</code>, <code>epsECM</code> and <code>maxECMPerStage</code>.</li>
+<li>
+<code><a href="../reference/steadyStates.html">steadyStates()</a></code> (AlyssaPetit 1.5) takes <code>zeroLoops</code>: <code>TRUE</code> sets to zero the largest set of states that are only produced through one another, whose fluxes all vanish where the set is zero and on which no conserved quantity lies, as a feedback loop that is off. A state of a conserved quantity whose balance is left without a positive unknown is solved in a further round, with another state of the quantity kept free. An unknown without an equation is not tried again within a run of the greedy search.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.17.1" id="dmod2-0171">dMod2 0.17.1<a class="anchor" aria-label="anchor" href="#dmod2-0171"></a></h2>
 <ul><li>Requires cppDE &gt;= 0.13.16, whose derivatives of <code>exp10()</code> are finite at a spike of <code>-Inf</code>.</li>
@@ -387,7 +408,7 @@
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.14.0" id="dmod2-0140">dMod2 0.14.0<a class="anchor" aria-label="anchor" href="#dmod2-0140"></a></h2>
-<ul><li><p>Breaking: <code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code>, <code><a href="../reference/repar.html">repar()</a></code> and <code>branch(apply = )</code> write a substitution as <code>"lhs &lt;- rhs"</code>, e.g. <code>insert(trafo, "x &lt;- exp(x)", x = pars)</code>. A <code>"lhs ~ rhs"</code> string or a formula is an error that names the new form; <code>~</code> is left to model formulas.</p></li>
+<ul><li><p>Breaking: <code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code>, <code>repar()</code> and <code>branch(apply = )</code> write a substitution as <code>"lhs &lt;- rhs"</code>, e.g. <code>insert(trafo, "x &lt;- exp(x)", x = pars)</code>. A <code>"lhs ~ rhs"</code> string or a formula is an error that names the new form; <code>~</code> is left to model formulas.</p></li>
 <li><p><code><a href="../reference/evalConditionResidual.html">evalConditionResidual()</a></code> with <code>df</code> gives the Student-t likelihood of <code><a href="../reference/normT.html">normT()</a></code>.</p></li>
 <li><p>Random effects as formulas: <code><a href="../reference/define.html">insert()</a></code> on a branched transformation takes effect formulas such as <code>cl ~ wt + (1 + dose | p | ID)</code>. The symbol is replaced by the linear predictor on the scale the transformation gives it, so after <code>insert(trafo, "x &lt;- exp(x)", x = "cl")</code> the random effects are normal on the log scale. Fixed effects are coded as by <code><a href="https://rdrr.io/r/stats/model.matrix.html" class="external-link">model.matrix()</a></code> over the columns of the branch table, random terms follow lme4 with the IDs of brms for correlation across formulas, <code>gr(ID, dist = )</code> sets the distribution. <code>x ~ 1 + (1 | ID), x = pars</code> and <code>ka + v ~ ...</code> apply one right-hand side to many symbols. <code><a href="../reference/randomEffects.html">randomEffects()</a></code> returns the structure from the transformation or from the <code><a href="../reference/P.html">P()</a></code> built from it.</p></li>
 <li><p>New <code><a href="../reference/normal.html">normal()</a></code>, <code>laplace(lambda)</code>, <code>spikeSlab(prob, tau)</code> and <code>dirichletProcess(concentration, tau)</code>, the distributions of a random term. A spike-and-slab deviation is exactly 0 or, with probability <code>prob</code>, drawn from N(0, tau^2). Under <code><a href="../reference/normal.html">dirichletProcess()</a></code> the groups share the population value or a common deviation in clusters, with the Ewens prior over the partitions and N(0, tau^2) as base measure. Every hyperparameter left <code>NULL</code> is estimated by marginal maximum likelihood with the other parameters.</p></li>
@@ -507,7 +528,7 @@
 <li>
 <code><a href="../reference/trust.html">trust()</a></code> and <code><a href="../reference/trust.html">trustL1()</a></code> append the objective’s error message to <code>parinit not feasible: objfun failed</code>.</li>
 <li>
-<code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code> and <code><a href="../reference/repar.html">repar()</a></code> on <code>trafo = NULL</code> map each left-hand side to the right-hand side, not to itself.</li>
+<code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code> and <code>repar()</code> on <code>trafo = NULL</code> map each left-hand side to the right-hand side, not to itself.</li>
 </ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.12.6" id="dmod2-0126">dMod2 0.12.6<a class="anchor" aria-label="anchor" href="#dmod2-0126"></a></h2>
@@ -750,7 +771,7 @@
 <li>
 <code><a href="../reference/importSbml.html">importSbml()</a></code> substitutes the initial assignment of a constant parameter wherever the parameter appears, with species at their initial values, so a condition that sets the source parameter reaches the rates.</li>
 <li>
-<code><a href="../reference/repar.html">repar()</a></code>, <code><a href="../reference/define.html">insert()</a></code> and <code><a href="../reference/define.html">define()</a></code> keep a trailing underscore in an identifier.</li>
+<code>repar()</code>, <code><a href="../reference/define.html">insert()</a></code> and <code><a href="../reference/define.html">define()</a></code> keep a trailing underscore in an identifier.</li>
 <li>
 <code><a href="../reference/Y.html">Y()</a></code> returns a NaN observable instead of stopping, and <code><a href="../reference/normL2.html">normL2()</a></code> stops only on a NaN at a data point.</li>
 <li>
@@ -1003,7 +1024,7 @@
 <ul><li>
 <code><a href="../reference/Pexpl.html">Pexpl()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code> and <code>Pequil()</code> build explicit, implicit and equilibrated parameter transformations.</li>
 <li>
-<code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code>, <code><a href="../reference/define.html">branch()</a></code> and <code><a href="../reference/repar.html">repar()</a></code> assemble transformations.</li>
+<code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code>, <code><a href="../reference/define.html">branch()</a></code> and <code>repar()</code> assemble transformations.</li>
 <li>Warm starts are kept per condition, so a condition restarts from the previous root of that condition.</li>
 </ul></div>
     <div class="section level2">

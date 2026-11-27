@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -131,18 +133,19 @@ dMod2.</p>
 objective terms, and <code>normL2(data, g * x * p)</code>.
 <code><a href="../reference/eqnlist.html">eqnlist()</a></code>, <code><a href="../reference/addReaction.html">addReaction()</a></code>,
 <code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code>, <code><a href="../reference/define.html">branch()</a></code>,
-<code><a href="../reference/repar.html">repar()</a></code>, <code><a href="../reference/trust.html">trust()</a></code>, <code><a href="../reference/mstrust.html">mstrust()</a></code>,
-<code><a href="../reference/profile.html">profile()</a></code> and <code>plot*()</code> keep names and main
-arguments. dMod2 has <code><a href="../reference/getSymbols.html">getSymbols()</a></code> and
-<code><a href="../reference/replaceSymbols.html">replaceSymbols()</a></code>, so <code><a href="https://rdrr.io/r/base/library.html" class="external-link">library(cOde)</a></code> is not
-needed.</p>
+<code><a href="../reference/trust.html">trust()</a></code>, <code><a href="../reference/mstrust.html">mstrust()</a></code>, <code><a href="../reference/profile.html">profile()</a></code> and
+<code>plot*()</code> keep names and main arguments. dMod2 has
+<code><a href="../reference/getSymbols.html">getSymbols()</a></code> and <code><a href="../reference/replaceSymbols.html">replaceSymbols()</a></code>, so
+<code><a href="https://rdrr.io/r/base/library.html" class="external-link">library(cOde)</a></code> is not needed.</p>
 </div>
 <div class="section level2">
 <h2 id="substitution-syntax">Substitution syntax<a class="anchor" aria-label="anchor" href="#substitution-syntax"></a>
 </h2>
-<p><code><a href="../reference/define.html">define()</a></code>, <code><a href="../reference/define.html">insert()</a></code> and <code><a href="../reference/repar.html">repar()</a></code>
-take <code>"lhs &lt;- rhs"</code>; <code>"lhs ~ rhs"</code> is an error
-naming the new form.</p>
+<p><code><a href="../reference/define.html">define()</a></code> and <code><a href="../reference/define.html">insert()</a></code> take
+<code>"lhs &lt;- rhs"</code>; <code>"lhs ~ rhs"</code> is an error
+naming the new form. <code>repar()</code> is internal:
+<code><a href="../reference/define.html">define()</a></code> sets an entry, <code><a href="../reference/define.html">insert()</a></code> replaces a
+symbol wherever it occurs.</p>
 <table class="table">
 <colgroup>
 <col width="50%">

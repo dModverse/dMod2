@@ -7,43 +7,56 @@ models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
 ## Marginal likelihood
 
-Group \\i\\ of \\G\\ has random effects \\\eta_i \in \mathbb{R}^K\\,
-inner parameters \\\phi_i = h(\theta, \eta_i)\\ and the observation
-model
+A group is the unit that shares one draw of the random effects, for
+example a subject or a gel, and holds one or several conditions. Group
+\\i\\ of \\G\\ has random effects \\\eta_i \in \mathbb{R}^K\\, the
+unobserved deviations of the group from the population, integrated out
+of the likelihood, inner parameters \\\phi_i = h(\theta, \eta_i)\\ and
+the observation model
 
 \\\begin{aligned} y\_{ij} &= g\bigl(x(t\_{ij};\\ \phi_i)\bigr) +
 \varepsilon\_{ij}, \\ \varepsilon\_{ij} &\sim \mathcal{N}\bigl(0,
 \sigma^2(\phi_i, t\_{ij})\bigr), \qquad \eta_i \sim \mathcal{N}(0,
 \Omega), \end{aligned} \tag{1}\\
 
-with population parameters \\\psi = (\theta, \Omega, \sigma)\\, and
+with \\\Omega\\ the covariance matrix of the random effects, population
+parameters \\\psi = (\theta, \Omega, \sigma)\\, the parameters
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates,
+and structural parameters \\\theta\\, those that are neither random
+effects nor parameters of \\\Omega\\ or the error model, fixed effects
+included. The log marginal likelihood is
 
-\\\ell(\psi) = \sum\_{i=1}^G \log L_i(\psi), \qquad L_i(\psi) = \int
-p(y_i \mid \eta_i, \psi)\\ p(\eta_i \mid \Omega)\\ \mathrm{d}\eta_i .
-\tag{2}\\
+\\\begin{aligned} \log L(\psi) &= \sum\_{i=1}^G \log L_i(\psi), \\
+L_i(\psi) &= \int p(y_i \mid \eta_i, \psi)\\ p(\eta_i \mid \Omega)\\
+\mathrm{d}\eta_i . \end{aligned} \tag{2}\\
 
-The integrand is `normL2(data, g * x * p, errmodel = e)`, with
-sensitivities in \\\eta_i\\ by the chain rule, plus the prior \\\sum_i
-\eta_i^\top \Omega^{-1} \eta_i + G \log \lvert \Omega \rvert\\ from
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) minimizes
+and reports \\-2 \log L\\; differences of nested fits are
+likelihood-ratio statistics. The integrand is
+`normL2(data, g * x * p, errmodel = e)`, with sensitivities in
+\\\eta_i\\ by the chain rule, plus the prior \\\sum_i \eta_i^\top
+\Omega^{-1} \eta_i + G \log \lvert \Omega \rvert\\ from
 `randomEffects(p)`. Conditions without a group add their \\-2 \log L\\
 unchanged. `normT(..., df = 4)` gives Student-t residuals.
 
 ## EM algorithm
 
-With the posterior \\q_i(\eta_i) = p(\eta_i \mid y_i, \psi^{(t)})\\,
-Jensen’s inequality gives [\[1\]](#ref-dempster1977maximum)
+With the posterior \\q_i(\eta_i) = p(\eta_i \mid y_i, \psi^{(t)})\\, the
+distribution of the random effects of a group given the data, Jensen’s
+inequality gives [\[1\]](#ref-dempster1977maximum)
 
 \\\log L_i(\psi) \ge \underbrace{\mathbb{E}\_{q_i}\bigl\[\log p(y_i,
 \eta_i \mid \psi)\bigr\]}\_{Q_i(\psi \mid \psi^{(t)})} -
 \mathbb{E}\_{q_i}\bigl\[\log q_i(\eta_i)\bigr\], \tag{3}\\
 
 with equality at \\\psi = \psi^{(t)}\\. EM alternates forming \\Q =
-\sum_i Q_i\\ and maximizing it, so \\\ell\\ never decreases; near the
+\sum_i Q_i\\ and maximizing it, so \\\log L\\ never decreases; near the
 optimum it converges linearly at the fraction of missing information.
 ECM [\[2\]](#ref-meng1993maximum) splits the M-step into conditional
-steps, ECME [\[3\]](#ref-liu1994ecme) takes some of them on the
-likelihood itself: \\\Omega\\ in closed form, structural parameters by
-optimization. [Sparsity
+steps, each over some parameters with the others held, ECME
+[\[3\]](#ref-liu1994ecme) takes some of them on the likelihood itself:
+\\\Omega\\ in closed form, structural parameters by optimization.
+[Sparsity
 priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#hyperparameters)
 minimizes \\-2Q\\ instead. The methods replace the posterior, which has
 no closed form, by:
@@ -59,20 +72,26 @@ no closed form, by:
 
 ### Laplace approximation
 
-With \\\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta
-\mid \Omega) - K \log(2\pi)\\, the prior without the constant of the
-normal density, mode \\\hat\eta_i\\ and the Gauss-Newton curvature
-\\H_i\\ of \\\Phi_i\\ at \\\hat\eta_i\\, Laplace’s approximation of (2)
-is \\-2 \log L_i \approx \Phi_i(\hat\eta_i) + \log \lvert H_i/2
-\rvert\\, the constant canceling against that of the Gaussian integral.
-FOCEI minimizes
+With
+
+\\\Phi_i(\eta) = -2 \log p(y_i \mid \eta, \psi) - 2 \log p(\eta \mid
+\Omega) - K \log(2\pi),\\
+
+the prior without the constant of the normal density, the conditional
+mode \\\hat\eta_i\\, which minimizes \\\Phi_i\\ and so maximizes the
+posterior, and the Gauss-Newton curvature \\H_i\\ of \\\Phi_i\\ at
+\\\hat\eta_i\\, Laplace’s approximation of (2) is \\-2 \log L_i \approx
+\Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert\\, the constant canceling
+against that of the Gaussian integral. FOCEI, first-order conditional
+estimation with interaction, minimizes
 
 \\F(\psi) = \sum_i \Bigl\[ \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert
 \Bigr\] \tag{4}\\
 
 plus the full \\-2 \log L\\ of the conditions without a group. \\\log
-\lvert H_i/2 \rvert\\ is the volume term. \\H_i\\ includes the
-derivatives of \\\sigma\\ in \\\eta\\, the interaction of FOCEI
+\lvert H_i/2 \rvert\\ is the volume term, the log determinant of the
+curvature of the posterior. \\H_i\\ includes the derivatives of
+\\\sigma\\ in \\\eta\\, the interaction of FOCEI
 [\[4\]](#ref-wang2007derivation),
 [\[5\]](#ref-pinheiro1995approximations). Conditional standard errors of
 the modes are the square roots of the diagonal of \\2 H_i^{-1}\\. The
@@ -88,14 +107,15 @@ Each evaluation, in C++:
   outer step, stopped at `innerControl$steptol`; eigenvalue floor
   \\10^{-10} \operatorname{tr}(H_i)/K\\; trial points of all groups in
   one batched prediction.
-- **Gradient.** By the envelope theorem the mode shift drops out:
+- **Gradient.** By the envelope theorem the mode shift drops out,
   \\\nabla\_\psi F = \sum_i \nabla\_\psi \Phi_i \big\|\_{\hat\eta_i} +
-  \sum_i \mathrm{d} \log \lvert H_i \rvert / \mathrm{d}\psi\\, with a
-  Newton correction for the gradient left by the inner search.
+  \sum_i \frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d}\psi},\\
+  with a Newton correction for the gradient left by the inner search.
 - **Model Hessian.** Gauss-Newton Schur complement \\\sum_i
-  \[\Phi_i^{\psi\psi} - \Phi_i^{\psi\eta} (\Phi_i^{\eta\eta})^{-1}
-  \Phi_i^{\eta\psi}\]\\, plus the volume-term Hessian with second-order
-  sensitivities, plus SR1 from the last three accepted gradients.
+  \bigl\[\Phi_i^{\psi\psi} - \Phi_i^{\psi\eta} (\Phi_i^{\eta\eta})^{-1}
+  \Phi_i^{\eta\psi}\bigr\],\\ plus the volume-term Hessian with
+  second-order sensitivities, plus SR1 from the last three accepted
+  gradients.
 - **Stop.** Model gain below `trustControl$mtol` in the region `rmax`,
   or five rejected trials flat within `ftol`.
 - **Hessian source.** With several groupings the outer loop is
@@ -120,30 +140,33 @@ Each evaluation, in C++:
 ### Group kernel
 
 One C++ kernel evaluates all groups at once: the modes, the local model
-of each group and the integral on it. At the mode, \\\Phi_i(\hat\eta_i +
-\delta) \approx \Phi_i(\hat\eta_i) + g_i^\top \delta + \tfrac12
-\delta^\top H_i \delta\\, \\g_i\\ the gradient the inner search leaves.
-The block \\H\_{NN}\\ of the normal random effects is factored once;
-eliminating it gives the outer model, \\\Phi_i^{\psi\psi} - \Phi_i^{\psi
-N} H\_{NN}^{-1} \Phi_i^{N\psi}\\, and the curvature \\H\_{LL} - H\_{LN}
-H\_{NN}^{-1} H\_{NL}\\ left on the other coordinates \\L\\. An
-integrator maps the local model to the term \\-2 \log L_i -
-\Phi_i(\hat\eta_i)\\ and to the derivative \\W_i\\ of the term in
-\\H_i\\, which the volume derivative (5) contracts with \\\mathrm{d} H_i
-/ \mathrm{d}\psi\\. FOCEI is Laplace on the normal block: the term
-\\\log \lvert H\_{NN}/2 \rvert\\ and \\W_i = H\_{NN}^{-1}\\.
+of each group and the integral on it. At the mode,
+
+\\\Phi_i(\hat\eta_i + \delta) \approx \Phi_i(\hat\eta_i) + g_i^\top
+\delta + \tfrac12 \delta^\top H_i \delta,\\
+
+\\g_i\\ the gradient the inner search leaves. The block \\H\_{NN}\\ of
+the normal random effects is factored once; eliminating it gives the
+outer model, \\\Phi_i^{\psi\psi} - \Phi_i^{\psi N} H\_{NN}^{-1}
+\Phi_i^{N\psi}\\, and the curvature \\H\_{LL} - H\_{LN} H\_{NN}^{-1}
+H\_{NL}\\ left on the other coordinates \\L\\. An integrator maps the
+local model to the term \\-2 \log L_i - \Phi_i(\hat\eta_i)\\ and to the
+derivative \\W_i\\ of the term in \\H_i\\, which the volume derivative
+(5) contracts with \\\mathrm{d} H_i / \mathrm{d}\psi\\. FOCEI is Laplace
+on the normal block: the term \\\log \lvert H\_{NN}/2 \rvert\\ and \\W_i
+= H\_{NN}^{-1}\\.
 
 ### Volume term
 
 For Gauss-Newton \\H_i\\, from second-order sensitivities,
 
-\\\frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d} \psi_k} =
+\\\begin{aligned} \frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d}
+\psi_k} &= \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial
+\psi_k}\Big\|\_\eta\Bigr) \\ &\quad + \sum_l
 \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial
-\psi_k}\Big\|\_\eta\Bigr) + \sum_l \operatorname{tr}\Bigl(H_i^{-1}
-\frac{\partial H_i}{\partial \eta_l}\Bigr) \frac{\mathrm{d}
-\hat\eta_l}{\mathrm{d} \psi_k}, \qquad
-\frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} = -(\Phi_i^{\eta\eta})^{-1}
-\Phi_i^{\eta\psi}, \tag{5}\\
+\eta_l}\Bigr) \frac{\mathrm{d} \hat\eta_l}{\mathrm{d} \psi_k}, \\
+\frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} &= -(\Phi_i^{\eta\eta})^{-1}
+\Phi_i^{\eta\psi}, \end{aligned} \tag{5}\\
 
 | `control` | volume term |
 |----|----|
@@ -161,29 +184,36 @@ errors of \\\Omega\\.
 ## Adaptive sparse-grid quadrature
 
 Laplace biases \\\Omega\\ for skewed posteriors, as for oral doses
-sampled near absorption. The cubature \\\int e^{-\Phi_i/2}\\
-\mathrm{d}\eta \approx \sum_b W_b\\ e^{-\Phi_i(\eta_b)/2}\\ removes that
-error level by level. It combines the nested Genz-Keister rules
-[\[6\]](#ref-genz1996fully), 1, 3, 9, 19 and 35 points exact to degree
-1, 5, 15, 29 and 51, by Smolyak’s sparse grid
+sampled near absorption. The cubature
+
+\\\int e^{-\Phi_i/2}\\ \mathrm{d}\eta \approx \sum_b W_b\\
+e^{-\Phi_i(\eta_b)/2}\\
+
+removes that error level by level. It combines the nested Genz-Keister
+rules [\[6\]](#ref-genz1996fully), 1, 3, 9, 19 and 35 points exact to
+degree 1, 5, 15, 29 and 51, by the Smolyak sparse grid
 [\[7\]](#ref-smolyak1963quadrature), [\[8\]](#ref-heiss2008likelihood),
+a sum of tensor products of one-dimensional rules with far fewer nodes
+than the full tensor grid,
 
 \\A(L, K) = \sum\_{\lvert \mathbf{i} \rvert \le L} \Delta^{i_1} \otimes
 \cdots \otimes \Delta^{i_K}, \tag{6}\\
 
 \\\Delta^l\\ the difference of the one-dimensional rules of levels \\l\\
-and \\l - 1\\. Level \\L\\ is exact for total degree \\2(L - K) + 1\\
-against the Gaussian, with nodes polynomial in \\K\\ (for \\K = 3\\,
-levels 3 to 7 have 1, 7, 19, 45, 117); level \\K\\ is the single Laplace
-node. The grid sits on the FOCEI Gaussian \\\mathcal{N}(\hat\eta_i, 2
-H_i^{-1})\\ and moves with \\\psi\\ [\[9\]](#ref-clausen2009maximum).
-Negative weights make \\\log L_i\\ a signed log-sum-exp; a nonpositive
-sum, an unresolved posterior, fails the evaluation, naming the group.
-The gradient is the quadrature of the exact gradient of \\\log L_i\\ on
-the current nodes (Fisher’s identity), the Hessian follows by Louis’
-identity from data Hessians per node that are exact where the model is
-built with `"forward-forward"` and Gauss-Newton otherwise; the move of
-the grid with \\\psi\\ is not differentiated.
+and \\l - 1\\. Level \\L\\, the bound on the sum \\\lvert \mathbf{i}
+\rvert\\ of the one-dimensional levels, is exact for total degree
+\\2(L - K) + 1\\ against the Gaussian, with nodes polynomial in \\K\\
+(for \\K = 3\\, levels 3 to 7 have 1, 7, 19, 45, 117); level \\K\\ is
+the single Laplace node. The grid sits on the FOCEI Gaussian
+\\\mathcal{N}(\hat\eta_i, 2 H_i^{-1})\\ and moves with \\\psi\\
+[\[9\]](#ref-clausen2009maximum). Negative weights make \\\log L_i\\ a
+signed log-sum-exp; a nonpositive sum, an unresolved posterior, fails
+the evaluation, naming the group. The gradient is the quadrature of the
+exact gradient of \\\log L_i\\ on the current nodes (Fisher’s identity),
+the Hessian follows by Louis’ identity from data Hessians per node that
+are exact where the model is built with `"forward-forward"` and
+Gauss-Newton otherwise; the move of the grid with \\\psi\\ is not
+differentiated.
 
 `method = "quadrature"` starts from the converged FOCEI fit and
 alternates:
@@ -204,12 +234,17 @@ alternates:
   grid, their change is the estimate, and a group above the tolerance is
   capped. With no refinement the grid is that of (6); for \\K = 20\\
   levels \\K + 1\\ to \\K + 3\\ have 41, 801 and 10041 nodes.
-- **Step.** Trust region over all parameters on frozen nodes. For
-  mu-referenced fixed effects, \\\phi_i = D_i \beta + \eta_i\\, nodes
-  are frozen in \\\phi\\, need no sensitivities and hold over larger
-  steps.
-- **Stop.** A Newton step on the rebuilt nodes would gain less than
-  `tolDecrement`, or \\-2 \log L\\ rose after a step on unchanged
+- **Step.** Trust region over all parameters on frozen nodes: nodes and
+  weights held while \\\psi\\ moves within the step, so the quadrature
+  is a smooth function of \\\psi\\. Fixed effects are the coefficients
+  of an effect formula, the same for all groups. They are mu-referenced
+  where the formula sets \\\phi_i = D_i \beta + \eta_i\\, \\D_i\\ the
+  design row of the group, so a shift of \\\beta\\ acts as a shift of
+  \\\eta_i\\; there nodes are frozen in \\\phi\\, need no sensitivities
+  and hold over larger steps.
+- **Stop.** The Newton decrement, the decrease of \\-2 \log L\\ that a
+  Newton step on the rebuilt nodes would make by the quadratic model, is
+  below `tolDecrement`, or \\-2 \log L\\ rose after a step on unchanged
   levels, so the step lies below what the levels resolve. Either way the
   fit is stationary at the levels reached, capped ones included; it
   returns the iterate of lowest \\-2 \log L\\ on the highest levels, and
@@ -217,38 +252,42 @@ alternates:
 
 At the estimate, importance sampling (\\t_5\\ proposal at the mode,
 shifted lattice points) flags groups whose two estimates differ by more
-than three standard errors plus the level error, or with Pareto shape
-[\[11\]](#ref-vehtari2024pareto) above 0.7.
+than three standard errors plus the larger of the level error and `tol`
+over the number of groups, or with Pareto shape \\\hat k\\
+[\[11\]](#ref-vehtari2024pareto) above 0.7, \\\hat k\\ the shape of a
+generalized Pareto distribution fitted to the largest importance
+weights; above 0.7 the tail is so heavy that the estimate is unreliable.
 
 ## Laplace EM
 
 `method = "laplaceEM"` runs ECME: a trust-region run of at most
 `maxCm1Iter` (default 30) iterations of the structural parameters on the
 likelihood over frozen nodes of level \\K + 1\\, then every block of
-\\\Omega\\ from \\S = G^{-1} \sum_i M_i\\ with the posterior second
-moments \\M_i = \hat\eta_i \hat\eta_i^\top + 2 H_i^{-1}\\ (modes alone
-would shrink \\\Omega\\). It stops when parameter change and
-extrapolated remaining distance are below `epsEcm` (default `1e-5`), or
-after `maxEcm` (default 200) iterations. Settings come from
-`control$quadrature`.
+\\\Omega\\, the random effects of one ID with full covariance and
+independent of the other blocks, from \\S = G^{-1} \sum_i M_i\\ with the
+posterior second moments \\M_i = \hat\eta_i \hat\eta_i^\top + 2
+H_i^{-1}\\ (modes alone would shrink \\\Omega\\). It stops when
+parameter change and extrapolated remaining distance are below `epsECM`
+(default `1e-5`), or after `maxECM` (default 200) iterations. Settings
+come from `control$quadrature`.
 
 ## SAEM
 
 `method = "saem"` uses posterior draws, with no Gaussian assumption and
-equal cost for any \\K\\. Stochastic-approximation EM
+equal cost for any \\K\\. Stochastic-approximation EM (SAEM)
 [\[12\]](#ref-delyon1999convergence) averages the sufficient statistics
 by a Robbins-Monro recursion [\[13\]](#ref-robbins1951stochastic),
 
-\\s_k = s\_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s\_{k-1} \bigr),
-\qquad \eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} =
-\hat\psi(s_k), \tag{7}\\
+\\\begin{aligned} s_k &= s\_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) -
+s\_{k-1} \bigr), \\ \eta^{(k)} &\sim q(\cdot \mid \psi^{(k-1)}), \qquad
+\psi^{(k)} = \hat\psi(s_k), \end{aligned} \tag{7}\\
 
-converging to a stationary point of \\\ell\\
+converging to a stationary point of \\\log L\\
 [\[12\]](#ref-delyon1999convergence), [\[14\]](#ref-kuhn2004coupling).
 \\\Omega\\ follows from \\\sum_i \eta_i \eta_i^\top\\, mu-referenced
 fixed effects by generalized least squares, other structural parameters
 from an average of quadratic models at the draws, whose Newton step has
-the marginal score as fixed point.
+the marginal score, the gradient of \\\log L(\psi)\\, as fixed point.
 
 | phase | rule |
 |----|----|
@@ -256,7 +295,7 @@ the marginal score as fixed point.
 | burn-in | \\\gamma_k = 1\\, variances shrink at most 5 % per iteration; ends when no parameter drifts over `window` |
 | averaging | \\\gamma_k = k^{-0.7}\\, \\k\\ counted from the end of burn-in, mean of iterates [\[15\]](#ref-kushner2003stochastic); ends when the expected Monte Carlo rise of \\-2 \log L\\ is below `mcTol` |
 
-SAEM neither forms \\\ell\\ nor raises it in every iteration;
+SAEM neither forms \\\log L\\ nor raises it in every iteration;
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) reports the
 quadrature of level \\K + 2\\ with standard errors from the quadrature
 Hessian. SAEM suits many random effects and skewed, heavy-tailed or
@@ -264,9 +303,9 @@ multimodal posteriors [\[14\]](#ref-kuhn2004coupling).
 
 ### Spike-and-slab random effects
 
-A spike-and-slab random effect \\\eta\_{ij} = z\_{ij} v\_{ij}\\ has an
-indicator \\z\_{ij}\\ with \\\Pr(z\_{ij} = 1) = p\\ and a slab value
-\\v\_{ij} \sim \mathcal{N}(0, \tau^2)\\
+A spike-and-slab random effect \\\eta\_{ij} = z\_{ij} v\_{ij}\\ is 0
+(spike) or normal (slab) by an indicator \\z\_{ij}\\ with \\\Pr(z\_{ij}
+= 1) = p\\ and a slab value \\v\_{ij} \sim \mathcal{N}(0, \tau^2)\\
 [\[16\]](#ref-mitchell1988bayesian), [\[17\]](#ref-george1993variable).
 Per iteration, after the normal random effects:
 
@@ -282,8 +321,8 @@ Per iteration, after the normal random effects:
   f(x)\\dx\\, \\f\\ the joint density of data and prior, is a
   Gauss-Hermite sum on the local Gaussian \\\mathcal{N}(m, s^2)\\ with
   the exact data term at `nodes` (default 3) points, which gives the
-  conditional inclusion probability with the slab value integrated out
-  [\[18\]](#ref-liu1994collapsed),
+  conditional inclusion probability \\\Pr(z\_{ij} = 1)\\ given the data,
+  with the slab value integrated out [\[18\]](#ref-liu1994collapsed),
 
   \\\hat\pi\_{ij} = \frac{I}{I + f_0}, \qquad f_0 = f \text{ at }
   z\_{ij} = 0 . \tag{8}\\
@@ -303,21 +342,24 @@ Per iteration, after the normal random effects:
   averages of \\\sum \hat\pi\_{ij}\\ and \\\sum
   \hat\pi\_{ij}\\\mathbb{E}(x^2 \mid z\_{ij} = 1)\\, the
   Rao-Blackwellized statistics [\[20\]](#ref-casella1996rao) of the
-  sweep, in place of the drawn indicators. An effect the data do not
-  inform has \\\hat\pi\_{ij} = p\\ and second moment \\\tau^2\\ and
-  leaves both unchanged; counts of drawn indicators would instead let
-  \\p\\ wander to 1 in burn-in, where \\\gamma_k = 1\\. In burn-in the
-  odds \\p / (1 - p)\\ and \\\tau\\ change by a factor in \\\[0.95,
-  1.25\]\\ per iteration.
+  sweep: conditional expectations in place of the drawn indicators, with
+  the same mean and smaller variance. An effect the data do not inform
+  has \\\hat\pi\_{ij} = p\\ and second moment \\\tau^2\\ and leaves both
+  unchanged; counts of drawn indicators would instead let \\p\\ wander
+  to 1 in burn-in, where \\\gamma_k = 1\\. In burn-in the odds \\p /
+  (1 - p)\\ and \\\tau\\ change by a factor in \\\[0.95, 1.25\]\\ per
+  iteration.
 
 \\p_0\\ is one minus the mean of \\\hat\pi\_{ij}\\ over the late sweeps,
 an effect selected where it is below 1/2. An `em` fit as `init` starts
 the chain at the selected values of that fit, the indicators set where
 they are not 0, which checks a FOCEI optimum by SAEM. \\-2 \log L\\ at
-the estimate is that of `method = "focei"`; with Dirichlet-process
-random effects beside on more than 14 groups, or with
-`integral = "importance"`, it comes from sequential importance sampling
-over the partitions ([Sparsity
+the estimate is that of `method = "focei"`. Dirichlet-process random
+effects cluster the groups: the groups of a cluster share one value, 0
+for the population cluster and a normal draw for each other cluster.
+With them beside on more than 14 groups, or with
+`integral = "importance"`, \\-2 \log L\\ comes from sequential
+importance sampling over the partitions ([Sparsity
 priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#importance-sampling)),
 each group summing over the subsets of the spike-and-slab effects that
 reach the group data.

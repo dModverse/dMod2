@@ -10,40 +10,65 @@ uncertainty](https://dmodverse.github.io/dMod2/articles/guide-prediction-uncerta
 
 ## Profile and threshold
 
-The objective function \\\mathcal{J}(\theta) = -2 \log L(\theta) - 2
-\log \pi(\theta)\\ is the data term plus the prior \\\pi\\ ([Likelihood
-and
+The objective function \\\ell(\theta) = -2 \log L(\theta) - 2 \log
+\pi(\theta)\\ is the data term \\-2 \log L\\ plus the prior term \\-2
+\log \pi\\ of the prior \\\pi\\ ([Likelihood and
 prior](https://dmodverse.github.io/dMod2/articles/methods-objective.md)).
-Along the profile of \\\theta_i\\ the other parameters minimize
-\\\mathcal{J}\\,
+[`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md)
+returns the data term as attribute `data`,
+[`constraintL2()`](https://dmodverse.github.io/dMod2/reference/constraintL2.md)
+the prior term as `prior`, and
+[`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
+keeps both as columns. The profile of \\\theta_i\\ is \\\ell\\ minimized
+over all other parameters as a function of \\\theta_i = c\\. The
+minimizing values of the other parameters form the parameter path
+\\\hat\theta(c)\\,
 
-\\\hat\theta(c) = \operatorname\*{arg\\min}\_{\theta \\:\\ \theta_i = c}
-\mathcal{J}(\theta) , \tag{1}\\
+\\\hat\theta(c) = \operatorname\*{arg\\min}\_{\theta \\:\\ \theta_i =
+c}\\ \ell(\theta) , \tag{1}\\
 
-and the profile likelihood is the data term along this path,
+and the profile likelihood is the objective along this path,
 
-\\\mathrm{PL}\_i(c) = -2 \log L\bigl(\hat\theta(c)\bigr) . \tag{2}\\
+\\\mathrm{PL}\_i(c) = \ell\bigl(\hat\theta(c)\bigr) . \tag{2}\\
+
+A parameter that moves with \\\theta_i\\ along the path compensates the
+change of \\\theta_i\\ in the predictions
+([`plotPaths()`](https://dmodverse.github.io/dMod2/reference/plotPaths.md)).
 
 Without a prior, (2) is the minimum of \\-2 \log L\\ with \\\theta_i =
 c\\. By the likelihood ratio test, the rise \\\mathrm{PL}\_i(c) -
 \mathrm{PL}\_i(\hat\theta_i)\\ from the optimum \\\hat\theta_i\\ below
-the \\1 - \alpha\\ quantile of \\\chi^2_1\\ (3.84 for 95 %) defines an
-asymptotic confidence interval, invariant under reparameterization of
-\\\theta_i\\. Without a prior the optimum is the minimum of (2); with a
-prior (2) may fall below the value at the optimum, and the rise is still
-measured from there.
+the threshold, the \\1 - \alpha\\ quantile of \\\chi^2_1\\ (3.84 for 95
+%), defines an asymptotic confidence interval, the set of values \\c\\
+compatible with the data, invariant under reparameterization of
+\\\theta_i\\. The optimum is the minimum of (2).
 [`profileThreshold()`](https://dmodverse.github.io/dMod2/reference/profileThreshold.md)
-computes the threshold, `method = "F"` the finite-sample one for
-estimated standard deviations. A prior wide against the data curvature
-keeps (1) finite where the data do not determine \\\theta_i\\ and
-changes (2) little where they do.
+computes the threshold, `method = "F"` the finite-sample threshold \\n
+\log(1 + F\_{1,\nu,1-\alpha}/\nu)\\ with \\n\\ data points and \\\nu =
+n - p\\ for \\p\\ estimated mean parameters, exact for Gaussian errors
+with one estimated standard deviation. A prior wide against the data
+curvature keeps (1) finite where the data do not determine \\\theta_i\\
+and changes (2) little where they do.
 
 [`profile()`](https://dmodverse.github.io/dMod2/reference/profile.md)
-stops on \\\mathcal{J}\\ by default; `stepControl = list(stop = "data")`
-ends a profile at the threshold of (2), and
-`confint(val.column = "data")` reads the interval off (2).
+stops on (2) by default; `stepControl = list(stop = "data")` ends a
+profile at the threshold of the data term \\-2 \log
+L\bigl(\hat\theta(c)\bigr)\\ along the path, and
+`confint(val.column = "data")` reads the interval off that term.
 
 ## Shapes
+
+A parameter is identifiable when (2) exceeds the threshold on both
+sides, otherwise non-identifiable: practically non-identifiable when the
+profile stays below the threshold on one side or both for the given
+data, structurally non-identifiable when different parameter values give
+the same prediction of every observable and the profile is flat
+([Structural
+identifiability](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#structural-identifiability)).
+A symmetry is a transformation of the parameters that leaves every
+observable unchanged; a gauge fixes coordinates so that each orbit of
+the symmetry meets the fixed values in one point ([Gauge and
+reduction](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction)).
 
 | shape of (2) | meaning |
 |----|----|
@@ -54,10 +79,11 @@ ends a profile at the threshold of (2), and
 On the log scale, a one-sided profile towards \\-\infty\\ means the
 reaction can be switched off, towards \\+\infty\\ that the process is in
 equilibrium on the time scale of the data, replaceable by a large fixed
-value or the quasi-steady state. Both limits give a smaller model with
-the same fit [\[3\]](#ref-maiwald2016driving). Each profile tests one
-limit with all other parameters free; several limits together need a
-likelihood ratio test of the reduced model.
+value or the quasi-steady state. Both limits give a reduced model, the
+model with the parameter at the limit, with the same fit
+[\[3\]](#ref-maiwald2016driving). Each profile tests one limit with all
+other parameters free; several limits together need a likelihood ratio
+test of the reduced model.
 
 ## Computing a profile
 
@@ -68,23 +94,28 @@ point.
   [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md), one
   converged fit per point.
 
-- `method = "integrate"` follows the constrained optimum of the
-  Lagrangian \\\mathcal{J}(\theta) + \lambda\\(\theta_i - c)\\, where
-  \\\nabla \mathcal{J} + \lambda e_i = 0\\ and \\\theta_i = c\\.
-  Differentiating in \\c\\ gives the path equation
+- `method = "integrate"`, the integration-based profile, follows the
+  constrained optimum \\\hat\theta(c)\\ of (1), the stationary point of
+  the Lagrangian \\\ell(\theta) + \lambda\\(\theta_i - c)\\, where
+  \\\nabla \ell + \lambda e_i = 0\\ and \\\theta_i = c\\.
+  Differentiating in \\c\\ gives the path equation, the linear system
+  for \\\mathrm{d}\theta/\mathrm{d}c\\ that the profile follows in Euler
+  steps,
 
   \\\begin{pmatrix} H & e_i \\ e_i^\top & 0 \end{pmatrix}
   \begin{pmatrix} \mathrm{d}\theta/\mathrm{d}c \\
   \mathrm{d}\lambda/\mathrm{d}c \end{pmatrix} = \begin{pmatrix} 0 \\ 1
   \end{pmatrix} \tag{3}\\
 
-  with the Hessian \\H\\ of \\\mathcal{J}\\: one evaluation and one
-  linear solve per step. The step solves (3) with \\-\gamma \nabla
-  \mathcal{J}\\ in place of the upper zero, which pulls it back to the
-  constrained optimum (\\\gamma = 1\\ by default, adapted to the size of
-  the pull); with a Gauss-Newton \\H\\ the path still drifts, and
-  `algoControl = list(reoptimize = TRUE)` corrects each step by a short
-  fit.
+  with the Hessian \\H\\ of \\\ell\\: one evaluation and one linear
+  solve per step. The step solves (3) with \\-\gamma \nabla \ell\\ in
+  place of the upper zero, which pulls it back to the constrained
+  optimum (\\\gamma = 1\\ by default, adapted to the size of the pull).
+  With a Gauss-Newton \\H\\ the path still drifts, so each step is then
+  corrected by a short fit of the other parameters with
+  [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md), at
+  most `optControl$iterlim = 10` iterations;
+  `algoControl = list(reoptimize = FALSE)` leaves out the fit.
 
 Step control and stops:
 
@@ -94,32 +125,38 @@ Step control and stops:
 | step doubles | mismatch below `0.3 * atol`, or below `0.3 * rtol` relative |
 | side ends | objective (or data term, `stop = "data"`) up by the threshold; `limits` relative to the optimum reached; `limit` steps |
 
-A point of \\\mathcal{J}\\ below the start value is a better optimum:
-fit and profiles are then to be repeated from it. Where the curvature
-jumps, the step shrinks to `min` and stays on the profile.
+A point of \\\ell\\ below the start value is a better optimum: fit and
+profiles are then to be repeated from it. Where the curvature jumps, the
+step shrinks to `min` and stays on the profile.
 
 ## Prediction profiles
 
-A prediction \\z = g(t, \theta)\\ has the profile likelihood
+A prediction \\z = g(t, \theta)\\ has the prediction profile likelihood,
+the objective minimized under the constraint \\g(t, \theta) = z\\,
 
-\\\mathrm{PPL}(z) = -2 \log L\bigl(\hat\theta(z)\bigr) , \quad
-\hat\theta(z) = \operatorname\*{arg\\min}\_{\theta \\:\\ g(t, \theta) =
-z} \mathcal{J}(\theta) , \tag{4}\\
+\\\begin{aligned} \mathrm{PPL}(z) &= \ell\bigl(\hat\theta(z)\bigr) , \\
+\hat\theta(z) &= \operatorname\*{arg\\min}\_{\theta \\:\\ g(t, \theta) =
+z}\\ \ell(\theta) , \end{aligned} \tag{4}\\
 
 whose threshold gives a confidence interval of the prediction
-[\[2\]](#ref-kreutz2012likelihood); without a prior it is the image of
-the parameter region at the \\\chi^2_1\\ threshold, not of the joint
-region.
+[\[2\]](#ref-kreutz2012likelihood), over several \\t\\ a pointwise
+confidence band. Without a prior the interval is the image of the
+parameter region at the \\\chi^2_1\\ threshold, the set of \\\theta\\
+with \\-2 \log L\\ less than 3.84 above the minimum, not of the joint
+region, which uses the \\\chi^2_p\\ quantile of all \\p\\ parameters at
+once and is larger.
 
-A validation data point makes \\z\\ a parameter \\v\\, tied to the
-prediction by
+A validation data point, a hypothetical measurement \\v\\ of the
+prediction with standard deviation \\\sigma_v\\, makes \\z\\ a parameter
+\\v\\, tied to the prediction by
 
 \\\left( \frac{g(t, \theta) - v}{\sigma_v} \right)^2 . \tag{5}\\
 
-The profile of \\v\\ is (4) for \\\sigma_v \to 0\\ and lies below (4)
-otherwise, so the interval of \\v\\ is wider: for a quadratic (4) of
-half-width \\w\\ the half-width becomes \\(w^2 + \Delta
-\sigma_v^2)^{1/2}\\, \\\Delta\\ the threshold.
+The validation profile, the profile of \\v\\, is (4) for \\\sigma_v \to
+0\\ and lies below (4) otherwise. The interval of \\v\\, the range of a
+new measurement compatible with model and data, is therefore wider: for
+a quadratic (4) of half-width \\w\\ the half-width becomes \\(w^2 +
+\Delta \sigma_v^2)^{1/2}\\, \\\Delta\\ the threshold.
 [`datapointL2()`](https://dmodverse.github.io/dMod2/reference/datapointL2.md)
 builds (5) as an `objfn` from the evaluation of
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md),

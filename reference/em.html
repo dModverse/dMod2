@@ -87,7 +87,7 @@ Laplace approximation.
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -127,6 +127,8 @@ Laplace approximation.
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -376,7 +378,13 @@ reaches no data of the group; such an effect rests at 0 with the prior.</p></dd>
 
 <dt><code>slab</code></dt>
 <dd><p>the hyperparameters of the spike-and-slab and
-Dirichlet-process blocks.</p></dd>
+Dirichlet-process blocks; with hyperpriors also <code>lower</code> and <code>upper</code>, the
+95 % interval of a <code>prob</code> integrated out or a <code>tau</code> integrated over, and
+<code>prior</code>, the hyperprior.</p></dd>
+
+<dt><code>hyperprior</code></dt>
+<dd><p>with a scale prior on <code>tau</code>, -2 log of the prior
+density at the estimate, which <code>value</code> holds as well.</p></dd>
 
 <dt><code>valueSE</code></dt>
 <dd><p>the standard error of <code>value</code> where it comes from
@@ -385,6 +393,17 @@ importance sampling.</p></dd>
 <dt><code>coupling</code></dt>
 <dd><p><code>"expectationConsistent"</code> where a group needed it,
 else <code>NULL</code>.</p></dd>
+
+<dt><code>phases</code></dt>
+<dd><p>with spike-and-slab random effects of a given <code>mean</code> or
+<code>spike</code>, a row per phase: <code>approx</code> (<code>"burnin"</code> for the burn-in),
+<code>iterations</code> (0 for a skipped phase), <code>value</code> (-2 log L of the
+approximation, for the burn-in data plus penalty), <code>converged</code>,
+<code>seconds</code> and <code>failed</code>, the subsets of weight 0.</p></dd>
+
+<dt><code>burnin</code></dt>
+<dd><p>the spike-and-slab random effects in the slab at the
+start of the burn-in, <code>NULL</code> without burn-in.</p></dd>
 
 <dt><code>boundary</code></dt>
 <dd><p>the hyperparameters set to 0, see <code>control</code>.</p></dd>
@@ -445,7 +464,7 @@ of unchanged levels, so the step lies below what the levels resolve
 capped ones included; the fit returns the iterate of lowest -2 log L on
 the highest levels.</p></dd>
 
-<dt><code>maxEcmPerStage</code>, <code>cm1Control</code>, <code>maxCm1Iter</code></dt>
+<dt><code>maxECMPerStage</code>, <code>cm1Control</code>, <code>maxCm1Iter</code></dt>
 <dd><p>rebuilds per stage
 (default 10, <code>stopReason</code> <code>"iterlim"</code> where they run out), <code><a href="trust.html">trust()</a></code>
 settings and iterations of a step (default 30).</p></dd>
@@ -461,7 +480,7 @@ proposal at the mode of each group. A group is flagged where the two
 -2 log L differ by more than three standard errors plus the error the
 level of the group allows, or the Pareto shape of the weights exceeds 0.7.</p></dd>
 
-<dt><code>epsEcm</code>, <code>maxEcm</code></dt>
+<dt><code>epsECM</code>, <code>maxECM</code></dt>
 <dd><p>for <code>"laplaceEM"</code>: the extrapolated distance to
 the fixed point at which it stops, default 1e-5, and the iteration limit,
 default 200.</p></dd>
@@ -565,27 +584,26 @@ trial point at which EC does not converge is a failed evaluation. Entries of <co
 are found as by FOCEI, by the group kernel, where the Gauss-Newton step is
 below 1e-8; of <code>control$innerControl</code> only <code>sqpIterlim</code> applies.</p></dd>
 
-<dt><code>maxEcm</code>, <code>epsEcm</code>, <code>budget</code>, <code>ec</code></dt>
-<dd><p>of the sum over subsets, see below.</p></dd>
+<dt><code>burnin</code>, <code>phases</code>, <code>termBudget</code>, <code>ec</code></dt>
+<dd><p>of the sum over subsets,
+see below.</p></dd>
 
 
-</dl><p>Spike-and-slab random effects with <code>mean</code> or <code>spike</code> other than 0, see
-<code><a href="normal.html">spikeSlab()</a></code>, take a separate path of <code>method = "focei"</code>, beside normal
+</dl><p>Spike-and-slab random effects with <code>mean</code> or <code>spike</code> other than 0, or with
+a hyperprior (<code><a href="betaPrior.html">betaPrior()</a></code>), see <code><a href="normal.html">spikeSlab()</a></code>, take a separate path of
+<code>method = "focei"</code>, beside normal
 random effects of the same grouping but no Dirichlet-process ones. The
 integral of a group is the sum over all subsets of the spike-and-slab random
 effects, each subset a Laplace integral over the normal random effects and
 the slab ones of the subset at the inner mode, the other random effects at
 the spike; <code>spike = -Inf</code> switches the
-parameter off. The number of subsets summed over all groups is at most
-<code>budget</code> (default 4096). The fixed effects and hyperparameters follow by EM:
+parameter off. The fixed effects and hyperparameters follow by EM:
 <code>prob</code> is the mean inclusion probability, <code>tau^2</code> the mean squared deviation
 from <code>mean</code> under the slab, and the fixed effects minimize the data term
 plus slab prior summed over the subsets with their weights, jointly with
 the subset modes; the log determinant of the Laplace integral enters the
 weights only; Omega is the mean of the posterior second moments of the
-normal random effects, restricted to the block structure. EM stops after
-<code>maxEcm</code> iterations (default 200) or when no
-estimate changes by more than <code>epsEcm</code> (default 1e-6). The <code>p0</code> column of
+normal random effects, restricted to the block structure. The <code>p0</code> column of
 the random table is the posterior probability of the spike.</p>
 <p><code>method = "saem"</code> draws them by the moves of section SAEM: a spike at
 <code>-Inf</code> leaves the other slab values as they are, and a move into the slab
@@ -605,14 +623,45 @@ Cholesky parameters of Omega and the estimated <code>prob</code> and <code>tau</
 moves by trust steps on the frozen nodes, which are rebuilt after each step
 until a Newton step would lower -2 log L by less than <code>tolDecrement</code>
 (<code>stopReason</code> <code>"decrement"</code>). Of <code>control$quadrature</code> this path reads <code>tol</code>,
-<code>maxLevel</code> and <code>maxNodes</code> (per subset), <code>tolDecrement</code>, <code>maxEcmPerStage</code>,
+<code>maxLevel</code> and <code>maxNodes</code> (per subset), <code>tolDecrement</code>, <code>maxECMPerStage</code>,
 <code>cm1Control</code> and <code>maxCm1Iter</code>.</p>
-<p>Groups beyond the budget, the largest first, take the expectation consistent
-(EC) approximation in a coordinate in which the spike is 0: the rate
+<p><code>phases</code> lists the approximations of the sum over subsets in the order they
+run, each from the estimates and inner modes of the phase before: a
+character vector, or a named list whose entries set <code>maxECM</code>, the ECM
+iterations (default 200), and <code>epsECM</code>, the largest change of an estimate
+at which the phase ends (default 1e-2, in the last phase 1e-6). Each name
+at most once; default <code>c("meanfield", "ec", "exact")</code>:</p><dl><dt><code>"meanfield"</code></dt>
+<dd><p>factorized inclusion per random effect, from the
+Laplace integrals of a reference subset and of the subsets that differ
+from it in one random effect; the reference is the subset of inclusion
+above 1/2. A subset whose inner search fails has weight 0.</p></dd>
+
+<dt><code>"ec"</code></dt>
+<dd><p>EC for every group, see below.</p></dd>
+
+<dt><code>"exact"</code></dt>
+<dd><p>the sum over all subsets. Where the subsets summed over
+the groups exceed <code>termBudget</code> (default 4096), the phase is skipped and
+the fit ends with phase <code>"ec"</code>; without it, an error.</p></dd>
+
+
+</dl><p><code>burnin</code> fits the fixed effects first, with <code>prob</code>, <code>tau</code> and <code>Omega</code> held,
+in one trust region at the joint mode of a start subset of the
+spike-and-slab random effects in the slab, the prior densities as penalty;
+the others stay at the spike. <code>FALSE</code> (default) no burn-in, <code>TRUE</code> the
+defaults, or a list of <code>start</code>, <code>"random"</code> (default, each in the slab with
+probability <code>prob</code>, drawn from the random number stream), <code>"spike"</code>, <code>"slab"</code>
+or the names of the random effects in the slab, and <code>iterlim</code>, the trust
+iterations (default 200). The first phase starts from that subset. The fit
+reports <code>burnin</code>, the start subset. <code>converged</code> is that of the last phase;
+an error names the phase.</p>
+<p>EC is the
+expectation consistent approximation in a coordinate in which the spike is 0: the rate
 \(b^\eta\) for <code>spike = -Inf</code>, where the slab is log-normal, and
 \(\eta\) minus the spike else. The data term is a Gaussian in that
-coordinate, expanded first at the mode with every random effect in the slab
-and again at the EC mean until it is stable; normal random effects enter it
+coordinate, expanded first at the mode with the random effects of inclusion
+above 1/2 of the step before in the slab (at the first step every one), and
+again at the EC mean until it is stable; normal random effects enter it
 exactly, without sites. These groups take the subset of
 inclusion probability above 1/2 for the fixed effects. Entries of
 <code>control$sparseFit$ec</code>: <code>nodes</code> of the Gauss-Hermite rule of the log-normal
@@ -646,10 +695,10 @@ and <a href="https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.
 <span class="r-in"><span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"</span><span class="op">)</span>,</span></span>
 <span class="r-in"><span>       states <span class="op">=</span> <span class="st">"time"</span>, modelname <span class="op">=</span> <span class="st">"theoph_obs"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>, derivMode <span class="op">=</span> <span class="va">dm</span>,</span></span>
 <span class="r-in"><span>       outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpEh2W6Q/theoph_obs.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpX1Wc0y/theoph_obs.cpp</span>
 <span class="r-in"><span><span class="va">err</span> <span class="op">&lt;-</span> <span class="fu"><a href="Y.html">Y</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>y <span class="op">=</span> <span class="st">"sigma_add"</span><span class="op">)</span>, <span class="va">g</span>, attachInput <span class="op">=</span> <span class="cn">FALSE</span>, modelname <span class="op">=</span> <span class="st">"theoph_err"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span>,</span></span>
 <span class="r-in"><span>         derivMode <span class="op">=</span> <span class="va">dm</span>, outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
-<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpEh2W6Q/theoph_err.cpp</span>
+<span class="r-msg co"><span class="r-pr">#&gt;</span> Overwriting: /tmp/RtmpX1Wc0y/theoph_err.cpp</span>
 <span class="r-in"><span><span class="co">## one condition per subject with the subject dose; the effect formula replaces each log parameter</span></span></span>
 <span class="r-in"><span><span class="co">## by an intercept plus a random effect per subject</span></span></span>
 <span class="r-in"><span><span class="va">doses</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/tapply.html" class="external-link">tapply</a></span><span class="op">(</span><span class="va">th</span><span class="op">$</span><span class="va">Dose</span> <span class="op">*</span> <span class="va">th</span><span class="op">$</span><span class="va">Wt</span>, <span class="va">th</span><span class="op">$</span><span class="va">Subject</span>, <span class="va">`[`</span>, <span class="fl">1</span><span class="op">)</span><span class="op">[</span><span class="va">subjects</span><span class="op">]</span></span></span>

@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -128,22 +130,24 @@ benchmark collection</a>.</p>
 <h2 id="petab-export">PEtab export<a class="anchor" aria-label="anchor" href="#petab-export"></a>
 </h2>
 <p><code><a href="../reference/exportPEtab.html">exportPEtab()</a></code> writes reactions as SBML, observables,
-errors, data, and the transformation <code>p</code> with fixed values
-and values per condition. PEtab 2, the default, has no parameter scales:
-values of parameters entering as <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp()</a></code> are written on
-linear scale, with a warning. The gauge of <a href="guide-symmetries.html">Symmetries</a> becomes fixed values.</p>
+errors, data, and the <a href="methods-steady-states.html#def-parameter-transformation">parameter
+transformation</a> <code>p</code> with fixed values and values per
+condition. PEtab 2, the default, has no parameter scales: values of
+parameters entering as <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">exp()</a></code> are written on linear scale,
+with a warning. The <a href="methods-symmetries.html#def-gauge">gauge</a> of <a href="guide-symmetries.html">Symmetries</a> becomes fixed values.</p>
 <ul>
 <li>
 <strong>State at rest.</strong> <code>steadyState = pSS</code> gives
-a pre-equilibration before time 0, shared by both conditions. One
-species per conserved total starts at the total (<code>NfkIkb</code>,
-<code>Ikk</code>), all others at 0.</li>
+a pre-equilibration, a <a href="methods-steady-states.html#def-steady-state">steady state</a>
+before time 0, shared by both conditions. One species per <a href="methods-steady-states.html#conserved-quantities">conserved
+total</a> starts at the total (<code>NfkIkb</code>, <code>Ikk</code>),
+all others at 0.</li>
 <li>
-<strong>Event.</strong> <code>events = events</code> writes the
-event at time 0 as the <code>TNF</code> value of the condition.</li>
+<strong>Event.</strong> <code>events = events</code> writes the <a href="methods-sensitivities.html#def-event">event</a> at time 0 as the
+<code>TNF</code> value of the condition.</li>
 <li>
-<strong>Errors.</strong> Imaging readouts get the error model, blots
-the data standard deviations as noise parameters per measurement.</li>
+<strong>Errors.</strong> Imaging readouts get the <a href="methods-objective.html#def-error-model">error model</a>, blots the
+data standard deviations as noise parameters per measurement.</li>
 </ul>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the estimated parameters at the best fit, the gauge as fixed values on the linear scale of the</span></span>
@@ -176,11 +180,11 @@ then the experiment condition at 0:</p>
 <div class="section level2">
 <h2 id="petab-import">PEtab import<a class="anchor" aria-label="anchor" href="#petab-import"></a>
 </h2>
-<p><code><a href="../reference/importPEtab.html">importPEtab()</a></code> builds <code>prdfn</code>, the
-<code>obsfn</code>s of observables and errors, the <code>parfn</code>,
-data and <code>objfn</code>; a pre-equilibration becomes a
-<code><a href="../reference/Pimpl.html">Pimpl()</a></code>. With <code>compile = FALSE</code>,
-<code><a href="../reference/compile.html">compile()</a></code> builds the sources.</p>
+<p><code><a href="../reference/importPEtab.html">importPEtab()</a></code> builds <code>prdfn</code>, the <a href="methods-objective.html#def-obsfn"><code>obsfn</code>s</a> of
+observables and errors, the <code>parfn</code>, data and
+<code>objfn</code>; a pre-equilibration becomes a <code><a href="../reference/Pimpl.html">Pimpl()</a></code>.
+With <code>compile = FALSE</code>, <code><a href="../reference/compile.html">compile()</a></code> builds the
+sources.</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">petab</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/importPEtab.html">importPEtab</a></span><span class="op">(</span><span class="va">yaml</span>, backend <span class="op">=</span> <span class="st">"cppDE"</span>, options <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>atol <span class="op">=</span> <span class="fl">1e-10</span>, rtol <span class="op">=</span> <span class="fl">1e-8</span><span class="op">)</span>,</span>
 <span>                     modelname <span class="op">=</span> <span class="st">"oppelt_petab"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
@@ -192,18 +196,19 @@ data and <code>objfn</code>; a pre-equilibration becomes a
 <span>  PEtab   <span class="op">=</span> <span class="va">petab</span><span class="op">$</span><span class="fu">obj</span><span class="op">(</span><span class="va">petab</span><span class="op">$</span><span class="va">bestfit</span>, deriv <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">$</span><span class="va">value</span><span class="op">)</span></span>
 <span><span class="co">#&gt;   model.R     PEtab </span></span>
 <span><span class="co">#&gt; -511.1689 -511.1690</span></span></code></pre></div>
-<p>The imported problem reproduces the data term of <code>model.R</code>
-at the best fit. <code>petab$bestfit</code> holds the nominal values on
-the problem scales, <code>petab$parlower</code> and
-<code>petab$parupper</code> the bounds.</p>
+<p>The imported problem reproduces the <a href="methods-objective.html#data-term">data term</a> of
+<code>model.R</code> at the best fit. <code>petab$bestfit</code> holds
+the nominal values on the problem scales, <code>petab$parlower</code>
+and <code>petab$parupper</code> the bounds.</p>
 </div>
 <div class="section level2">
 <h2 id="sbml-models">SBML models<a class="anchor" aria-label="anchor" href="#sbml-models"></a>
 </h2>
 <p><code><a href="../reference/exportSbml.html">exportSbml()</a></code> writes species with compartments,
 reactions, parameters and initial assignments; concentration rates are
-multiplied by the compartment volume, <code><a href="../reference/importSbml.html">importSbml()</a></code> divides
-again. <code><a href="../reference/importSbml.html">importSbml()</a></code> returns the equation list in
+multiplied by the <a href="methods-steady-states.html#def-compartment-volume">compartment
+volume</a>, <code><a href="../reference/importSbml.html">importSbml()</a></code> divides again.
+<code><a href="../reference/importSbml.html">importSbml()</a></code> returns the equation list in
 <code>reactions</code>, parameter and initial values, observables,
 assignment rules and events:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">

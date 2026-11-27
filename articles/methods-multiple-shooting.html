@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -119,11 +121,12 @@
     
     
 <p>Single shooting integrates from the initial state over the whole time
-axis. For oscillating or spiking systems the objective is rugged: a
-parameter change shifts every later period, and a peak moved by more
-than the peak width leaves the residuals without direction, so few
-starts reach the narrow valleys. <code><a href="../reference/trust.html">trust()</a></code> offers multiple
-shooting instead (<a href="methods-trust.html">trust region</a>).</p>
+axis. For oscillating or spiking systems the objective is <span id="def-rugged-objective">rugged</span>, with many local minima and
+narrow valleys: a parameter change shifts every later period, and a peak
+moved by more than the peak width leaves the residuals without
+direction, so few starts reach the narrow valleys. <code><a href="../reference/trust.html">trust()</a></code>
+offers multiple shooting instead (<a href="methods-trust.html">trust
+region</a>).</p>
 <div class="section level2">
 <h2 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a>
 </h2>
@@ -244,12 +247,15 @@ globalization.</p>
 <div class="section level2">
 <h2 id="segments-and-gaps">Segments and gaps<a class="anchor" aria-label="anchor" href="#segments-and-gaps"></a>
 </h2>
-<p>Multiple shooting <span class="citation"><a href="#ref-bock1983recent">[1]</a>, <a href="#ref-baake1992fitting">[2]</a></span> cuts the time axis at nodes
-<span class="math inline">\(\tau_1 &lt; \dots &lt; \tau_M\)</span> and
+<p><span id="def-multiple-shooting">Multiple shooting</span> <span class="citation"><a href="#ref-bock1983recent">[1]</a>, <a href="#ref-baake1992fitting">[2]</a></span> cuts the time axis at <span id="def-node">nodes</span> <span class="math inline">\(\tau_1 &lt; \dots
+&lt; \tau_M\)</span> into <span id="def-segment">segments</span> and
 integrates segment <span class="math inline">\(j\)</span> from node
 values <span class="math inline">\(s_j\)</span>, the first from the
-initial state of the parameter transformation. Continuity becomes the
-constraint</p>
+initial state of the parameter transformation. The node values are
+fitted with the parameters. The <span id="def-gap">gap</span> <span class="math inline">\(c_j\)</span> is the difference between the end
+state of segment <span class="math inline">\(j\)</span> and the node
+value of the next segment, and the <span id="def-continuity-constraint">continuity constraint</span> demands
+every gap to be zero:</p>
 <p><span class="math display">\[c_j = x(\tau_{j+1};\, \tau_j, s_j,
 \theta) - s_{j+1} = 0 . \tag{1}\]</span></p>
 <p>Observed states start at the data, so every segment stays close to
@@ -260,17 +266,19 @@ objective.</p>
 <div class="section level2">
 <h2 id="condensed-step">Condensed step<a class="anchor" aria-label="anchor" href="#condensed-step"></a>
 </h2>
-<p>Bock’s generalized Gauss-Newton method linearizes (1). With the
-end-state sensitivities <span class="math inline">\(G_j = \partial x_j /
-\partial s_j\)</span> and <span class="math inline">\(P_j = \partial x_j
-/ \partial \theta\)</span>,</p>
+<p>Bock’s <span id="def-generalized-gauss-newton">generalized
+Gauss-Newton</span> method, Gauss-Newton for least squares with equality
+constraints, linearizes the residuals and the constraints (1) and takes
+the step from the linear problem. With the end-state sensitivities <span class="math inline">\(G_j = \partial x_j / \partial s_j\)</span> and
+<span class="math inline">\(P_j = \partial x_j / \partial
+\theta\)</span>,</p>
 <p><span class="math display">\[\Delta s_{j+1} = \alpha\, c_j + G_j\,
 \Delta s_j + P_j\, \Delta \theta , \tag{2}\]</span></p>
 <p>and the recursion gives <span class="math inline">\(\Delta s = \alpha
 z + S\, \Delta\theta\)</span>. Substituted into the linearized residuals
-it leaves a Gauss-Newton model in <span class="math inline">\(\Delta\theta\)</span> alone (condensing), of
-single-shooting size, so subproblem solver and bounds of
-<code><a href="../reference/trust.html">trust()</a></code> apply unchanged. The nodes follow the step by the
+it leaves a Gauss-Newton model in <span class="math inline">\(\Delta\theta\)</span> alone, of single-shooting
+size, so subproblem solver and bounds of <code><a href="../reference/trust.html">trust()</a></code> apply
+unchanged. This elimination of the node steps is <span id="def-condensing">condensing</span>. The nodes follow the step by the
 linearization, not by simulation, so the gaps close only at
 convergence.</p>
 <p>The trust region bounds parameters and nodes together,</p>
@@ -283,13 +291,14 @@ identity without bounds, since a region on <span class="math inline">\(\theta\)<
 across a spike. <span class="math inline">\(V\)</span> is one over the
 state scale (<code>multipleShootingControl$scale</code>): data range for
 observed states, simulation range otherwise, a decade for log10 node
-values. <span class="math inline">\(\alpha = 1\)</span> closes the
-linearized gaps (Bock’s step); under an active region <span class="math inline">\(\alpha \le 1\)</span> is the share of the node
-part of the full step that the radius allows. A link of the condensing
-chain that would propagate a gap through expanding segments beyond a
-bound is dropped for the step. Other summands, a prior or a
-single-shooting <code><a href="../reference/normL2.html">normL2()</a></code>, enter with value, gradient and
-Gauss-Newton Hessian.</p>
+values. The <span id="def-scaled-gap-size">scaled gap size</span> <span class="math inline">\(h = \lVert V c \rVert\)</span> is the Euclidean
+norm of the gaps in units of the state scale. <span class="math inline">\(\alpha = 1\)</span> closes the linearized gaps
+(Bock’s step); under an active region <span class="math inline">\(\alpha
+\le 1\)</span> is the share of the node part of the full step that the
+radius allows. A link of the condensing chain that would propagate a gap
+through expanding segments beyond a bound is dropped for the step. Other
+summands, a prior or a single-shooting <code><a href="../reference/normL2.html">normL2()</a></code>, enter with
+value, gradient and Gauss-Newton Hessian.</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -303,22 +312,26 @@ Gauss-Newton Hessian.</p>
 <tr class="odd">
 <td>
 <code>stepControl$acceptance = "filter"</code> (default)</td>
-<td>filter of Fletcher and Leyffer <span class="citation"><a href="#ref-fletcher2002nonlinear">[3]</a></span> on the objective
-function <span class="math inline">\(\mathcal{J}(\theta)\)</span>, <span class="math inline">\(-2 \log L\)</span> or <span class="math inline">\(-2 \log\)</span> of the posterior, and the scaled
-gap size <span class="math inline">\(h = \lVert V c \rVert\)</span>
-</td>
+<td>
+<span id="def-filter">filter</span> of Fletcher and Leyffer <span class="citation"><a href="#ref-fletcher2002nonlinear">[3]</a></span> on
+the objective function <span class="math inline">\(\ell(\theta)\)</span>, <span class="math inline">\(-2 \log L\)</span> or <span class="math inline">\(-2 \log\)</span> of the posterior, and the scaled
+gap size <span class="math inline">\(h\)</span>: a trial point is
+accepted if it lowers <span class="math inline">\(h\)</span> or <span class="math inline">\(\ell\)</span> by a margin against the current
+point and every pair <span class="math inline">\((h, \ell)\)</span>
+stored from earlier iterates</td>
 </tr>
 <tr class="even">
 <td><code>stepControl$acceptance = "merit"</code></td>
-<td>
-<span class="math inline">\(\ell_2\)</span> exact penalty <span class="math inline">\(\mathcal{J} + \mu h\)</span>
+<td>exact penalty <span class="math inline">\(\ell + \mu h\)</span>
 </td>
 </tr>
 <tr class="odd">
 <td>
 <code>stepControl$soc</code> (on)</td>
-<td>one second-order correction of a rejected step whose gaps did not
-close as predicted</td>
+<td>one <span id="def-second-order-correction">second-order
+correction</span> of a rejected step whose gaps did not close as
+predicted: the step repeated with the gaps at the trial point closed by
+the current linearization</td>
 </tr>
 <tr class="even">
 <td><code>tolControl$ctol</code></td>
@@ -351,7 +364,7 @@ so the data term does not measure the fit.</p>
 <p>From a distant start the condensed step can be forced through a
 regime the data never show, such as a spike threshold.
 <code>stepControl$anneal</code> (on) therefore first minimizes</p>
-<p><span class="math display">\[\mathcal{J} + w \lVert V c \rVert^2
+<p><span class="math display">\[\ell + w \lVert V c \rVert^2
 \tag{4}\]</span></p>
 <p>over parameters and nodes on the sparse Gauss-Newton matrix, <span class="math inline">\(w\)</span> rising tenfold per stage from one, then
 hands over to the exact method: precision annealing <span class="citation"><a href="#ref-ye2015improved">[4]</a></span> with a
@@ -407,7 +420,8 @@ removes it.</p>
 <tr class="odd">
 <td>default</td>
 <td>observed states at the data; others from a run with observed states
-reset to the data at each data time, replacement synchronization <span class="citation"><a href="#ref-pecora1990synchronization">[5]</a></span>
+reset to the data at each data time, <span id="def-replacement-synchronization">replacement synchronization</span>
+<span class="citation"><a href="#ref-pecora1990synchronization">[5]</a></span>
 </td>
 </tr>
 <tr class="even">
@@ -444,13 +458,12 @@ condition, fix the layout.</p>
 <div class="section level2">
 <h2 id="further-step-controls">Further step controls<a class="anchor" aria-label="anchor" href="#further-step-controls"></a>
 </h2>
-<p><code>stepControl$acceptance = "natural"</code> selects Bock’s
-natural level function <span class="citation"><a href="#ref-peifer2007parameter">[7]</a></span>: the full Gauss-Newton
-step damped by a factor from a curvature estimate, cut back by a
-corrector, and accepted when the simplified step at the trial point
-(current Jacobians, trial residuals and gaps) has shrunk. The filter
-takes over where the damping finds no step. It needs the Gauss-Newton
-Hessian, a fixed sigma and no error model.</p>
+<p><code>stepControl$acceptance = "natural"</code> selects Bock’s <span id="def-natural-level-function">natural level function</span> <span class="citation"><a href="#ref-peifer2007parameter">[7]</a></span>: the
+full Gauss-Newton step damped by a factor from a curvature estimate, cut
+back by a corrector, and accepted when the simplified step at the trial
+point (current Jacobians, trial residuals and gaps) has shrunk. The
+filter takes over where the damping finds no step. It needs the
+Gauss-Newton Hessian, a fixed sigma and no error model.</p>
 <p>Off by default, since each helps on some problems and costs on
 others:</p>
 <table class="table">
@@ -482,10 +495,11 @@ only</td>
 </tr>
 <tr class="even">
 <td><code>stepControl$restore</code></td>
-<td>filter restoration, at most five times: close the linearized gaps,
-damped if needed, else put the nodes on the current trajectory; on noisy
-spike trains this makes the layout cut more segments and fewer starts
-succeed</td>
+<td>filter <span id="def-restoration">restoration</span>, steps that
+only reduce the gaps where the filter accepts no step, at most five
+times: close the linearized gaps, damped if needed, else put the nodes
+on the current trajectory; on noisy spike trains this makes the layout
+cut more segments and fewer starts succeed</td>
 </tr>
 </tbody>
 </table>
@@ -532,9 +546,9 @@ c\)</span> by 1.</p>
 <span><span class="va">fhnRuns</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"single shooting"</span> <span class="op">=</span> <span class="fu">fhnFit</span><span class="op">(</span><span class="va">fhnSS</span><span class="op">)</span>,</span>
 <span>                <span class="st">"multiple shooting, filter"</span> <span class="op">=</span> <span class="fu">fhnFit</span><span class="op">(</span><span class="va">fhnMS</span><span class="op">)</span>,</span>
 <span>                <span class="st">"multiple shooting, merit"</span> <span class="op">=</span> <span class="fu">fhnFit</span><span class="op">(</span><span class="va">fhnMS</span>, stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>acceptance <span class="op">=</span> <span class="st">"merit"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></code></pre></div>
-<p>A hit has a single-shooting objective within 0.1 of the best,
-evaluated anew because open gaps can report a data term below the
-optimum.</p>
+<p>A <span id="def-hit">hit</span> has a single-shooting objective
+within 0.1 of the best, evaluated anew because open gaps can report a
+data term below the optimum.</p>
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fhnRuns</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/readRDS.html" class="external-link">readRDS</a></span><span class="op">(</span><span class="st">"results/fitzhughNagumo.rds"</span><span class="op">)</span></span>
 <span><span class="va">fhnValue</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">f</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/apply.html" class="external-link">apply</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/matrix.html" class="external-link">as.matrix</a></span><span class="op">(</span><span class="va">f</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">fhnTruth</span><span class="op">)</span><span class="op">]</span><span class="op">)</span>, <span class="fl">1</span>, <span class="kw">function</span><span class="op">(</span><span class="va">th</span><span class="op">)</span></span>

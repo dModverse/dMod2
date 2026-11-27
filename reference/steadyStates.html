@@ -7,10 +7,14 @@
   };
 </script><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.3.8/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.3.8/bootstrap.bundle.min.js"></script><link href="../deps/font-awesome-6.5.2/css/all.min.css" rel="stylesheet"><link href="../deps/font-awesome-6.5.2/css/v4-shims.min.css" rel="stylesheet"><script src="../deps/headroom-0.11.0/headroom.min.js"></script><script src="../deps/headroom-0.11.0/jQuery.headroom.min.js"></script><script src="../deps/bootstrap-toc-1.0.1/bootstrap-toc.min.js"></script><script src="../deps/clipboard.js-2.0.11/clipboard.min.js"></script><script src="../deps/search-1.0.0/autocomplete.jquery.min.js"></script><script src="../deps/search-1.0.0/fuse.min.js"></script><script src="../deps/search-1.0.0/mark.min.js"></script><!-- pkgdown --><script src="../pkgdown.js"></script><link href="../extra.css" rel="stylesheet"><script src="../extra.js"></script><meta property="og:title" content="Analytical Steady States — steadyStates"><meta name="description" content="Computes symbolic steady-state expressions for use in a parameter
 transformation, following the AlyssaPetit method [1], [2]. States whose
-own balance gives a ratio of positive sums are solved from it first. The
+mass only leaks are set to zero first, with zeroLoops = TRUE also states
+that are only produced through one another. States whose own balance gives a
+ratio of positive sums are solved from it first. The
 cycles of the graph of states left are cut then: at a state of a conserved
 quantity, or at a state whose balance is solved for a rate constant of one
-flux side instead. Each cut state stays a free parameter. The remaining
+flux side instead. Each cut state stays a free parameter. A state of a
+conserved quantity whose balance is left without a positive unknown is solved
+in a further round, with another state of the quantity free. The remaining
 states and the rate constants of the cuts are then solved, each from a
 balance or a combination of balances in amounts, such that the result is a
 ratio of sums of positive terms. Only if that fails, a flux side with
@@ -19,10 +23,14 @@ ratios, the new parameters r_&amp;lt;state&amp;gt;_&amp;lt;j&amp;gt;. Compartmen
 The solver is a Python module called through reticulate; it needs
 numpy, sympy and scipy."><meta property="og:description" content="Computes symbolic steady-state expressions for use in a parameter
 transformation, following the AlyssaPetit method [1], [2]. States whose
-own balance gives a ratio of positive sums are solved from it first. The
+mass only leaks are set to zero first, with zeroLoops = TRUE also states
+that are only produced through one another. States whose own balance gives a
+ratio of positive sums are solved from it first. The
 cycles of the graph of states left are cut then: at a state of a conserved
 quantity, or at a state whose balance is solved for a rate constant of one
-flux side instead. Each cut state stays a free parameter. The remaining
+flux side instead. Each cut state stays a free parameter. A state of a
+conserved quantity whose balance is left without a positive unknown is solved
+in a further round, with another state of the quantity free. The remaining
 states and the rate constants of the cuts are then solved, each from a
 balance or a combination of balances in amounts, such that the result is a
 ratio of sums of positive terms. Only if that fails, a flux side with
@@ -37,7 +45,7 @@ numpy, sympy and scipy."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -77,6 +85,8 @@ numpy, sympy and scipy."></head><body>
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul></li>
 <li class="nav-item dropdown">
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-examples" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Examples</button>
@@ -113,10 +123,14 @@ numpy, sympy and scipy."></head><body>
     <div class="ref-description section level2">
     <p>Computes symbolic steady-state expressions for use in a parameter
 transformation, following the AlyssaPetit method [1], [2]. States whose
-own balance gives a ratio of positive sums are solved from it first. The
+mass only leaks are set to zero first, with <code>zeroLoops = TRUE</code> also states
+that are only produced through one another. States whose own balance gives a
+ratio of positive sums are solved from it first. The
 cycles of the graph of states left are cut then: at a state of a conserved
 quantity, or at a state whose balance is solved for a rate constant of one
-flux side instead. Each cut state stays a free parameter. The remaining
+flux side instead. Each cut state stays a free parameter. A state of a
+conserved quantity whose balance is left without a positive unknown is solved
+in a further round, with another state of the quantity free. The remaining
 states and the rate constants of the cuts are then solved, each from a
 balance or a combination of balances in amounts, such that the result is a
 ratio of sums of positive terms. Only if that fails, a flux side with
@@ -139,6 +153,7 @@ The solver is a Python module called through <span class="pkg">reticulate</span>
 <span>  simplify <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  solveQuadratic <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  priority <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  zeroLoops <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  resolve <span class="op">=</span> <span class="cn">TRUE</span>,</span>
 <span>  verbose <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -204,6 +219,16 @@ preferred first: named states are solved rather than kept free and solved
 earlier, named rate parameters are preferred as pivots. Default <code>NULL</code>.</p></dd>
 
 
+<dt id="arg-zeroloops">zeroLoops<a class="anchor" aria-label="anchor" href="#arg-zeroloops"></a></dt>
+<dd><p>Logical. <code>FALSE</code> (default) looks for a steady state with
+every state away from zero. <code>TRUE</code> sets to zero the largest set of states
+that are only produced through one another, such as a ligand that only
+the receptor complexes it forms activate: all fluxes of these states vanish
+where they are zero, and no conserved quantity lies on them. This is the
+steady state of a feedback loop that is off, as under
+<code>symmetryDetection(equilibrate = TRUE)</code>.</p></dd>
+
+
 <dt id="arg-resolve">resolve<a class="anchor" aria-label="anchor" href="#arg-resolve"></a></dt>
 <dd><p>Logical, whether the result is passed through
 <code><a href="resolveRecurrence.html">resolveRecurrence()</a></code> so that no equation refers to another. Default
@@ -232,7 +257,7 @@ non-linear ordinary differential equation models.
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
-    <div class="dont-index"><p><code><a href="repar.html">repar()</a></code>, <code><a href="P.html">P()</a></code></p></div>
+    <div class="dont-index"><p><code><a href="define.html">define()</a></code>, <code><a href="P.html">P()</a></code></p></div>
     </div>
 
     <div class="section level2">
@@ -258,8 +283,8 @@ non-linear ordinary differential equation models.
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="co"># Parameter transformation that puts the model in steady state</span></span></span>
 <span class="r-in"><span><span class="va">parameters</span> <span class="op">&lt;-</span> <span class="fu"><a href="getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">reactions</span><span class="op">)</span></span></span>
-<span class="r-in"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="repar.html">repar</a></span><span class="op">(</span><span class="fu"><a href="eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="va">parameters</span>, <span class="va">parameters</span><span class="op">)</span><span class="op">)</span>, <span class="st">"x &lt;- y"</span>,</span></span>
-<span class="r-in"><span>               x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">steadies</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">steadies</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="define.html">define</a></span><span class="op">(</span><span class="cn">NULL</span>, <span class="st">"x &lt;- x"</span>, x <span class="op">=</span> <span class="va">parameters</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="define.html">insert</a></span><span class="op">(</span><span class="va">trafo</span>, <span class="st">"x &lt;- y"</span>, x <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">steadies</span><span class="op">)</span>, y <span class="op">=</span> <span class="va">steadies</span><span class="op">)</span></span></span>
 <span class="r-in"><span><span class="va">trafo</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Idx           Inner &lt;- Outer</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   1      Tca_buffer &lt;- Tca_buffer</span>

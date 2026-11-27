@@ -1,7 +1,8 @@
 # 11. Remote computing
 
 Conditions of one evaluation run in threads, independent fits and
-profiles in processes.
+[profiles](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-profile)
+in processes.
 [`distributedComputing()`](https://dmodverse.github.io/dMod2/reference/distributedComputing.md)
 runs R code as tasks in detached processes, locally, over ssh or as a
 SLURM array job. Only the local job below runs at page build.
@@ -359,7 +360,6 @@ sides <- expand.grid(par = names(best), side = c("left", "right"), stringsAsFact
 profilesJob <- distributedComputing(
   profile(obj, best, task$par, side = task$side, fixed = gauge,
           limits = c(lower = -7, upper = 7), stepControl = list(stop = "data"),
-          algoControl = list(reoptimize = TRUE),
           optControl = list(iterlim = 100, tolControl = tolerances)),
   tasks = sides, on = cluster, jobname = "oppelt_profiles",
   input = c("obj", "best", "gauge", "tolerances"))

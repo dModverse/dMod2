@@ -1,10 +1,10 @@
 # Multiple shooting
 
 Single shooting integrates from the initial state over the whole time
-axis. For oscillating or spiking systems the objective is rugged: a
-parameter change shifts every later period, and a peak moved by more
-than the peak width leaves the residuals without direction, so few
-starts reach the narrow valleys.
+axis. For oscillating or spiking systems the objective is rugged, with
+many local minima and narrow valleys: a parameter change shifts every
+later period, and a peak moved by more than the peak width leaves the
+residuals without direction, so few starts reach the narrow valleys.
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) offers
 multiple shooting instead ([trust
 region](https://dmodverse.github.io/dMod2/articles/methods-trust.md)).
@@ -53,9 +53,12 @@ and the counts of the globalization.
 
 Multiple shooting [\[1\]](#ref-bock1983recent),
 [\[2\]](#ref-baake1992fitting) cuts the time axis at nodes \\\tau_1 \<
-\dots \< \tau_M\\ and integrates segment \\j\\ from node values \\s_j\\,
-the first from the initial state of the parameter transformation.
-Continuity becomes the constraint
+\dots \< \tau_M\\ into segments and integrates segment \\j\\ from node
+values \\s_j\\, the first from the initial state of the parameter
+transformation. The node values are fitted with the parameters. The gap
+\\c_j\\ is the difference between the end state of segment \\j\\ and the
+node value of the next segment, and the continuity constraint demands
+every gap to be zero:
 
 \\c_j = x(\tau\_{j+1};\\ \tau_j, s_j, \theta) - s\_{j+1} = 0 . \tag{1}\\
 
@@ -66,20 +69,23 @@ objective.
 
 ## Condensed step
 
-Bock’s generalized Gauss-Newton method linearizes (1). With the
-end-state sensitivities \\G_j = \partial x_j / \partial s_j\\ and \\P_j
-= \partial x_j / \partial \theta\\,
+Bock’s generalized Gauss-Newton method, Gauss-Newton for least squares
+with equality constraints, linearizes the residuals and the constraints
+(1) and takes the step from the linear problem. With the end-state
+sensitivities \\G_j = \partial x_j / \partial s_j\\ and \\P_j = \partial
+x_j / \partial \theta\\,
 
 \\\Delta s\_{j+1} = \alpha\\ c_j + G_j\\ \Delta s_j + P_j\\ \Delta
 \theta , \tag{2}\\
 
 and the recursion gives \\\Delta s = \alpha z + S\\ \Delta\theta\\.
 Substituted into the linearized residuals it leaves a Gauss-Newton model
-in \\\Delta\theta\\ alone (condensing), of single-shooting size, so
-subproblem solver and bounds of
+in \\\Delta\theta\\ alone, of single-shooting size, so subproblem solver
+and bounds of
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) apply
-unchanged. The nodes follow the step by the linearization, not by
-simulation, so the gaps close only at convergence.
+unchanged. This elimination of the node steps is condensing. The nodes
+follow the step by the linearization, not by simulation, so the gaps
+close only at convergence.
 
 The trust region bounds parameters and nodes together,
 
@@ -93,19 +99,21 @@ the identity without bounds, since a region on \\\theta\\ alone leaves
 \\S\\ \Delta\theta\\ unbounded, which is huge across a spike. \\V\\ is
 one over the state scale (`multipleShootingControl$scale`): data range
 for observed states, simulation range otherwise, a decade for log10 node
-values. \\\alpha = 1\\ closes the linearized gaps (Bock’s step); under
-an active region \\\alpha \le 1\\ is the share of the node part of the
-full step that the radius allows. A link of the condensing chain that
-would propagate a gap through expanding segments beyond a bound is
-dropped for the step. Other summands, a prior or a single-shooting
+values. The scaled gap size \\h = \lVert V c \rVert\\ is the Euclidean
+norm of the gaps in units of the state scale. \\\alpha = 1\\ closes the
+linearized gaps (Bock’s step); under an active region \\\alpha \le 1\\
+is the share of the node part of the full step that the radius allows. A
+link of the condensing chain that would propagate a gap through
+expanding segments beyond a bound is dropped for the step. Other
+summands, a prior or a single-shooting
 [`normL2()`](https://dmodverse.github.io/dMod2/reference/normL2.md),
 enter with value, gradient and Gauss-Newton Hessian.
 
 | control | effect |
 |----|----|
-| `stepControl$acceptance = "filter"` (default) | filter of Fletcher and Leyffer [\[3\]](#ref-fletcher2002nonlinear) on the objective function \\\mathcal{J}(\theta)\\, \\-2 \log L\\ or \\-2 \log\\ of the posterior, and the scaled gap size \\h = \lVert V c \rVert\\ |
-| `stepControl$acceptance = "merit"` | \\\ell_2\\ exact penalty \\\mathcal{J} + \mu h\\ |
-| `stepControl$soc` (on) | one second-order correction of a rejected step whose gaps did not close as predicted |
+| `stepControl$acceptance = "filter"` (default) | filter of Fletcher and Leyffer [\[3\]](#ref-fletcher2002nonlinear) on the objective function \\\ell(\theta)\\, \\-2 \log L\\ or \\-2 \log\\ of the posterior, and the scaled gap size \\h\\: a trial point is accepted if it lowers \\h\\ or \\\ell\\ by a margin against the current point and every pair \\(h, \ell)\\ stored from earlier iterates |
+| `stepControl$acceptance = "merit"` | exact penalty \\\ell + \mu h\\ |
+| `stepControl$soc` (on) | one second-order correction of a rejected step whose gaps did not close as predicted: the step repeated with the gaps at the trial point closed by the current linearization |
 | `tolControl$ctol` | `converged = TRUE` only for \\h\\ below it; stagnation, `rmin`, ten failed solves in a row, `iterlim`, and under `acceptance = "natural"` a zero full step or one failed solve end the run with `converged = FALSE` above it |
 | `hessianMethod = "gn"` | condensed Gauss-Newton blocks |
 | `hessianMethod = "bfgs"`, `"sr1"` | one quasi-Newton block per segment Lagrangian, from gradients alone, so usable with `sweep = "reverse"` |
@@ -119,7 +127,7 @@ From a distant start the condensed step can be forced through a regime
 the data never show, such as a spike threshold. `stepControl$anneal`
 (on) therefore first minimizes
 
-\\\mathcal{J} + w \lVert V c \rVert^2 \tag{4}\\
+\\\ell + w \lVert V c \rVert^2 \tag{4}\\
 
 over parameters and nodes on the sparse Gauss-Newton matrix, \\w\\
 rising tenfold per stage from one, then hands over to the exact method:
@@ -190,7 +198,7 @@ Off by default, since each helps on some problems and costs on others:
 | `stepControl$twoPhase` | fit parameters with nodes held at the start [\[6\]](#ref-horbelt2002parameter), then lay out nodes at the result and release them; helps with noisy node values, as on spiking traces, at several times the cost elsewhere |
 | `stepControl$regularize` | fix condensed directions with singular value below that fraction of the largest [\[7\]](#ref-peifer2007parameter) |
 | `multipleShootingControl$breaks` | nodes without continuity constraint [\[8\]](#ref-voss2004nonlinear); Gauss-Newton Hessian only |
-| `stepControl$restore` | filter restoration, at most five times: close the linearized gaps, damped if needed, else put the nodes on the current trajectory; on noisy spike trains this makes the layout cut more segments and fewer starts succeed |
+| `stepControl$restore` | filter restoration, steps that only reduce the gaps where the filter accepts no step, at most five times: close the linearized gaps, damped if needed, else put the nodes on the current trajectory; on noisy spike trains this makes the layout cut more segments and fewer starts succeed |
 
 ## FitzHugh-Nagumo oscillator
 

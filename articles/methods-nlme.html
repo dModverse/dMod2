@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -124,42 +126,56 @@ mixed-effects models</a>.</p>
 <div class="section level2">
 <h2 id="marginal-likelihood">Marginal likelihood<a class="anchor" aria-label="anchor" href="#marginal-likelihood"></a>
 </h2>
-<p>Group <span class="math inline">\(i\)</span> of <span class="math inline">\(G\)</span> has random effects <span class="math inline">\(\eta_i \in \mathbb{R}^K\)</span>, inner parameters
-<span class="math inline">\(\phi_i = h(\theta, \eta_i)\)</span> and the
-observation model</p>
+<p>A <span id="def-group">group</span> is the unit that shares one draw
+of the random effects, for example a subject or a gel, and holds one or
+several conditions. Group <span class="math inline">\(i\)</span> of
+<span class="math inline">\(G\)</span> has <span id="def-random-effect">random effects</span> <span class="math inline">\(\eta_i \in \mathbb{R}^K\)</span>, the unobserved
+deviations of the group from the population, integrated out of the
+likelihood, inner parameters <span class="math inline">\(\phi_i =
+h(\theta, \eta_i)\)</span> and the observation model</p>
 <p><span class="math display">\[\begin{aligned}
 y_{ij} &amp;= g\bigl(x(t_{ij};\, \phi_i)\bigr) + \varepsilon_{ij}, \\
 \varepsilon_{ij} &amp;\sim \mathcal{N}\bigl(0, \sigma^2(\phi_i,
 t_{ij})\bigr), \qquad \eta_i \sim \mathcal{N}(0, \Omega),
 \end{aligned} \tag{1}\]</span></p>
-<p>with population parameters <span class="math inline">\(\psi =
-(\theta, \Omega, \sigma)\)</span>, and</p>
-<p><span class="math display">\[\ell(\psi) = \sum_{i=1}^G \log
-L_i(\psi), \qquad
-L_i(\psi) = \int p(y_i \mid \eta_i, \psi)\, p(\eta_i \mid \Omega)\,
-\mathrm{d}\eta_i . \tag{2}\]</span></p>
-<p>The integrand is <code>normL2(data, g * x * p, errmodel = e)</code>,
-with sensitivities in <span class="math inline">\(\eta_i\)</span> by the
-chain rule, plus the prior <span class="math inline">\(\sum_i
-\eta_i^\top \Omega^{-1} \eta_i + G \log \lvert \Omega \rvert\)</span>
-from <code>randomEffects(p)</code>. Conditions without a group add their
+<p>with <span id="def-omega"><span class="math inline">\(\Omega\)</span></span> the covariance matrix of
+the random effects, <span id="def-population-parameters">population
+parameters</span> <span class="math inline">\(\psi = (\theta, \Omega,
+\sigma)\)</span>, the parameters <code><a href="../reference/em.html">em()</a></code> estimates, and <span id="def-structural-parameters">structural parameters</span> <span class="math inline">\(\theta\)</span>, those that are neither random
+effects nor parameters of <span class="math inline">\(\Omega\)</span> or
+the error model, fixed effects included. The log marginal likelihood
+is</p>
+<p><span class="math display">\[\begin{aligned}
+\log L(\psi) &amp;= \sum_{i=1}^G \log L_i(\psi), \\
+L_i(\psi) &amp;= \int p(y_i \mid \eta_i, \psi)\, p(\eta_i \mid \Omega)\,
+\mathrm{d}\eta_i .
+\end{aligned} \tag{2}\]</span></p>
+<p><code><a href="../reference/em.html">em()</a></code> minimizes and reports <span id="def-minus-2-log-l"><span class="math inline">\(-2 \log
+L\)</span></span>; differences of nested fits are likelihood-ratio
+statistics. The integrand is
+<code>normL2(data, g * x * p, errmodel = e)</code>, with sensitivities
+in <span class="math inline">\(\eta_i\)</span> by the chain rule, plus
+the prior <span class="math inline">\(\sum_i \eta_i^\top \Omega^{-1}
+\eta_i + G \log \lvert \Omega \rvert\)</span> from
+<code>randomEffects(p)</code>. Conditions without a group add their
 <span class="math inline">\(-2 \log L\)</span> unchanged.
 <code>normT(..., df = 4)</code> gives Student-t residuals.</p>
 </div>
 <div class="section level2">
 <h2 id="em-algorithm">EM algorithm<a class="anchor" aria-label="anchor" href="#em-algorithm"></a>
 </h2>
-<p>With the posterior <span class="math inline">\(q_i(\eta_i) = p(\eta_i
-\mid y_i, \psi^{(t)})\)</span>, Jensen’s inequality gives <span class="citation"><a href="#ref-dempster1977maximum">[1]</a></span></p>
+<p>With the <span id="def-posterior">posterior</span> <span class="math inline">\(q_i(\eta_i) = p(\eta_i \mid y_i,
+\psi^{(t)})\)</span>, the distribution of the random effects of a group
+given the data, Jensen’s inequality gives <span class="citation"><a href="#ref-dempster1977maximum">[1]</a></span></p>
 <p><span class="math display">\[\log L_i(\psi) \ge
 \underbrace{\mathbb{E}_{q_i}\bigl[\log p(y_i, \eta_i \mid
-\psi)\bigr]}_{Q_i(\psi \mid \psi^{(t)})}
-- \mathbb{E}_{q_i}\bigl[\log q_i(\eta_i)\bigr], \tag{3}\]</span></p>
+\psi)\bigr]}_{Q_i(\psi \mid \psi^{(t)})} - \mathbb{E}_{q_i}\bigl[\log
+q_i(\eta_i)\bigr], \tag{3}\]</span></p>
 <p>with equality at <span class="math inline">\(\psi =
 \psi^{(t)}\)</span>. EM alternates forming <span class="math inline">\(Q
-= \sum_i Q_i\)</span> and maximizing it, so <span class="math inline">\(\ell\)</span> never decreases; near the optimum it
-converges linearly at the fraction of missing information. ECM <span class="citation"><a href="#ref-meng1993maximum">[2]</a></span> splits
-the M-step into conditional steps, ECME <span class="citation"><a href="#ref-liu1994ecme">[3]</a></span> takes some of them on the
+= \sum_i Q_i\)</span> and maximizing it, so <span class="math inline">\(\log L\)</span> never decreases; near the optimum
+it converges linearly at the fraction of missing information. <span id="def-ecm">ECM</span> <span class="citation"><a href="#ref-meng1993maximum">[2]</a></span> splits the M-step into
+conditional steps, each over some parameters with the others held, <span id="def-ecme">ECME</span> <span class="citation"><a href="#ref-liu1994ecme">[3]</a></span> takes some of them on the
 likelihood itself: <span class="math inline">\(\Omega\)</span> in closed
 form, structural parameters by optimization. <a href="methods-sparsity-priors.html#hyperparameters">Sparsity priors</a>
 minimizes <span class="math inline">\(-2Q\)</span> instead. The methods
@@ -214,22 +230,27 @@ replace the posterior, which has no closed form, by:</p>
 <div class="section level3">
 <h3 id="laplace-approximation">Laplace approximation<a class="anchor" aria-label="anchor" href="#laplace-approximation"></a>
 </h3>
-<p>With <span class="math inline">\(\Phi_i(\eta) = -2 \log p(y_i \mid
-\eta, \psi) - 2 \log p(\eta \mid \Omega) - K \log(2\pi)\)</span>, the
-prior without the constant of the normal density, mode <span class="math inline">\(\hat\eta_i\)</span> and the Gauss-Newton curvature
-<span class="math inline">\(H_i\)</span> of <span class="math inline">\(\Phi_i\)</span> at <span class="math inline">\(\hat\eta_i\)</span>, Laplace’s approximation of
+<p>With</p>
+<p><span class="math display">\[\Phi_i(\eta) = -2 \log p(y_i \mid \eta,
+\psi) - 2 \log p(\eta \mid \Omega) - K \log(2\pi),\]</span></p>
+<p>the prior without the constant of the normal density, the <span id="def-conditional-mode">conditional mode</span> <span class="math inline">\(\hat\eta_i\)</span>, which minimizes <span class="math inline">\(\Phi_i\)</span> and so maximizes the posterior,
+and the Gauss-Newton curvature <span class="math inline">\(H_i\)</span>
+of <span class="math inline">\(\Phi_i\)</span> at <span class="math inline">\(\hat\eta_i\)</span>, Laplace’s approximation of
 (2) is <span class="math inline">\(-2 \log L_i \approx
 \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert\)</span>, the constant
-canceling against that of the Gaussian integral. FOCEI minimizes</p>
+canceling against that of the Gaussian integral. <span id="def-focei">FOCEI</span>, first-order conditional estimation with
+interaction, minimizes</p>
 <p><span class="math display">\[F(\psi) = \sum_i \Bigl[
 \Phi_i(\hat\eta_i) + \log \lvert H_i/2 \rvert \Bigr]
 \tag{4}\]</span></p>
 <p>plus the full <span class="math inline">\(-2 \log L\)</span> of the
 conditions without a group. <span class="math inline">\(\log \lvert
-H_i/2 \rvert\)</span> is the volume term. <span class="math inline">\(H_i\)</span> includes the derivatives of <span class="math inline">\(\sigma\)</span> in <span class="math inline">\(\eta\)</span>, the interaction of FOCEI <span class="citation"><a href="#ref-wang2007derivation">[4]</a>, <a href="#ref-pinheiro1995approximations">[5]</a></span>. Conditional
-standard errors of the modes are the square roots of the diagonal of
-<span class="math inline">\(2 H_i^{-1}\)</span>. The error has either
-sign and order <span class="math inline">\(1 / n_i\)</span> for <span class="math inline">\(n_i\)</span> data points in the group, with a
+H_i/2 \rvert\)</span> is the <span id="def-volume-term">volume
+term</span>, the log determinant of the curvature of the posterior.
+<span class="math inline">\(H_i\)</span> includes the derivatives of
+<span class="math inline">\(\sigma\)</span> in <span class="math inline">\(\eta\)</span>, the interaction of FOCEI <span class="citation"><a href="#ref-wang2007derivation">[4]</a>, <a href="#ref-pinheiro1995approximations">[5]</a></span>. <span id="def-conditional-standard-error">Conditional standard errors</span>
+of the modes are the square roots of the diagonal of <span class="math inline">\(2 H_i^{-1}\)</span>. The error has either sign and
+order <span class="math inline">\(1 / n_i\)</span> for <span class="math inline">\(n_i\)</span> data points in the group, with a
 factor that grows with <span class="math inline">\(K\)</span>.</p>
 </div>
 <div class="section level3">
@@ -246,16 +267,16 @@ eigenvalue floor <span class="math inline">\(10^{-10}
 batched prediction.</li>
 <li>
 <strong>Gradient.</strong> By the envelope theorem the mode shift
-drops out: <span class="math inline">\(\nabla_\psi F = \sum_i
-\nabla_\psi \Phi_i \big|_{\hat\eta_i} + \sum_i \mathrm{d} \log \lvert
-H_i
-\rvert / \mathrm{d}\psi\)</span>, with a Newton correction for the
-gradient left by the inner search.</li>
+drops out, <span class="math display">\[\nabla_\psi F = \sum_i
+\nabla_\psi \Phi_i \big|_{\hat\eta_i} + \sum_i \frac{\mathrm{d} \log
+\lvert H_i \rvert}{\mathrm{d}\psi},\]</span> with a Newton correction
+for the gradient left by the inner search.</li>
 <li>
-<strong>Model Hessian.</strong> Gauss-Newton Schur complement <span class="math inline">\(\sum_i [\Phi_i^{\psi\psi} -
-\Phi_i^{\psi\eta} (\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi}]\)</span>,
-plus the volume-term Hessian with second-order sensitivities, plus SR1
-from the last three accepted gradients.</li>
+<strong>Model Hessian.</strong> Gauss-Newton Schur complement <span class="math display">\[\sum_i \bigl[\Phi_i^{\psi\psi} -
+\Phi_i^{\psi\eta} (\Phi_i^{\eta\eta})^{-1}
+\Phi_i^{\eta\psi}\bigr],\]</span> plus the volume-term Hessian with
+second-order sensitivities, plus SR1 from the last three accepted
+gradients.</li>
 <li>
 <strong>Stop.</strong> Model gain below
 <code>trustControl$mtol</code> in the region <code>rmax</code>, or five
@@ -283,11 +304,15 @@ K\)</span> for the Schur complement, <span class="math inline">\(k = 2K
 <h3 id="group-kernel">Group kernel<a class="anchor" aria-label="anchor" href="#group-kernel"></a>
 </h3>
 <p>One C++ kernel evaluates all groups at once: the modes, the local
-model of each group and the integral on it. At the mode, <span class="math inline">\(\Phi_i(\hat\eta_i + \delta) \approx
+model of each group and the integral on it. At the mode,</p>
+<p><span class="math display">\[\Phi_i(\hat\eta_i + \delta) \approx
 \Phi_i(\hat\eta_i) + g_i^\top \delta + \tfrac12 \delta^\top H_i
-\delta\)</span>, <span class="math inline">\(g_i\)</span> the gradient
-the inner search leaves. The block <span class="math inline">\(H_{NN}\)</span> of the normal random effects is
-factored once; eliminating it gives the outer model, <span class="math inline">\(\Phi_i^{\psi\psi} - \Phi_i^{\psi N} H_{NN}^{-1}
+\delta,\]</span></p>
+<p><span class="math inline">\(g_i\)</span> the gradient the inner
+search leaves. The block <span class="math inline">\(H_{NN}\)</span> of
+the normal random effects is factored once; eliminating it gives the
+outer model, <span class="math inline">\(\Phi_i^{\psi\psi} -
+\Phi_i^{\psi N} H_{NN}^{-1}
 \Phi_i^{N\psi}\)</span>, and the curvature <span class="math inline">\(H_{LL} - H_{LN} H_{NN}^{-1} H_{NL}\)</span> left
 on the other coordinates <span class="math inline">\(L\)</span>. An
 integrator maps the local model to the term <span class="math inline">\(-2 \log L_i - \Phi_i(\hat\eta_i)\)</span> and to
@@ -303,14 +328,16 @@ the derivative <span class="math inline">\(W_i\)</span> of the term in
 </h3>
 <p>For Gauss-Newton <span class="math inline">\(H_i\)</span>, from
 second-order sensitivities,</p>
-<p><span class="math display">\[\frac{\mathrm{d} \log \lvert H_i
-\rvert}{\mathrm{d} \psi_k}
-= \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial
-\psi_k}\Big|_\eta\Bigr)
-+ \sum_l \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial
-\eta_l}\Bigr) \frac{\mathrm{d} \hat\eta_l}{\mathrm{d} \psi_k},
-\qquad \frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} =
--(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi}, \tag{5}\]</span></p>
+<p><span class="math display">\[\begin{aligned}
+\frac{\mathrm{d} \log \lvert H_i \rvert}{\mathrm{d} \psi_k}
+&amp;= \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial H_i}{\partial
+\psi_k}\Big|_\eta\Bigr) \\
+&amp;\quad + \sum_l \operatorname{tr}\Bigl(H_i^{-1} \frac{\partial
+H_i}{\partial \eta_l}\Bigr) \frac{\mathrm{d} \hat\eta_l}{\mathrm{d}
+\psi_k}, \\
+\frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} &amp;=
+-(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi},
+\end{aligned} \tag{5}\]</span></p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -350,21 +377,28 @@ standard errors of <span class="math inline">\(\Omega\)</span>.</p>
 <h2 id="adaptive-sparse-grid-quadrature">Adaptive sparse-grid quadrature<a class="anchor" aria-label="anchor" href="#adaptive-sparse-grid-quadrature"></a>
 </h2>
 <p>Laplace biases <span class="math inline">\(\Omega\)</span> for skewed
-posteriors, as for oral doses sampled near absorption. The cubature
-<span class="math inline">\(\int e^{-\Phi_i/2}\, \mathrm{d}\eta \approx
-\sum_b W_b\, e^{-\Phi_i(\eta_b)/2}\)</span> removes that error level by
-level. It combines the nested Genz-Keister rules <span class="citation"><a href="#ref-genz1996fully">[6]</a></span>, 1, 3, 9,
-19 and 35 points exact to degree 1, 5, 15, 29 and 51, by Smolyak’s
-sparse grid <span class="citation"><a href="#ref-smolyak1963quadrature">[7]</a>, <a href="#ref-heiss2008likelihood">[8]</a></span>,</p>
+posteriors, as for oral doses sampled near absorption. The cubature</p>
+<p><span class="math display">\[\int e^{-\Phi_i/2}\, \mathrm{d}\eta
+\approx \sum_b W_b\, e^{-\Phi_i(\eta_b)/2}\]</span></p>
+<p>removes that error level by level. It combines the nested
+Genz-Keister rules <span class="citation"><a href="#ref-genz1996fully">[6]</a></span>, 1, 3, 9, 19 and 35 points
+exact to degree 1, 5, 15, 29 and 51, by the <span id="def-smolyak">Smolyak</span> <span id="def-sparse-grid">sparse
+grid</span> <span class="citation"><a href="#ref-smolyak1963quadrature">[7]</a>, <a href="#ref-heiss2008likelihood">[8]</a></span>, a sum of tensor products
+of one-dimensional rules with far fewer nodes than the full tensor
+grid,</p>
 <p><span class="math display">\[A(L, K) = \sum_{\lvert \mathbf{i} \rvert
 \le L} \Delta^{i_1} \otimes \cdots \otimes \Delta^{i_K},
 \tag{6}\]</span></p>
 <p><span class="math inline">\(\Delta^l\)</span> the difference of the
 one-dimensional rules of levels <span class="math inline">\(l\)</span>
-and <span class="math inline">\(l - 1\)</span>. Level <span class="math inline">\(L\)</span> is exact for total degree <span class="math inline">\(2(L - K) + 1\)</span> against the Gaussian, with
-nodes polynomial in <span class="math inline">\(K\)</span> (for <span class="math inline">\(K = 3\)</span>, levels 3 to 7 have 1, 7, 19, 45,
-117); level <span class="math inline">\(K\)</span> is the single Laplace
-node. The grid sits on the FOCEI Gaussian <span class="math inline">\(\mathcal{N}(\hat\eta_i, 2 H_i^{-1})\)</span> and
+and <span class="math inline">\(l - 1\)</span>. <span id="def-level">Level</span> <span class="math inline">\(L\)</span>, the
+bound on the sum <span class="math inline">\(\lvert \mathbf{i}
+\rvert\)</span> of the one-dimensional levels, is exact for total degree
+<span class="math inline">\(2(L - K) + 1\)</span> against the Gaussian,
+with nodes polynomial in <span class="math inline">\(K\)</span> (for
+<span class="math inline">\(K = 3\)</span>, levels 3 to 7 have 1, 7, 19,
+45, 117); level <span class="math inline">\(K\)</span> is the single
+Laplace node. The grid sits on the FOCEI Gaussian <span class="math inline">\(\mathcal{N}(\hat\eta_i, 2 H_i^{-1})\)</span> and
 moves with <span class="math inline">\(\psi\)</span> <span class="citation"><a href="#ref-clausen2009maximum">[9]</a></span>.
 Negative weights make <span class="math inline">\(\log L_i\)</span> a
 signed log-sum-exp; a nonpositive sum, an unresolved posterior, fails
@@ -395,50 +429,69 @@ grid, their change is the estimate, and a group above the tolerance is
 capped. With no refinement the grid is that of (6); for <span class="math inline">\(K = 20\)</span> levels <span class="math inline">\(K + 1\)</span> to <span class="math inline">\(K +
 3\)</span> have 41, 801 and 10041 nodes.</li>
 <li>
-<strong>Step.</strong> Trust region over all parameters on frozen
-nodes. For mu-referenced fixed effects, <span class="math inline">\(\phi_i = D_i \beta + \eta_i\)</span>, nodes are
-frozen in <span class="math inline">\(\phi\)</span>, need no
+<strong>Step.</strong> Trust region over all parameters on <span id="def-frozen-nodes">frozen nodes</span>: nodes and weights held while
+<span class="math inline">\(\psi\)</span> moves within the step, so the
+quadrature is a smooth function of <span class="math inline">\(\psi\)</span>. <span id="def-fixed-effect">Fixed
+effects</span> are the coefficients of an effect formula, the same for
+all groups. They are <span id="def-mu-referencing">mu-referenced</span>
+where the formula sets <span class="math inline">\(\phi_i = D_i \beta +
+\eta_i\)</span>, <span class="math inline">\(D_i\)</span> the design row
+of the group, so a shift of <span class="math inline">\(\beta\)</span>
+acts as a shift of <span class="math inline">\(\eta_i\)</span>; there
+nodes are frozen in <span class="math inline">\(\phi\)</span>, need no
 sensitivities and hold over larger steps.</li>
 <li>
-<strong>Stop.</strong> A Newton step on the rebuilt nodes would gain
-less than <code>tolDecrement</code>, or <span class="math inline">\(-2
-\log L\)</span> rose after a step on unchanged levels, so the step lies
-below what the levels resolve. Either way the fit is stationary at the
-levels reached, capped ones included; it returns the iterate of lowest
-<span class="math inline">\(-2 \log L\)</span> on the highest levels,
-and the stage trace records the levels, errors and caps per group.</li>
+<strong>Stop.</strong> The <span id="def-newton-decrement">Newton
+decrement</span>, the decrease of <span class="math inline">\(-2 \log
+L\)</span> that a Newton step on the rebuilt nodes would make by the
+quadratic model, is below <code>tolDecrement</code>, or <span class="math inline">\(-2 \log L\)</span> rose after a step on unchanged
+levels, so the step lies below what the levels resolve. Either way the
+fit is stationary at the levels reached, capped ones included; it
+returns the iterate of lowest <span class="math inline">\(-2 \log
+L\)</span> on the highest levels, and the stage trace records the
+levels, errors and caps per group.</li>
 </ul>
 <p>At the estimate, importance sampling (<span class="math inline">\(t_5\)</span> proposal at the mode, shifted lattice
 points) flags groups whose two estimates differ by more than three
-standard errors plus the level error, or with Pareto shape <span class="citation"><a href="#ref-vehtari2024pareto">[11]</a></span> above
-0.7.</p>
+standard errors plus the larger of the level error and <code>tol</code>
+over the number of groups, or with <span id="def-pareto-shape">Pareto
+shape</span> <span class="math inline">\(\hat k\)</span> <span class="citation"><a href="#ref-vehtari2024pareto">[11]</a></span> above
+0.7, <span class="math inline">\(\hat k\)</span> the shape of a
+generalized Pareto distribution fitted to the largest importance
+weights; above 0.7 the tail is so heavy that the estimate is
+unreliable.</p>
 </div>
 <div class="section level2">
 <h2 id="laplace-em">Laplace EM<a class="anchor" aria-label="anchor" href="#laplace-em"></a>
 </h2>
 <p><code>method = "laplaceEM"</code> runs ECME: a trust-region run of at
 most <code>maxCm1Iter</code> (default 30) iterations of the structural
-parameters on the likelihood over frozen nodes of level <span class="math inline">\(K + 1\)</span>, then every block of <span class="math inline">\(\Omega\)</span> from <span class="math inline">\(S
-= G^{-1} \sum_i M_i\)</span> with the posterior second moments <span class="math inline">\(M_i = \hat\eta_i \hat\eta_i^\top + 2
-H_i^{-1}\)</span> (modes alone would shrink <span class="math inline">\(\Omega\)</span>). It stops when parameter change
-and extrapolated remaining distance are below <code>epsEcm</code>
-(default <code>1e-5</code>), or after <code>maxEcm</code> (default 200)
+parameters on the likelihood over frozen nodes of level <span class="math inline">\(K + 1\)</span>, then every <span id="def-block">block</span> of <span class="math inline">\(\Omega\)</span>, the random effects of one ID with
+full covariance and independent of the other blocks, from <span class="math inline">\(S = G^{-1} \sum_i M_i\)</span> with the posterior
+second moments <span class="math inline">\(M_i = \hat\eta_i
+\hat\eta_i^\top + 2 H_i^{-1}\)</span> (modes alone would shrink <span class="math inline">\(\Omega\)</span>). It stops when parameter change
+and extrapolated remaining distance are below <code>epsECM</code>
+(default <code>1e-5</code>), or after <code>maxECM</code> (default 200)
 iterations. Settings come from <code>control$quadrature</code>.</p>
 </div>
 <div class="section level2">
 <h2 id="saem">SAEM<a class="anchor" aria-label="anchor" href="#saem"></a>
 </h2>
 <p><code>method = "saem"</code> uses posterior draws, with no Gaussian
-assumption and equal cost for any <span class="math inline">\(K\)</span>. Stochastic-approximation EM <span class="citation"><a href="#ref-delyon1999convergence">[12]</a></span>
+assumption and equal cost for any <span class="math inline">\(K\)</span>. <span id="def-saem">Stochastic-approximation EM</span> (SAEM) <span class="citation"><a href="#ref-delyon1999convergence">[12]</a></span>
 averages the sufficient statistics by a Robbins-Monro recursion <span class="citation"><a href="#ref-robbins1951stochastic">[13]</a></span>,</p>
-<p><span class="math display">\[s_k = s_{k-1} + \gamma_k \bigl( S(y,
-\eta^{(k)}) - s_{k-1} \bigr), \qquad
-\eta^{(k)} \sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} =
-\hat\psi(s_k), \tag{7}\]</span></p>
-<p>converging to a stationary point of <span class="math inline">\(\ell\)</span> <span class="citation"><a href="#ref-delyon1999convergence">[12]</a>, <a href="#ref-kuhn2004coupling">[14]</a></span>. <span class="math inline">\(\Omega\)</span> follows from <span class="math inline">\(\sum_i \eta_i \eta_i^\top\)</span>, mu-referenced
+<p><span class="math display">\[\begin{aligned}
+s_k &amp;= s_{k-1} + \gamma_k \bigl( S(y, \eta^{(k)}) - s_{k-1} \bigr),
+\\
+\eta^{(k)} &amp;\sim q(\cdot \mid \psi^{(k-1)}), \qquad \psi^{(k)} =
+\hat\psi(s_k),
+\end{aligned} \tag{7}\]</span></p>
+<p>converging to a stationary point of <span class="math inline">\(\log
+L\)</span> <span class="citation"><a href="#ref-delyon1999convergence">[12]</a>, <a href="#ref-kuhn2004coupling">[14]</a></span>. <span class="math inline">\(\Omega\)</span> follows from <span class="math inline">\(\sum_i \eta_i \eta_i^\top\)</span>, mu-referenced
 fixed effects by generalized least squares, other structural parameters
 from an average of quadratic models at the draws, whose Newton step has
-the marginal score as fixed point.</p>
+the <span id="def-marginal-score">marginal score</span>, the gradient of
+<span class="math inline">\(\log L(\psi)\)</span>, as fixed point.</p>
 <table class="table">
 <colgroup>
 <col width="50%">
@@ -475,7 +528,7 @@ L\)</span> is below <code>mcTol</code>
 </tr>
 </tbody>
 </table>
-<p>SAEM neither forms <span class="math inline">\(\ell\)</span> nor
+<p>SAEM neither forms <span class="math inline">\(\log L\)</span> nor
 raises it in every iteration; <code><a href="../reference/em.html">em()</a></code> reports the quadrature
 of level <span class="math inline">\(K + 2\)</span> with standard errors
 from the quadrature Hessian. SAEM suits many random effects and skewed,
@@ -483,8 +536,10 @@ heavy-tailed or multimodal posteriors <span class="citation"><a href="#ref-kuhn2
 <div class="section level3">
 <h3 id="spike-and-slab-random-effects">Spike-and-slab random effects<a class="anchor" aria-label="anchor" href="#spike-and-slab-random-effects"></a>
 </h3>
-<p>A spike-and-slab random effect <span class="math inline">\(\eta_{ij}
-= z_{ij} v_{ij}\)</span> has an indicator <span class="math inline">\(z_{ij}\)</span> with <span class="math inline">\(\Pr(z_{ij} = 1) = p\)</span> and a slab value
+<p>A <span id="def-spike-and-slab">spike-and-slab</span> random effect
+<span class="math inline">\(\eta_{ij} = z_{ij} v_{ij}\)</span> is 0
+(spike) or normal (slab) by an <span id="def-indicator">indicator</span>
+<span class="math inline">\(z_{ij}\)</span> with <span class="math inline">\(\Pr(z_{ij} = 1) = p\)</span> and a slab value
 <span class="math inline">\(v_{ij} \sim \mathcal{N}(0, \tau^2)\)</span>
 <span class="citation"><a href="#ref-mitchell1988bayesian">[16]</a>, <a href="#ref-george1993variable">[17]</a></span>. Per iteration, after the
 normal random effects:</p>
@@ -494,18 +549,21 @@ the data term in the slab values, with the curvature clipped to be
 positive semidefinite, refreshed at the mean of the slab-only
 Gaussian.</p></li>
 <li>
-<p><strong>Collapsed indicator moves.</strong> Each indicator of a
-group once per sweep, in random order, all groups at once. The other
-slab values of the group move with <span class="math inline">\(v_{ij}\)</span> along the regression of the local
-model, <span class="math inline">\(v_o = b_o + x\,u_o\)</span>, so the
-state <span class="math inline">\(b\)</span> with <span class="math inline">\(z_{ij} = 0\)</span> and the line stay fixed. On
-this line the slab mass <span class="math inline">\(I = \int
+<p><strong><span id="def-collapsed-move">Collapsed indicator
+moves</span>.</strong> Each indicator of a group once per sweep, in
+random order, all groups at once. The other slab values of the group
+move with <span class="math inline">\(v_{ij}\)</span> along the
+regression of the local model, <span class="math inline">\(v_o = b_o +
+x\,u_o\)</span>, so the state <span class="math inline">\(b\)</span>
+with <span class="math inline">\(z_{ij} = 0\)</span> and the line stay
+fixed. On this line the slab mass <span class="math inline">\(I = \int
 f(x)\,dx\)</span>, <span class="math inline">\(f\)</span> the joint
 density of data and prior, is a Gauss-Hermite sum on the local Gaussian
 <span class="math inline">\(\mathcal{N}(m, s^2)\)</span> with the exact
 data term at <code>nodes</code> (default 3) points, which gives the
-conditional inclusion probability with the slab value integrated out
-<span class="citation"><a href="#ref-liu1994collapsed">[18]</a></span>,</p>
+conditional <span id="def-inclusion-probability">inclusion
+probability</span> <span class="math inline">\(\Pr(z_{ij} = 1)\)</span>
+given the data, with the slab value integrated out <span class="citation"><a href="#ref-liu1994collapsed">[18]</a></span>,</p>
 <p><span class="math display">\[\hat\pi_{ij} = \frac{I}{I + f_0}, \qquad
 f_0 = f \text{ at } z_{ij} = 0 . \tag{8}\]</span></p>
 <p>The proposal draws <span class="math inline">\(z_{ij}\)</span> with
@@ -522,9 +580,12 @@ slab, scaled by the conditional standard deviations of the local
 model.</p></li>
 <li><p><strong>A-step and M-steps.</strong> <span class="math inline">\(p\)</span> and <span class="math inline">\(\tau\)</span> follow from Robbins-Monro averages
 of <span class="math inline">\(\sum \hat\pi_{ij}\)</span> and <span class="math inline">\(\sum \hat\pi_{ij}\,\mathbb{E}(x^2 \mid z_{ij} =
-1)\)</span>, the Rao-Blackwellized statistics <span class="citation"><a href="#ref-casella1996rao">[20]</a></span> of the sweep, in place of the
-drawn indicators. An effect the data do not inform has <span class="math inline">\(\hat\pi_{ij} = p\)</span> and second moment <span class="math inline">\(\tau^2\)</span> and leaves both unchanged; counts
-of drawn indicators would instead let <span class="math inline">\(p\)</span> wander to 1 in burn-in, where <span class="math inline">\(\gamma_k = 1\)</span>. In burn-in the odds <span class="math inline">\(p / (1 - p)\)</span> and <span class="math inline">\(\tau\)</span> change by a factor in <span class="math inline">\([0.95, 1.25]\)</span> per iteration.</p></li>
+1)\)</span>, the <span id="def-rao-blackwellization">Rao-Blackwellized</span> statistics <span class="citation"><a href="#ref-casella1996rao">[20]</a></span> of the
+sweep: conditional expectations in place of the drawn indicators, with
+the same mean and smaller variance. An effect the data do not inform has
+<span class="math inline">\(\hat\pi_{ij} = p\)</span> and second moment
+<span class="math inline">\(\tau^2\)</span> and leaves both unchanged;
+counts of drawn indicators would instead let <span class="math inline">\(p\)</span> wander to 1 in burn-in, where <span class="math inline">\(\gamma_k = 1\)</span>. In burn-in the odds <span class="math inline">\(p / (1 - p)\)</span> and <span class="math inline">\(\tau\)</span> change by a factor in <span class="math inline">\([0.95, 1.25]\)</span> per iteration.</p></li>
 </ul>
 <p><span class="math inline">\(p_0\)</span> is one minus the mean of
 <span class="math inline">\(\hat\pi_{ij}\)</span> over the late sweeps,
@@ -532,10 +593,13 @@ an effect selected where it is below 1/2. An <code>em</code> fit as
 <code>init</code> starts the chain at the selected values of that fit,
 the indicators set where they are not 0, which checks a FOCEI optimum by
 SAEM. <span class="math inline">\(-2 \log L\)</span> at the estimate is
-that of <code>method = "focei"</code>; with Dirichlet-process random
-effects beside on more than 14 groups, or with
-<code>integral = "importance"</code>, it comes from sequential
-importance sampling over the partitions (<a href="methods-sparsity-priors.html#importance-sampling">Sparsity
+that of <code>method = "focei"</code>. <span id="def-dirichlet-process-random-effects">Dirichlet-process random
+effects</span> cluster the groups: the groups of a cluster share one
+value, 0 for the population cluster and a normal draw for each other
+cluster. With them beside on more than 14 groups, or with
+<code>integral = "importance"</code>, <span class="math inline">\(-2
+\log L\)</span> comes from sequential importance sampling over the
+partitions (<a href="methods-sparsity-priors.html#importance-sampling">Sparsity
 priors</a>), each group summing over the subsets of the spike-and-slab
 effects that reach the group data.</p>
 </div>

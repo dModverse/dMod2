@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -120,9 +122,9 @@
     
 <p>A mixed-effects model writes each individual parameter as a
 population value plus a random deviation and integrates the deviations
-out of the likelihood. Random effects are declared in the
-<code>parfn</code>; <code><a href="../reference/em.html">em()</a></code> fits the model. Example:
-theophylline, twelve subjects, one oral dose each.</p>
+out of the <a href="methods-objective.html#def-likelihood">likelihood</a>. <a href="methods-nlme.html#def-random-effect">Random effects</a> are
+declared in the <code>parfn</code>; <code><a href="../reference/em.html">em()</a></code> fits the model.
+Example: theophylline, twelve subjects, one oral dose each.</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="kw"><a href="https://rdrr.io/r/base/library.html" class="external-link">library</a></span><span class="op">(</span><span class="va"><a href="https://dmodverse.github.io/dMod2/">dMod2</a></span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/options.html" class="external-link">options</a></span><span class="op">(</span>dMod2.outdir <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/tempfile.html" class="external-link">tempdir</a></span><span class="op">(</span><span class="op">)</span>, <span class="st">"guide-mixed-effects"</span><span class="op">)</span><span class="op">)</span></span>
@@ -209,8 +211,8 @@ predictors:</p>
 <li>
 <code>Cl ~ 1 + (1 | ID)</code>: random intercept per subject.</li>
 <li>
-<code>Cl ~ 1 + logWeight + (1 | ID)</code>: a covariate, fixed
-effect <code>Cl_logWeight</code> on a table column.</li>
+<code>Cl ~ 1 + logWeight + (1 | ID)</code>: a covariate, <a href="methods-nlme.html#def-fixed-effect">fixed effect</a>
+<code>Cl_logWeight</code> on a table column.</li>
 <li>
 <code>Ka + Cl ~ 1 + (1 | p | ID)</code>: random effects of
 <code>Ka</code> and <code>Cl</code> correlated (same ID
@@ -222,11 +224,11 @@ random slope, correlated with the intercept.</li>
 <code>Cl ~ 1 + (1 | ID) + (1 | ID:OCC)</code>: variability between
 subjects and between occasions.</li>
 <li>
-<code>Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))</code>:
-spike-and-slab instead of normal random effects.</li>
+<code>Cl ~ 1 + (1 | gr(ID, dist = spikeSlab()))</code>: <a href="methods-nlme.html#def-spike-and-slab">spike-and-slab</a> instead
+of normal random effects.</li>
 </ul>
-<p>Conditions of one group share the group random effects. The random
-effects of one ID form a block with full covariance;
+<p>Conditions of one <a href="methods-nlme.html#def-group">group</a>
+share the group random effects. The random effects of one ID form a <a href="methods-nlme.html#def-block">block</a> with full covariance;
 <code>omega_&lt;a&gt;_&lt;b&gt;</code> are the entries of the Cholesky
 factor of the block, with the log of the diagonal. Spike-and-slab and
 Dirichlet-process random effects: <a href="guide-sparse-deviations.html">Sparse deviations</a>.</p>
@@ -234,8 +236,9 @@ Dirichlet-process random effects: <a href="guide-sparse-deviations.html">Sparse 
 <div class="section level2">
 <h2 id="marginal-likelihood">Marginal likelihood<a class="anchor" aria-label="anchor" href="#marginal-likelihood"></a>
 </h2>
-<p><code><a href="../reference/em.html">em()</a></code> maximizes the likelihood of fixed effects, <span class="math inline">\(\Omega\)</span> and error parameters with the
-random effects integrated out. It takes
+<p><code><a href="../reference/em.html">em()</a></code> maximizes the marginal likelihood of fixed effects,
+<span class="math inline">\(\Omega\)</span> and <a href="methods-objective.html#def-error-parameters">error parameters</a>
+with the random effects integrated out. It takes
 <code>normL2(data, g * x * p, errmodel = e)</code>, or
 <code>normT(..., df = 4)</code> for Student-t residuals, and builds the
 prior from <code>randomEffects(p)</code>. <code>method</code>:</p>
@@ -254,12 +257,14 @@ prior from <code>randomEffects(p)</code>. <code>method</code>:</p>
 <tbody>
 <tr class="odd">
 <td><code>"focei"</code></td>
-<td>default, fast, Laplace’s approximation at the modes</td>
+<td>default, fast, Laplace’s approximation at the <a href="methods-sparsity-priors.html#def-mode">modes</a>
+</td>
 <td>Laplace</td>
 </tr>
 <tr class="even">
 <td><code>"quadrature"</code></td>
-<td>skewed posteriors, few random effects per group</td>
+<td>skewed <a href="methods-nlme.html#def-posterior">posteriors</a>, few
+random effects per group</td>
 <td>quadrature</td>
 </tr>
 <tr class="odd">
@@ -319,15 +324,15 @@ by <code>results/guide-nlme.R</code>.</p>
 <span><span class="co">#&gt; Shrinkage: eta_Ka = 0.018, eta_V = 0.103, eta_Cl = 0.039</span></span></code></pre>
 <p><code>omega_*</code> are log standard deviations here. Shrinkage near
 1 means the data of a subject hardly move the individual parameter.</p>
-<p><code>value</code> is <span class="math inline">\(-2 \log L\)</span>;
-<code>valueNonmem</code> compares with the NONMEM <code>OBJ</code>
-(<code>NA</code> for <code><a href="../reference/normT.html">normT()</a></code>). The fit holds
-<code>Omega</code>, <code>omega</code>, <code>random</code>,
-<code>etaModes</code>, <code>etaSE</code> and <code>shrinkage</code>.
-Methods: <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>,
-<code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> (Wald or <code>method = "profile"</code>),
-<code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC()</a></code>,
-<code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>, <code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>,
+<p><code>value</code> is <a href="methods-nlme.html#def-minus-2-log-l"><span class="math inline">\(-2 \log L\)</span></a>; <code>valueNonmem</code>
+compares with the NONMEM <code>OBJ</code> (<code>NA</code> for
+<code><a href="../reference/normT.html">normT()</a></code>). The fit holds <code>Omega</code>,
+<code>omega</code>, <code>random</code>, <code>etaModes</code>,
+<code>etaSE</code> and <code>shrinkage</code>. Methods:
+<code><a href="https://rdrr.io/r/stats/coef.html" class="external-link">coef()</a></code>, <code><a href="https://rdrr.io/r/stats/vcov.html" class="external-link">vcov()</a></code>, <code><a href="https://rdrr.io/r/stats/confint.html" class="external-link">confint()</a></code> (Wald
+or <code>method = "profile"</code>), <code><a href="https://rdrr.io/r/stats/logLik.html" class="external-link">logLik()</a></code>,
+<code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">AIC()</a></code>, <code><a href="https://rdrr.io/r/stats/AIC.html" class="external-link">BIC()</a></code>, <code><a href="https://rdrr.io/r/stats/anova.html" class="external-link">anova()</a></code>,
+<code><a href="https://rdrr.io/r/stats/predict.html" class="external-link">predict()</a></code>, <code><a href="https://rdrr.io/r/stats/residuals.html" class="external-link">residuals()</a></code>,
 <code><a href="https://rdrr.io/r/stats/simulate.html" class="external-link">simulate()</a></code> and the plots below.</p>
 </div>
 <div class="section level3">
@@ -359,7 +364,9 @@ Methods: <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link"
 <code>iterlim = 30</code>, <code>steptol = 1e-8</code>,
 <code>mtol = 1e-12</code>
 </td>
-<td>trust region of the modes</td>
+<td>
+<a href="methods-trust.html#def-trust-region">trust region</a> of
+the modes</td>
 </tr>
 <tr class="odd">
 <td><code>trustControl</code></td>
@@ -373,8 +380,9 @@ Methods: <code><a href="https://rdrr.io/r/stats/coef.html" class="external-link"
 <tr class="even">
 <td><code>derivMode</code></td>
 <td><code>"forward-reverse"</code></td>
-<td>volume-term second derivatives, or
-<code>"forward-forward"</code>
+<td>
+<a href="methods-nlme.html#volume-term">volume-term</a> second
+derivatives, or <code>"forward-forward"</code>
 </td>
 </tr>
 <tr class="odd">
@@ -397,7 +405,8 @@ computing</a>.</p>
 <h2 id="adaptive-sparse-grid-quadrature">Adaptive sparse-grid quadrature<a class="anchor" aria-label="anchor" href="#adaptive-sparse-grid-quadrature"></a>
 </h2>
 <p><code>method = "quadrature"</code> starts from the FOCEI fit and
-integrates on a sparse grid around each group mode; level <span class="math inline">\(K\)</span> is Laplace’s approximation. A
+integrates on a <a href="methods-nlme.html#def-sparse-grid">sparse
+grid</a> around each group mode; <a href="methods-nlme.html#def-level">level</a> <span class="math inline">\(K\)</span> is Laplace’s approximation. A
 certificate flags groups whose posterior the grid does not resolve. <a href="methods-nlme.html#adaptive-sparse-grid-quadrature">Methods &gt;
 Adaptive sparse-grid quadrature</a>.</p>
 <table class="table">
@@ -435,10 +444,12 @@ levels</td>
 <tr class="even">
 <td><code>tolDecrement</code></td>
 <td><code>1e-4</code></td>
-<td>Newton decrement that ends a stage</td>
+<td>
+<a href="methods-nlme.html#def-newton-decrement">Newton
+decrement</a> that ends a stage</td>
 </tr>
 <tr class="odd">
-<td><code>maxEcmPerStage</code></td>
+<td><code>maxECMPerStage</code></td>
 <td><code>10</code></td>
 <td>rebuilds per stage</td>
 </tr>
@@ -477,8 +488,8 @@ covariance per group) and <code>certificate</code>;
 <p><code>method = "laplaceEM"</code>: expectation conditional
 maximization on the Laplace approximation, reporting the quadrature of
 level <span class="math inline">\(K + 2\)</span>, without certificate.
-<code>control$quadrature</code> takes <code>epsEcm</code> (default
-<code>1e-5</code>), <code>maxEcm</code> (default 200) and
+<code>control$quadrature</code> takes <code>epsECM</code> (default
+<code>1e-5</code>), <code>maxECM</code> (default 200) and
 <code>cm1Control</code>, <code>maxCm1Iter</code>, <code>pruneTol</code>,
 <code>maxLevel</code>. <a href="methods-nlme.html#laplace-em">Methods
 &gt; Laplace EM</a>.</p>
@@ -624,7 +635,9 @@ Both should be standard normal.</p>
 <div class="sourceCode" id="cb15"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotResiduals.html">plotResiduals</a></span><span class="op">(</span><span class="va">fit</span>, type <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"CWRES"</span>, <span class="st">"NPDE"</span><span class="op">)</span>, nsim <span class="op">=</span> <span class="fl">200</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-9-1.png" class="r-plt" alt="" width="768"></p>
-<p>Visual predictive check:</p>
+<p>Visual predictive check, the 5th, 50th and 95th percentiles of the
+readings per time bin against the prediction intervals of the same
+percentiles of data simulated from the fit:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotVPC.html">plotVPC</a></span><span class="op">(</span><span class="va">fit</span>, nsim <span class="op">=</span> <span class="fl">200</span>, bins <span class="op">=</span> <span class="fl">8</span>, seed <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span></code></pre></div>
 <p><img src="guide-nlme_files/figure-html/unnamed-chunk-10-1.png" class="r-plt" alt="" width="768"></p>

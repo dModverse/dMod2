@@ -4,7 +4,8 @@ Oppelt et al. [\[1\]](#ref-oppelt2018model) also measured the TNFα
 response of HepG2 cells under diclofenac (DCF). Which rate constants
 does DCF change? The publication selected differences by an L1 scan and
 a likelihood ratio test [\[2\]](#ref-steiert2016l1). This chapter
-repeats the scan and answers the same question with spike-and-slab
+repeats the scan and answers the same question with
+[spike-and-slab](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-spike-and-slab)
 random effects. Model: the reduced model of [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.md);
 random effects and
@@ -15,7 +16,9 @@ models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md).
 
 The second part lists the sparse random-effect distributions and what
 their fits report; derivations: [Methods \> Sparsity
-priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md).
+priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md),
+the terms it uses in the
+[Index](https://dmodverse.github.io/dMod2/articles/index-terms.md).
 
 ## Data and model
 
@@ -35,9 +38,10 @@ dataDCF <- as.datalist(cellsDCF[c("name", "time", "value", "sigma", "condition",
 With DCF an estimated rate constant \\k\\ becomes \\\log k + \Delta_k\\.
 [`insert()`](https://dmodverse.github.io/dMod2/reference/define.md) with
 `x ~ 1 + (1 | gr(compound, dist = spikeSlab()))` writes each
-\\\Delta_k\\ as a random effect `eta_<k>_DCF`, 0 without compound; the
-L1 scan treats the same symbols as parameters. 24 differences, as in the
-publication:
+\\\Delta_k\\ as a [random
+effect](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-random-effect)
+`eta_<k>_DCF`, 0 without compound; the L1 scan treats the same symbols
+as parameters. 24 differences, as in the publication:
 
 ``` r
 
@@ -344,13 +348,18 @@ a difference is
 \\p(\Delta_k) = (1 - \rho)\\ \delta(\Delta_k) + \rho\\
 \mathcal{N}(\Delta_k;\\ 0, \tau^2),\\
 
-with inclusion probability \\\rho\\ (`prob_compound`) and slab standard
-deviation \\\tau\\ (`tau_compound`, log scale).
+with [inclusion
+probability](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-inclusion-probability)
+\\\rho\\ (`prob_compound`) and slab standard deviation \\\tau\\
+(`tau_compound`, log scale).
 [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) estimates
-\\\theta\\, \\\rho\\ and \\\tau\\ from the likelihood with the
-differences integrated out, a sum over subsets ([Methods \> Sparsity
+\\\theta\\, \\\rho\\ and \\\tau\\ from the marginal likelihood, the
+likelihood with the differences integrated out, a sum over
+[subsets](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-subset)
+([Methods \> Sparsity
 priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal)).
-\\p_0 = \Pr(\Delta_k = 0 \mid y)\\ is the posterior spike probability.
+\\p_0 = \Pr(\Delta_k = 0 \mid y)\\ is the posterior spike probability,
+one minus the inclusion probability given the data.
 
 The candidates are the same 20 as in the L1 scan; with both partners of
 a product as candidates, neither would reach a probability of one half.
@@ -538,21 +547,150 @@ fit$random[, c("eta", "mode", "p0")]
 grouping, `k ~ 1 + (1 | gr(ID, dist = spikeSlab(spike = -Inf)))`
 switches the reaction off per group. `em(method = "focei")` and
 `em(method = "quadrature")` fit these random effects, also beside normal
-ones of the same grouping; `"quadrature"` integrates to `tol` where
-`"focei"` takes the Laplace approximation. With few candidates, most of
-them clearly present, an estimated `prob` tends to 1; a fixed `prob` is
-the selection prior. Details: [Methods \> Spike at a given
+ones of the same grouping; `"quadrature"` integrates on a [sparse
+grid](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#adaptive-sparse-grid-quadrature)
+to `tol` where `"focei"` takes the [Laplace
+approximation](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#laplace-approximation).
+With few candidates, most of them clearly present, an estimated `prob`
+tends to 1; a fixed `prob` is the selection prior. Details: [Methods \>
+Spike at a given
 value](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#spike-at-a-given-value).
+
+## Starts far from the data
+
+With a given `mean` or `spike`,
+[`em()`](https://dmodverse.github.io/dMod2/reference/em.md) sums over
+the subsets of candidates per group. The sum runs in phases, each from
+the estimates and inner
+[modes](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-mode)
+of the phase before; a burn-in may fit the [fixed
+effects](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-fixed-effect)
+first ([Methods \> Phases and
+burn-in](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#phases-and-burn-in)):
+
+| entry of `control$sparseFit` | values | default |
+|----|----|----|
+| `phases` | `"meanfield"`, `"ec"`, `"exact"` in the order they run; a character vector, or a named list with `maxECM` and `epsECM` per phase | all three; `maxECM = 200`, `epsECM = 1e-2`, in the last phase `1e-6` |
+| `burnin` | `FALSE`, `TRUE` or `list(start = , iterlim = )`; `start` `"random"`, `"spike"`, `"slab"` or names of random effects | `FALSE`; `start = "random"`, `iterlim = 200` |
+| `termBudget` | the most subsets of the exact sum; beyond it `"exact"` is skipped after `"ec"`, an error without | `4096` |
+
+`"meanfield"` ([mean
+field](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#mean-field))
+takes the inclusion of each candidate from the Laplace integrals of a
+reference subset and of the subsets that differ from it in one
+candidate, \\K + 1\\ integrals for \\K\\ candidates instead of \\2^K\\.
+`"ec"`, the [expectation consistent
+approximation](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#expectation-consistent-approximation-in-the-rate),
+expands the data term as a Gaussian, at the first step with every
+candidate in the slab; from a start far from the data that expansion
+does not hold, and EC does not converge. The burn-in fits the fixed
+effects in one [trust
+region](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-trust-region)
+with the candidates of the start subset in the slab, at the joint mode
+with the prior densities as penalty; the others stay at the spike. A
+small example: two species, four candidate rates, the start of the
+initial values 40 and 10 times too high.
+
+``` r
+
+rates <- c("a0", "a1", "b0", "b1")
+xSw <- Xs(odemodel(eqnvec(x = "a0 - a1*x", y = "b0 - b1*y"), modelname = "switch_x", compile = FALSE))
+gSw <- Y(eqnvec(x = "x", y = "y"), xSw, modelname = "switch_g", compile = FALSE)
+trafoSw <- define(NULL, "p <- p", p = c("x", "y", rates)) |>
+  branch(table = data.frame(row.names = "C1", one = 1)) |>
+  insert("k <- exp(k)", k = rates) |>
+  insert(k ~ 0 + (1 | gr(dist = spikeSlab(prob = 0.5, tau = 1, mean = log(0.5), spike = -Inf))), k = rates)
+pSw <- P(trafoSw, modelname = "switch_p", compile = FALSE)
+compile(gSw, xSw, pSw, output = "switch")
+# x is produced and degraded, y only degraded
+times <- seq(0, 10, by = 0.5)
+set.seed(2)
+noisy <- function(n, v) data.frame(name = n, time = times, value = v + rnorm(length(times), 0, 0.05),
+                                   sigma = 0.05)
+dataSw <- datalist(C1 = rbind(noisy("x", 2 - 1.5 * exp(-0.5 * times)), noisy("y", 2 * exp(-0.3 * times))))
+objSw <- normL2(dataSw, gSw * xSw * pSw)
+far <- c(x = 20, y = 20)
+```
+
+EC alone fails at this start:
+
+``` r
+
+tryCatch(em(objSw, randomEffects(pSw), init = far, verbose = FALSE,
+            control = list(sparseFit = list(phases = "ec"))),
+         error = conditionMessage)
+#> [1] "em: the expectation consistent (EC) approximation of group all did not converge."
+```
+
+A burn-in from a random start subset, then the default phases:
+
+``` r
+
+set.seed(1)
+fitSw <- em(objSw, randomEffects(pSw), init = far, verbose = FALSE,
+            control = list(sparseFit = list(burnin = TRUE)))
+fitSw$burnin
+#> [1] "eta_a0_all" "eta_a1_all"
+fitSw$phases
+#>   phase    approx iterations      value converged seconds failed
+#> 1     1    burnin         11 2588.98159      TRUE   0.017      0
+#> 2     2 meanfield          2  -95.12004      TRUE   0.076      0
+#> 3     3        ec          1  -95.07580      TRUE   0.014      0
+#> 4     4     exact          1  -95.12004      TRUE   0.078      0
+fitSw$random[, c("eta", "mode", "p0")]
+#>   eta        mode        p0
+#> 1  a0  0.01735696 0.0000000
+#> 2  a1 -0.68584252 0.0000000
+#> 3  b0        -Inf 0.9999634
+#> 4  b1 -1.18035445 0.0000000
+```
+
+`fit$burnin` is the start subset, `fit$phases` has a row per phase:
+`value` is -2 log L of the approximation of the phase (for the burn-in
+data plus prior at the mode), `failed` the subsets whose inner search
+failed. An error names the phase.
+[`msem()`](https://dmodverse.github.io/dMod2/reference/msem.md) draws a
+start subset per attempt and repeats a failed start (`retry`);
+`multistart` lists the start subset in `subset`. Around a fitted model,
+as for DCF above, the spike is that model and the start is near the
+data: no burn-in is needed, and
+[`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md)
+with the default spike 0 takes the joint trust region of the next
+section, which has no phases.
+
+## Hyperpriors
+
+With one group, as in the selection of reactions above, `prob` and `tau`
+rest on the few candidates of the block: an estimated `prob` ([empirical
+Bayes](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-empirical-bayes))
+tends to 0 or 1, and an estimated `tau` follows the modes.
+[Hyperpriors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-hyperprior)
+replace the estimates:
+
+``` r
+
+spikeSlab(prob = betaPrior(1, 1), tau = halfCauchyPrior(1), mean = log(0.5), spike = -Inf)
+```
+
+`betaPrior(1, 1)` integrates `prob` out, every number of candidates in
+the slab equally likely; `fit$slab` reports the posterior mean of `prob`
+with a 95 % interval. A scale prior on `tau` takes the posterior mode,
+with `integrate = TRUE` the phase `"exact"` integrates over `log tau`.
+With many groups the estimates stay the default. Details: [Methods \>
+Hyperpriors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#hyperpriors).
 
 ## Fitting sparse random effects
 
 `em(method = "focei")` integrates sparse random effects by the Laplace
-approximation at the joint mode of a group, exactly where possible, and
-by expectation consistent (EC) approximation where the data link a
-Dirichlet-process effect to another factor or the subset sum exceeds the
-budget. Fixed effects and hyperparameters move in one trust region.
-`fit$coupling` is `"expectationConsistent"` if a group needed EC, else
-`NULL`. Methods: [Methods \> Approximate
+approximation at the [joint
+mode](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#joint-mode)
+of a group, exactly where possible, and by expectation consistent (EC)
+approximation where the data link a
+[Dirichlet-process](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#dirichlet-process-random-effects)
+effect to another factor or the subset sum exceeds the budget. Fixed
+effects and hyperparameters move in one trust region. `fit$coupling` is
+`"expectationConsistent"` if a group needed EC, else `NULL`. Methods:
+[Methods \> Approximate
 marginal](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#approximate-marginal),
 [Methods \> Expectation consistent
 approximation](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#expectation-consistent-approximation)

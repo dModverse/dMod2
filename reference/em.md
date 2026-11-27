@@ -243,7 +243,14 @@ An object of class `em` with, among others:
 - `slab`:
 
   the hyperparameters of the spike-and-slab and Dirichlet-process
-  blocks.
+  blocks; with hyperpriors also `lower` and `upper`, the 95 % interval
+  of a `prob` integrated out or a `tau` integrated over, and `prior`,
+  the hyperprior.
+
+- `hyperprior`:
+
+  with a scale prior on `tau`, -2 log of the prior density at the
+  estimate, which `value` holds as well.
 
 - `valueSE`:
 
@@ -252,6 +259,19 @@ An object of class `em` with, among others:
 - `coupling`:
 
   `"expectationConsistent"` where a group needed it, else `NULL`.
+
+- `phases`:
+
+  with spike-and-slab random effects of a given `mean` or `spike`, a row
+  per phase: `approx` (`"burnin"` for the burn-in), `iterations` (0 for
+  a skipped phase), `value` (-2 log L of the approximation, for the
+  burn-in data plus penalty), `converged`, `seconds` and `failed`, the
+  subsets of weight 0.
+
+- `burnin`:
+
+  the spike-and-slab random effects in the slab at the start of the
+  burn-in, `NULL` without burn-in.
 
 - `boundary`:
 
@@ -319,7 +339,7 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
   means stationary at the levels reached, capped ones included; the fit
   returns the iterate of lowest -2 log L on the highest levels.
 
-- `maxEcmPerStage`, `cm1Control`, `maxCm1Iter`:
+- `maxECMPerStage`, `cm1Control`, `maxCm1Iter`:
 
   rebuilds per stage (default 10, `stopReason` `"iterlim"` where they
   run out),
@@ -339,7 +359,7 @@ frozen in `phi = X beta + eta`. Entries of `control$quadrature`:
   than three standard errors plus the error the level of the group
   allows, or the Pareto shape of the weights exceeds 0.7.
 
-- `epsEcm`, `maxEcm`:
+- `epsECM`, `maxECM`:
 
   for `"laplaceEM"`: the extrapolated distance to the fixed point at
   which it stops, default 1e-5, and the iteration limit, default 200.
@@ -453,29 +473,29 @@ failed evaluation. Entries of `control$sparseFit`:
   group kernel, where the Gauss-Newton step is below 1e-8; of
   `control$innerControl` only `sqpIterlim` applies.
 
-- `maxEcm`, `epsEcm`, `budget`, `ec`:
+- `burnin`, `phases`, `termBudget`, `ec`:
 
   of the sum over subsets, see below.
 
-Spike-and-slab random effects with `mean` or `spike` other than 0, see
+Spike-and-slab random effects with `mean` or `spike` other than 0, or
+with a hyperprior
+([`betaPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)),
+see
 [`spikeSlab()`](https://dmodverse.github.io/dMod2/reference/normal.md),
 take a separate path of `method = "focei"`, beside normal random effects
 of the same grouping but no Dirichlet-process ones. The integral of a
 group is the sum over all subsets of the spike-and-slab random effects,
 each subset a Laplace integral over the normal random effects and the
 slab ones of the subset at the inner mode, the other random effects at
-the spike; `spike = -Inf` switches the parameter off. The number of
-subsets summed over all groups is at most `budget` (default 4096). The
-fixed effects and hyperparameters follow by EM: `prob` is the mean
-inclusion probability, `tau^2` the mean squared deviation from `mean`
-under the slab, and the fixed effects minimize the data term plus slab
-prior summed over the subsets with their weights, jointly with the
-subset modes; the log determinant of the Laplace integral enters the
-weights only; Omega is the mean of the posterior second moments of the
-normal random effects, restricted to the block structure. EM stops after
-`maxEcm` iterations (default 200) or when no estimate changes by more
-than `epsEcm` (default 1e-6). The `p0` column of the random table is the
-posterior probability of the spike.
+the spike; `spike = -Inf` switches the parameter off. The fixed effects
+and hyperparameters follow by EM: `prob` is the mean inclusion
+probability, `tau^2` the mean squared deviation from `mean` under the
+slab, and the fixed effects minimize the data term plus slab prior
+summed over the subsets with their weights, jointly with the subset
+modes; the log determinant of the Laplace integral enters the weights
+only; Omega is the mean of the posterior second moments of the normal
+random effects, restricted to the block structure. The `p0` column of
+the random table is the posterior probability of the spike.
 
 `method = "saem"` draws them by the moves of section SAEM: a spike at
 `-Inf` leaves the other slab values as they are, and a move into the
@@ -497,21 +517,56 @@ estimated `prob` and `tau` included, moves by trust steps on the frozen
 nodes, which are rebuilt after each step until a Newton step would lower
 -2 log L by less than `tolDecrement` (`stopReason` `"decrement"`). Of
 `control$quadrature` this path reads `tol`, `maxLevel` and `maxNodes`
-(per subset), `tolDecrement`, `maxEcmPerStage`, `cm1Control` and
+(per subset), `tolDecrement`, `maxECMPerStage`, `cm1Control` and
 `maxCm1Iter`.
 
-Groups beyond the budget, the largest first, take the expectation
-consistent (EC) approximation in a coordinate in which the spike is 0:
-the rate \\b^\eta\\ for `spike = -Inf`, where the slab is log-normal,
-and \\\eta\\ minus the spike else. The data term is a Gaussian in that
-coordinate, expanded first at the mode with every random effect in the
-slab and again at the EC mean until it is stable; normal random effects
-enter it exactly, without sites. These groups take the subset of
-inclusion probability above 1/2 for the fixed effects. Entries of
-`control$sparseFit$ec`: `nodes` of the Gauss-Hermite rule of the
-log-normal slab (40), `maxSweeps` (500) and `tolSweep` (1e-5, the change
-of the marginal means in standard deviations), `maxRelinearize` (30) and
-`tolRelinearize` (1e-4, relative).
+`phases` lists the approximations of the sum over subsets in the order
+they run, each from the estimates and inner modes of the phase before: a
+character vector, or a named list whose entries set `maxECM`, the ECM
+iterations (default 200), and `epsECM`, the largest change of an
+estimate at which the phase ends (default 1e-2, in the last phase 1e-6).
+Each name at most once; default `c("meanfield", "ec", "exact")`:
+
+- `"meanfield"`:
+
+  factorized inclusion per random effect, from the Laplace integrals of
+  a reference subset and of the subsets that differ from it in one
+  random effect; the reference is the subset of inclusion above 1/2. A
+  subset whose inner search fails has weight 0.
+
+- `"ec"`:
+
+  EC for every group, see below.
+
+- `"exact"`:
+
+  the sum over all subsets. Where the subsets summed over the groups
+  exceed `termBudget` (default 4096), the phase is skipped and the fit
+  ends with phase `"ec"`; without it, an error.
+
+`burnin` fits the fixed effects first, with `prob`, `tau` and `Omega`
+held, in one trust region at the joint mode of a start subset of the
+spike-and-slab random effects in the slab, the prior densities as
+penalty; the others stay at the spike. `FALSE` (default) no burn-in,
+`TRUE` the defaults, or a list of `start`, `"random"` (default, each in
+the slab with probability `prob`, drawn from the random number stream),
+`"spike"`, `"slab"` or the names of the random effects in the slab, and
+`iterlim`, the trust iterations (default 200). The first phase starts
+from that subset. The fit reports `burnin`, the start subset.
+`converged` is that of the last phase; an error names the phase.
+
+EC is the expectation consistent approximation in a coordinate in which
+the spike is 0: the rate \\b^\eta\\ for `spike = -Inf`, where the slab
+is log-normal, and \\\eta\\ minus the spike else. The data term is a
+Gaussian in that coordinate, expanded first at the mode with the random
+effects of inclusion above 1/2 of the step before in the slab (at the
+first step every one), and again at the EC mean until it is stable;
+normal random effects enter it exactly, without sites. These groups take
+the subset of inclusion probability above 1/2 for the fixed effects.
+Entries of `control$sparseFit$ec`: `nodes` of the Gauss-Hermite rule of
+the log-normal slab (40), `maxSweeps` (500) and `tolSweep` (1e-5, the
+change of the marginal means in standard deviations), `maxRelinearize`
+(30) and `tolRelinearize` (1e-4, relative).
 
 ## See also
 
@@ -544,10 +599,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmpEh2W6Q/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpX1Wc0y/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmpEh2W6Q/theoph_err.cpp
+#> Overwriting: /tmp/RtmpX1Wc0y/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]

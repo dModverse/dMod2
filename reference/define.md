@@ -40,12 +40,13 @@ branch(
 - expr:
 
   `"lhs <- rhs"` string. The symbols in it are replaced by the arguments
-  in `...` of the same name; see
-  [`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md). For
-  `insert()` on a branched transformation also one or several effect
-  formulas, e.g. `cl ~ wt + (1 | ID)`, which replace the symbol by a
-  linear predictor over the columns of the branch table with fixed and
-  random effects; see
+  in `...` of the same name; inside a name, `_` separates symbols, so
+  `"Delta_x"` with `x = "a"` becomes `"Delta_a"`. A `"lhs ~ rhs"` string
+  is an error: `~` is reserved for model formulas. For `insert()` on a
+  branched transformation also one or several effect formulas, e.g.
+  `cl ~ wt + (1 | ID)`, which replace the symbol by a linear predictor
+  over the columns of the branch table with fixed and random effects;
+  see
   [`randomEffects()`](https://dmodverse.github.io/dMod2/reference/randomEffects.md).
   Named arguments in `...` are then placeholders of the formulas,
   `insert(trafo, x ~ 1 + (1 | ID), x = c("ka", "cl"))`. A substitution
@@ -91,7 +92,6 @@ Same shape as `trafo`, or a list named by condition for `branch()`.
 
 ## See also
 
-[`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md),
 [`P()`](https://dmodverse.github.io/dMod2/reference/P.md)
 
 ## Examples

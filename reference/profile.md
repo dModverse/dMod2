@@ -127,7 +127,7 @@ profile(fitted, ...)
   :   Whether every step is followed by a fit of the other parameters
       with
       [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md).
-      `FALSE` / `TRUE`.
+      `TRUE` for both methods.
 
   `correction`
 
@@ -265,8 +265,8 @@ plotPaths(profiles.approx, whichPar = "logk")
 
 confint(profiles.approx, val.column = "value")
 #>      name      value      lower      upper
-#> logA logA  0.6774738  0.6369418  0.7167919
-#> logk logk -0.7369431 -0.8051821 -0.6699116
+#> logA logA  0.6774738  0.6369417  0.7167936
+#> logk logk -0.7369431 -0.8051900 -0.6699037
 
 options(old)
 # }

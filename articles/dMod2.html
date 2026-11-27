@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -128,7 +130,9 @@ model.</p>
 <h2 id="data-and-conditions">Data and conditions<a class="anchor" aria-label="anchor" href="#data-and-conditions"></a>
 </h2>
 <p>Bile acid in buffer and cells, measured with closed and opened tight
-junctions, one data set per condition.</p>
+junctions, one data set per <span id="def-condition">condition</span>. A
+condition, here <code>closed</code> or <code>open</code>, is one
+experimental setting with own data and own model parameters.</p>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/utils/data.html" class="external-link">data</a></span><span class="op">(</span><span class="va">badata</span><span class="op">)</span></span>
 <span><span class="va">data</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/datalist.html">as.datalist</a></span><span class="op">(</span><span class="va">badata</span><span class="op">)</span></span></code></pre></div>
@@ -157,20 +161,27 @@ buffer or canaliculi, and from the canaliculi back into the buffer.</p>
 <span><span class="co">#&gt; 3         TCA_cell -&gt;   TCA_cana  k_export_cana*TCA_cell     canalicular export</span></span>
 <span><span class="co">#&gt; 4         TCA_cana -&gt; TCA_buffer       k_reflux*TCA_cana reflux into the buffer</span></span></code></pre></div>
 <p><code><a href="../reference/odemodel.html">odemodel()</a></code> generates C++ code for ODE and sensitivities,
-<code><a href="../reference/Xs.html">Xs()</a></code> makes the prediction function, <code><a href="../reference/Y.html">Y()</a></code> the
-observables: cells and canaliculi are measured together, both
-observables with scale <code>s</code>. Expressions follow the <a href="https://dmodverse.github.io/cppDE/reference/expressions.html" class="external-link">expression
+<code><a href="../reference/Xs.html">Xs()</a></code> makes the <span id="def-prdfn">prediction
+function</span> (<code>prdfn</code>) from parameters to trajectories,
+<code><a href="../reference/Y.html">Y()</a></code> the <span id="def-obsfn">observation function</span>
+(<code>obsfn</code>) from trajectories to observables: cells and
+canaliculi are measured together, both observables with scale
+<code>s</code>. Expressions follow the <a href="https://dmodverse.github.io/cppDE/reference/expressions.html" class="external-link">expression
 language of cppDE</a>, including switches such as
 <code>piecewise()</code>.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">x</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Xs.html">Xs</a></span><span class="op">(</span><span class="fu"><a href="../reference/odemodel.html">odemodel</a></span><span class="op">(</span><span class="va">reactions</span>, modelname <span class="op">=</span> <span class="st">"start_x"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">observables</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span>buffer <span class="op">=</span> <span class="st">"s*TCA_buffer"</span>, cellular <span class="op">=</span> <span class="st">"s*(TCA_cana + TCA_cell)"</span><span class="op">)</span></span>
 <span><span class="va">g</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/Y.html">Y</a></span><span class="op">(</span><span class="va">observables</span>, <span class="va">x</span>, modelname <span class="op">=</span> <span class="st">"start_g"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
-<p><code><a href="../reference/P.html">P()</a></code> maps estimated to model parameters, all on log10
-scale, with an empty buffer at the start. <code><a href="../reference/define.html">branch()</a></code> makes
-one transformation per condition, open junctions with a separate reflux
-rate <code>K_REFLUX_OPEN</code>. All three function objects compile into
-one shared object.</p>
+<p><code><a href="../reference/P.html">P()</a></code> is a <span id="def-parfn">parameter
+transformation</span> (<code>parfn</code>). It maps the <span id="def-outer-parameters">outer parameters</span>, which the optimizer
+sees (<code>K_IMPORT</code>, <code>S</code>, … on log10 scale), to the
+<span id="def-inner-parameters">inner parameters</span> of ODE and
+observables in one condition (<code>k_import</code>, <code>s</code>, …),
+with an empty buffer at the start. <code><a href="../reference/define.html">branch()</a></code> makes one
+transformation per condition, open junctions with a separate reflux rate
+<code>K_REFLUX_OPEN</code>. All three function objects compile into one
+shared object.</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">trafo</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/eqnvec.html">eqnvec</a></span><span class="op">(</span><span class="op">)</span> <span class="op">|&gt;</span></span>
 <span>  <span class="fu"><a href="../reference/define.html">define</a></span><span class="op">(</span><span class="st">"x &lt;- x"</span>, x <span class="op">=</span> <span class="fu"><a href="../reference/getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">g</span><span class="op">)</span><span class="op">)</span> <span class="op">|&gt;</span></span>
@@ -207,13 +218,19 @@ one shared object.</p>
 <span><span class="co">#&gt; open        open</span></span>
 <span><span class="va">p</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/P.html">P</a></span><span class="op">(</span><span class="va">trafo</span>, modelname <span class="op">=</span> <span class="st">"start_p"</span>, compile <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span><span class="fu"><a href="../reference/compile.html">compile</a></span><span class="op">(</span><span class="va">x</span>, <span class="va">g</span>, <span class="va">p</span>, output <span class="op">=</span> <span class="st">"start"</span>, cores <span class="op">=</span> <span class="fl">6</span><span class="op">)</span></span></code></pre></div>
+<p><code>+</code> and <code><a href="../reference/define.html">branch()</a></code> join conditions;
+<code>*</code> composes function objects by the chain rule, so every
+call returns values with their derivatives in the outer parameters, the
+objective value, gradient and Hessian.</p>
 </div>
 <div class="section level2">
 <h2 id="likelihood-prior-and-fit">Likelihood, prior and fit<a class="anchor" aria-label="anchor" href="#likelihood-prior-and-fit"></a>
 </h2>
-<p><code><a href="../reference/normL2.html">normL2()</a></code> returns <span class="math inline">\(-2 \log
-L\)</span> of the data; a weak prior from <code><a href="../reference/constraintL2.html">constraintL2()</a></code>
-keeps parameters the data do not determine finite.</p>
+<p><code><a href="../reference/normL2.html">normL2()</a></code> returns an <span id="def-objfn">objective
+function</span> (<code>objfn</code>), here <span class="math inline">\(-2 \log L\)</span> of the data; a weak prior from
+<code><a href="../reference/constraintL2.html">constraintL2()</a></code> keeps parameters the data do not determine
+finite, and the sum is <span class="math inline">\(-2 \log\)</span> of
+the posterior.</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">outerpars</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/getParameters.html">getParameters</a></span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span>
 <span><span class="va">pouter</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/structure.html" class="external-link">structure</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep</a></span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">outerpars</span><span class="op">)</span><span class="op">)</span>, names <span class="op">=</span> <span class="va">outerpars</span><span class="op">)</span></span>
@@ -287,67 +304,6 @@ project</a> fixes the scale, starts the canaliculi in steady state and
 goes on to prediction bands. <code>K_EXPORT_SINUS</code> and
 <code>K_REFLUX_OPEN</code> are bounded on one side only, a practical
 non-identifiability.</p>
-</div>
-<div class="section level2">
-<h2 id="terminology">Terminology<a class="anchor" aria-label="anchor" href="#terminology"></a>
-</h2>
-<table class="table">
-<colgroup>
-<col width="50%">
-<col width="50%">
-</colgroup>
-<thead><tr class="header">
-<th>term</th>
-<th>meaning</th>
-</tr></thead>
-<tbody>
-<tr class="odd">
-<td>outer parameters</td>
-<td>parameters the optimizer sees, here <code>K_IMPORT</code>,
-<code>S</code>, … on log10 scale</td>
-</tr>
-<tr class="even">
-<td>inner parameters</td>
-<td>parameters of ODE and observables in one condition, here
-<code>k_import</code>, <code>s</code>, …</td>
-</tr>
-<tr class="odd">
-<td>condition</td>
-<td>one experimental setting with own data and inner parameters, here
-<code>closed</code>, <code>open</code>
-</td>
-</tr>
-<tr class="even">
-<td><code>parfn</code></td>
-<td>parameter transformation, outer to inner: <code><a href="../reference/P.html">P()</a></code>,
-<code><a href="../reference/Pexpl.html">Pexpl()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code>
-</td>
-</tr>
-<tr class="odd">
-<td><code>prdfn</code></td>
-<td>prediction function, parameters to trajectories: <code><a href="../reference/Xs.html">Xs()</a></code>,
-<code><a href="../reference/Xf.html">Xf()</a></code>
-</td>
-</tr>
-<tr class="even">
-<td><code>obsfn</code></td>
-<td>observation function, trajectories to observables or errors:
-<code><a href="../reference/Y.html">Y()</a></code>
-</td>
-</tr>
-<tr class="odd">
-<td><code>objfn</code></td>
-<td>objective function, <span class="math inline">\(-2 \log L\)</span>
-or with a prior <span class="math inline">\(-2 \log\)</span> of the
-posterior: <code><a href="../reference/normL2.html">normL2()</a></code>, <code><a href="../reference/constraintL2.html">constraintL2()</a></code>
-</td>
-</tr>
-</tbody>
-</table>
-<p><code>+</code> and <code><a href="../reference/define.html">branch()</a></code> join conditions;
-<code>*</code> composes function objects by the chain rule, so every
-call returns values with their derivatives in the outer parameters, the
-objective value, gradient and Hessian.</p>
 <p><a href="guide-model.html">1. Setting up models →</a></p>
 </div>
   </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>

@@ -4,8 +4,9 @@ Western blots, plate readers and similar assays read on
 experiment-specific scales.
 [`alignmentModel()`](https://dmodverse.github.io/dMod2/reference/alignmentModel.md)
 and [`align()`](https://dmodverse.github.io/dMod2/reference/align.md)
-bring all experiments onto one common scale by maximum likelihood, with
-the reading model written as an expression, as in the R package
+bring all experiments onto one common scale by [maximum
+likelihood](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-maximum-likelihood),
+with the reading model written as an expression, as in the R package
 [blotIt](https://github.com/JetiLab/blotIt).
 
 ``` r
@@ -49,10 +50,11 @@ head(d)
 ## Alignment model
 
 A reading is value `yi` times gel scale `sj` plus background `bj`, with
-relative error. Each symbol is a linear predictor over the data columns,
-on log scale. `technical = "lane"` averages the lanes of a sample, see
-[technical and biological
-replicates](#technical-and-biological-replicates).
+[relative
+error](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-relative-error).
+Each symbol is a linear predictor over the data columns, on log scale.
+`technical = "lane"` averages the lanes of a sample, see [technical and
+biological replicates](#technical-and-biological-replicates).
 
 ``` r
 
@@ -76,9 +78,11 @@ experiments sharing values.
 ## Fit by restricted likelihood
 
 [`align()`](https://dmodverse.github.io/dMod2/reference/align.md) fits
-from several perturbed starts and keeps the best; error parameters by
-restricted maximum likelihood. The fits of this chapter are loaded from
-`results/guide-alignment.rds`, computed by `results/guide-alignment.R`.
+from several perturbed starts and keeps the best; [error
+parameters](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-error-parameters)
+by restricted maximum likelihood. The fits of this chapter are loaded
+from `results/guide-alignment.rds`, computed by
+`results/guide-alignment.R`.
 
 ``` r
 
@@ -143,8 +147,10 @@ Technical replicates (lanes, wells) measure the same sample and share
 the biological deviation of that sample. `technical = "lane"` averages
 them before the alignment; readings agreeing in all columns but `value`,
 `lloq` and the technical columns form one sample. The mean is geometric
-for a relative error model, arithmetic for an absolute one. The same
-data with every lane as a reading:
+for a relative [error
+model](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-error-model),
+arithmetic for an absolute one. The same data with every lane as a
+reading:
 
 ``` r
 
@@ -176,11 +182,15 @@ two.
 
 ## Random background per gel
 
-A random effect per gel around a common background, integrated by FOCEI
+A [random
+effect](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-random-effect)
+per gel around a common background, integrated by
+[FOCEI](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-focei)
 as in [Nonlinear mixed-effects
 models](https://dmodverse.github.io/dMod2/articles/guide-nlme.md). A
-prior on `omega_bj_bj`, the log standard deviation, normal around \\\log
-0.3\\ with standard deviation 0.3:
+[prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-prior)
+on `omega_bj_bj`, the log standard deviation, normal around \\\log 0.3\\
+with standard deviation 0.3:
 
 ``` r
 
@@ -252,8 +262,8 @@ below -4.
 ### qPCR data
 
 Column `lloq` holds the limit of each reading; an `NA` reading is
-censored there. Standard deviation 0.5 cycles between samples, 0.25
-between wells.
+censored there, known only to lie below the limit. Standard deviation
+0.5 cycles between samples, 0.25 between wells.
 
 ``` r
 
@@ -540,7 +550,9 @@ plotResiduals(fit)
 ### Random background
 
 Standard deviation of the log2 background between gels, and per gel the
-mode with conditional standard error:
+[mode](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.html#def-mode)
+with [conditional standard
+error](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-conditional-standard-error):
 
 ``` r
 
@@ -571,7 +583,9 @@ fit$fit$shrinkage
 #> 0.8728
 ```
 
-Conditional draws against the estimated normal:
+Conditional draws from the
+[posterior](https://dmodverse.github.io/dMod2/articles/methods-nlme.html#def-posterior)
+against the estimated normal:
 
 ``` r
 
@@ -580,7 +594,8 @@ plotRandomEffects(fit$fit)
 
 ![](guide-alignment_files/figure-html/unnamed-chunk-29-1.png)
 
-Individual (IPRED) and population prediction (PRED):
+Individual (IPRED) and population prediction (PRED), as in [Model
+diagnostics](https://dmodverse.github.io/dMod2/articles/guide-nlme.html#model-diagnostics):
 
 ``` r
 

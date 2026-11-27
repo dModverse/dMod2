@@ -10,21 +10,30 @@ collection](https://github.com/Benchmarking-Initiative/Benchmark-Models-PEtab).
 ## PEtab export
 
 [`exportPEtab()`](https://dmodverse.github.io/dMod2/reference/exportPEtab.md)
-writes reactions as SBML, observables, errors, data, and the
-transformation `p` with fixed values and values per condition. PEtab 2,
-the default, has no parameter scales: values of parameters entering as
+writes reactions as SBML, observables, errors, data, and the [parameter
+transformation](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-parameter-transformation)
+`p` with fixed values and values per condition. PEtab 2, the default,
+has no parameter scales: values of parameters entering as
 [`exp()`](https://rdrr.io/r/base/Log.html) are written on linear scale,
-with a warning. The gauge of
+with a warning. The
+[gauge](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-gauge)
+of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md)
 becomes fixed values.
 
-- **State at rest.** `steadyState = pSS` gives a pre-equilibration
-  before time 0, shared by both conditions. One species per conserved
-  total starts at the total (`NfkIkb`, `Ikk`), all others at 0.
-- **Event.** `events = events` writes the event at time 0 as the `TNF`
-  value of the condition.
-- **Errors.** Imaging readouts get the error model, blots the data
-  standard deviations as noise parameters per measurement.
+- **State at rest.** `steadyState = pSS` gives a pre-equilibration, a
+  [steady
+  state](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-steady-state)
+  before time 0, shared by both conditions. One species per [conserved
+  total](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#conserved-quantities)
+  starts at the total (`NfkIkb`, `Ikk`), all others at 0.
+- **Event.** `events = events` writes the
+  [event](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#def-event)
+  at time 0 as the `TNF` value of the condition.
+- **Errors.** Imaging readouts get the [error
+  model](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-error-model),
+  blots the data standard deviations as noise parameters per
+  measurement.
 
 ``` r
 
@@ -62,8 +71,10 @@ read.delim("results/petab/conditions_oppelt.tsv")
 ## PEtab import
 
 [`importPEtab()`](https://dmodverse.github.io/dMod2/reference/importPEtab.md)
-builds `prdfn`, the `obsfn`s of observables and errors, the `parfn`,
-data and `objfn`; a pre-equilibration becomes a
+builds `prdfn`, the
+[`obsfn`s](https://dmodverse.github.io/dMod2/articles/methods-objective.html#def-obsfn)
+of observables and errors, the `parfn`, data and `objfn`; a
+pre-equilibration becomes a
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md). With
 `compile = FALSE`,
 [`compile()`](https://dmodverse.github.io/dMod2/reference/compile.md)
@@ -89,16 +100,17 @@ c(model.R = attr(obj(c(best, gauge), deriv = FALSE), "data"),
 #> -511.1689 -511.1690
 ```
 
-The imported problem reproduces the data term of `model.R` at the best
-fit. `petab$bestfit` holds the nominal values on the problem scales,
-`petab$parlower` and `petab$parupper` the bounds.
+The imported problem reproduces the [data
+term](https://dmodverse.github.io/dMod2/articles/methods-objective.html#data-term)
+of `model.R` at the best fit. `petab$bestfit` holds the nominal values
+on the problem scales, `petab$parlower` and `petab$parupper` the bounds.
 
 ## SBML models
 
 [`exportSbml()`](https://dmodverse.github.io/dMod2/reference/exportSbml.md)
 writes species with compartments, reactions, parameters and initial
-assignments; concentration rates are multiplied by the compartment
-volume,
+assignments; concentration rates are multiplied by the [compartment
+volume](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-compartment-volume),
 [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md)
 divides again.
 [`importSbml()`](https://dmodverse.github.io/dMod2/reference/importSbml.md)

@@ -1,19 +1,26 @@
 # 5. Profile likelihood
 
-The profile likelihood [\[1\]](#ref-raue2009structural) shows how well
-the data constrain each parameter. This chapter profiles the full model
-at the best fit of
+The [profile
+likelihood](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-profile-likelihood)
+[\[1\]](#ref-raue2009structural) shows how well the data constrain each
+parameter. This chapter profiles the full model at the best fit of
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md),
-tests the core model of the publication and fits a reduced model.
+tests the core model of the publication and fits a [reduced
+model](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-reduced-model).
 
 ## Profile likelihood and confidence intervals
 
-The profile of a parameter is the data term along the path on which the
-other parameters minimize the objective with that parameter fixed. Here
-the objective has a prior of standard deviation 20 on the log scale at
-the best fit, so that the data term shapes the profiles. Data terms
-within 3.84, the 95 % quantile of \\\chi^2_1\\, of the minimum form the
-95 % confidence interval ([Methods \> Profile
+The profile of a parameter is the [data
+term](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-data-term)
+along the path on which the other parameters minimize the
+[objective](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-objective)
+with that parameter fixed. Here the objective has a
+[prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#prior)
+of standard deviation 20 on the log scale at the best fit, so that the
+data term shapes the profiles. Data terms within 3.84, the 95 % quantile
+of \\\chi^2_1\\, of the minimum form the 95 % [confidence
+interval](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-confidence-interval)
+([Methods \> Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/methods-profiles.md)).
 `stepControl = list(stop = "data")` ends a profile there,
 `confint(val.column = "data")` reads the interval,
@@ -23,8 +30,9 @@ can be switched off, towards \\+\infty\\ that it can be instantaneous
 ([Methods \>
 Shapes](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#shapes)).
 
-`method = "integrate"` (default) follows the constrained optimum as a
-curve, with `algoControl = list(reoptimize = TRUE)` corrected by
+`method = "integrate"` (default) follows the [constrained
+optimum](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-constrained-optimum)
+as a curve and corrects each step by a short fit with
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md);
 `method = "optimize"` refits at every step.
 
@@ -64,8 +72,9 @@ fitProfile <- trust(objProfile, refit$argument, fixed = gauge, rinit = 0.1, rmax
 best <- fitProfile$argument
 ```
 
-and profiles each side until the data term has risen by the threshold or
-the parameter has moved by 7. The profiles are loaded from
+and profiles each side until the data term has risen by the
+[threshold](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-threshold)
+or the parameter has moved by 7. The profiles are loaded from
 `results/profiles.rds`:
 
 ``` r
@@ -187,10 +196,11 @@ plotProfile(profiles, mode %in% c("data", "prior"), name %in% open, ncol = 4) + 
 ## Parameter paths
 
 [`plotPaths()`](https://dmodverse.github.io/dMod2/reference/plotPaths.md)
-shows how the other parameters compensate along a profile. Along
-`act_Ikb_Base`, `eta_act_Ikb_Base_c_pNfkIkb` rises by the same amount:
-the data determine the product. Shown are the parameters that move by
-more than 1:
+shows how the other parameters compensate along a profile ([parameter
+path](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-parameter-path)).
+Along `act_Ikb_Base`, `eta_act_Ikb_Base_c_pNfkIkb` rises by the same
+amount: the data determine the product. Shown are the parameters that
+move by more than 1:
 
 ``` r
 
@@ -214,9 +224,10 @@ for (par in c("act_Ikb_Base", "int_Nfk"))
 
 [`plotArray()`](https://dmodverse.github.io/dMod2/reference/plotArray.md)
 predicts along one side of a profile, colored by the profiled parameter;
-`fixed` adds the gauge. Along the upper side of `degrad_RnaA20`,
-`RnaA20` falls by two orders of magnitude while A20 stays nearly the
-same:
+`fixed` adds the
+[gauge](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction).
+Along the upper side of `degrad_RnaA20`, `RnaA20` falls by two orders of
+magnitude while A20 stays nearly the same:
 
 ``` r
 
@@ -398,9 +409,12 @@ observablesReduced["ipNFkB_ibNFkB"] <- "log(off_ipNFkB_ibNFkB)"
 ```
 
 As in the publication, all NFκB rests in the complex with IκBα and all
-IKK is inactive, a steady state for every parameter value, so neither
+IKK is inactive, a [steady
+state](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-steady-state)
+for every parameter value, so neither
 [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) nor a
-stability term is needed:
+[stability](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#stability)
+term is needed:
 
 ``` r
 
@@ -536,11 +550,13 @@ intervalsReduced[intervalsReduced$shape != "finite", c("name", "value", "lower",
 #> 16 form_complex 1.641204 0.03715742   Inf open above
 ```
 
-All parameters are identifiable except `form_complex`, bounded below at
-0.016 on the log10 scale and open above on a plateau 3.8 above the
-optimum; the publication reports (-0.21, 3.03). The profiles of
-`degrad_A20`, `degrad_RnaA20` and `shuttle_RnaA20` have a second minimum
-inside the interval. The rate constants:
+All parameters are
+[identifiable](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-identifiable)
+except `form_complex`, bounded below at 0.016 on the log10 scale and
+open above on a plateau 3.8 above the optimum; the publication reports
+(-0.21, 3.03). The profiles of `degrad_A20`, `degrad_RnaA20` and
+`shuttle_RnaA20` have a second minimum inside the interval. The rate
+constants:
 
 ``` r
 
@@ -577,7 +593,9 @@ plotProfile(saved$profiles, mode %in% c("data", "prior"), name %in% rates, ncol 
 ![](guide-profiles_files/figure-html/unnamed-chunk-23-1.png)
 
 Exchanging `degrad_A20` and `degrad_RnaA20` leaves every readout and the
-prior unchanged, a discrete symmetry ([Symmetries \> Discrete
+prior unchanged, a [discrete
+symmetry](https://dmodverse.github.io/symident/method/global.html)
+([Symmetries \> Discrete
 symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.html#discrete-symmetries)).
 Of the 34 best fits of the multistart, 33 lie on the side
 `degrad_A20 < degrad_RnaA20` and 1 at the mirror image. The profile of
@@ -593,12 +611,15 @@ Table S7, also lie close to the fixed set.
 
 ## Profiles in the fundamental domain
 
-The fundamental domain `degrad_A20 < degrad_RnaA20` holds the optimum
-and removes the swap. `fundamental.R` fits the reduced model in the
-chart that `symmetryReduction(branch = "degrad_A20 < degrad_RnaA20")`
-returns, with `define("degrad_RnaA20 <- degrad_A20 + delta_RnaA20")`
-before `insert("x <- exp(x)")`; the fixed set lies at `delta_RnaA20`
-\\\to -\infty\\. Only the parameter transformation is new:
+The [fundamental
+domain](https://dmodverse.github.io/symident/method/global.html)
+`degrad_A20 < degrad_RnaA20` holds the optimum and removes the swap.
+`fundamental.R` fits the reduced model in the
+[chart](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-chart)
+that `symmetryReduction(branch = "degrad_A20 < degrad_RnaA20")` returns,
+with `define("degrad_RnaA20 <- degrad_A20 + delta_RnaA20")` before
+`insert("x <- exp(x)")`; the fixed set lies at `delta_RnaA20` \\\to
+-\infty\\. Only the parameter transformation is new:
 
 ``` r
 

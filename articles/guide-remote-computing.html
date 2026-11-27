@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,10 +120,10 @@
 
     
     
-<p>Conditions of one evaluation run in threads, independent fits and
-profiles in processes. <code><a href="../reference/distributedComputing.html">distributedComputing()</a></code> runs R code
-as tasks in detached processes, locally, over ssh or as a SLURM array
-job. Only the local job below runs at page build.</p>
+<p>Conditions of one evaluation run in threads, independent fits and <a href="methods-profiles.html#def-profile">profiles</a> in processes.
+<code><a href="../reference/distributedComputing.html">distributedComputing()</a></code> runs R code as tasks in detached
+processes, locally, over ssh or as a SLURM array job. Only the local job
+below runs at page build.</p>
 <div class="section level2">
 <h2 id="threads-and-processes">Threads and processes<a class="anchor" aria-label="anchor" href="#threads-and-processes"></a>
 </h2>
@@ -565,7 +567,6 @@ into one profile:</p>
 <span><span class="va">profilesJob</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/distributedComputing.html">distributedComputing</a></span><span class="op">(</span></span>
 <span>  <span class="fu"><a href="../reference/profile.html">profile</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">best</span>, <span class="va">task</span><span class="op">$</span><span class="va">par</span>, side <span class="op">=</span> <span class="va">task</span><span class="op">$</span><span class="va">side</span>, fixed <span class="op">=</span> <span class="va">gauge</span>,</span>
 <span>          limits <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">7</span>, upper <span class="op">=</span> <span class="fl">7</span><span class="op">)</span>, stepControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>stop <span class="op">=</span> <span class="st">"data"</span><span class="op">)</span>,</span>
-<span>          algoControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>reoptimize <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
 <span>          optControl <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iterlim <span class="op">=</span> <span class="fl">100</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  tasks <span class="op">=</span> <span class="va">sides</span>, on <span class="op">=</span> <span class="va">cluster</span>, jobname <span class="op">=</span> <span class="st">"oppelt_profiles"</span>,</span>
 <span>  input <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"obj"</span>, <span class="st">"best"</span>, <span class="st">"gauge"</span>, <span class="st">"tolerances"</span><span class="op">)</span><span class="op">)</span></span>

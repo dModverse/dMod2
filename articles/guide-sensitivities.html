@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,9 +120,10 @@
 
     
     
-<p>dMod2 computes derivatives of the objective exactly from the ODE
-sensitivities and the chain rule through every function object. Code:
-<code>sensitivities.R</code>; details: <a href="methods-sensitivities.html">Methods &gt; Sensitivities and
+<p>dMod2 computes derivatives of the <a href="methods-profiles.html#def-objective">objective</a> exactly from
+the ODE <a href="methods-sensitivities.html#def-sensitivity">sensitivities</a> and
+the chain rule through every <a href="methods-sensitivities.html#def-chain-gxp">function object</a>.
+Code: <code>sensitivities.R</code>; details: <a href="methods-sensitivities.html">Methods &gt; Sensitivities and
 Hessians</a>.</p>
 <p><code>derivMode</code> of <code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Y.html">Y()</a></code>,
 <code><a href="../reference/P.html">P()</a></code> and <code><a href="../reference/Pimpl.html">Pimpl()</a></code> selects the derivatives a
@@ -135,10 +138,10 @@ built is an error.</p>
 </h2>
 <p>The default, <code>derivMode = "forward"</code>: <code><a href="../reference/Xs.html">Xs()</a></code>
 integrates <span class="math inline">\(\partial x / \partial
-\theta\)</span> with the states, the objective returns gradient and
-Gauss-Newton Hessian. <code>sensErrCon</code> in
-<code>optionsSens</code> sets whether sensitivities enter the error test
-(default <code>TRUE</code>).</p>
+\theta\)</span> with the states, the objective returns gradient and <a href="methods-sensitivities.html#gauss-newton-with-an-error-model">Gauss-Newton
+Hessian</a>. <code>sensErrCon</code> in <code>optionsSens</code> sets
+whether sensitivities enter the error test (default
+<code>TRUE</code>).</p>
 </div>
 <div class="section level2">
 <h2 id="forward-over-forward">Forward over forward<a class="anchor" aria-label="anchor" href="#forward-over-forward"></a>
@@ -146,33 +149,33 @@ Gauss-Newton Hessian. <code>sensErrCon</code> in
 <p><code>derivMode = "forward-forward"</code> in
 <code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code> and
 <code><a href="../reference/Pimpl.html">Pimpl()</a></code> builds second-order sensitivities, and a call with
-<code>deriv2 = TRUE</code> returns the exact Hessian from them. The
-equation count grows with the square of the parameters (guide model:
-63); it suits small models such as those of <a href="guide-nlme.html">Nonlinear mixed-effects models</a>.</p>
+<code>deriv2 = TRUE</code> returns the <a href="methods-sensitivities.html#forward-over-forward">exact Hessian</a>
+from them. The equation count grows with the square of the parameters
+(guide model: 63); it suits small models such as those of <a href="guide-nlme.html">Nonlinear mixed-effects models</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="reverse-sweep">Reverse sweep<a class="anchor" aria-label="anchor" href="#reverse-sweep"></a>
 </h2>
-<p>One backward sweep of the adjoint system gives the gradient at a cost
-independent of the parameter count (<a href="methods-sensitivities.html#reverse-sweep">Methods &gt; Reverse
+<p>One backward sweep of the <a href="methods-sensitivities.html#def-adjoint">adjoint</a> system gives
+the gradient at a cost independent of the parameter count (<a href="methods-sensitivities.html#reverse-sweep">Methods &gt; Reverse
 sweep</a>). Build with <code>derivMode = c("forward", "reverse")</code>
-(<code><a href="../reference/Pimpl.html">Pimpl()</a></code> passes the sweep through the Jacobian of the
-root), call with <code>sweep = "reverse"</code>. Both passes solve with
-<code>options</code> alone; solves with sensitivities use
+(<code><a href="../reference/Pimpl.html">Pimpl()</a></code> passes the sweep through the <a href="methods-steady-states.html#derivatives-of-the-root">Jacobian of
+the root</a>), call with <code>sweep = "reverse"</code>. Both passes
+solve with <code>options</code> alone; solves with sensitivities use
 <code>optionsSens</code> merged over <code>options</code>. In
-<code><a href="../reference/trust.html">trust()</a></code> the sweep is set per phase:</p>
+<code><a href="../reference/trust.html">trust()</a></code> the sweep is set per <a href="methods-trust.html#hessian-phases">phase</a>:</p>
 <div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">fit</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">obj</span>, <span class="va">start</span>,</span>
 <span>             phases <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"gn"</span><span class="op">)</span>,</span>
 <span>                           <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>hessianMethod <span class="op">=</span> <span class="st">"sr1"</span>, sweep <span class="op">=</span> <span class="st">"reverse"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">fit</span><span class="op">$</span><span class="va">phaseSweep</span></span></code></pre></div>
 <p>Without <code>sweep</code>, <code>"bfgs"</code> and
-<code>"sr1"</code> phases sweep backwards if the objective allows it.
-Gauss-Newton needs forward sensitivities: a <code>"gn"</code> phase with
-<code>sweep = "reverse"</code> is an error. <code>"exact"</code> with
-<code>sweep = "reverse"</code> and <code>deriv2 = TRUE</code> uses
-forward over reverse.</p>
-<p>The backward sweep follows the step grid of the value pass by
+<code>"sr1"</code> (quasi-Newton updates) phases sweep backwards if the
+objective allows it. Gauss-Newton needs forward sensitivities: a
+<code>"gn"</code> phase with <code>sweep = "reverse"</code> is an error.
+<code>"exact"</code> with <code>sweep = "reverse"</code> and
+<code>deriv2 = TRUE</code> uses forward over reverse.</p>
+<p>The backward sweep follows the step grid of the <a href="methods-sensitivities.html#def-value-pass">value pass</a> by
 default; on the cppDE backend <code>optionsReverse</code> of
 <code><a href="../reference/Xs.html">Xs()</a></code> sets the accuracy, see
 <code><a href="https://dmodverse.github.io/cppDE/reference/adjointControl.html" class="external-link">cppDE::adjointControl()</a></code>:</p>
@@ -213,8 +216,8 @@ change to the refined trajectory, attribute <code>correction</code> (<a href="me
 parameter (<a href="methods-sensitivities.html#forward-over-reverse">Methods &gt;
 Forward over reverse</a>). Build with
 <code>derivMode = c("forward", "reverse", "forward-reverse")</code>,
-call with <code>sweep = "reverse", deriv2 = TRUE</code>. FOCEI in <a href="guide-nlme.html">Nonlinear mixed-effects models</a> uses it for
-directional second derivatives.</p>
+call with <code>sweep = "reverse", deriv2 = TRUE</code>. <a href="methods-nlme.html#def-focei">FOCEI</a> in <a href="guide-nlme.html">Nonlinear mixed-effects models</a> uses it for <a href="methods-sensitivities.html#second-derivatives-along-directions">directional
+second derivatives</a>.</p>
 </div>
 <div class="section level2">
 <h2 id="ode-backends">ODE backends<a class="anchor" aria-label="anchor" href="#ode-backends"></a>
@@ -246,7 +249,8 @@ directional second derivatives.</p>
 <td>C++: BDF/NDF, Adams, Rosenbrock, Tsitouras</td>
 <td>duals</td>
 <td>duals</td>
-<td>discrete adjoint</td>
+<td><a href="methods-sensitivities.html#def-discrete-adjoint">discrete
+adjoint</a></td>
 <td>yes</td>
 <td>all models</td>
 </tr>

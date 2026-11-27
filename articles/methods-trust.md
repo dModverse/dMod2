@@ -1,46 +1,50 @@
 # Trust-region optimization
 
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
-minimizes the objective function \\\mathcal{J}(\theta)\\, \\-2 \log L\\
-or \\-2 \log\\ of the posterior, by a trust-region method on the exact
-gradient [\[1\]](#ref-kaschek2019dmod). Arguments and usage:
+minimizes the objective function \\\ell(\theta)\\, \\-2 \log L\\ or \\-2
+\log\\ of the posterior, by a trust-region method on the exact gradient
+[\[1\]](#ref-kaschek2019dmod). Arguments and usage:
 [Optimization](https://dmodverse.github.io/dMod2/articles/guide-optimization.md).
 
 ## Trust-region method
 
 At the iterate \\\theta_k\\ with the gradient \\b = \nabla
-\mathcal{J}(\theta_k)\\ and a symmetric approximation \\H\\ of the
-Hessian,
+\ell(\theta_k)\\ and a symmetric approximation \\H\\ of the Hessian,
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md)
-minimizes the quadratic model of the objective inside a ball,
+minimizes the quadratic model \\m(s)\\ of the change of \\\ell\\ along a
+step \\s\\, the second-order Taylor polynomial with \\H\\ in place of
+the Hessian, inside the trust region, a ball of radius \\r\\,
 
 \\\min\_{s} \\ m(s) = b^\top s + \tfrac{1}{2}\\ s^\top H s \quad
 \text{subject to} \quad \lVert s \rVert \le r . \tag{1}\\
 
-The ratio of actual to predicted decrease decides on the step and the
-radius \\r\\. Subproblem, radius, bounds and termination are the same
-for every source of \\H\\ and on the [sparse path](#sparse-hessians).
+The ratio of actual to predicted decrease \\-m(s)\\ decides on the step
+and the radius \\r\\. Subproblem, radius, bounds and termination are the
+same for every source of \\H\\ and on the [sparse
+path](#sparse-hessians).
 
 ### Trust-region subproblem
 
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) solves
-the subproblem (1) exactly, through the full eigendecomposition of \\H\\
-[\[2\]](#ref-more1983computing). The solution satisfies \\(H + \nu I)\\
-s = -b\\ with a multiplier \\\nu \ge 0\\ that makes \\H + \nu I\\
-positive semidefinite and vanishes unless the step reaches the boundary,
-\\\lVert s \rVert = r\\. With \\H = Q \Lambda Q^\top\\, eigenvalues
-\\\lambda_i\\ and \\\gamma = Q^\top b\\, the step
+the subproblem (1), the minimization of the quadratic model over the
+trust region, once per iteration and exactly, through the full
+eigendecomposition of \\H\\ [\[2\]](#ref-more1983computing). The
+solution satisfies \\(H + \nu I)\\ s = -b\\ with a multiplier \\\nu \ge
+0\\, the Lagrange multiplier of the radius constraint, that makes \\H +
+\nu I\\ positive semidefinite and vanishes unless the step reaches the
+boundary, \\\lVert s \rVert = r\\. With \\H = Q \Lambda Q^\top\\,
+eigenvalues \\\lambda_i\\ and \\\gamma = Q^\top b\\, the step
 
 \\s(\nu) = -Q (\Lambda + \nu I)^{-1} \gamma \tag{2}\\
 
 solves the subproblem when \\\nu \ge \max(0, -\lambda\_{\min})\\ and
 either \\\nu = 0\\ with \\\lVert s \rVert \le r\\, or \\\nu \> 0\\ with
 \\\lVert s \rVert = r\\. The second case is a root of the secular
-equation
+equation, which sets \\\nu\\ such that the step ends on the boundary,
 
-\\\phi(\nu) = \frac{1}{r} - \frac{1}{\lVert s(\nu) \rVert} =
-\frac{1}{r} - \Big( \sum_i \frac{\gamma_i^2}{(\lambda_i + \nu)^2}
-\Big)^{-1/2}, \tag{3}\\
+\\\begin{aligned} \phi(\nu) &= \frac{1}{r} - \frac{1}{\lVert s(\nu)
+\rVert} \\ &= \frac{1}{r} - \Big( \sum_i \frac{\gamma_i^2}{(\lambda_i +
+\nu)^2} \Big)^{-1/2}, \end{aligned} \tag{3}\\
 
 nearly linear for \\\nu \> -\lambda\_{\min}\\, solved by bisection on a
 bracket of \\\nu\\, every evaluation \\O(n\_\theta)\\ in the eigenbasis.
@@ -56,8 +60,8 @@ path](#sparse-hessians).
 
 With the ratio of actual to predicted decrease
 
-\\\rho_k = \frac{\mathcal{J}(\theta_k) - \mathcal{J}(\theta_k +
-s_k)}{-m_k(s_k)}, \tag{4}\\
+\\\rho_k = \frac{\ell(\theta_k) - \ell(\theta_k + s_k)}{-m_k(s_k)},
+\tag{4}\\
 
 the radius is updated with \\r\_{\max}\\ = `rmax`:
 
@@ -69,24 +73,24 @@ the radius is updated with \\r\_{\max}\\ = `rmax`:
 A step with \\\rho_k \< 1/4\\ is rejected. The radius grows only when
 the step reached the boundary. Under `boundary = "clip"` the radius
 shrinks to \\r_k/4\\, grows at \\\rho_k \> 3/4\\ after every step that
-is not the Newton step, and a step that lowers \\\mathcal{J}\\ is
-accepted where the value or model test ends the run. The first radius is
-`rinit`. A trial point where the objective fails or is not finite counts
-as rejected; three in a row end the run (`"objfun"`).
+is not the Newton step, and a step that lowers \\\ell\\ is accepted
+where the value or model test ends the run. The first radius is `rinit`.
+A trial point where the objective fails or is not finite counts as
+rejected; three in a row end the run (`"objfun"`).
 
 ### Nonmonotone acceptance
 
-With `stepControl$nonmonotone` \\= \eta \in (0, 1)\\, the actual
-decrease is measured from a weighted average of past values
-[\[3\]](#ref-zhang2004nonmonotone),
+With `stepControl$nonmonotone` \\= \eta \in (0, 1)\\, nonmonotone
+acceptance measures the actual decrease from a weighted average of past
+values [\[3\]](#ref-zhang2004nonmonotone), so an accepted step may raise
+\\\ell\\,
 
-\\Q\_{k+1} = \eta Q_k + 1, \qquad C\_{k+1} = \frac{\eta Q_k C_k +
-\mathcal{J}(\theta\_{k+1})}{Q\_{k+1}}, \tag{6}\\
+\\\begin{aligned} Q\_{k+1} &= \eta Q_k + 1, \\ C\_{k+1} &= \frac{\eta
+Q_k C_k + \ell(\theta\_{k+1})}{Q\_{k+1}}, \end{aligned} \tag{6}\\
 
-updated at accepted steps, and \\\rho_k = \bigl(C_k -
-\mathcal{J}(\theta_k + s_k)\bigr) / \bigl(-m_k(s_k)\bigr)\\; \\\eta =
-0\\ recovers (4). The result is the best iterate visited; the
-termination tests read \\\mathcal{J}\\ itself.
+updated at accepted steps, and \\\rho_k\\ is (4) with \\C_k\\ in place
+of \\\ell(\theta_k)\\; \\\eta = 0\\ recovers (4). The result is the best
+iterate visited; the termination tests read \\\ell\\ itself.
 
 ### Bound constraints
 
@@ -119,19 +123,21 @@ if \\H\\ is poor. A `"gradient"`, `"fvalue"` or `"preddiff"` stop that
 ends the run also needs the full Newton step of the scaled model (7) at
 the current iterate to predict a decrease of at most `mtol`,
 
-\\\tfrac{1}{2}\\ \hat b^\top \hat B^{+} \hat b = \frac{1}{2}
-\sum\_{\hat\lambda_i \> 0} \frac{(\hat q_i^\top \hat
-b)^2}{\hat\lambda_i} \le \texttt{mtol} , \tag{8}\\
+\\\begin{aligned} \tfrac{1}{2}\\ \hat b^\top \hat B^{+} \hat b &=
+\frac{1}{2} \sum\_{\hat\lambda_i \> 0} \frac{(\hat q_i^\top \hat
+b)^2}{\hat\lambda_i} \\ &\le \texttt{mtol} , \end{aligned} \tag{8}\\
 
-with the eigenpairs \\(\hat\lambda_i, \hat q_i)\\ of \\\hat B\\,
-eigenvalues inside the noise floor of the eigendecomposition counted as
-zero. Along a direction of curvature \\\lambda\\ the gradient at a
-distance \\d\\ from the minimum is \\\lambda d\\ and the value lies
-\\\lambda d^2 / 2\\ above it, so a small gradient along a flat direction
-does not mean a value close to the minimum; (8) bounds that excess. On
-the [sparse path](#sparse-hessians) the Cholesky factors give (8) where
-\\\hat B\\ is positive definite, the dense eigendecomposition of \\\hat
-B\\ elsewhere;
+with \\\hat B^{+}\\ the inverse of \\\hat B\\ on the eigenvectors of
+positive eigenvalues and zero on the others, the eigenpairs
+\\(\hat\lambda_i, \hat q_i)\\ of \\\hat B\\, and eigenvalues inside the
+noise floor of the eigendecomposition, the rounding error below which an
+eigenvalue is not resolved, counted as zero. Along a direction of
+curvature \\\lambda\\ the gradient at a distance \\d\\ from the minimum
+is \\\lambda d\\ and the value lies \\\lambda d^2 / 2\\ above it, so a
+small gradient along a flat direction does not mean a value close to the
+minimum; (8) bounds that excess. On the [sparse path](#sparse-hessians)
+the Cholesky factors give (8) where \\\hat B\\ is positive definite, the
+dense eigendecomposition of \\\hat B\\ elsewhere;
 [`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md)
 evaluates (8) on the model of the coordinates not held at a kink ([L1
 penalties](#l1-penalties)). A run that fails (8) goes on, within
@@ -166,8 +172,8 @@ prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#prior))
 With a parameter-dependent error model the matrix is \\J^\top L J\\, not
 necessarily semidefinite ([Sensitivities and
 Hessians](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
-With large residuals the Gauss-Newton model can stop short of the
-minimum.
+With large residuals, where the second term is not small, the
+Gauss-Newton model can stop short of the minimum.
 
 ### Exact Hessian
 
@@ -180,26 +186,27 @@ exact also for large residuals and at a much higher cost per iteration.
 
 Both quasi-Newton updates use the secant pair
 
-\\s_k = \theta\_{k+1} - \theta_k, \qquad y_k = \nabla
-\mathcal{J}(\theta\_{k+1}) - \nabla \mathcal{J}(\theta_k), \tag{9}\\
+\\\begin{aligned} s_k &= \theta\_{k+1} - \theta_k, \\ y_k &= \nabla
+\ell(\theta\_{k+1}) - \nabla \ell(\theta_k), \end{aligned} \tag{9}\\
 
 with the secant equation \\B\_{k+1} s_k = y_k\\. BFGS keeps \\B\\
-positive definite, which needs \\s^\top y \> 0\\; the pair is damped
-[\[6\]](#ref-powell1978fast):
+positive definite, which needs \\s^\top y \> 0\\; the pair is damped,
+\\y\\ mixed with \\B s\\ [\[6\]](#ref-powell1978fast):
 
-\\\vartheta = \begin{cases} 1, & s^\top y \ge 0.2\\ s^\top B s, \\
-\dfrac{0.8\\ s^\top B s}{s^\top B s - s^\top y}, & \text{otherwise,}
-\end{cases} \qquad \tilde y = \vartheta y + (1 - \vartheta) B s ,
-\tag{10}\\
+\\\begin{aligned} \vartheta &= \begin{cases} 1, & s^\top y \ge 0.2\\
+s^\top B s, \\ \dfrac{0.8\\ s^\top B s}{s^\top B s - s^\top y}, &
+\text{otherwise,} \end{cases} \\ \tilde y &= \vartheta y + (1 -
+\vartheta) B s , \end{aligned} \tag{10}\\
 
 the update is
 
 \\B\_{k+1} = B_k - \frac{B_k s\\ s^\top B_k}{s^\top B_k s} +
 \frac{\tilde y\\ \tilde y^\top}{s^\top \tilde y}. \tag{11}\\
 
-Then \\s^\top \tilde y \ge 0.2\\ s^\top B s \> 0\\. `qnCautious` skips
-pairs with \\s^\top y \le c \lVert s \rVert \lVert y \rVert\\ (counted
-in `qnSkipped`). BFGS updates from accepted steps only.
+Then \\s^\top \tilde y \ge 0.2\\ s^\top B s \> 0\\. The cautious test
+`qnCautious` skips pairs with \\s^\top y \le c \lVert s \rVert \lVert y
+\rVert\\ (counted in `qnSkipped`). BFGS updates from accepted steps
+only.
 
 ### SR1 update
 
@@ -224,15 +231,16 @@ a data point, \\\ell_i = r_i^2\\ in the simplest case. With the Jacobian
 \partial m_i\\, the gradient is \\J^\top u\\ and the Hessian is the
 Gauss-Newton Hessian \\G = J^\top L J\\, \\L\\ the Hessian of the losses
 in \\m\\, which the objective returns, plus \\C = \sum_i u_i^\top
-\nabla^2 m_i\\. The structured methods keep \\G\\ at every iterate and
-learn only \\A \approx C\\ from the steps. The secant of Dennis,
-Martínez and Tapia [\[7\]](#ref-dennis1989convergence) is \\(J\_{k+1} -
-J_k)^\top u\_{k+1}\\ for the data term, of Gauss-Newton Hessian \\G^{\rm
-LS}\\; the other terms of a sum, such as a prior, take the secant of
-their gradient and Hessian:
+\nabla^2 m_i\\. The structured secant updates keep \\G\\ at every
+iterate and learn only \\A \approx C\\ from the steps. The secant of
+Dennis, Martínez and Tapia [\[7\]](#ref-dennis1989convergence) is
+\\(J\_{k+1} - J_k)^\top u\_{k+1}\\ for the data term, of Gauss-Newton
+Hessian \\G^{\rm LS}\\; the other terms of a sum, such as a prior, take
+the secant of their gradient and Hessian:
 
-\\B_k = G_k + A_k, \qquad y^\\\_k = y_k - J_k^\top (u\_{k+1} - u_k) -
-\left(G\_{k+1} - G^{\rm LS}\_{k+1}\right) s_k , \tag{13}\\
+\\\begin{aligned} B_k &= G_k + A_k, \\ y^\\\_k &= y_k - J_k^\top
+(u\_{k+1} - u_k) - \left(G\_{k+1} - G^{\rm LS}\_{k+1}\right) s_k ,
+\end{aligned} \tag{13}\\
 
 \\s_k\\ and \\y_k\\ from (9). For \\\ell_i = r_i^2\\, \\u = 2 r\\ and
 the data part is \\2 (J\_{k+1} - J_k)^\top r\_{k+1}\\, as in Fides
@@ -264,14 +272,14 @@ A_k s_k, \tag{15}\\
 skipped when \\\lvert w^\top s_k \rvert \le 10^{-8} \lVert s_k \rVert
 \lVert w \rVert\\. \\A\\ stays indefinite where \\C\\ is, and rejected
 trial points update it under `qnRejected`. Both start at \\A_0 = 0\\, so
-the first step is a Gauss-Newton step; a handover or a reseed starts
-there again. A pair that leaves \\A\\ unchanged counts in `qnSkipped`.
+the first step is a Gauss-Newton step; a handover or a reseed, a restart
+of the update from a new seed, starts there again. A pair that leaves
+\\A\\ unchanged counts in `qnSkipped`.
 
 `qnScaling = "residual"` is the totally structured secant method of
 Huschens [\[9\]](#ref-yabe1998quadratic). With the residual norm \\\rho
 = \lVert u \rVert\\, which is \\2 \lVert r \rVert\\ for \\\ell_i =
-r_i^2\\, and \\\rho = \sqrt{\mathcal{J}}\\ for an objective without data
-rows,
+r_i^2\\, and \\\rho = \sqrt{\ell}\\ for an objective without data rows,
 
 \\B_k = G_k + \rho_k A_k, \qquad z_k = \frac{\rho\_{k+1}}{\rho_k}\\
 y^\\\_k , \tag{16}\\
@@ -279,17 +287,20 @@ y^\\\_k , \tag{16}\\
 14. or (15) act on \\\rho\_{k+1} A_k\\ with \\z_k\\ in place of
     \\y^\\\_k\\, and \\A\_{k+1}\\ is the result divided by
     \\\rho\_{k+1}\\. The correction vanishes with the residuals:
-    convergence is quadratic for a zero residual and superlinear
-    otherwise. \\\rho = 0\\ leaves \\A\\ unchanged.
+    convergence is quadratic for a zero residual, an exact fit of the
+    data at the minimum where \\C = 0\\, and superlinear otherwise.
+    \\\rho = 0\\ leaves \\A\\ unchanged.
 
 `"gnsbfgs"` is the hybrid Gauss-Newton structured BFGS method of Zhou
 and Chen [\[10\]](#ref-zhou2010global). After every accepted step, with
 \\z_k\\ from (16),
 
-\\B\_{k+1} = \begin{cases} G\_{k+1} + A\_{k+1}, \quad A\_{k+1} =
+\\\begin{aligned} B\_{k+1} &= \begin{cases} G\_{k+1} + A\_{k+1}, &
+z_k^\top s_k \ge \epsilon\\ s_k^\top s_k , \\ G\_{k+1}, &
+\text{otherwise,} \end{cases} \\ A\_{k+1} &= \begin{cases}
 \operatorname{BFGS}(A_k;\\ s_k, z_k), & z_k^\top s_k \ge \epsilon\\
-s_k^\top s_k , \\ G\_{k+1}, \quad A\_{k+1} = A_k, & \text{otherwise,}
-\end{cases} \tag{17}\\
+s_k^\top s_k , \\ A_k, & \text{otherwise,} \end{cases} \end{aligned}
+\tag{17}\\
 
 with \\\epsilon\\ = `qnHybridTol`, default \\10^{-6}\\ as in the paper,
 the undamped update (11) and \\A_0 = 0\\. The ratio \\z^\top s / s^\top
@@ -310,31 +321,33 @@ Gauss-Newton branch, `hybridGN` counts the steps that chose it.
 ### Seed and memory
 
 Far from the optimum \\J^\top J\\ is large and ill-conditioned; BFGS
-corrects a seed that is wrong by orders of magnitude only slowly, SR1
-overwrites it. With `qnMemory` \\= m \> 0\\ the approximation is rebuilt
-from \\\gamma I\\, \\\gamma = y^\top y / s^\top y\\
-[\[11\]](#ref-shanno1978matrix), and the last \\m\\ pairs, the curvature
-of L-BFGS [\[5\]](#ref-nocedal2006numerical) as an explicit matrix.
-There is no diagonal preconditioner: on the log scale the
-ill-conditioning of sloppy models lies along rotated directions
-[\[12\]](#ref-gutenkunst2007universally).
+corrects a seed, the matrix the update starts from, that is wrong by
+orders of magnitude only slowly, SR1 overwrites it. With `qnMemory` \\=
+m \> 0\\ the approximation is rebuilt from \\\gamma I\\, \\\gamma =
+y^\top y / s^\top y\\ [\[11\]](#ref-shanno1978matrix), and the last
+\\m\\ pairs, the curvature of L-BFGS [\[5\]](#ref-nocedal2006numerical)
+as an explicit matrix. There is no diagonal preconditioner: on the log
+scale the ill-conditioning of sloppy models, whose Hessian eigenvalues
+spread evenly over many orders of magnitude, lies along rotated
+directions [\[12\]](#ref-gutenkunst2007universally).
 
 ### Hessian phases
 
-A phase hands over to the next where a value, model, step or stagnation
-stop or the `iterlim` of the phase would end the run; `"gradient"` ends
-the run, and with `onStop = "end"` the value, model, step and stagnation
-stops end it as well. A phase with `radiusStall` \\= n\\ also hands over
-after \\n\\ consecutive iterations that leave the radius unchanged, an
-accepted step inside the region or one that the region at `rmax` bounds.
-A handover resets the radius to `rinit`, or keeps it with
-`keepRadius = TRUE`, and seeds a quasi-Newton phase with the
-Gauss-Newton Hessian at the iterate of the handover. With
-`hessianInit = "tracked"` a BFGS phase starts instead from a matrix kept
-over the whole run: the Hessian of the first phase at \\\theta_0\\, with
-the absolute values of the eigenvalues where it is indefinite, updated
-by (10) and (11) with the pair (9) of every accepted step of the phases
-before, under the same tests as the update in the phase.
+A phase, a part of the run with one source of \\H\\, hands over to the
+next where a value, model, step or stagnation stop or the `iterlim` of
+the phase would end the run; `"gradient"` ends the run, and with
+`onStop = "end"` the value, model, step and stagnation stops end it as
+well. A phase with `radiusStall` \\= n\\ also hands over after \\n\\
+consecutive iterations that leave the radius unchanged, an accepted step
+inside the region or one that the region at `rmax` bounds. A handover
+resets the radius to `rinit`, or keeps it with `keepRadius = TRUE`, and
+seeds a quasi-Newton phase with the Gauss-Newton Hessian at the iterate
+of the handover. With `hessianInit = "tracked"` a BFGS phase starts
+instead from a matrix kept over the whole run: the Hessian of the first
+phase at \\\theta_0\\, with the absolute values of the eigenvalues where
+it is indefinite, updated by (10) and (11) with the pair (9) of every
+accepted step of the phases before, under the same tests as the update
+in the phase.
 
 The default of
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md) is the
@@ -354,22 +367,23 @@ path](#sparse-hessians) run Gauss-Newton alone, as
 
 ### Sparse Hessians
 
-A sparse Hessian \\H = S + U D U^\top\\, \\S\\ sparse and \\U\\ of few
-columns \\m\\ with the diagonal \\D\\, takes the same steps without the
-eigendecomposition. The root of (3) is found by Newton’s method on
-\\1/\lVert s(\nu) \rVert\\, safeguarded by a bracket of \\\nu\\, to a
-relative \\10^{-12}\\: every iterate factorizes \\S + \nu I\\ by sparse
-Cholesky, with the ordering of one symbolic analysis per pattern, and
-adds \\U D U^\top\\ by the Woodbury identity through \\K = D^{-1} +
-U^\top (S + \nu I)^{-1} U\\. \\H + \nu I\\ is positive definite where
-\\S + \nu I\\ has \\p\\ negative eigenvalues, \\K\\ has \\q\\ positive
-ones and \\p + q\\ equals the number of positive entries of \\D\\; an
-indefinite \\S + \nu I\\ is factorized as \\L \Delta L^\top\\ for \\p\\.
-In the hard case the eigenvector of \\\lambda\_{\min}\\ comes from
-inverse iteration on the factor at \\\nu\\ next to \\-\lambda\_{\min}\\.
-`sparse = "auto"` compares the flops of a step, about eight
-factorizations with \\m + 2\\ solves each from the symbolic analysis,
-with the \\4 n\_\theta^3\\ of the eigendecomposition.
+A sparse Hessian \\H = S + U D U^\top\\, \\S\\ sparse and the low-rank
+part \\U D U^\top\\ of few columns \\m\\ in \\U\\ and the diagonal
+\\D\\, dense curvature without a dense matrix, takes the same steps
+without the eigendecomposition. The root of (3) is found by Newton’s
+method on \\1/\lVert s(\nu) \rVert\\, safeguarded by a bracket of
+\\\nu\\, to a relative \\10^{-12}\\: every iterate factorizes \\S + \nu
+I\\ by sparse Cholesky, with the ordering of one symbolic analysis per
+pattern, and adds \\U D U^\top\\ by the Woodbury identity through \\K =
+D^{-1} + U^\top (S + \nu I)^{-1} U\\. \\H + \nu I\\ is positive definite
+where \\S + \nu I\\ has \\p\\ negative eigenvalues, \\K\\ has \\q\\
+positive ones and \\p + q\\ equals the number of positive entries of
+\\D\\; an indefinite \\S + \nu I\\ is factorized as \\L \Delta L^\top\\
+for \\p\\. In the hard case the eigenvector of \\\lambda\_{\min}\\ comes
+from inverse iteration on the factor at \\\nu\\ next to
+\\-\lambda\_{\min}\\. `sparse = "auto"` compares the flops of a step,
+about eight factorizations with \\m + 2\\ solves each from the symbolic
+analysis, with the \\4 n\_\theta^3\\ of the eigendecomposition.
 
 A BFGS phase on the sparse path, `"bfgs"` with `hessianInit = "gn"`, is
 limited-memory BFGS on the Hessian \\B_0 = S_0 + U_0 D_0 U_0^\top\\ of
@@ -379,9 +393,9 @@ against the model it updates and skipped by the same tests as the dense
 update. In the compact representation
 [\[13\]](#ref-byrd1994representations)
 
-\\B = B_0 - W M^{-1} W^\top, \qquad W = (B_0 S,\\ Y), \qquad M =
-\begin{pmatrix} S^\top B_0 S & L \\ L^\top & -E \end{pmatrix},
-\tag{18}\\
+\\\begin{aligned} B &= B_0 - W M^{-1} W^\top, \qquad W = (B_0 S,\\ Y),
+\\ M &= \begin{pmatrix} S^\top B_0 S & L \\ L^\top & -E \end{pmatrix},
+\end{aligned} \tag{18}\\
 
 \\S\\ and \\Y\\ hold the pairs as columns, \\L\\ the strict lower
 triangle of \\S^\top Y\\ and \\E\\ the diagonal. With \\M = P \Theta
@@ -413,32 +427,32 @@ Gauss-Newton Hessian misses curvature that matters.
 minimizes the objective plus an L1 penalty on some of the parameters
 [\[14\]](#ref-tibshirani1996regression),
 
-\\\mathcal{J}(\theta) + \sum\_{i \in P} \lambda_i \lvert \theta_i -
-\mu_i \rvert , \tag{19}\\
+\\\ell(\theta) + \sum\_{i \in P} \lambda_i \lvert \theta_i - \mu_i
+\rvert , \tag{19}\\
 
 with penalized parameters \\P\\, references \\\mu_i\\ and strengths
 \\\lambda_i\\.
 [`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md) runs
 the trust region with the Gauss-Newton Hessian and two changes: a
-parameter on the kink is removed from (1) while \\\lvert \partial
-\mathcal{J} / \partial \theta_i \rvert \le \lambda_i\\, and a step
-across the kink is cut back onto \\\mu_i\\, so zero differences are
-exact. Further penalties are a one-sided one,
+parameter on the kink is removed from (1) while \\\lvert \partial \ell /
+\partial \theta_i \rvert \le \lambda_i\\, and a step across the kink is
+cut back onto \\\mu_i\\, so zero differences are exact. Further
+penalties are a one-sided one,
 
 \\\lambda_i \max(0,\\ \mu_i - \theta_i) , \tag{20}\\
 
-which keeps a parameter on the kink while \\0 \le \partial \mathcal{J} /
+which keeps a parameter on the kink while \\0 \le \partial \ell /
 \partial \theta_i \le \lambda_i\\; a gate \\\lambda_i (\theta_i -
 \mu_i)\\ with \\\theta_i \ge \mu_i\\, which keeps it there while
-\\\partial \mathcal{J} / \partial \theta_i \ge -\lambda_i\\; and a fused
-block \\B\\, the clustered lasso [\[15\]](#ref-hauber2023uncovering) in
-the L1 form (Hauber et al. favor the exponent 0.8),
+\\\partial \ell / \partial \theta_i \ge -\lambda_i\\; and a fused block
+\\B\\, the clustered lasso [\[15\]](#ref-hauber2023uncovering) in the L1
+form (Hauber et al. favor the exponent 0.8),
 
 \\\lambda \sum\_{p \< q \in B} w\_{pq}\\ \lvert \theta_p - \theta_q
 \rvert , \tag{21}\\
 
-optionally with an anchor; equal parameters move as one until the data
-split them.
+optionally with an anchor; it merges the parameters of \\B\\ into
+clusters of equal value, which move as one until the data split them.
 
 ## Forward and reverse derivatives on the Oppelt fit
 
@@ -574,11 +588,12 @@ summary
 #> GNSSR1, shifted              38.3           209
 ```
 
-Medians over starts; a hit ends within 5 of the best value; `iterlim`
-counts the runs stopped by the iteration limit; `failed` counts runs
-without result, which the time limit of a task ended. The stops by
-method, with a stagnation that ends away from a stationary point of the
-model counted apart:
+Medians over starts; a plateau is a group of fits with one final value,
+a local optimum; a hit ends within 5 of the best value; `iterlim` counts
+the runs stopped by the iteration limit; `failed` counts runs without
+result, which the time limit of a task ended. The stops by method, with
+a stagnation that ends away from a stationary point of the model counted
+apart:
 
 ``` r
 

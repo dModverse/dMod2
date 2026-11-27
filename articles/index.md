@@ -59,6 +59,7 @@ Derivations behind the guide, with the comparisons that support them.
   models](https://dmodverse.github.io/dMod2/articles/methods-nlme.md):
 - [Sparsity
   priors](https://dmodverse.github.io/dMod2/articles/methods-sparsity-priors.md):
+- [Index](https://dmodverse.github.io/dMod2/articles/index-terms.md):
 
 ### Examples: signaling models
 

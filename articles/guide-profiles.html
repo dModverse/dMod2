@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -118,27 +120,27 @@
 
     
     
-<p>The profile likelihood <span class="citation"><a href="#ref-raue2009structural">[1]</a></span> shows how well the data
+<p>The <a href="methods-profiles.html#def-profile-likelihood">profile
+likelihood</a> <span class="citation"><a href="#ref-raue2009structural">[1]</a></span> shows how well the data
 constrain each parameter. This chapter profiles the full model at the
 best fit of <a href="guide-optimization.html">Optimization</a>, tests
-the core model of the publication and fits a reduced model.</p>
+the core model of the publication and fits a <a href="methods-profiles.html#def-reduced-model">reduced model</a>.</p>
 <div class="section level2">
 <h2 id="profile-likelihood-and-confidence-intervals">Profile likelihood and confidence intervals<a class="anchor" aria-label="anchor" href="#profile-likelihood-and-confidence-intervals"></a>
 </h2>
-<p>The profile of a parameter is the data term along the path on which
-the other parameters minimize the objective with that parameter fixed.
-Here the objective has a prior of standard deviation 20 on the log scale
-at the best fit, so that the data term shapes the profiles. Data terms
-within 3.84, the 95 % quantile of <span class="math inline">\(\chi^2_1\)</span>, of the minimum form the 95 %
-confidence interval (<a href="methods-profiles.html">Methods &gt;
-Profile likelihood</a>). <code>stepControl = list(stop = "data")</code>
-ends a profile there, <code>confint(val.column = "data")</code> reads
-the interval, <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> gives other levels. A
-profile open towards <span class="math inline">\(-\infty\)</span> means
-the process can be switched off, towards <span class="math inline">\(+\infty\)</span> that it can be instantaneous (<a href="methods-profiles.html#shapes">Methods &gt; Shapes</a>).</p>
-<p><code>method = "integrate"</code> (default) follows the constrained
-optimum as a curve, with
-<code>algoControl = list(reoptimize = TRUE)</code> corrected by
+<p>The profile of a parameter is the <a href="methods-profiles.html#def-data-term">data term</a> along the path
+on which the other parameters minimize the <a href="methods-profiles.html#def-objective">objective</a> with that
+parameter fixed. Here the objective has a <a href="methods-objective.html#prior">prior</a> of standard deviation 20
+on the log scale at the best fit, so that the data term shapes the
+profiles. Data terms within 3.84, the 95 % quantile of <span class="math inline">\(\chi^2_1\)</span>, of the minimum form the 95 % <a href="methods-profiles.html#def-confidence-interval">confidence
+interval</a> (<a href="methods-profiles.html">Methods &gt; Profile
+likelihood</a>). <code>stepControl = list(stop = "data")</code> ends a
+profile there, <code>confint(val.column = "data")</code> reads the
+interval, <code><a href="../reference/profileThreshold.html">profileThreshold()</a></code> gives other levels. A profile
+open towards <span class="math inline">\(-\infty\)</span> means the
+process can be switched off, towards <span class="math inline">\(+\infty\)</span> that it can be instantaneous (<a href="methods-profiles.html#shapes">Methods &gt; Shapes</a>).</p>
+<p><code>method = "integrate"</code> (default) follows the <a href="methods-profiles.html#def-constrained-optimum">constrained
+optimum</a> as a curve and corrects each step by a short fit with
 <code><a href="../reference/trust.html">trust()</a></code>; <code>method = "optimize"</code> refits at every
 step.</p>
 <table class="table">
@@ -217,8 +219,8 @@ tolerances of the profiles,</p>
 <span><span class="va">fitProfile</span> <span class="op">&lt;-</span> <span class="fu"><a href="../reference/trust.html">trust</a></span><span class="op">(</span><span class="va">objProfile</span>, <span class="va">refit</span><span class="op">$</span><span class="va">argument</span>, fixed <span class="op">=</span> <span class="va">gauge</span>, rinit <span class="op">=</span> <span class="fl">0.1</span>, rmax <span class="op">=</span> <span class="fl">10</span>,</span>
 <span>                    iterlim <span class="op">=</span> <span class="fl">1000</span>, tolControl <span class="op">=</span> <span class="va">tolerances</span><span class="op">)</span></span>
 <span><span class="va">best</span> <span class="op">&lt;-</span> <span class="va">fitProfile</span><span class="op">$</span><span class="va">argument</span></span></code></pre></div>
-<p>and profiles each side until the data term has risen by the threshold
-or the parameter has moved by 7. The profiles are loaded from
+<p>and profiles each side until the data term has risen by the <a href="methods-profiles.html#def-threshold">threshold</a> or the
+parameter has moved by 7. The profiles are loaded from
 <code>results/profiles.rds</code>:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the profiles integrated, every step re-optimized, each side until the data term has risen by the</span></span>
@@ -316,10 +318,10 @@ No profile lies below the fit:</p>
 <h2 id="parameter-paths">Parameter paths<a class="anchor" aria-label="anchor" href="#parameter-paths"></a>
 </h2>
 <p><code><a href="../reference/plotPaths.html">plotPaths()</a></code> shows how the other parameters compensate
-along a profile. Along <code>act_Ikb_Base</code>,
-<code>eta_act_Ikb_Base_c_pNfkIkb</code> rises by the same amount: the
-data determine the product. Shown are the parameters that move by more
-than 1:</p>
+along a profile (<a href="methods-profiles.html#def-parameter-path">parameter path</a>).
+Along <code>act_Ikb_Base</code>, <code>eta_act_Ikb_Base_c_pNfkIkb</code>
+rises by the same amount: the data determine the product. Shown are the
+parameters that move by more than 1:</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># the parameters that move along the profile of `par` by more than `by` on the log scale</span></span>
 <span><span class="va">movers</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">par</span>, <span class="va">by</span> <span class="op">=</span> <span class="fl">1</span><span class="op">)</span> <span class="op">{</span></span>
@@ -339,9 +341,9 @@ than 1:</p>
 <h2 id="predictions-along-a-profile">Predictions along a profile<a class="anchor" aria-label="anchor" href="#predictions-along-a-profile"></a>
 </h2>
 <p><code><a href="../reference/plotArray.html">plotArray()</a></code> predicts along one side of a profile,
-colored by the profiled parameter; <code>fixed</code> adds the gauge.
-Along the upper side of <code>degrad_RnaA20</code>, <code>RnaA20</code>
-falls by two orders of magnitude while A20 stays nearly the same:</p>
+colored by the profiled parameter; <code>fixed</code> adds the <a href="methods-symmetries.html#gauge-and-reduction">gauge</a>. Along the
+upper side of <code>degrad_RnaA20</code>, <code>RnaA20</code> falls by
+two orders of magnitude while A20 stays nearly the same:</p>
 <div class="sourceCode" id="cb11"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">states</span> <span class="op">&lt;-</span> <span class="va">x</span> <span class="op">*</span> <span class="va">pSS</span> <span class="op">*</span> <span class="va">p</span></span>
 <span><span class="va">minutes</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">360</span>, <span class="fl">2</span><span class="op">)</span></span>
@@ -653,8 +655,9 @@ scale <code>s_ipNFkB_ibNFkB</code> at 0:</p>
 <span><span class="va">observablesReduced</span> <span class="op">&lt;-</span> <span class="va">observables</span></span>
 <span><span class="va">observablesReduced</span><span class="op">[</span><span class="st">"ipNFkB_ibNFkB"</span><span class="op">]</span> <span class="op">&lt;-</span> <span class="st">"log(off_ipNFkB_ibNFkB)"</span></span></code></pre></div>
 <p>As in the publication, all NFκB rests in the complex with IκBα and
-all IKK is inactive, a steady state for every parameter value, so
-neither <code><a href="../reference/Pimpl.html">Pimpl()</a></code> nor a stability term is needed:</p>
+all IKK is inactive, a <a href="methods-steady-states.html#def-steady-state">steady state</a> for
+every parameter value, so neither <code><a href="../reference/Pimpl.html">Pimpl()</a></code> nor a <a href="methods-steady-states.html#stability">stability</a> term is
+needed:</p>
 <div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># at rest all NFκB is bound to IκBα and all IKK inactive, the other states are 0: without basal</span></span>
 <span><span class="co"># activation this is a steady state for every parameter value, as in the publication; TNFα added</span></span>
@@ -761,12 +764,12 @@ threshold 26.3.</p>
 <span><span class="va">intervalsReduced</span><span class="op">[</span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">shape</span> <span class="op">!=</span> <span class="st">"finite"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"value"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span>, <span class="st">"shape"</span><span class="op">)</span><span class="op">]</span></span>
 <span><span class="co">#&gt;            name    value      lower upper      shape</span></span>
 <span><span class="co">#&gt; 16 form_complex 1.641204 0.03715742   Inf open above</span></span></code></pre></div>
-<p>All parameters are identifiable except <code>form_complex</code>,
-bounded below at 0.016 on the log10 scale and open above on a plateau
-3.8 above the optimum; the publication reports (-0.21, 3.03). The
-profiles of <code>degrad_A20</code>, <code>degrad_RnaA20</code> and
-<code>shuttle_RnaA20</code> have a second minimum inside the interval.
-The rate constants:</p>
+<p>All parameters are <a href="methods-profiles.html#def-identifiable">identifiable</a> except
+<code>form_complex</code>, bounded below at 0.016 on the log10 scale and
+open above on a plateau 3.8 above the optimum; the publication reports
+(-0.21, 3.03). The profiles of <code>degrad_A20</code>,
+<code>degrad_RnaA20</code> and <code>shuttle_RnaA20</code> have a second
+minimum inside the interval. The rate constants:</p>
 <div class="sourceCode" id="cb25"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">rates</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/sets.html" class="external-link">setdiff</a></span><span class="op">(</span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">name</span>, <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grep</a></span><span class="op">(</span><span class="st">"^(s|off|sigma|tau)_"</span>, <span class="va">intervalsReduced</span><span class="op">$</span><span class="va">name</span>, value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="va">intervalsReduced</span><span class="op">[</span><span class="va">intervalsReduced</span><span class="op">$</span><span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">rates</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"name"</span>, <span class="st">"value"</span>, <span class="st">"lower"</span>, <span class="st">"upper"</span><span class="op">)</span><span class="op">]</span></span>
@@ -795,7 +798,8 @@ The rate constants:</p>
 <code class="sourceCode R"><span><span class="fu"><a href="../reference/plotProfile.html">plotProfile</a></span><span class="op">(</span><span class="va">saved</span><span class="op">$</span><span class="va">profiles</span>, <span class="va">mode</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"data"</span>, <span class="st">"prior"</span><span class="op">)</span>, <span class="va">name</span> <span class="op"><a href="https://rdrr.io/r/base/match.html" class="external-link">%in%</a></span> <span class="va">rates</span>, ncol <span class="op">=</span> <span class="fl">4</span><span class="op">)</span> <span class="op">+</span> <span class="va">readable</span></span></code></pre></div>
 <p><img src="guide-profiles_files/figure-html/unnamed-chunk-23-1.png" class="r-plt" alt="" width="768"></p>
 <p>Exchanging <code>degrad_A20</code> and <code>degrad_RnaA20</code>
-leaves every readout and the prior unchanged, a discrete symmetry (<a href="guide-symmetries.html#discrete-symmetries">Symmetries &gt;
+leaves every readout and the prior unchanged, a <a href="https://dmodverse.github.io/symident/method/global.html" class="external-link">discrete
+symmetry</a> (<a href="guide-symmetries.html#discrete-symmetries">Symmetries &gt;
 Discrete symmetries</a>). Of the 34 best fits of the multistart, 33 lie
 on the side <code>degrad_A20 &lt; degrad_RnaA20</code> and 1 at the
 mirror image. The profile of <code>degrad_RnaA20</code> passes through
@@ -811,9 +815,10 @@ the fixed set.</p>
 <div class="section level2">
 <h2 id="profiles-in-the-fundamental-domain">Profiles in the fundamental domain<a class="anchor" aria-label="anchor" href="#profiles-in-the-fundamental-domain"></a>
 </h2>
-<p>The fundamental domain <code>degrad_A20 &lt; degrad_RnaA20</code>
-holds the optimum and removes the swap. <code>fundamental.R</code> fits
-the reduced model in the chart that
+<p>The <a href="https://dmodverse.github.io/symident/method/global.html" class="external-link">fundamental
+domain</a> <code>degrad_A20 &lt; degrad_RnaA20</code> holds the optimum
+and removes the swap. <code>fundamental.R</code> fits the reduced model
+in the <a href="methods-symmetries.html#def-chart">chart</a> that
 <code>symmetryReduction(branch = "degrad_A20 &lt; degrad_RnaA20")</code>
 returns, with
 <code>define("degrad_RnaA20 &lt;- degrad_A20 + delta_RnaA20")</code>

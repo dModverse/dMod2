@@ -1,29 +1,44 @@
 # 4. Optimization
 
 dMod2 [\[1\]](#ref-kaschek2019dmod) minimizes \\-2 \log L\\ (with a
-prior, \\-2 \log\\ of the posterior) by the trust-region method
+[prior](https://dmodverse.github.io/dMod2/articles/methods-objective.html#prior),
+\\-2 \log\\ of the posterior) by the [trust-region
+method](https://dmodverse.github.io/dMod2/articles/methods-trust.html#trust-region-method)
 [`trust()`](https://dmodverse.github.io/dMod2/reference/trust.md), from
 many starts by
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md),
 here on the model of [Setting up
 models](https://dmodverse.github.io/dMod2/articles/guide-model.md) with
-the gauge of
+the
+[gauge](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-gauge)
+of
 [Symmetries](https://dmodverse.github.io/dMod2/articles/guide-symmetries.md).
 Derivations: [Methods \> Trust-region
 optimization](https://dmodverse.github.io/dMod2/articles/methods-trust.md).
 
 ## Trust-region method
 
-Each iteration minimizes a quadratic model inside a ball of radius
-\\r\\, first `rinit`; the ratio of actual to predicted decrease decides
-on step and radius. A trial point where the objective fails counts as
-rejected. `stepControl$nonmonotone` in \\(0, 1)\\ also accepts rising
-steps and returns the best iterate.
+Each iteration minimizes a [quadratic
+model](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-quadratic-model)
+inside a ball of
+[radius](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-radius)
+\\r\\, first `rinit`; the [ratio of actual to predicted
+decrease](https://dmodverse.github.io/dMod2/articles/methods-trust.html#radius-update)
+decides on step and radius. A trial point where the objective fails
+counts as rejected. `stepControl$nonmonotone` in \\(0, 1)\\ also accepts
+rising steps ([nonmonotone
+acceptance](https://dmodverse.github.io/dMod2/articles/methods-trust.html#nonmonotone-acceptance))
+and returns the best iterate.
 
-`parlower` and `parupper` set bounds. `boundary = "reflective"`
-(default) keeps the iterates strictly inside and lists bound parameters
-in `atBound`; `boundary = "clip"` removes them from the subproblem and
-runs Gauss-Newton only, with `ftol` and `mtol`.
+`parlower` and `parupper` set
+[bounds](https://dmodverse.github.io/dMod2/articles/methods-trust.html#bound-constraints).
+`boundary = "reflective"` (default) keeps the iterates strictly inside
+and lists bound parameters in `atBound`; `boundary = "clip"` removes
+them from the
+[subproblem](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-subproblem)
+and runs
+[Gauss-Newton](https://dmodverse.github.io/dMod2/articles/methods-trust.html#gauss-newton-approximation)
+only, with `ftol` and `mtol`.
 
 ### Termination criteria
 
@@ -51,17 +66,22 @@ defines them as `tolerances`, passed as `tolControl`.
 | `hessianMethod` | model Hessian | the objective returns |
 |----|----|----|
 | `"gn"` | Gauss-Newton | value, gradient, Gauss-Newton Hessian |
-| `"exact"` | exact (Newton) | value, gradient, exact Hessian |
-| `"bfgs"` | damped BFGS update, positive definite | value, gradient |
-| `"sr1"` | symmetric rank-one update, possibly indefinite | value, gradient |
+| `"exact"` | exact ([Newton](https://dmodverse.github.io/dMod2/articles/methods-trust.html#exact-hessian)) | value, gradient, exact Hessian |
+| `"bfgs"` | damped [BFGS update](https://dmodverse.github.io/dMod2/articles/methods-trust.html#bfgs-update), positive definite | value, gradient |
+| `"sr1"` | [symmetric rank-one update](https://dmodverse.github.io/dMod2/articles/methods-trust.html#sr1-update), possibly indefinite | value, gradient |
 
 The default is the hybrid of Fides [\[2\]](#ref-froehlich2022fides):
 Gauss-Newton until the radius stayed the same for 20 iterations, then
 BFGS ([Methods \> Hessian
 phases](https://dmodverse.github.io/dMod2/articles/methods-trust.html#hessian-phases)).
-The sparse path, multiple shooting and `boundary = "clip"` run
-Gauss-Newton. With an error model the Gauss-Newton Hessian can be
-indefinite ([Methods \> Gauss-Newton with an error
+The [sparse
+path](https://dmodverse.github.io/dMod2/articles/methods-trust.html#sparse-hessians),
+[multiple
+shooting](https://dmodverse.github.io/dMod2/articles/methods-multiple-shooting.html#def-multiple-shooting)
+and `boundary = "clip"` run Gauss-Newton. With an [error
+model](https://dmodverse.github.io/dMod2/articles/methods-objective.html#error-model)
+the Gauss-Newton Hessian can be indefinite ([Methods \> Gauss-Newton
+with an error
 model](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#gauss-newton-with-an-error-model)).
 `"exact"` needs a chain built with `derivMode = "forward-forward"` or
 `"forward-reverse"`
@@ -70,19 +90,20 @@ Quasi-Newton settings, entries of `qnControl`:
 
 | entry | default | controls |
 |----|----|----|
-| `hessianInit` | `"gn"` | seed: `"gn"`, `"identity"`, `"exact"`, or `"tracked"` (later phases) |
+| `hessianInit` | `"gn"` | [seed](https://dmodverse.github.io/dMod2/articles/methods-trust.html#seed-and-memory): `"gn"`, `"identity"`, `"exact"`, or `"tracked"` (later phases) |
 | `hessianReseed` | `"never"` | `"stall"`: reseed instead of stopping on stagnation, up to 8 times |
 | `qnMemory` | `0` | `0` accumulates all updates; \\m \> 0\\ rebuilds from the last \\m\\ pairs |
-| `qnCautious` | `1e-8` | cautious test of BFGS; `0` turns it off |
+| `qnCautious` | `1e-8` | [cautious test](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-cautious-test) of BFGS; `0` turns it off |
 | `qnRejected` | `TRUE` for `"sr1"` | SR1 also updates from rejected trial points |
 
 ### Hessian phases and reverse sweep
 
-`phases` runs several sources in turn, each a list with `hessianMethod`
-and optionally `iterlim`, `radiusStall`, `sweep`, `keepRadius`, `onStop`
-and `qnControl`. A phase hands over on a stop other than `"gradient"`,
-on `iterlim` or after `radiusStall` iterations at one radius; `switches`
-bounds the handovers.
+`phases` runs several sources in turn ([Hessian
+phases](https://dmodverse.github.io/dMod2/articles/methods-trust.html#hessian-phases)),
+each a list with `hessianMethod` and optionally `iterlim`,
+`radiusStall`, `sweep`, `keepRadius`, `onStop` and `qnControl`. A phase
+hands over on a stop other than `"gradient"`, on `iterlim` or after
+`radiusStall` iterations at one radius; `switches` bounds the handovers.
 
 ``` r
 
@@ -92,16 +113,18 @@ fit[c("phaseIterations", "evalBySource", "nSwitch", "stopReason")]
 ```
 
 `sweep = "reverse"` computes the gradient of a quasi-Newton phase by one
-backward sweep, for models built with
-`derivMode = c("forward", "reverse")`; a `"bfgs"` or `"sr1"` phase does
-so by default.
+[backward
+sweep](https://dmodverse.github.io/dMod2/articles/methods-sensitivities.html#reverse-sweep),
+for models built with `derivMode = c("forward", "reverse")`; a `"bfgs"`
+or `"sr1"` phase does so by default.
 
 ### Sparse Hessians
 
-`sparse = TRUE` uses sparse Cholesky factors, plus a low-rank part, for
-many parameters that each act on few conditions; it reaches the same fit
-as the dense path. `"auto"` (default) takes it from 100 parameters on
-where it costs fewer flops (`options(dMod2.sparseAuto = )`).
+`sparse = TRUE` uses sparse Cholesky factors, plus a [low-rank
+part](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-low-rank-part),
+for many parameters that each act on few conditions; it reaches the same
+fit as the dense path. `"auto"` (default) takes it from 100 parameters
+on where it costs fewer flops (`options(dMod2.sparseAuto = )`).
 
 ### Arguments and result
 
@@ -158,7 +181,7 @@ fit[c("value", "converged", "iterations", "stopReason")]
 ## Multistart fitting
 
 [`mstrust()`](https://dmodverse.github.io/dMod2/reference/mstrust.md)
-fits from many starts;
+fits from many starts (multistart);
 [`as.parframe()`](https://dmodverse.github.io/dMod2/reference/as.parframe.md)
 sorts the fits by value. `fit.R` draws 200 starts from the prior of
 [Setting up
@@ -214,7 +237,9 @@ c(fits = nrow(fits), converged = sum(fits$converged), best = min(fits$value),
 #>  200.0000  187.0000 -488.6774   15.0000
 ```
 
-Sorted values; each plateau is a local optimum:
+Sorted values; each
+[plateau](https://dmodverse.github.io/dMod2/articles/methods-trust.html#def-plateau)
+is a local optimum:
 
 ``` r
 
@@ -274,19 +299,20 @@ t(rbind(converged = tapply(opt$converged, method, sum),
 #> GNSBFGS                          88   20           154
 ```
 
-The exact Hessian converges most often, scaled SR1 reaches the best
-plateaus most often, and Gauss-Newton followed by BFGS on the reverse
-gradient needs the least time per hit. Details: [Methods \> Forward and
-reverse derivatives on the Oppelt
+The exact Hessian converges most often, scaled SR1 ([structured secant
+updates](https://dmodverse.github.io/dMod2/articles/methods-trust.html#structured-secant-updates))
+reaches the best plateaus most often, and Gauss-Newton followed by BFGS
+on the reverse gradient needs the least time per hit. Details: [Methods
+\> Forward and reverse derivatives on the Oppelt
 fit](https://dmodverse.github.io/dMod2/articles/methods-trust.html#forward-and-reverse-derivatives-on-the-oppelt-fit).
 
 ## L1 penalties
 
 [`trustL1()`](https://dmodverse.github.io/dMod2/reference/trust.md) adds
-\\\sum_i \lambda_i \lvert \theta_i - \mu_i \rvert\\ for the parameters
-named in `mu`; a scan over `lambda` selects the parameters that differ
-from the reference. `one.sided`, `gate` and `fuse` vary the penalty
-([Methods \> L1
+the L1 penalty \\\sum_i \lambda_i \lvert \theta_i - \mu_i \rvert\\ for
+the parameters named in `mu`; a scan over `lambda` selects the
+parameters that differ from the reference. `one.sided`, `gate` and
+`fuse` vary the penalty ([Methods \> L1
 penalties](https://dmodverse.github.io/dMod2/articles/methods-trust.html#l1-penalties)).
 
 Multiple shooting for oscillating or spiking systems: [Methods \>

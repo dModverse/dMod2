@@ -10,31 +10,40 @@ Code: `symmetries.R` and the end of `model.R`.
 
 ## Lie symmetries and detection
 
-Each family is the orbit of a Lie symmetry. symident obtains the
-generators as the kernel of the observability-identifiability matrix and
-proves scalings exactly ([Methods \> Structural identifiability and Lie
+Each family is the
+[orbit](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-orbit)
+of a [Lie
+symmetry](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-lie-symmetry).
+symident obtains the
+[generators](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-generator)
+as the
+[kernel](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-kernel)
+of the [observability-identifiability
+matrix](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-oim)
+and proves
+[scalings](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-scaling)
+exactly ([Methods \> Structural identifiability and Lie
 symmetries](https://dmodverse.github.io/dMod2/articles/methods-symmetries.md)).
 
 ## Detection settings
 
-- `equilibrate = TRUE`: initial values are the steady state without
-  TNFα.
+- `equilibrate = TRUE`: initial values are the [steady
+  state](https://dmodverse.github.io/dMod2/articles/methods-steady-states.html#def-steady-state)
+  without TNFα.
 - `reduceCQ = TRUE`: symmetries act on the conserved totals, the
   parameters of
   [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md).
 - `forcings = "TNF"`: TNFα is an input state, set by the event at time
   0.
-- `conditions`: a direction is non-identifiable only if it is so in both
-  doses.
+- `conditions`: a direction is
+  [non-identifiable](https://dmodverse.github.io/dMod2/articles/methods-profiles.html#def-non-identifiable)
+  only if it is so in both doses.
 
 The imaging readouts bleach, \\y = \log(s x + o) - \tau t\\. In the
 control the states are constant, so the bleaching rates are in no
 symmetry, and `symmetries.R` drops the bleaching terms.
 
 ## Symmetries of the full model
-
-    #> Warning: symmetries.rds was computed from an earlier version of symmetries.R
-    #> Warning: reduction.rds was computed from an earlier version of symmetries.R
 
 Computed by `symmetries.R`, loaded from `results/symmetries.rds`:
 
@@ -118,8 +127,9 @@ symmetries
 ```
 
 The rank is 57 of 65 coordinates, proven; the kernel is spanned by eight
-scalings, each proven over the rationals. The generators are one basis;
-up to sums there are four kinds.
+scalings, each proven over the rationals
+([level](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-level)).
+The generators are one basis; up to sums there are four kinds.
 
 - **Unobserved intermediates**, level against driven rate: receptor
   \\X_1\\, IκBα transcript \\X_4\\, A20 transcript \\X_6\\, A20 \\X_7\\
@@ -135,7 +145,9 @@ up to sums there are four kinds.
 
 [`symmetryReduction()`](https://dmodverse.github.io/dMod2/reference/symmetryReduction.md)
 returns in `$trafo` a transformation without the directions, for
-scalings by fixing one coordinate per direction ([Methods \> Gauge and
+scalings by fixing one coordinate per direction, a
+[section](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-section)
+([Methods \> Gauge and
 reduction](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction)).
 Loaded from `results/reduction.rds`:
 
@@ -174,7 +186,8 @@ reduction
 ## Gauge fixing
 
 `model.R` fixes one moved parameter per scaling at 1, 0 on log scale,
-the gauge:
+the
+[gauge](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-gauge):
 
 ``` r
 
@@ -183,8 +196,9 @@ gauge <- c(Vnuc = 0, totalNfk = 0, totalIkk = 0, uptake = 0, prod_Ikb = 0, build
            split_NfkIkb = 0, s_A20GFP = 0)
 ```
 
-The eight coordinates remove all eight scalings if their weight matrix
-is regular ([Methods \> Gauge and
+The eight coordinates remove all eight scalings if their
+[weight](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-weights)
+matrix is regular (invertible) ([Methods \> Gauge and
 reduction](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#gauge-and-reduction)):
 
 ``` r
@@ -217,10 +231,12 @@ checks which the data determine.
 
 ## Discrete symmetries
 
-A discrete symmetry maps a parameter value to isolated other values with
-the same output. `symmetryDetection(mode = "global")` counts these
-values and reconstructs rational maps between them (requires msolve).
-`discrete.R` applies it to the reduced model of [Profile
+A [discrete
+symmetry](https://dmodverse.github.io/symident/method/global.html) maps
+a parameter value to isolated other values with the same output.
+`symmetryDetection(mode = "global")` counts these values and
+reconstructs rational maps between them (requires msolve). `discrete.R`
+applies it to the reduced model of [Profile
 likelihood](https://dmodverse.github.io/dMod2/articles/guide-profiles.html#reduced-model),
 passed as `trafo`; loaded from `results/discrete.rds`:
 
@@ -272,15 +288,22 @@ swap[c("map", "level", "stateMaps")]
 #> [1] "-A20*degrad_A20 + A20*degrad_RnaA20 + RnaA20"
 ```
 
-There are two values with the output of a generic one; the map exchanges
-the degradation rates of the A20 transcript and of A20, `exact` means
-proven by the map of the states. The map moves no coordinate of the
-scalings and holds in the original coordinates as well.
+There are two values with the output of a
+[generic](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-generic)
+one, the
+[fiber](https://dmodverse.github.io/symident/method/global.html); the
+map exchanges the degradation rates of the A20 transcript and of A20,
+`exact` means proven by the map of the states. The map moves no
+coordinate of the scalings and holds in the original coordinates as
+well.
 
 The publication does not name the swap and reports both rates with the
 same 95 % interval, \\-5.97\\ to \\-3.32\\ on log scale
 [\[1\]](#ref-oppelt2018model), Table S7, the union of the two images.
-`symmetryReduction(branch = )` gives a chart of the fundamental domain
+`symmetryReduction(branch = )` gives a
+[chart](https://dmodverse.github.io/dMod2/articles/methods-symmetries.html#def-chart)
+of the [fundamental
+domain](https://dmodverse.github.io/symident/method/global.html)
 `degrad_A20 < degrad_RnaA20`:
 
 ``` r

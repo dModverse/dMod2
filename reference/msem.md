@@ -4,7 +4,10 @@ Runs [`em()`](https://dmodverse.github.io/dMod2/reference/em.md) from
 `fits` starts, the first at `init`, the others perturbed by normal noise
 of standard deviation `sd` (on the log scale for concentrations and slab
 standard deviations, on the logit scale for slab probabilities), and
-returns the best fit.
+returns the best fit. With the burn-in of spike-and-slab random effects
+at `start = "random"`, each attempt also draws the start subset;
+[`set.seed()`](https://rdrr.io/r/base/Random.html) reproduces the
+starts.
 
 ## Usage
 
@@ -175,8 +178,9 @@ msem(
   Logical. If `TRUE` (default), a fit that fails with an error, for
   instance at a start where a steady state of
   [`Pimpl()`](https://dmodverse.github.io/dMod2/reference/Pimpl.md) has
-  no stable root, is repeated from a new perturbed start, up to `nTries`
-  attempts.
+  no stable root or in a phase of the sum over subsets
+  (`control$sparseFit`), is repeated from a new perturbed start, up to
+  `nTries` attempts.
 
 - nTries:
 
@@ -227,9 +231,15 @@ data frame with a row per start:
 
   why evaluations in the trust region failed, and how often.
 
-- `error`, `boundary`:
+- `error`, `phase`, `boundary`:
 
-  the error of a failed start, the variances the fit set to 0.
+  the error of a failed start, the failed phase of the last attempt, the
+  variances the fit set to 0.
+
+- `subset`:
+
+  the random effects in the slab during the burn-in, separated by
+  commas.
 
 [`plotValues()`](https://dmodverse.github.io/dMod2/reference/plotValues.md)
 draws it as a waterfall.
@@ -255,10 +265,10 @@ x <- Xt()
 g <- Y(c(y = "amt * Ka / (V * Ka - Cl) * (exp(-Cl / V * time) - exp(-Ka * time))"),
        states = "time", modelname = "theoph_obs", compile = FALSE, derivMode = dm,
        outdir = tempdir())
-#> Overwriting: /tmp/RtmpEh2W6Q/theoph_obs.cpp
+#> Overwriting: /tmp/RtmpX1Wc0y/theoph_obs.cpp
 err <- Y(c(y = "sigma_add"), g, attachInput = FALSE, modelname = "theoph_err", compile = FALSE,
          derivMode = dm, outdir = tempdir())
-#> Overwriting: /tmp/RtmpEh2W6Q/theoph_err.cpp
+#> Overwriting: /tmp/RtmpX1Wc0y/theoph_err.cpp
 ## one condition per subject with the subject dose; the effect formula replaces each log parameter
 ## by an intercept plus a random effect per subject
 doses <- tapply(th$Dose * th$Wt, th$Subject, `[`, 1)[subjects]
@@ -282,11 +292,11 @@ best$multistart
 #> 2     2 359.4032      TRUE         11 0.002859698     1 <NA>           <NA>
 #> 3     3 359.4032      TRUE         14 0.000496391     1 <NA>           <NA>
 #> 4     4 359.4032      TRUE         11 0.001513915     1 <NA>           <NA>
-#>   boundary
-#> 1         
-#> 2         
-#> 3         
-#> 4         
+#>   phase subset boundary
+#> 1    NA   <NA>         
+#> 2    NA   <NA>         
+#> 3    NA   <NA>         
+#> 4    NA   <NA>         
 plotValues(best)
 
 # }

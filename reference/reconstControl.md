@@ -85,8 +85,9 @@ reconstControl(
 
 - gapOrderCap:
 
-  Maximum order of the power series in the time between events. Defaults
-  to 8.
+  Maximum order of the power series in the time between events. Curve
+  samples of resting conditions start at this order and double it at
+  most twice where a kernel at eps = 1 needs more. Defaults to 8.
 
 - minSupportCandCap:
 

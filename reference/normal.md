@@ -47,11 +47,16 @@ dirichletProcess(concentration = NULL, tau = NULL)
 - prob:
 
   Probability that a group deviates, in (0, 1); `NULL` (default)
-  estimates it.
+  estimates it;
+  [`betaPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+  integrates it out.
 
 - tau:
 
-  Standard deviation of the slab; `NULL` (default) estimates it.
+  Standard deviation of the slab; `NULL` (default) estimates it; a scale
+  prior such as
+  [`halfCauchyPrior()`](https://dmodverse.github.io/dMod2/reference/betaPrior.md)
+  estimates it as the posterior mode (spike-and-slab only).
 
 - mean:
 

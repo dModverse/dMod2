@@ -2,15 +2,19 @@
 
 Computes symbolic steady-state expressions for use in a parameter
 transformation, following the AlyssaPetit method \[1\], \[2\]. States
-whose own balance gives a ratio of positive sums are solved from it
-first. The cycles of the graph of states left are cut then: at a state
-of a conserved quantity, or at a state whose balance is solved for a
-rate constant of one flux side instead. Each cut state stays a free
-parameter. The remaining states and the rate constants of the cuts are
-then solved, each from a balance or a combination of balances in
-amounts, such that the result is a ratio of sums of positive terms. Only
-if that fails, a flux side with separate rate constants is cut as well:
-the fluxes of the side keep free ratios, the new parameters
+whose mass only leaks are set to zero first, with `zeroLoops = TRUE`
+also states that are only produced through one another. States whose own
+balance gives a ratio of positive sums are solved from it first. The
+cycles of the graph of states left are cut then: at a state of a
+conserved quantity, or at a state whose balance is solved for a rate
+constant of one flux side instead. Each cut state stays a free
+parameter. A state of a conserved quantity whose balance is left without
+a positive unknown is solved in a further round, with another state of
+the quantity free. The remaining states and the rate constants of the
+cuts are then solved, each from a balance or a combination of balances
+in amounts, such that the result is a ratio of sums of positive terms.
+Only if that fails, a flux side with separate rate constants is cut as
+well: the fluxes of the side keep free ratios, the new parameters
 `r_<state>_<j>`. Compartment volumes are fixed. The solver is a Python
 module called through reticulate; it needs numpy, sympy and scipy.
 
@@ -28,6 +32,7 @@ steadyStates(
   simplify = TRUE,
   solveQuadratic = FALSE,
   priority = NULL,
+  zeroLoops = FALSE,
   resolve = TRUE,
   verbose = FALSE
 )
@@ -95,6 +100,16 @@ steadyStates(
   earlier, named rate parameters are preferred as pivots. Default
   `NULL`.
 
+- zeroLoops:
+
+  Logical. `FALSE` (default) looks for a steady state with every state
+  away from zero. `TRUE` sets to zero the largest set of states that are
+  only produced through one another, such as a ligand that only the
+  receptor complexes it forms activate: all fluxes of these states
+  vanish where they are zero, and no conserved quantity lies on them.
+  This is the steady state of a feedback loop that is off, as under
+  `symmetryDetection(equilibrate = TRUE)`.
+
 - resolve:
 
   Logical, whether the result is passed through
@@ -124,7 +139,7 @@ Biology* 4, 41.
 
 ## See also
 
-[`repar()`](https://dmodverse.github.io/dMod2/reference/repar.md),
+[`define()`](https://dmodverse.github.io/dMod2/reference/define.md),
 [`P()`](https://dmodverse.github.io/dMod2/reference/P.md)
 
 ## Examples
@@ -151,8 +166,8 @@ steadies
 
 # Parameter transformation that puts the model in steady state
 parameters <- getParameters(reactions)
-trafo <- repar(eqnvec(setNames(parameters, parameters)), "x <- y",
-               x = names(steadies), y = steadies)
+trafo <- define(NULL, "x <- x", x = parameters)
+trafo <- insert(trafo, "x <- y", x = names(steadies), y = steadies)
 trafo
 #> Idx           Inner <- Outer
 #>   1      Tca_buffer <- Tca_buffer

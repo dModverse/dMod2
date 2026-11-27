@@ -26,7 +26,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">dMod2</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.17.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.18.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -70,6 +70,8 @@
     <li><a class="dropdown-item" href="../articles/methods-multiple-shooting.html">Multiple shooting</a></li>
     <li><a class="dropdown-item" href="../articles/methods-nlme.html">Marginal likelihood of mixed-effects models</a></li>
     <li><a class="dropdown-item" href="../articles/methods-sparsity-priors.html">Sparsity priors</a></li>
+    <li><hr class="dropdown-divider"></li>
+    <li><a class="dropdown-item" href="../articles/index-terms.html">Index</a></li>
   </ul>
 </li>
 <li class="nav-item dropdown">
@@ -148,21 +150,26 @@ finite differences. Guide: <a href="guide-sensitivities.html">Sensitivities</a>;
 <div class="section level2">
 <h2 id="forward-sensitivities">Forward sensitivities<a class="anchor" aria-label="anchor" href="#forward-sensitivities"></a>
 </h2>
-<p>The sensitivities <span class="math inline">\(S = \partial x /
-\partial \theta\)</span> of <span class="math inline">\(\dot x = f(x,
-\theta)\)</span>, <span class="math inline">\(x(t_0) =
-x_0(\theta)\)</span>, solve</p>
+<p>The <span id="def-sensitivity">sensitivities</span> <span class="math inline">\(S = \partial x / \partial \theta\)</span> of <span class="math inline">\(\dot x = f(x, \theta)\)</span>, <span class="math inline">\(x(t_0) = x_0(\theta)\)</span>, the derivatives of
+the trajectory with respect to the parameters, solve</p>
 <p><span class="math display">\[\dot S = \frac{\partial f}{\partial x}\,
 S + \frac{\partial f}{\partial \theta}, \qquad
   S(t_0) = \frac{\partial x_0}{\partial \theta}, \tag{1}\]</span></p>
 <p><span class="math inline">\(n_x n_\theta\)</span> further equations.
-cppDE evaluates <span class="math inline">\(f\)</span> on dual numbers,
-one tangent per parameter, and steps states and tangents together. The
-step-size control includes the tangents (<code>sensErrCon</code>), so
-the sensitivities are as accurate as the states (<a href="https://dmodverse.github.io/cppDE/articles/methods-forward.html" class="external-link">forward
-sensitivities</a>). An event passes the tangents through the saltation
-matrix of the jump (<a href="https://dmodverse.github.io/cppDE/articles/methods-events.html" class="external-link">events</a>).
-Every further function object of <code>g*x*p</code> multiplies by the
+cppDE evaluates <span class="math inline">\(f\)</span> on <span id="def-dual-number">dual numbers</span>, numbers with a value part and
+derivative parts whose arithmetic propagates first derivatives exactly
+by the chain rule, one <span id="def-tangent">tangent</span> (derivative
+part) per parameter. States and tangents step forward in time together,
+the <span id="def-forward-sweep">forward sweep</span> of <span id="def-forward-mode">forward mode</span> differentiation. The step-size
+control includes the tangents (<code>sensErrCon</code>), so the
+sensitivities are as accurate as the states (<a href="https://dmodverse.github.io/cppDE/articles/methods-forward.html" class="external-link">forward
+sensitivities</a>). An <span id="def-event">event</span>, a jump of the
+states at a time or on a condition, passes the tangents through the
+<span id="def-saltation-matrix">saltation matrix</span> of the jump,
+which maps the sensitivities before the jump to those after it (<a href="https://dmodverse.github.io/cppDE/articles/methods-events.html" class="external-link">events</a>).
+Every further function object of the <span id="def-chain-gxp">chain
+<code>g*x*p</code></span>, parameter transformation <code>p</code>,
+prediction <code>x</code> and observation <code>g</code> (<a href="guide-model.html">Setting up models</a>), multiplies by the
 Jacobian of that object, e.g. <span class="math inline">\(g_x S +
 g_\theta\)</span> for <span class="math inline">\(y = g(x,
 \theta)\)</span>.</p>
@@ -174,9 +181,9 @@ g_\theta\)</span> for <span class="math inline">\(y = g(x,
 <p><span class="math display">\[\ell_j = r_j^2 + \log \sigma_j^2, \qquad
 r_j = \frac{g_j - y_j}{\sigma_j}, \tag{2}\]</span></p>
 <p>the summand of <a href="methods-objective.html#data-term">the data
-term</a>. For fixed <span class="math inline">\(\sigma_j\)</span> and
-<span class="math inline">\(J = \partial r / \partial \theta\)</span>,
-the gradient is <span class="math inline">\(2 J^\top r\)</span> and the
+term</a>, with the <span id="def-residual">residual</span> <span class="math inline">\(r_j\)</span>, the difference of prediction and
+data divided by the standard deviation. For fixed <span class="math inline">\(\sigma_j\)</span> and <span class="math inline">\(J = \partial r / \partial \theta\)</span>, the
+gradient is <span class="math inline">\(2 J^\top r\)</span> and the
 Hessian</p>
 <p><span class="math display">\[\nabla^2 \sum_j r_j^2 = 2 J^\top J + 2
 \sum_j r_j\, \nabla^2 r_j . \tag{3}\]</span></p>
@@ -204,17 +211,20 @@ derivatives of <span class="math inline">\(g_j\)</span> and <span class="math in
 <div class="section level2">
 <h2 id="forward-over-forward">Forward over forward<a class="anchor" aria-label="anchor" href="#forward-over-forward"></a>
 </h2>
-<p>Differentiating (1) again gives <span class="math inline">\(n_x
-n_\theta (n_\theta + 1) / 2\)</span> equations and the exact Hessian,
-for small models.</p>
+<p><span id="def-forward-over-forward">Forward over forward</span>
+applies forward tangents to the forward sensitivities. Differentiating
+(1) again gives <span class="math inline">\(n_x n_\theta (n_\theta + 1)
+/ 2\)</span> equations and the exact Hessian, for small models.</p>
 </div>
 <div class="section level2">
 <h2 id="reverse-sweep">Reverse sweep<a class="anchor" aria-label="anchor" href="#reverse-sweep"></a>
 </h2>
-<p>The gradient of the objective alone follows from one backward sweep
-with the multipliers <span class="math inline">\(\lambda(t)\)</span>,
-zero after the last measurement, and the terms <span class="math inline">\(\ell_j\)</span> of the data at the measurement
-times <span class="math inline">\(t_j\)</span>,</p>
+<p>The <span id="def-adjoint">adjoint</span> or <span id="def-multiplier">multiplier</span> <span class="math inline">\(\lambda(t)\)</span> is the sensitivity of the
+objective to a change of the state at time <span class="math inline">\(t\)</span>. The gradient of the objective alone
+follows from one <span id="def-reverse-sweep">reverse sweep</span>,
+backward in time from the data to the start, with <span class="math inline">\(\lambda\)</span> zero after the last measurement
+and the terms <span class="math inline">\(\ell_j\)</span> of the data at
+the measurement times <span class="math inline">\(t_j\)</span>,</p>
 <p><span class="math display">\[\begin{aligned}
 \dot\lambda &amp;= -\left(\frac{\partial f}{\partial x}\right)^{\!\top}
 \lambda, \qquad
@@ -225,13 +235,15 @@ x}\right)^{\!\top}, \\
 \mathrm{d}t + \lambda(t_0)^\top \frac{\partial x_0}{\partial \theta}
 + \sum_j \frac{\partial \ell_j}{\partial \theta} .
 \end{aligned} \tag{5}\]</span></p>
-<p>cppDE uses the <em>discrete adjoint</em> of the integrator steps, the
-exact derivative of the computed objective, with checkpoints of the
-forward trajectory (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse.html" class="external-link">reverse
-mode</a>). The cost is a few times the value, independent of <span class="math inline">\(n_\theta\)</span>. The value pass solves without
-sensitivities, and the sweep uses the step grid of that pass.
-<code><a href="../reference/Pimpl.html">Pimpl()</a></code> passes the sweep through the Jacobian of the root
-(<a href="methods-steady-states.html#derivatives-of-the-root">Steady
+<p>cppDE uses the <span id="def-discrete-adjoint"><em>discrete
+adjoint</em></span> of the integrator steps, the <span id="def-reverse-mode">reverse mode</span> applied to the steps instead
+of to the ODE and the exact derivative of the computed objective. <span id="def-checkpoint">Checkpoints</span> store the start of every accepted
+forward step (state, time, step size, controller state), and the sweep
+applies the transposed steps from these, last to first (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse.html" class="external-link">reverse
+mode</a>). The cost is a few times the value, independent of <span class="math inline">\(n_\theta\)</span>. The <span id="def-value-pass">value pass</span>, the forward solve that computes
+the objective value, runs without sensitivities, and the sweep uses the
+step grid of that pass. <code><a href="../reference/Pimpl.html">Pimpl()</a></code> passes the sweep through
+the Jacobian of the root (<a href="methods-steady-states.html#derivatives-of-the-root">Steady
 states</a>).</p>
 <div class="section level3">
 <h3 id="accuracy-of-a-reverse-gradient">Accuracy of a reverse gradient<a class="anchor" aria-label="anchor" href="#accuracy-of-a-reverse-gradient"></a>
@@ -269,10 +281,11 @@ vanishes, a fixed <code>gradtol</code> does not keep the relative error
 small (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html" class="external-link">checking
 the sweep</a>).</p>
 <p>A refined sweep differentiates the trajectory with substeps, not the
-computed one. Under <code>refine</code> it therefore returns, per seed,
-the first-order change of the seeded functional between the two: over
-the steps, the adjoint at the step end times the difference of the end
-states, plus the seeds times the difference of the observed values (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html#value-correction" class="external-link">value
+computed one. Under <code>refine</code> it therefore returns, per <span id="def-seed">seed</span>, the vector the sweep starts from in the
+observed values, the first-order change of the seeded functional between
+the two: over the steps, the adjoint at the step end times the
+difference of the end states, plus the seeds times the difference of the
+observed values (<a href="https://dmodverse.github.io/cppDE/articles/methods-reverse-checks.html#value-correction" class="external-link">value
 correction</a>). The <code><a href="../reference/normL2.html">normL2()</a></code> seed gives the change of the
 objective, a second seed the change of <code>chi2</code>. The reverse
 objective adds both, so value and gradient belong to one function, and a
@@ -283,7 +296,8 @@ closer to the exact one; accepted steps get no correction.</p>
 <div class="section level2">
 <h2 id="forward-over-reverse">Forward over reverse<a class="anchor" aria-label="anchor" href="#forward-over-reverse"></a>
 </h2>
-<p>Forward tangents, one per parameter, ride on the backward sweep,
+<p><span id="def-forward-over-reverse">Forward over reverse</span>
+applies forward tangents, one per parameter, to the backward sweep,
 which returns one Hessian column per tangent. Cost grows like a forward
 solve; the <span class="math inline">\(n_\theta^2\)</span> Hessian
 entries are accumulated, but no <span class="math inline">\(n_x
@@ -304,19 +318,18 @@ predictions and sigmas of the data rows, and <span class="math inline">\(\dot w_
 <p><span class="math display">\[\sum_r w_r\, \nabla^2 z_r\, v_k + J^\top
 \dot w_k \tag{6}\]</span></p>
 <p>for every <span class="math inline">\(k\)</span>, <span class="math inline">\(z_r\)</span> prediction or sigma of row <span class="math inline">\(r\)</span>, <span class="math inline">\(J\)</span>
-their Jacobian. With the gradient of the row loss as seed and <span class="math inline">\(L_r J_r v_k\)</span> as tangent derivative, <span class="math inline">\(L_r\)</span> the Hessian (4), the sweep gives
-<span class="math inline">\(\Phi_i^{\eta\eta}\)</span>, <span class="math inline">\(\Phi_i^{\eta\psi}\)</span> and the mode shift
-<span class="math inline">\(\mathrm{d}\hat\eta / \mathrm{d}\psi =
--(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi}\)</span>. The trace
-gradients are linear in <span class="math inline">\(M\)</span>: seed
-<span class="math inline">\(j\)</span> is <span class="math inline">\(2
-L_r J_{r,j}\)</span>, with tangent derivative the derivative of <span class="math inline">\(L_r\)</span> contracted with <span class="math inline">\(J_{r,j}\)</span> and <span class="math inline">\(J_{r,k}\)</span>. With <span class="math inline">\(U_{jk}\)</span> slice <span class="math inline">\(k\)</span> of the result for seed <span class="math inline">\(j\)</span>,</p>
+their Jacobian. With the gradient of the row loss as seed and <span class="math inline">\(L_r J_r v_k\)</span> as tangent derivative, <span class="math inline">\(L_r\)</span> the Hessian (4), the sweep gives the
+second derivatives <span class="math inline">\(\Phi_i^{\eta\eta}\)</span> and <span class="math inline">\(\Phi_i^{\eta\psi}\)</span> of <span class="math inline">\(\Phi_i\)</span> in <span class="math inline">\(\eta\)</span> and in <span class="math inline">\(\eta\)</span>, <span class="math inline">\(\psi\)</span>, and the mode shift</p>
+<p><span class="math display">\[\frac{\mathrm{d}\hat\eta}{\mathrm{d}\psi} =
+-(\Phi_i^{\eta\eta})^{-1} \Phi_i^{\eta\psi} .\]</span></p>
+<p>The trace gradients are linear in <span class="math inline">\(M\)</span>: seed <span class="math inline">\(j\)</span> is <span class="math inline">\(2 L_r
+J_{r,j}\)</span>, with tangent derivative the derivative of <span class="math inline">\(L_r\)</span> contracted with <span class="math inline">\(J_{r,j}\)</span> and <span class="math inline">\(J_{r,k}\)</span>. With <span class="math inline">\(U_{jk}\)</span> slice <span class="math inline">\(k\)</span> of the result for seed <span class="math inline">\(j\)</span>,</p>
 <p><span class="math display">\[\nabla \operatorname{tr}(M H_i) =
 \sum_{j,k} M_{jk}\, U_{jk} \tag{7}\]</span></p>
 <p>for every symmetric <span class="math inline">\(M\)</span>: <span class="math inline">\(K\)</span> seeds for any number of matrices.
-Hessian rows and trace seeds go back in one sweep, every cotangent with
-<span class="math inline">\(K + 1\)</span> blocks, the seed and the
-derivative of the seed along each tangent.</p>
+Hessian rows and trace seeds go back in one sweep. Every <span id="def-cotangent">cotangent</span>, the derivative of the output
+propagated back to an intermediate quantity, has <span class="math inline">\(K + 1\)</span> blocks, the seed and the derivative
+of the seed along each tangent.</p>
 <p>Reference: <code><a href="../reference/odemodel.html">odemodel()</a></code>, <code><a href="../reference/Xs.html">Xs()</a></code>,
 <code><a href="../reference/Y.html">Y()</a></code>, <code><a href="../reference/P.html">P()</a></code>, <code><a href="../reference/Pimpl.html">Pimpl()</a></code>,
 <code><a href="../reference/normL2.html">normL2()</a></code></p>
